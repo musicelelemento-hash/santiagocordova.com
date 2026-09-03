@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --accent: #f59e0b;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: 320px;
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            background-image:
+                radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 250px),
+                radial-gradient(circle at bottom left, rgba(245, 158, 11, 0.05), transparent 200px);
+            color: var(--text-main);
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .logo-box {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+
+        .logo-box svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+
+        .info-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .info-text {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 13px;
+            margin-bottom: 8px;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+        }
+
+        select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        .cargas-help {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .theme-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .theme-circle {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .theme-circle:hover {
+            transform: scale(1.15);
+        }
+
+        .theme-circle.active {
+            border-color: white;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+
+        .action-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-icon {
+            flex: 0 0 48px;
+            background: #f8717120;
+            color: #f87171;
+            border: 1px solid #f8717140;
+        }
+
+        .btn-icon:hover {
+            background: #f8717140;
+            color: #f87171;
+        }
+
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .footer strong {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate {
+            animation: fadeIn 0.5s ease forwards;
+        }
+
+        .delay-1 {
+            animation-delay: 0.1s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.2s;
+        }
+
+        .delay-3 {
+            animation-delay: 0.3s;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header animate">
+        <div class="logo-box">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 10V3L4 14H11V21L20 10H13Z" stroke="white" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" />
+            </svg>
+        </div>
+        <h2>SRI Assistant <span style="font-weight: 400; font-size: 14px; opacity: 0.7;">Elite</span></h2>
+    </div>
+
+    <div class="info-card animate delay-1">
+        <p class="info-text">Potencia tu declaración con IA. Navega a Facturas Electrónicas y deja que el robot trabaje
+            por ti.</p>
+        <button class="btn btn-primary" id="open-assistant">
+            <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14H11V21L20 10H13Z">
+                </path>
+            </svg>
+            Desplegar Asistente
+        </button>
+    </div>
+
+    <div class="animate delay-2">
+        <h3 class="section-title">Ajustes de Cargas (2025)</h3>
+        <select id="cargas-familiares">
+            <option value="0">0 Cargas (Tope $5.588) • 7 Canastas</option>
+            <option value="1">1 Carga (Tope $7.184) • 9 Canastas</option>
+            <option value="2">2 Cargas (Tope $8.781) • 11 Canastas</option>
+            <option value="3">3 Cargas (Tope $11.176) • 14 Canastas</option>
+            <option value="4">4 Cargas (Tope $13.571) • 17 Canastas</option>
+            <option value="5">5+ Cargas (Tope $15.966) • 20 Canastas</option>
+            <option value="100">Enf. Catastrófica (Tope $79k) • 100 Canastas</option>
+        </select>
+        <div class="cargas-help">
+            <svg style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            El asistente avisará al llegar al tope.
+        </div>
+    </div>
+
+    <div class="animate delay-3">
+        <h3 class="section-title">Paleta Elite</h3>
+        <div class="theme-container">
+            <div class="theme-circle" data-theme="default" style="background: #1e3a8a;" title="Titanium Blue"></div>
+            <div class="theme-circle" data-theme="dark"
+                style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1);" title="Midnight Pro"></div>
+            <div class="theme-circle" data-theme="glass" style="background: linear-gradient(45deg, #6366f1, #a855f7);"
+                title="Aurora Glass"></div>
+            <div class="theme-circle" data-theme="gold" style="background: linear-gradient(45deg, #d4af37, #f59e0b);"
+                title="Premium Gold"></div>
+            <div class="theme-circle" data-theme="cyber" style="background: #fbbf24; border: 1px solid #000;"
+                title="Cyberpunk"></div>
+        </div>
+
+        <div class="action-row">
+            <button class="btn btn-secondary" id="go-to-anexos" style="flex: 1;">
+                📁 Ir a Anexos
+            </button>
+            <button class="btn btn-icon" id="reset-mappings" title="Borrar Aprendizaje">
+                <svg style="width: 18px; height: 18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                    </path>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="footer animate delay-3">
+        <span>Diseñado en <strong>Elite Mode</strong></span>
+        <span style="opacity: 0.5;">Premium Automation v1.5 • 2025</span>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+
+</html>

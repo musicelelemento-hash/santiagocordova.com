@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#F7F9FF; color:#0A1140; font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:#16309B; text-decoration:none; }
+  a:hover { color:#0F2280; }
+  input, textarea, select { font-family:inherit; }
+  input::placeholder, textarea::placeholder { color:#A6AFC8; }
+  @keyframes pi-rise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pi-blink { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+  ::-webkit-scrollbar { width:7px; height:7px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(10,17,64,.2); border-radius:99px; }
+  @media (prefers-reduced-motion:reduce) { * { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</helmet>
+
+<div style="display:flex; min-height:100vh; align-items:stretch;">
+
+  <aside style="width:240px; flex-shrink:0; background:#0A1140; color:#fff; display:flex; flex-direction:column; padding:20px 0 18px;">
+    <div style="display:flex; align-items:center; gap:11px; padding:0 20px 20px;">
+      <svg viewBox="0 0 34 34" style="width:30px; height:30px; display:block; flex-shrink:0;" aria-hidden="true"><path d="M29.1 10A14 14 0 1 0 29.1 24" fill="none" stroke="#FFFFFF" stroke-width="6.2" stroke-linecap="round"></path><path d="M10.6 10.4h9v2.9h-3v7.4h3v2.9h-9v-2.9h3v-7.4h-3z" fill="#E70101" stroke="#FFC61A" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+      <span style="display:flex; flex-direction:column; line-height:1.15;">
+        <span style="font-family:'Outfit',sans-serif; font-size:15px; font-weight:700; letter-spacing:-.03em; color:#fff;">CÓRDOVA<span style="color:#FFC61A;">.</span></span>
+        <span style="font-size:8px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:#7E8CBE; margin-top:2px;">Centro de producción</span>
+      </span>
+    </div>
+    <div style="padding:0 12px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+      <sc-for list="{{ nav }}" as="g" hint-placeholder-count="3">
+        <div>
+          <div style="{{ g.titleStyle }}">{{ g.grupo }}</div>
+          <div style="display:flex; flex-direction:column; gap:2px; margin-top:7px;">
+            <sc-for list="{{ g.items }}" as="i" hint-placeholder-count="4">
+              <span style="{{ i.style }}">{{ i.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="margin-top:auto; padding:16px 16px 0;">
+      <div style="display:flex; align-items:center; gap:9px; padding:11px 12px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.16); border-radius:11px;">
+        <span style="width:30px; height:30px; border-radius:9px; background:rgba(255,198,26,.14); border:1px solid rgba(255,198,26,.3); display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:800; color:#FFC61A;">MC</span>
+        <span style="display:flex; flex-direction:column; line-height:1.25; min-width:0;">
+          <span style="font-size:12.5px; font-weight:600; color:#fff;">Mayra Castro</span>
+          <span style="font-size:10.5px; color:#9AA6CE;">Recepción · turno mañana</span>
+        </span>
+      </div>
+    </div>
+  </aside>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+    <header style="background:#fff; border-bottom:1px solid #E4E8F4; padding:14px clamp(16px,2.2vw,28px); display:flex; align-items:center; gap:18px; justify-content:space-between; position:sticky; top:0; z-index:20;">
+      <div style="min-width:0;">
+        <div style="font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">Nueva Orden</div>
+        <div style="font-size:11.5px; color:#8A93AE; margin-top:2px;">{{ relojLargo }}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="display:flex; align-items:center; gap:9px; padding:9px 13px; background:#F7F9FF; border:1px solid #D7DDF0; border-radius:10px; min-width:250px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#8A93AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <span style="font-size:12.5px; color:#A6AFC8; flex:1;">Buscar orden, cliente o RUC</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; background:#EEF1FC; border-radius:5px; color:#16309B;">⌘K</span>
+        </span>
+        <span style="display:inline-flex; align-items:center; gap:7px; padding:8px 12px; background:#F2F7F2; border:1px solid #D8E8DC; border-radius:99px;">
+          <span style="width:6px; height:6px; border-radius:99px; background:#1B8A4B; animation:pi-blink 2.4s ease-in-out infinite;"></span>
+          <span style="font-size:11px; font-weight:700; color:#1B6E3E;">Sistema en línea</span>
+        </span>
+      </div>
+    </header>
+
+    <div style="padding:clamp(18px,2.2vw,28px) clamp(16px,2.2vw,28px) 90px;">
+    <div style="max-width:1440px; margin:0 auto; display:flex; flex-direction:column; gap:14px; animation:pi-rise .6s cubic-bezier(.2,.8,.2,1) both;">
+
+      <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap;">
+        <div>
+          <p style="margin:0; font-size:10.5px; font-weight:800; letter-spacing:.32em; text-transform:uppercase; color:#8A93AE;">Operaciones · flujo único</p>
+          <h1 style="margin:6px 0 0; font-family:'Outfit',sans-serif; font-size:27px; font-weight:600; letter-spacing:-.035em; color:#0A1140;">Nueva Orden</h1>
+          <p style="margin:7px 0 0; font-size:13.5px; color:#6B7590; max-width:76ch;">Un solo camino para todo: preimpresos del SRI y trabajos comerciales en la misma orden. Los del SRI abren su formulario dentro del paso 2 y no gravan IVA. Meta: 30 segundos.</p>
+        </div>
+        <div style="display:flex; gap:9px;">
+          <button onClick="{{ toggleBanner }}" style="display:inline-flex; align-items:center; gap:8px; padding:11px 16px; background:#fff; color:#16309B; border:1px solid #D7DDF0; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="border-color:#16309B;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><path d="M12 3v12"></path><path d="m8 11 4 4 4-4"></path><path d="M8 21h8"></path></svg>
+            {{ bannerBtnLabel }}
+          </button>
+          <button style="display:inline-flex; align-items:center; gap:8px; padding:11px 16px; background:#F2F4FA; color:#16309B; border:none; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">Cotización rápida</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ banner }}" hint-placeholder-val="{{ true }}">
+        <div style="background:#0A1140; border-radius:16px; padding:17px 20px; color:#fff; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+          <div style="min-width:0;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span style="width:7px; height:7px; border-radius:99px; background:#FFC61A; animation:pi-blink 2s ease-in-out infinite;"></span>
+              <span style="font-size:9.5px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#8E9AC4;">Solicitud del SRI detectada por la extensión</span>
+            </div>
+            <div style="font-size:14.5px; font-weight:600; margin-top:7px;">RUC <span style="font-family:'JetBrains Mono',monospace;">0791234567001</span> · Ferretería El Oro Cía. · Notas de venta, 100 juegos · renovación</div>
+            <div style="font-size:12px; color:#9AA6CE; margin-top:4px;">Al importar se llenan cliente, documento, cantidad y el formulario del SRI del paso 2.</div>
+          </div>
+          <div style="display:flex; gap:9px; flex-shrink:0;">
+            <button onClick="{{ importar }}" style="display:inline-flex; align-items:center; gap:8px; padding:11px 17px; background:#FFC61A; color:#0A1140; border:none; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;">Importar (1 clic)</button>
+            <button onClick="{{ toggleBanner }}" style="padding:11px 15px; background:rgba(255,255,255,.06); color:#C2CAE6; border:1px solid rgba(255,255,255,.16); border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;">Descartar</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:14px 18px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <sc-for list="{{ pasos }}" as="p" hint-placeholder-count="4">
+            <span style="display:flex; align-items:center; gap:10px;">
+              <span style="{{ p.style }}">
+                <span style="{{ p.numStyle }}">{{ p.marca }}</span>
+                <span style="display:flex; flex-direction:column; align-items:flex-start; line-height:1.25;">
+                  <span style="font-size:12.5px; font-weight:700;">{{ p.label }}</span>
+                  <span style="font-size:10.5px; opacity:.75;">{{ p.hint }}</span>
+                </span>
+              </span>
+              <sc-if value="{{ p.flecha }}" hint-placeholder-val="{{ true }}">
+                <span style="color:#D7DDF0; font-size:15px;">→</span>
+              </sc-if>
+            </span>
+          </sc-for>
+        </div>
+        <div style="height:4px; background:#F2F4FA; border-radius:99px; margin-top:13px; overflow:hidden;">
+          <span style="{{ progresoStyle }}"></span>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,352px); gap:14px; align-items:start;">
+
+        <div style="display:flex; flex-direction:column; gap:14px; min-width:0;">
+
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:19px 20px;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px;">
+              <div>
+                <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">1 · Producto</h2>
+                <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">Un solo catálogo. Los preimpresos llevan el distintivo SRI y arrastran su formulario.</p>
+              </div>
+              <span style="font-size:11px; color:#8A93AE;">Atajos <span style="font-family:'JetBrains Mono',monospace; color:#16309B;">1</span>–<span style="font-family:'JetBrains Mono',monospace; color:#16309B;">6</span></span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:11px; margin-top:15px;">
+              <sc-for list="{{ catalogo }}" as="c" hint-placeholder-count="6">
+                <button onClick="{{ c.pick }}" style="{{ c.style }}">
+                  <span style="display:flex; align-items:center; justify-content:space-between; gap:9px;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; background:#F2F4FA; border-radius:5px; color:#8A93AE;">{{ c.atajo }}</span>
+                    <span style="{{ c.badge }}">{{ c.badgeLabel }}</span>
+                  </span>
+                  <span style="display:block; font-size:14.5px; font-weight:700; color:#0A1140; margin-top:11px; line-height:1.25;">{{ c.nombre }}</span>
+                  <span style="display:block; font-size:11.5px; color:#8A93AE; margin-top:3px;">{{ c.tipo }}</span>
+                  <span style="display:flex; align-items:baseline; gap:5px; margin-top:10px;">
+                    <span style="font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#8A93AE;">Desde</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:700; color:#16309B;">{{ c.precio }}</span>
+                    <span style="font-size:11px; color:#8A93AE;">/ {{ c.unidad }}</span>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:16px; padding-top:15px; border-top:1px solid #EEF0F8;">
+              <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:9px;">Variante de {{ prodNombre }}</span>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ variantes }}" as="v" hint-placeholder-count="4">
+                  <button onClick="{{ v.pick }}" style="{{ v.style }}">{{ v.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:19px 20px;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px;">
+              <div>
+                <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">2 · Detalles</h2>
+                <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">Cantidad, entrega y urgencia. El descuento por volumen se aplica solo.</p>
+              </div>
+              <span style="{{ escalaPill }}">{{ escalaLabel }}</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:18px; margin-top:16px;">
+              <div>
+                <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:9px;">Cantidad ({{ prodUnidad }})</span>
+                <div style="display:flex; align-items:stretch; gap:9px;">
+                  <button onClick="{{ menos }}" style="width:46px; min-height:46px; display:flex; align-items:center; justify-content:center; background:#F2F4FA; color:#16309B; border:none; border-radius:11px; font-size:20px; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">−</button>
+                  <span style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; background:#F7F9FF; border:1px solid #D7DDF0; border-radius:11px; padding:6px 10px;">
+                    <span style="font-family:'Outfit',sans-serif; font-size:25px; font-weight:600; letter-spacing:-.04em; color:#0A1140; line-height:1;">{{ qty }}</span>
+                    <span style="font-size:10.5px; color:#8A93AE; margin-top:3px;">paso de {{ prodPaso }}</span>
+                  </span>
+                  <button onClick="{{ mas }}" style="width:46px; min-height:46px; display:flex; align-items:center; justify-content:center; background:#F2F4FA; color:#16309B; border:none; border-radius:11px; font-size:20px; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">+</button>
+                </div>
+                <div style="display:flex; gap:7px; flex-wrap:wrap; margin-top:10px;">
+                  <sc-for list="{{ presets }}" as="p" hint-placeholder-count="4">
+                    <button onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:13px; padding:12px 14px; background:#FAFBFF; border:1px solid #E4E8F4; border-radius:11px;">
+                  <span style="font-size:12.5px; color:#3C4763;">Precio unitario aplicado</span>
+                  <span style="display:flex; align-items:baseline; gap:8px;">
+                    <sc-if value="{{ hayDescuento }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#A6AFC8; text-decoration:line-through;">{{ precioBase }}</span>
+                    </sc-if>
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#16309B;">{{ precioUnit }}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:13px;">
+                <div>
+                  <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:9px;">Entrega</span>
+                  <div style="display:flex; gap:7px; flex-wrap:wrap;">
+                    <sc-for list="{{ entregas }}" as="e" hint-placeholder-count="4">
+                      <button onClick="{{ e.pick }}" style="{{ e.style }}">{{ e.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <button onClick="{{ toggleUrgente }}" style="{{ urgenteStyle }}">
+                  <span style="{{ urgenteDot }}"></span>
+                  <span style="flex:1; text-align:left; display:flex; flex-direction:column; line-height:1.3;">
+                    <span style="font-size:13.5px; font-weight:600;">{{ urgenteLabel }}</span>
+                    <span style="font-size:11.5px; opacity:.75;">{{ urgenteHint }}</span>
+                  </span>
+                  <span style="{{ urgenteSwitch }}"><span style="{{ urgenteKnob }}"></span></span>
+                </button>
+                <label style="display:block;">
+                  <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:7px;">Nota para el taller</span>
+                  <textarea placeholder="Ej. mismo arte del talonario anterior, cambiar solo el teléfono." style="width:100%; min-height:74px; padding:12px 14px; background:#F7F9FF; border:1px solid #D7DDF0; border-radius:11px; font-size:13px; line-height:1.55; color:#0A1140; outline:none; resize:vertical;" style-focus="border-color:#16309B;"></textarea>
+                </label>
+              </div>
+            </div>
+
+            <sc-if value="{{ mostrarSri }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:17px; border:1px solid #D7DDF0; border-radius:14px; overflow:hidden;">
+                <div style="background:#0A1140; color:#fff; padding:13px 17px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+                  <span style="display:flex; align-items:center; gap:10px; min-width:0;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#FFC61A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px; height:17px; flex-shrink:0;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v5h6"></path><path d="M9 13h6"></path><path d="M9 17h4"></path></svg>
+                    <span style="display:flex; flex-direction:column; line-height:1.3;">
+                      <span style="font-size:13.5px; font-weight:700;">Formulario del SRI · solicitud de autorización</span>
+                      <span style="font-size:11px; color:#9AA6CE;">{{ sriHint }}</span>
+                    </span>
+                  </span>
+                  <span style="display:inline-flex; align-items:center; gap:7px; padding:5px 11px; background:rgba(255,198,26,.14); border:1px solid rgba(255,198,26,.3); border-radius:99px;">
+                    <span style="width:6px; height:6px; border-radius:99px; background:#FFC61A;"></span>
+                    <span style="font-size:10.5px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#FFC61A;">No grava IVA</span>
+                  </span>
+                </div>
+
+                <div style="background:#FAFBFF; padding:17px;">
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <sc-for list="{{ sriModos }}" as="m" hint-placeholder-count="2">
+                      <button onClick="{{ m.pick }}" style="{{ m.style }}">{{ m.label }}</button>
+                    </sc-for>
+                    <span style="flex:1;"></span>
+                    <button onClick="{{ toggleClave }}" style="{{ claveBtnStyle }}">
+                      <span style="{{ claveCheck }}">✓</span>
+                      Imprimir clave de acceso en la solicitud
+                    </button>
+                  </div>
+
+                  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-top:15px;">
+                    <sc-for list="{{ sriCampos }}" as="f" hint-placeholder-count="6">
+                      <label style="display:block;">
+                        <span style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px;">
+                          <span style="font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#8A93AE;">{{ f.label }}</span>
+                          <span style="{{ f.reqStyle }}">{{ f.req }}</span>
+                        </span>
+                        <input value="{{ f.value }}" onInput="{{ f.set }}" placeholder="{{ f.placeholder }}" style="{{ f.inputStyle }}" style-focus="border-color:#16309B;" />
+                        <span style="display:block; font-size:11px; color:#8A93AE; margin-top:5px; line-height:1.45;">{{ f.hint }}</span>
+                      </label>
+                    </sc-for>
+                  </div>
+
+                  <div style="display:flex; align-items:center; gap:11px; margin-top:15px; padding:13px 15px; background:{{ sriAvisoBg }}; border:1px solid {{ sriAvisoBorder }}; border-radius:11px;">
+                    <span style="width:7px; height:7px; border-radius:99px; background:{{ sriAvisoDot }}; flex-shrink:0;"></span>
+                    <span style="font-size:12.5px; line-height:1.55; color:{{ sriAvisoColor }};">{{ sriAviso }}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <div style="display:flex; align-items:center; gap:10px; margin-top:16px; flex-wrap:wrap;">
+              <button onClick="{{ agregar }}" style="display:inline-flex; align-items:center; gap:8px; padding:12px 18px; background:#16309B; color:#fff; border:none; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="background:#0F2280;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                Agregar a la orden · {{ lineaTotal }}
+              </button>
+              <button style="display:inline-flex; align-items:center; gap:8px; padding:12px 16px; background:#fff; color:#16309B; border:1px dashed #D7DDF0; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="border-color:#16309B;">Adjuntar arte (.cdr, .pdf, foto)</button>
+              <span style="font-size:11.5px; color:#8A93AE;">{{ mixtoHint }}</span>
+            </div>
+          </div>
+
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:19px 20px;">
+            <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px;">
+              <div>
+                <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">3 · Cliente</h2>
+                <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">Identidad express: con la cédula basta, el resto se completa después.</p>
+              </div>
+              <button onClick="{{ toggleCliente }}" style="padding:9px 14px; background:#F2F4FA; color:#16309B; border:none; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">{{ clienteBtnLabel }}</button>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-top:15px;">
+              <sc-for list="{{ camposCliente }}" as="f" hint-placeholder-count="4">
+                <label style="display:block;">
+                  <span style="display:block; font-size:10.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">{{ f.label }}</span>
+                  <input value="{{ f.value }}" placeholder="{{ f.placeholder }}" style="{{ f.inputStyle }}" style-focus="border-color:#16309B;" />
+                </label>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ clienteReconocido }}" hint-placeholder-val="{{ true }}">
+              <div style="margin-top:14px; background:#F2F7F2; border:1px solid #D8E8DC; border-radius:13px; padding:15px 17px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+                  <span style="display:flex; align-items:center; gap:10px; min-width:0;">
+                    <span style="width:7px; height:7px; border-radius:99px; background:#1B8A4B; flex-shrink:0;"></span>
+                    <span style="display:flex; flex-direction:column; line-height:1.35; min-width:0;">
+                      <span style="font-size:13.5px; font-weight:700; color:#155C33;">Ferretería El Oro Cía. Ltda.</span>
+                      <span style="font-size:12px; color:#1B6E3E;">RIMPE Popular · 3 establecimientos · cliente desde 2019</span>
+                    </span>
+                  </span>
+                  <div style="display:flex; gap:8px;">
+                    <button style="padding:8px 13px; background:#fff; color:#155C33; border:1px solid #D8E8DC; border-radius:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Ver historial (14)</button>
+                    <button style="padding:8px 13px; background:#1B6E3E; color:#fff; border:none; border-radius:9px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit;">Repetir última orden</button>
+                  </div>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:13px;">
+                  <sc-for list="{{ historial }}" as="h" hint-placeholder-count="3">
+                    <div style="background:#fff; border:1px solid #D8E8DC; border-radius:10px; padding:11px 13px;">
+                      <div style="font-size:9.5px; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">{{ h.label }}</div>
+                      <div style="font-size:13px; font-weight:600; color:#0A1140; margin-top:4px;">{{ h.value }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:19px 20px;">
+            <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">4 · Pago</h2>
+            <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">Forma de pago y abono que deja hoy. El saldo queda en cuentas por cobrar.</p>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; margin-top:15px;">
+              <div>
+                <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:9px;">Forma de pago</span>
+                <div style="display:flex; gap:7px; flex-wrap:wrap;">
+                  <sc-for list="{{ pagos }}" as="p" hint-placeholder-count="4">
+                    <button onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+              <div>
+                <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:9px;">Abono que deja hoy</span>
+                <div style="display:flex; gap:7px; flex-wrap:wrap;">
+                  <sc-for list="{{ abonos }}" as="a" hint-placeholder-count="4">
+                    <button onClick="{{ a.pick }}" style="{{ a.style }}">{{ a.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="position:sticky; top:88px; display:flex; flex-direction:column; gap:12px;">
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; overflow:hidden;">
+            <div style="padding:16px 18px 13px; border-bottom:1px solid #EEF0F8; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:16px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">Resumen de la orden</h2>
+              <span style="font-size:11px; color:#8A93AE;">{{ itemsHint }}</span>
+            </div>
+
+            <div style="padding:6px 18px;">
+              <sc-for list="{{ items }}" as="i" hint-placeholder-count="2">
+                <div style="padding:12px 0; border-bottom:1px solid #F2F4FA; display:flex; align-items:flex-start; gap:10px;">
+                  <span style="min-width:0; flex:1;">
+                    <span style="display:flex; align-items:center; gap:7px;">
+                      <span style="font-size:13px; font-weight:600; color:#0A1140;">{{ i.nombre }}</span>
+                      <sc-if value="{{ i.esSri }}" hint-placeholder-val="{{ false }}">
+                        <span style="font-size:9px; font-weight:800; letter-spacing:.1em; padding:2px 6px; background:#EEF1FC; border-radius:5px; color:#16309B;">SRI</span>
+                      </sc-if>
+                    </span>
+                    <span style="display:block; font-size:11.5px; color:#8A93AE; margin-top:3px; line-height:1.45;">{{ i.detalle }}</span>
+                  </span>
+                  <span style="display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:#0A1140;">{{ i.total }}</span>
+                    <button onClick="{{ i.quitar }}" style="padding:2px 7px; background:#FDEEEE; color:#B91C1C; border:none; border-radius:6px; font-size:10.5px; font-weight:700; cursor:pointer; font-family:inherit;">Quitar</button>
+                  </span>
+                </div>
+              </sc-for>
+              <sc-if value="{{ sinItems }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:20px 0; text-align:center;">
+                  <div style="font-size:13px; font-weight:600; color:#6B7590;">Todavía no hay líneas</div>
+                  <div style="font-size:11.5px; color:#A6AFC8; margin-top:4px;">Elige un producto arriba y toca “Agregar a la orden”.</div>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="padding:13px 18px; background:#FAFBFF; border-top:1px solid #EEF0F8; display:flex; flex-direction:column; gap:8px;">
+              <sc-for list="{{ desglose }}" as="d" hint-placeholder-count="5">
+                <span style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                  <span style="font-size:12.5px; color:{{ d.color }};">{{ d.label }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:{{ d.color }};">{{ d.value }}</span>
+                </span>
+              </sc-for>
+            </div>
+
+            <div style="padding:15px 18px; border-top:1px solid #EEF0F8; display:flex; flex-direction:column; gap:9px;">
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px;">
+                <span style="font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">Total</span>
+                <span style="font-family:'Outfit',sans-serif; font-size:29px; font-weight:600; letter-spacing:-.04em; color:#0A1140; line-height:1;">{{ total }}</span>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; background:#FFFBEB; border:1px solid #F4E3A8; border-radius:10px;">
+                <span style="font-size:12.5px; color:#7A5A00;">Abono de hoy</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:13.5px; font-weight:700; color:#B45309;">{{ abono }}</span>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                <span style="font-size:12.5px; color:#3C4763;">Saldo pendiente</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:{{ saldoColor }};">{{ saldo }}</span>
+              </div>
+            </div>
+
+            <div style="padding:14px 18px; border-top:1px solid #EEF0F8; display:flex; flex-direction:column; gap:8px;">
+              <span style="font-size:10.5px; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE;">Antes de guardar</span>
+              <sc-for list="{{ checklist }}" as="c" hint-placeholder-count="4">
+                <span style="display:flex; align-items:center; gap:9px;">
+                  <span style="{{ c.mark }}">{{ c.icon }}</span>
+                  <span style="font-size:12.5px; color:{{ c.color }};">{{ c.label }}</span>
+                </span>
+              </sc-for>
+            </div>
+
+            <div style="padding:14px 18px 18px; border-top:1px solid #EEF0F8; display:flex; flex-direction:column; gap:8px;">
+              <button style="{{ guardarStyle }}">
+                <span>{{ guardarLabel }}</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:11px; opacity:.7;">F2</span>
+              </button>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <button style="padding:10px 12px; background:#F2F4FA; color:#16309B; border:none; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">Guardar y seguir</button>
+                <button style="padding:10px 12px; background:#F2F4FA; color:#16309B; border:none; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;" style-hover="background:#EEF1FC;">Solo cotización</button>
+              </div>
+              <button style="display:flex; align-items:center; justify-content:center; gap:8px; padding:10px 12px; background:#F2F7F2; color:#155C33; border:1px solid #D8E8DC; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;">Enviar resumen por WhatsApp</button>
+            </div>
+          </div>
+
+          <div style="background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:14px 16px;">
+            <div style="font-size:10.5px; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE;">Qué se imprime al guardar</div>
+            <div style="font-size:12.5px; line-height:1.6; color:#3C4763; margin-top:7px;">{{ impresionHint }}</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560,&quot;height&quot;:1400}}">
+const CAT = [
+  { nombre:'Notas de venta', tipo:'Preimpreso · RIMPE Popular', precio:0.48, unidad:'juego', paso:50, presets:[50,100,200,500], sri:true,  diseno:0, variantes:['Original + 1 copia','Original + 2 copias','1/4 oficio','Media hoja'] },
+  { nombre:'Facturas', tipo:'Preimpreso · Régimen General', precio:0.55, unidad:'juego', paso:50, presets:[100,200,500,1000], sri:true, diseno:0, variantes:['Original + 1 copia','Original + 2 copias','1/4 oficio','A5'] },
+  { nombre:'Talonarios', tipo:'Autocopiativo comercial', precio:0.42, unidad:'juego', paso:25, presets:[50,100,200,300], sri:false, diseno:6, variantes:['2 partes','3 partes','Numerado','Con logo a color'] },
+  { nombre:'Sellos', tipo:'Trodat / Shiny', precio:26, unidad:'unidad', paso:1, presets:[1,2,3,5], sri:false, diseno:0, variantes:['Trodat 4913','Trodat 4911','Shiny S-542','Fechador'] },
+  { nombre:'Tarjetas', tipo:'Couché 300 g', precio:0.19, unidad:'unidad', paso:50, presets:[100,200,500,1000], sri:false, diseno:8, variantes:['Mate','Soft touch','Laminado brillo','Reciclado'] },
+  { nombre:'Gigantografía', tipo:'Lona 1440 dpi', precio:9.5, unidad:'m²', paso:1, presets:[1,2,4,6], sri:false, diseno:0, variantes:['Lona 13 oz','Blackout','Vinil adhesivo','Microperforado'] },
+];
+
+const ENTREGAS = ['Hoy 17:00','Mañana','En 2 días','Fecha exacta'];
+const PAGOS = ['Efectivo','Transferencia','Tarjeta','Crédito 15 días'];
+const IVA = 0.15, URGENCIA = 0.15;
+const r2 = n => Math.round(n * 100) / 100;
+const escala = q => (q >= 500 ? 0.85 : q >= 200 ? 0.92 : 1);
+
+class Component extends DCLogic {
+  state = {
+    prodIdx:0, variante:0, qty:100, urgente:false, entrega:'Mañana', pago:'Efectivo', abonoModo:'50%',
+    banner:true, clienteAbierto:true, sriModo:'Renovación', imprimirClave:true,
+    numeracion:'001-001-000001', autorizacion:'', clave:'', establecimiento:'001', punto:'001',
+    actividad:'Venta al por menor de artículos de ferretería',
+    items:[{ nombre:'Notas de venta', detalle:'100 juegos · Original + 1 copia · no grava', esSri:true, bruto:48, diseno:0, grava:false }],
+  };
+
+  money = n => '$ ' + n.toLocaleString('es-EC', { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+  get prod() { return CAT[this.state.prodIdx]; }
+
+  lineaBruto() {
+    const p = this.prod, q = this.state.qty;
+    return { bruto: r2(p.precio * escala(q) * q), diseno: p.diseno };
+  }
+
+  calc() {
+    const items = this.state.items;
+    const sub = r2(items.reduce((a, i) => a + i.bruto, 0));
+    const dis = r2(items.reduce((a, i) => a + i.diseno, 0));
+    const recargo = this.state.urgente ? r2((sub + dis) * URGENCIA) : 0;
+    const gravables = items.filter(i => i.grava);
+    const baseGrava = r2(gravables.reduce((a, i) => a + i.bruto + i.diseno, 0) * (this.state.urgente ? 1 + URGENCIA : 1));
+    const iva = r2(baseGrava * IVA);
+    const total = r2(sub + dis + recargo + iva);
+    const abono = this.state.abonoModo === 'Sin abono' ? 0
+      : this.state.abonoModo === '50%' ? r2(total / 2)
+      : this.state.abonoModo === 'Total' ? total
+      : Math.min(total, r2(total / 2 + 10));
+    return { sub, dis, recargo, iva, total, abono, saldo: r2(total - abono), gravables: gravables.length, items: items.length };
+  }
+
+  chip(activo, extra) {
+    return `padding:9px 13px; border-radius:10px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; border:1px solid ${activo ? '#16309B' : '#D7DDF0'}; background:${activo ? '#EEF1FC' : '#fff'}; color:#16309B; ${extra || ''}`;
+  }
+
+  input(estado) {
+    const c = estado === 'error' ? '#F3C6C6' : estado === 'ok' ? '#D8E8DC' : '#D7DDF0';
+    const bg = estado === 'mono' ? '#FFFBEB' : '#fff';
+    return `width:100%; padding:11px 13px; background:${bg}; border:1px solid ${estado === 'mono' ? '#F4E3A8' : c}; border-radius:10px; font-size:13.5px; color:#0A1140; outline:none;` + (estado === 'mono' ? " font-family:'JetBrains Mono',monospace;" : '');
+  }
+
+  renderVals() {
+    const st = this.state, p = this.prod, d = this.calc();
+    const lin = this.lineaBruto();
+    const esc = escala(st.qty);
+    const haySri = st.items.some(i => i.esSri) || p.sri;
+    const sriListo = st.numeracion.trim().length > 6 && st.establecimiento.length === 3 && st.punto.length === 3;
+
+    const marca = (i, hecho) => hecho
+      ? { icon:'✓', mark:'width:17px; height:17px; border-radius:99px; background:#F2F7F2; border:1px solid #D8E8DC; color:#1B6E3E; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0;', color:'#3C4763' }
+      : { icon:'', mark:'width:17px; height:17px; border-radius:99px; background:#fff; border:1px solid #D7DDF0; flex-shrink:0; display:block;', color:'#A6AFC8' };
+
+    const pasosDef = [
+      { label:'Producto', hint:p.nombre, hecho:true },
+      { label:'Detalles', hint: haySri ? 'con formulario SRI' : st.qty + ' ' + p.unidad + (st.qty === 1 ? '' : 's'), hecho: st.items.length > 0 },
+      { label:'Cliente', hint:'Ferretería El Oro', hecho: st.clienteAbierto },
+      { label:'Pago', hint: st.pago, hecho: d.total > 0 },
+    ];
+    const hechos = pasosDef.filter(x => x.hecho).length;
+
+    return {
+      nav: [
+        { grupo:'Operaciones', items:['Panel principal','Órdenes','Nueva Orden','Despacho'] },
+        { grupo:'Taller', items:['Monitor de taller','Diseño gráfico','Bodega de insumos'] },
+        { grupo:'Finanzas', items:['Cuentas por cobrar','Facturación SRI','Flujo de caja','Calculadora'] },
+        { grupo:'Entidades', items:['Clientes','Proveedores'] },
+      ].map(g => ({
+        grupo: g.grupo,
+        titleStyle: `padding:0 10px; font-size:9px; font-weight:800; letter-spacing:.24em; text-transform:uppercase; color:${g.grupo === 'Operaciones' ? '#FFC61A' : '#5C6892'};`,
+        items: g.items.map(label => {
+          const activo = label === 'Nueva Orden';
+          return { label, style: `display:block; padding:9px 10px; border-radius:8px; font-size:12.5px; font-weight:${activo ? 600 : 500}; color:${activo ? '#FFC61A' : '#C2CAE6'}; background:${activo ? 'rgba(255,198,26,.1)' : 'transparent'}; ${activo ? 'box-shadow:inset 2px 0 0 #FFC61A;' : ''}` };
+        }),
+      })),
+      relojLargo: new Date().toLocaleDateString('es-EC', { weekday:'long', day:'numeric', month:'long' }) + ' · ' + new Date().toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' }),
+
+      banner: st.banner,
+      toggleBanner: () => this.setState({ banner: !st.banner }),
+      bannerBtnLabel: st.banner ? 'Ocultar aviso del SRI' : 'Importar del SRI',
+      importar: () => this.setState({
+        banner:false, prodIdx:0, variante:0, qty:100, sriModo:'Renovación',
+        items:[{ nombre:'Notas de venta', detalle:'100 juegos · Original + 1 copia · no grava', esSri:true, bruto:48, diseno:0, grava:false }],
+      }),
+
+      pasos: pasosDef.map((x, i) => {
+        const activo = i + 1 === Math.min(hechos + 1, 4);
+        return {
+          label:x.label, hint:x.hint, flecha: i < 3,
+          style: `display:inline-flex; align-items:center; gap:9px; padding:8px 13px; border-radius:11px; background:${activo ? '#16309B' : x.hecho ? '#EEF1FC' : '#F7F9FF'}; color:${activo ? '#fff' : x.hecho ? '#16309B' : '#8A93AE'};`,
+          numStyle: `width:21px; height:21px; border-radius:99px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:700; flex-shrink:0; background:${activo ? 'rgba(255,255,255,.16)' : x.hecho ? '#fff' : '#fff'}; color:${activo ? '#fff' : x.hecho ? '#1B6E3E' : '#8A93AE'};`,
+          marca: x.hecho && !activo ? '✓' : String(i + 1),
+        };
+      }),
+      progresoStyle: `display:block; height:100%; width:${(hechos / 4) * 100}%; background:#16309B; border-radius:99px;`,
+
+      catalogo: CAT.map((c, i) => {
+        const activo = i === st.prodIdx;
+        return {
+          nombre:c.nombre, tipo:c.tipo, unidad:c.unidad, atajo:String(i + 1),
+          precio: this.money(c.precio),
+          badgeLabel: c.sri ? 'SRI · no grava' : 'IVA 15%',
+          badge: `font-size:9px; font-weight:800; letter-spacing:.08em; padding:3px 7px; border-radius:5px; background:${c.sri ? '#FFFBEB' : '#F2F7F2'}; color:${c.sri ? '#B45309' : '#1B6E3E'}; border:1px solid ${c.sri ? '#F4E3A8' : '#D8E8DC'};`,
+          pick: () => this.setState({ prodIdx:i, variante:0, qty:c.presets[1] ?? c.presets[0] }),
+          style: `text-align:left; padding:14px 15px 16px; border-radius:13px; cursor:pointer; font-family:inherit; background:${activo ? '#F7F9FF' : '#fff'}; border:1px solid ${activo ? '#16309B' : '#E4E8F4'}; ${activo ? 'box-shadow:0 14px 28px -22px rgba(10,17,64,.45);' : ''}`,
+        };
+      }),
+      prodNombre: p.nombre, prodUnidad: p.unidad + (p.unidad === 'm²' ? '' : 's'), prodPaso: p.paso,
+      variantes: p.variantes.map((label, i) => ({ label, pick: () => this.setState({ variante:i }), style: this.chip(i === st.variante) })),
+
+      qty: st.qty.toLocaleString('es-EC'),
+      menos: () => this.setState({ qty: Math.max(p.paso, st.qty - p.paso) }),
+      mas: () => this.setState({ qty: st.qty + p.paso }),
+      presets: p.presets.map(n => ({ label: n.toLocaleString('es-EC'), pick: () => this.setState({ qty:n }), style: this.chip(n === st.qty, 'padding:8px 12px; font-size:12px;') })),
+      escalaLabel: esc === 1 ? 'Sin descuento por volumen' : esc === 0.92 ? 'Volumen ≥200 · −8%' : 'Volumen ≥500 · −15%',
+      escalaPill: `display:inline-flex; align-items:center; padding:5px 11px; border-radius:99px; font-size:11px; font-weight:700; background:${esc === 1 ? '#F5F6FA' : '#F2F7F2'}; border:1px solid ${esc === 1 ? '#E4E8F4' : '#D8E8DC'}; color:${esc === 1 ? '#5B6480' : '#1B6E3E'};`,
+      hayDescuento: esc !== 1,
+      precioBase: this.money(p.precio),
+      precioUnit: this.money(r2(p.precio * esc)),
+
+      entregas: ENTREGAS.map(label => ({ label, pick: () => this.setState({ entrega:label }), style: this.chip(label === st.entrega, 'padding:8px 12px; font-size:12px;') })),
+      toggleUrgente: () => this.setState({ urgente: !st.urgente }),
+      urgenteLabel: st.urgente ? 'Orden urgente' : 'Prioridad normal',
+      urgenteHint: st.urgente ? 'Recargo del 15% aplicado al subtotal' : 'Toca para marcar urgente (+15%)',
+      urgenteStyle: `display:flex; align-items:center; gap:11px; width:100%; padding:13px 15px; border-radius:12px; cursor:pointer; font-family:inherit; text-align:left; background:${st.urgente ? '#FDEEEE' : '#FAFBFF'}; border:1px solid ${st.urgente ? '#F3C6C6' : '#E4E8F4'}; color:${st.urgente ? '#B91C1C' : '#3C4763'};`,
+      urgenteDot: `width:8px; height:8px; border-radius:99px; flex-shrink:0; background:${st.urgente ? '#E70101' : '#A6AFC8'}; ${st.urgente ? 'animation:pi-blink 2s ease-in-out infinite;' : ''}`,
+      urgenteSwitch: `width:38px; height:22px; border-radius:99px; flex-shrink:0; padding:3px; display:flex; justify-content:${st.urgente ? 'flex-end' : 'flex-start'}; background:${st.urgente ? '#E70101' : '#D7DDF0'};`,
+      urgenteKnob: 'width:16px; height:16px; border-radius:99px; background:#fff; display:block;',
+
+      mostrarSri: haySri,
+      sriHint: st.sriModo === 'Renovación' ? 'Renovación de talonario · el arte maestro ya está en CorelDRAW' : 'Primera autorización · requiere revisión del padrón',
+      sriModos: ['Renovación','Nueva autorización'].map(label => ({ label, pick: () => this.setState({ sriModo:label }), style: this.chip(label === st.sriModo, 'padding:8px 13px; font-size:12px;') })),
+      toggleClave: () => this.setState({ imprimirClave: !st.imprimirClave }),
+      claveBtnStyle: `display:inline-flex; align-items:center; gap:8px; padding:8px 13px; border-radius:10px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; background:#fff; border:1px solid ${st.imprimirClave ? '#16309B' : '#D7DDF0'}; color:#16309B;`,
+      claveCheck: `width:16px; height:16px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; background:${st.imprimirClave ? '#16309B' : '#F2F4FA'}; color:${st.imprimirClave ? '#fff' : 'transparent'};`,
+      sriCampos: [
+        { label:'Actividad económica', req:'Obligatorio', value:st.actividad, placeholder:'Selecciona del padrón', hint:'Viene del RUC del cliente; se puede cambiar.', set: e => this.setState({ actividad:e.target.value }), estado:'ok' },
+        { label:'Establecimiento', req:'Obligatorio', value:st.establecimiento, placeholder:'001', hint:'3 dígitos. Predeterminado del cliente.', set: e => this.setState({ establecimiento:e.target.value }), estado:'mono' },
+        { label:'Punto de emisión', req:'Obligatorio', value:st.punto, placeholder:'001', hint:'3 dígitos.', set: e => this.setState({ punto:e.target.value }), estado:'mono' },
+        { label:'Numeración inicial', req:'Obligatorio', value:st.numeracion, placeholder:'001-001-000001', hint:'Continúa desde el último talonario autorizado.', set: e => this.setState({ numeracion:e.target.value }), estado:'mono' },
+        { label:'N° de autorización', req:'Al recibir', value:st.autorizacion, placeholder:'Se llena con la respuesta del SRI', hint:'Queda pendiente hasta que el SRI responda.', set: e => this.setState({ autorizacion:e.target.value }), estado:'' },
+        { label:'Clave de acceso', req:'Opcional', value:st.clave, placeholder:'Clave del contribuyente', hint:'Solo si el cliente autoriza guardarla.', set: e => this.setState({ clave:e.target.value }), estado:'mono' },
+      ].map(f => ({
+        ...f,
+        inputStyle: this.input(f.estado),
+        reqStyle: `font-size:9.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:${f.req === 'Obligatorio' ? '#B45309' : '#A6AFC8'};`,
+      })),
+      sriAviso: sriListo
+        ? 'Formulario completo. Al guardar se imprime la solicitud de autorización en A5 y la orden entra como pendiente del SRI.'
+        : 'Falta la numeración inicial o el establecimiento: sin eso el SRI rechaza la solicitud.',
+      sriAvisoBg: sriListo ? '#F2F7F2' : '#FFFBEB',
+      sriAvisoBorder: sriListo ? '#D8E8DC' : '#F4E3A8',
+      sriAvisoDot: sriListo ? '#1B8A4B' : '#FFC61A',
+      sriAvisoColor: sriListo ? '#155C33' : '#7A5A00',
+
+      lineaTotal: this.money(r2(lin.bruto + lin.diseno)),
+      agregar: () => this.setState({
+        items: [...st.items, {
+          nombre: p.nombre,
+          detalle: st.qty.toLocaleString('es-EC') + ' ' + p.unidad + (st.qty === 1 || p.unidad === 'm²' ? '' : 's') + ' · ' + p.variantes[st.variante] + (p.sri ? ' · no grava' : ' · grava IVA'),
+          esSri: p.sri, bruto: lin.bruto, diseno: lin.diseno, grava: !p.sri,
+        }],
+      }),
+      mixtoHint: d.gravables > 0 && d.gravables < d.items
+        ? 'Orden mixta: el IVA se calcula solo sobre ' + d.gravables + ' de ' + d.items + ' líneas.'
+        : 'Puedes mezclar preimpresos del SRI y trabajos comerciales en la misma orden.',
+
+      toggleCliente: () => this.setState({ clienteAbierto: !st.clienteAbierto }),
+      clienteBtnLabel: st.clienteAbierto ? 'Cliente ocasional' : 'Buscar cliente',
+      clienteReconocido: st.clienteAbierto,
+      camposCliente: [
+        { label:'Cédula / RUC', value:'0791234567001', placeholder:'Sin guiones', estado:'ok' },
+        { label:'Razón social', value: st.clienteAbierto ? 'FERRETERÍA EL ORO CÍA. LTDA.' : '', placeholder:'Nombre del cliente', estado:'' },
+        { label:'Teléfono / WhatsApp', value: st.clienteAbierto ? '099 812 4471' : '', placeholder:'09…', estado:'' },
+        { label:'Correo (opcional)', value:'', placeholder:'Para enviar la nota', estado:'' },
+      ].map(f => ({ ...f, inputStyle: this.input(f.estado) })),
+      historial: [
+        { label:'Última orden', value:'12 jun · 100 juegos' },
+        { label:'Autorización vigente', value:'hasta 30 nov' },
+        { label:'Saldo actual', value:'$ 60,00' },
+      ],
+
+      pagos: PAGOS.map(label => ({ label, pick: () => this.setState({ pago:label }), style: this.chip(label === st.pago, 'padding:9px 13px; font-size:12px;') })),
+      abonos: ['Sin abono','50%','Total','+ $10'].map(label => ({ label, pick: () => this.setState({ abonoModo:label }), style: this.chip(label === st.abonoModo, 'padding:9px 13px; font-size:12px;') })),
+
+      items: st.items.map((i, idx) => ({
+        nombre:i.nombre, detalle:i.detalle, esSri:i.esSri,
+        total: this.money(r2(i.bruto + i.diseno)),
+        quitar: () => this.setState({ items: st.items.filter((_, k) => k !== idx) }),
+      })),
+      sinItems: st.items.length === 0,
+      itemsHint: d.items + (d.items === 1 ? ' línea' : ' líneas') + (d.gravables ? ' · ' + d.gravables + ' grava' : ' · ninguna grava'),
+      desglose: [
+        { label:'Subtotal', value:this.money(d.sub), color:'#3C4763' },
+        ...(d.dis ? [{ label:'Diseño', value:this.money(d.dis), color:'#3C4763' }] : []),
+        ...(d.recargo ? [{ label:'Recargo por urgencia (15%)', value:this.money(d.recargo), color:'#B91C1C' }] : []),
+        { label: d.gravables ? 'IVA 15% · solo ' + d.gravables + ' de ' + d.items : 'IVA 15% · ninguna línea grava', value:this.money(d.iva), color:'#3C4763' },
+        { label:'Entrega · ' + st.entrega, value: st.urgente ? 'Urgente' : 'Normal', color:'#8A93AE' },
+      ],
+      total: this.money(d.total),
+      abono: this.money(d.abono),
+      saldo: this.money(d.saldo),
+      saldoColor: d.saldo > 0 ? '#B45309' : '#1B6E3E',
+      checklist: [
+        { label: d.items ? d.items + ' línea(s) en la orden' : 'Agregar al menos una línea', ...marca(0, d.items > 0) },
+        { label: st.clienteAbierto ? 'Cliente identificado' : 'Falta identificar al cliente', ...marca(0, st.clienteAbierto) },
+        { label: 'Entrega definida · ' + st.entrega, ...marca(0, true) },
+        ...(haySri ? [{ label: sriListo ? 'Formulario del SRI completo' : 'Formulario del SRI incompleto', ...marca(0, sriListo) }] : []),
+      ],
+      guardarLabel: haySri ? 'Guardar e imprimir solicitud SRI' : 'Guardar e imprimir nota',
+      guardarStyle: `display:flex; align-items:center; justify-content:center; gap:9px; width:100%; padding:14px 16px; border:none; border-radius:11px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; background:${d.items && st.clienteAbierto ? '#16309B' : '#F2F4FA'}; color:${d.items && st.clienteAbierto ? '#fff' : '#A6AFC8'};`,
+      impresionHint: haySri
+        ? 'Solicitud de autorización de preimpresos (A5) + orden de producción. La nota de venta se emite cuando el cliente retira.'
+        : 'Nota de venta o recibo de abono (Epson) + orden de producción para el taller.',
+    };
+  }
+}
+
+</script>
+</body>
+</html>

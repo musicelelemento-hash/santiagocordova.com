@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#F7F9FF; color:#0A1140; font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:#16309B; text-decoration:none; }
+  a:hover { color:#0F2280; }
+  @keyframes pi-rise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pi-blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
+  @media (prefers-reduced-motion:reduce) { * { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</helmet>
+
+<div style="padding:clamp(20px,2.4vw,38px) clamp(16px,2.6vw,40px) 90px;">
+<div style="max-width:1180px; margin:0 auto; display:flex; flex-direction:column; gap:16px; animation:pi-rise .6s cubic-bezier(.2,.8,.2,1) both;">
+
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap;">
+    <div>
+      <p style="margin:0; font-size:10.5px; font-weight:800; letter-spacing:.32em; text-transform:uppercase; color:#8A93AE;">Auditoría de diseño · Marino &amp; Oro</p>
+      <h1 style="margin:6px 0 0; font-family:'Outfit',sans-serif; font-size:30px; font-weight:600; letter-spacing:-.035em; color:#0A1140;">Informe: lo que falta y lo que hay que corregir</h1>
+      <p style="margin:8px 0 0; font-size:13.5px; line-height:1.6; color:#6B7590; max-width:78ch;">Revisión del repositorio <b>ImprentaCordova.Net</b> contra el handoff de diseño y el <b>design_manifest.md</b>. Todo lo listado sale de archivos leídos, no de suposiciones. Tema claro obligatorio: fondo <span style="font-family:'JetBrains Mono',monospace;">#F7F9FF</span>, superficies <span style="font-family:'JetBrains Mono',monospace;">#FFFFFF</span>.</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:11px; padding:10px 14px; background:#fff; border:1px solid #E4E8F4; border-radius:12px;">
+      <svg viewBox="0 0 34 34" style="width:28px; height:28px; display:block; flex-shrink:0;" aria-hidden="true"><path d="M29.1 10A14 14 0 1 0 29.1 24" fill="none" stroke="#16309B" stroke-width="6.2" stroke-linecap="round"></path><path d="M10.6 10.4h9v2.9h-3v7.4h3v2.9h-9v-2.9h3v-7.4h-3z" fill="#E70101" stroke="#FFC61A" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+      <span style="display:flex; flex-direction:column; line-height:1.2;">
+        <span style="font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; letter-spacing:-.03em; color:#0A1140;">CÓRDOVA<span style="color:#FFC61A;">.</span></span>
+        <span style="font-size:8.5px; font-weight:700; letter-spacing:.28em; text-transform:uppercase; color:#8A93AE; margin-top:2px;">Informe interno</span>
+      </span>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px;">
+    <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+      <div style="background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:15px 17px;">
+        <div style="display:flex; align-items:center; gap:7px;">
+          <span style="{{ k.dot }}"></span>
+          <span style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">{{ k.label }}</span>
+        </div>
+        <div style="font-family:'Outfit',sans-serif; font-size:30px; font-weight:600; letter-spacing:-.04em; color:#0A1140; margin-top:8px; line-height:1;">{{ k.value }}</div>
+        <div style="font-size:11.5px; color:#8A93AE; margin-top:5px; line-height:1.45;">{{ k.hint }}</div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="background:#0A1140; border-radius:16px; padding:20px 22px; color:#fff; display:flex; gap:22px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+    <div style="min-width:0; max-width:70ch;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="width:7px; height:7px; border-radius:99px; background:#E70101; animation:pi-blink 2.4s ease-in-out infinite;"></span>
+        <span style="font-size:9.5px; font-weight:800; letter-spacing:.24em; text-transform:uppercase; color:#8E9AC4;">Bloqueante principal</span>
+      </div>
+      <div style="font-family:'Outfit',sans-serif; font-size:20px; font-weight:600; letter-spacing:-.03em; margin-top:9px;">Nueva Orden obliga a elegir “SRI” o “Comercial” antes de tocar un producto</div>
+      <p style="margin:8px 0 0; font-size:13px; line-height:1.65; color:#C2CAE6;">Son dos flujos distintos (6 pasos para SRI, 5 para comercial) que no se pueden mezclar en una misma orden. El manifiesto pide 30 segundos por orden y un solo camino: <b style="color:#fff;">producto → detalles → cliente → pago</b>. Ya está resuelto en el diseño entregado: un único flujo donde los preimpresos del SRI abren su formulario dentro del paso 2.</p>
+    </div>
+    <a href="Nueva-Orden-Unificada.dc.html" style="display:inline-flex; align-items:center; gap:8px; padding:12px 18px; background:#FFC61A; color:#0A1140; border-radius:11px; font-size:13px; font-weight:700; white-space:nowrap;">Ver flujo unificado →</a>
+  </div>
+
+  <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; overflow:hidden;">
+    <div style="padding:16px 20px 13px; border-bottom:1px solid #EEF0F8; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">1 · Pantallas sin diseño hi-fi</h2>
+        <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">El handoff cubre 6 archivos. Estas vistas nunca tuvieron referencia visual.</p>
+      </div>
+      <span style="font-size:11.5px; color:#8A93AE;">{{ pantallasHint }}</span>
+    </div>
+    <div style="display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.2fr) minmax(0,3fr) 132px; gap:0; background:#FAFBFF; padding:10px 20px; border-bottom:1px solid #EEF0F8;">
+      <span style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">Pantalla</span>
+      <span style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">Archivo</span>
+      <span style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE;">Qué falta</span>
+      <span style="font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; text-align:right;">Estado</span>
+    </div>
+    <sc-for list="{{ pantallas }}" as="p" hint-placeholder-count="8">
+      <div style="display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.2fr) minmax(0,3fr) 132px; gap:0; padding:13px 20px; border-bottom:1px solid #F2F4FA; align-items:center;" style-hover="background:#F7F9FF;">
+        <span style="font-size:13.5px; font-weight:600; color:#0A1140; padding-right:12px;">{{ p.nombre }}</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#6B7590; padding-right:12px; word-break:break-word;">{{ p.archivo }}</span>
+        <span style="font-size:12.5px; line-height:1.55; color:#3C4763; padding-right:12px;">{{ p.falta }}</span>
+        <span style="display:flex; justify-content:flex-end;"><span style="{{ p.pill }}">{{ p.estado }}</span></span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; overflow:hidden;">
+    <div style="padding:16px 20px 13px; border-bottom:1px solid #EEF0F8; display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">2 · Hallazgos abiertos</h2>
+        <p style="margin:5px 0 0; font-size:12.5px; color:#6B7590;">Cada hallazgo cita el archivo donde se ve. Filtra por severidad.</p>
+      </div>
+      <div style="display:flex; gap:7px; flex-wrap:wrap;">
+        <sc-for list="{{ filtros }}" as="f" hint-placeholder-count="4">
+          <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+    <sc-for list="{{ hallazgos }}" as="h" hint-placeholder-count="6">
+      <div style="padding:15px 20px; border-bottom:1px solid #F2F4FA; display:flex; gap:14px; align-items:flex-start;">
+        <span style="{{ h.sev }}">{{ h.severidad }}</span>
+        <span style="min-width:0; flex:1;">
+          <span style="display:block; font-size:13.5px; font-weight:600; color:#0A1140; line-height:1.4;">{{ h.titulo }}</span>
+          <span style="display:block; font-size:12.5px; line-height:1.6; color:#3C4763; margin-top:5px;">{{ h.detalle }}</span>
+          <span style="display:flex; gap:7px; flex-wrap:wrap; margin-top:9px;">
+            <sc-for list="{{ h.archivos }}" as="a" hint-placeholder-count="2">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; padding:4px 8px; background:#EEF1FC; border-radius:6px; color:#16309B;">{{ a }}</span>
+            </sc-for>
+          </span>
+        </span>
+        <span style="flex-shrink:0; width:180px; font-size:12px; line-height:1.55; color:#6B7590; padding-left:14px; border-left:1px solid #F2F4FA;">
+          <span style="display:block; font-size:9.5px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; color:#8A93AE; margin-bottom:4px;">Corrección</span>
+          {{ h.fix }}
+        </span>
+      </div>
+    </sc-for>
+    <div style="padding:12px 20px; background:#FAFBFF; font-size:11.5px; color:#8A93AE;">{{ hallazgosHint }}</div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px;">
+    <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:18px 20px;">
+      <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">3 · Unificación del pedido</h2>
+      <p style="margin:7px 0 0; font-size:12.5px; line-height:1.6; color:#6B7590;">Un solo flujo. El SRI deja de ser un camino aparte y pasa a ser un formulario que aparece cuando la orden lleva preimpresos.</p>
+      <div style="display:flex; flex-direction:column; gap:0; margin-top:14px;">
+        <sc-for list="{{ unificacion }}" as="u" hint-placeholder-count="5">
+          <div style="display:flex; gap:12px; align-items:flex-start; padding:11px 0; border-top:1px solid #F2F4FA;">
+            <span style="width:22px; height:22px; border-radius:7px; background:#EEF1FC; color:#16309B; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ u.n }}</span>
+            <span style="min-width:0;">
+              <span style="display:block; font-size:13px; font-weight:600; color:#0A1140;">{{ u.titulo }}</span>
+              <span style="display:block; font-size:12px; line-height:1.55; color:#6B7590; margin-top:3px;">{{ u.detalle }}</span>
+            </span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:14px; padding:13px 15px; background:#FFFBEB; border:1px solid #F4E3A8; border-radius:11px; font-size:12.5px; line-height:1.6; color:#7A5A00;">
+        Regla que se mantiene: los preimpresos del SRI <b>no gravan IVA</b>, exigen numeración y autorización, y al guardar la orden se imprime la <b>solicitud de autorización</b> — no la nota de venta.
+      </div>
+    </div>
+
+    <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:18px 20px;">
+      <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">4 · Orden de trabajo sugerido</h2>
+      <p style="margin:7px 0 0; font-size:12.5px; line-height:1.6; color:#6B7590;">Por impacto en el mostrador, no por facilidad técnica.</p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <sc-for list="{{ fases }}" as="f" hint-placeholder-count="4">
+          <div style="border:1px solid #E4E8F4; border-radius:12px; padding:13px 15px; background:#FAFBFF;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+              <span style="font-size:13px; font-weight:700; color:#0A1140;">{{ f.titulo }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#16309B; background:#EEF1FC; padding:3px 8px; border-radius:99px;">{{ f.plazo }}</span>
+            </div>
+            <div style="font-size:12px; line-height:1.6; color:#6B7590; margin-top:6px;">{{ f.detalle }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:18px 20px;">
+    <h2 style="margin:0; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">Entregado en esta ronda</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:13px;">
+      <sc-for list="{{ entregas }}" as="e" hint-placeholder-count="3">
+        <a href="{{ e.href }}" style="display:block; border:1px solid #E4E8F4; border-radius:13px; padding:15px 16px; background:#fff;" style-hover="border-color:#16309B; box-shadow:0 14px 28px -20px rgba(10,17,64,.4);">
+          <span style="display:block; font-size:9.5px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#8A93AE;">{{ e.tipo }}</span>
+          <span style="display:block; font-family:'Outfit',sans-serif; font-size:16px; font-weight:600; letter-spacing:-.03em; color:#0A1140; margin-top:6px;">{{ e.nombre }}</span>
+          <span style="display:block; font-size:12px; line-height:1.55; color:#6B7590; margin-top:5px;">{{ e.detalle }}</span>
+          <span style="display:block; font-size:11.5px; font-weight:700; color:#16309B; margin-top:10px;">Abrir →</span>
+        </a>
+      </sc-for>
+    </div>
+  </div>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:1400}}">
+const SEV = {
+  Alta:  { bg:'#FDEEEE', border:'#F3C6C6', color:'#B91C1C' },
+  Media: { bg:'#FFFBEB', border:'#F4E3A8', color:'#B45309' },
+  Baja:  { bg:'#F5F6FA', border:'#E4E8F4', color:'#5B6480' },
+};
+
+const ESTADOS = {
+  'Entregado':  { bg:'#F2F7F2', border:'#D8E8DC', color:'#1B6E3E' },
+  'Falta':      { bg:'#FDEEEE', border:'#F3C6C6', color:'#B91C1C' },
+  'A corregir': { bg:'#FFFBEB', border:'#F4E3A8', color:'#B45309' },
+};
+
+const PANTALLAS = [
+  { nombre:'Ingreso al panel', archivo:'pages/Login.tsx', falta:'No existía referencia hi-fi: la vista tenía una franja marino de 44% que rompe la regla de “máximo dos fondos claros”. Entregada en tema claro con marca vectorial.', estado:'Entregado' },
+  { nombre:'Nueva Orden · celular', archivo:'components/MobileActionHub.tsx', falta:'El handoff móvil solo mostraba un asistente de 3 pasos de muestra; sin formulario SRI, sin resumen de IVA condicional ni objetivos táctiles verificados.', estado:'Entregado' },
+  { nombre:'Nueva Orden · escritorio', archivo:'pages/NuevoPedido.tsx', falta:'Bifurcación SRI / Comercial con dos steppers distintos. Rediseñada como un único flujo de 4 pasos.', estado:'Entregado' },
+  { nombre:'Recuperar acceso', archivo:'—', falta:'No hay pantalla ni flujo: si un usuario del taller olvida su clave, no existe camino. Mínimo: aviso “pide al administrador” con contacto directo.', estado:'Falta' },
+  { nombre:'Documentos impresos', archivo:'NotaDeVenta · ReciboAbono · OrdenProduccion · SolicitudImpresion · ReciboEpson', falta:'El papel está bien (blanco puro), pero la pantalla que los envuelve sigue en oscuro con halos dorados. Falta diseñar la barra de acciones clara.', estado:'A corregir' },
+  { nombre:'Estados vacíos y errores', archivo:'components/ErrorBoundary.tsx', falta:'Sin diseño para “sin resultados”, “sin conexión” ni pantalla de error. La actual es oscura con degradados.', estado:'A corregir' },
+  { nombre:'Buscador global', archivo:'components/SearchOmni.tsx', falta:'Sin especificación visual del panel de resultados, agrupación por tipo ni atajo de teclado visible en la cabecera.', estado:'Falta' },
+  { nombre:'Perfil y sesión', archivo:'—', falta:'El avatar de la cabecera no abre nada: falta menú de sesión (cambiar clave, cerrar sesión, turno activo).', estado:'Falta' },
+  { nombre:'Avisos y notificaciones', archivo:'—', falta:'La app cambia estados y registra abonos sin confirmación visible. Falta patrón de aviso (toast) claro y su ubicación en móvil.', estado:'Falta' },
+];
+
+const HALLAZGOS = [
+  { severidad:'Alta', titulo:'El resumen de Nueva Orden muestra un total que no es el total',
+    detalle:'La barra lateral imprime la variable `precio` (suma cruda de líneas) mientras la orden se guarda con `desglose.total`, que sí incluye recargo por urgencia e IVA. En pantalla el cliente ve una cifra y en el papel otra.',
+    archivos:['pages/NuevoPedido.tsx'], fix:'Un solo origen: `calcularPedido()` alimenta resumen, pie móvil e impresión.' },
+  { severidad:'Alta', titulo:'Dos flujos de pedido que no se pueden combinar',
+    detalle:'`missionCategory` decide entre 6 pasos (SRI) y 5 (comercial). Un cliente que pide notas de venta y tarjetas en la misma visita obliga a crear dos órdenes.',
+    archivos:['pages/NuevoPedido.tsx','components/orders/CommercialFlow.tsx'], fix:'Flujo único de 4 pasos; el bloque SRI aparece por ítem cuando `esSRI`.' },
+  { severidad:'Alta', titulo:'Las primitivas de UI siguen siendo oscuras',
+    detalle:'Botón, tarjeta, input, modal y badge todavía usan `bg-obsidian-card`, `liquid-gold` y `shadow-gold-glow`. Cualquier pantalla nueva que las use nace fuera del sistema claro.',
+    archivos:['components/ui/Button.tsx','components/ui/Card.tsx','components/ui/Input.tsx','components/ui/Modal.tsx','components/ui/Badge.tsx'], fix:'Reescribirlas sobre `panelTheme.ts` antes de migrar más páginas.' },
+  { severidad:'Alta', titulo:'La identidad del cliente SRI se captura en una pantalla oscura',
+    detalle:'`SriIdentityFlow` es el paso más usado del negocio (30% del volumen) y es la vista más alejada del manifiesto: fondo negro, oro en botones de acción, mayúsculas con tracking amplio.',
+    archivos:['components/orders/SriIdentityFlow.tsx','components/orders/PhotoCapture.tsx'], fix:'Migrar a tarjeta clara con el formulario SRI del diseño entregado.' },
+  { severidad:'Media', titulo:'El paso 1 gasta un clic en preguntar algo que el producto ya sabe',
+    detalle:'“¿Facturación SRI o trabajos comerciales?” es una decisión del sistema, no del cliente: el catálogo ya marca `esSRI` en cada producto.',
+    archivos:['pages/NuevoPedido.tsx'], fix:'Eliminar el paso y entrar directo al catálogo con atajos 1–6.' },
+  { severidad:'Media', titulo:'Nueva Orden en celular es la vista de escritorio encogida',
+    detalle:'La grilla de dos columnas y el resumen `position:sticky; top:88px` no tienen variante móvil: en 390px el resumen queda al final de un scroll largo y los controles caen por debajo de 44px.',
+    archivos:['pages/NuevoPedido.tsx','components/orders/OrderSummary.tsx'], fix:'Asistente de 3 pasos con pie fijo de total y acciones de 52px.' },
+  { severidad:'Media', titulo:'El logotipo sigue siendo un PNG rasterizado',
+    detalle:'El ingreso carga `/LOGO.png` (sin transparencia) cuando el sistema define la marca como vector. Se ve sucio sobre fondo claro y no sirve para favicon ni para documentos impresos.',
+    archivos:['pages/Login.tsx','assets/LOGO.png'], fix:'Usar el lockup SVG y exportar `.svg` + `.ico`.' },
+  { severidad:'Media', titulo:'Los tokens del tema oscuro siguen vivos en la configuración',
+    detalle:'`tailwind.config.js` mantiene `obsidian`, `liquid-gold`, `champagne` y las sombras doradas. Mientras existan, cualquier pantalla puede volver al tema viejo sin que nadie lo note en revisión.',
+    archivos:['tailwind.config.js','index.css'], fix:'Dejar solo los tokens de `panelTheme.ts` y romper el build a propósito.' },
+  { severidad:'Baja', titulo:'La cabecera de los documentos no coincide con el panel',
+    detalle:'El papel es correcto, pero la barra de “Imprimir / Volver” alrededor es oscura con radios de 2.5rem, fuera de la escala de radios del sistema (9–16px).',
+    archivos:['pages/NotaDeVenta.tsx','pages/OrdenProduccion.tsx'], fix:'Barra clara sobre `#F7F9FF`, botones de 10px de radio.' },
+  { severidad:'Baja', titulo:'Sin pantalla de sesión ni de recuperación',
+    detalle:'El ingreso acepta usuario con clave opcional y no ofrece salida cuando falla. Falta el menú de sesión y el aviso de contacto con el administrador.',
+    archivos:['pages/Login.tsx','contexts/AuthContext.tsx'], fix:'Añadir bloque de ayuda en el ingreso y menú de avatar en la cabecera.' },
+];
+
+const UNIFICACION = [
+  { n:'1', titulo:'Un catálogo, no dos mundos', detalle:'Los preimpresos del SRI y los trabajos comerciales viven en la misma grilla, con un distintivo “SRI” en la tarjeta y atajos de teclado 1–6.' },
+  { n:'2', titulo:'El formulario del SRI vive en el paso 2', detalle:'Al agregar un preimpreso aparece un bloque con régimen, actividad económica, establecimiento, punto de emisión, numeración inicial, autorización y caducidad.' },
+  { n:'3', titulo:'La orden puede ser mixta', detalle:'Notas de venta + tarjetas en la misma orden: el IVA se calcula línea por línea y solo grava lo que corresponde.' },
+  { n:'4', titulo:'Importar del SRI sigue siendo un clic', detalle:'El aviso de la extensión llena cliente, documento y cantidad, y deja la orden en el paso 2 con el formulario ya resuelto.' },
+  { n:'5', titulo:'La impresión decide sola', detalle:'Si la orden lleva preimpresos, el botón guarda e imprime la solicitud de autorización; si no, la nota de venta o el recibo de abono.' },
+];
+
+const FASES = [
+  { titulo:'Fase 1 · Mostrador', plazo:'Semana 1', detalle:'Flujo unificado de Nueva Orden en escritorio y celular, con el cálculo saliendo de un solo módulo. Es donde se pierden los segundos y donde el total no cuadra.' },
+  { titulo:'Fase 2 · Primitivas', plazo:'Semana 2', detalle:'Botón, input, tarjeta, modal y badge al tema claro, más el ingreso y las barras de los documentos. Después de esto ninguna pantalla nueva puede nacer oscura.' },
+  { titulo:'Fase 3 · SRI', plazo:'Semana 3', detalle:'Migrar `SriIdentityFlow` y `PhotoCapture`, y cerrar el vacío de numeración/autorización con validación visible.' },
+  { titulo:'Fase 4 · Bordes', plazo:'Semana 4', detalle:'Estados vacíos, errores, buscador global, menú de sesión y avisos. Lo que hoy no existe y se nota recién cuando algo falla.' },
+];
+
+class Component extends DCLogic {
+  state = { filtro:'Todos' };
+
+  pill(map, key) {
+    const c = map[key] || map.Baja || Object.values(map)[0];
+    return `display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:99px; font-size:11px; font-weight:700; background:${c.bg}; border:1px solid ${c.border}; color:${c.color}; white-space:nowrap;`;
+  }
+
+  renderVals() {
+    const f = this.state.filtro;
+    const hall = f === 'Todos' ? HALLAZGOS : HALLAZGOS.filter(h => h.severidad === f);
+    const faltan = PANTALLAS.filter(p => p.estado !== 'Entregado').length;
+    const altas = HALLAZGOS.filter(h => h.severidad === 'Alta').length;
+
+    return {
+      kpis: [
+        { label:'Pantallas revisadas', value:'29', hint:'Todas las de `pages/` contra el manifiesto.', dot:'width:8px; height:8px; border-radius:99px; background:#16309B; display:inline-block;' },
+        { label:'Sin diseño / a corregir', value:String(faltan), hint:'Vistas que no tienen referencia hi-fi o están fuera del tema claro.', dot:'width:8px; height:8px; border-radius:99px; background:#FFC61A; display:inline-block;' },
+        { label:'Hallazgos abiertos', value:String(HALLAZGOS.length), hint:altas + ' de severidad alta, con archivo citado.', dot:'width:8px; height:8px; border-radius:99px; background:#E70101; display:inline-block; animation:pi-blink 2.2s ease-in-out infinite;' },
+        { label:'Entregado hoy', value:'3', hint:'Ingreso, Nueva Orden unificada y Nueva Orden en celular.', dot:'width:8px; height:8px; border-radius:99px; background:#1B8A4B; display:inline-block;' },
+      ],
+      pantallas: PANTALLAS.map(p => ({ ...p, pill: this.pill(ESTADOS, p.estado) })),
+      pantallasHint: PANTALLAS.length + ' vistas · ' + faltan + ' pendientes',
+      filtros: ['Todos','Alta','Media','Baja'].map(label => ({
+        label: label === 'Todos' ? 'Todas' : label,
+        pick: () => this.setState({ filtro: label }),
+        style: `padding:7px 13px; border-radius:99px; font-family:inherit; font-size:11.5px; font-weight:700; cursor:pointer; border:1px solid ${f === label ? '#16309B' : '#D7DDF0'}; background:${f === label ? '#16309B' : '#fff'}; color:${f === label ? '#fff' : '#16309B'};`,
+      })),
+      hallazgos: hall.map(h => ({ ...h, sev: this.pill(SEV, h.severidad) })),
+      hallazgosHint: hall.length + ' de ' + HALLAZGOS.length + ' hallazgos visibles' + (f === 'Todos' ? '' : ' · severidad ' + f.toLowerCase()),
+      unificacion: UNIFICACION,
+      fases: FASES,
+      entregas: [
+        { tipo:'Acceso', nombre:'Ingreso al panel', detalle:'Tema claro, marca vectorial, ayuda de acceso y variante de celular.', href:'Ingreso.dc.html' },
+        { tipo:'Mostrador', nombre:'Nueva Orden unificada', detalle:'Un solo flujo de 4 pasos con el formulario del SRI dentro del paso 2.', href:'Nueva-Orden-Unificada.dc.html' },
+        { tipo:'Celular', nombre:'Nueva Orden · recepción', detalle:'Asistente de 3 pasos, controles de 52px y pie fijo con total vivo.', href:'Nueva-Orden-Movil.dc.html' },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

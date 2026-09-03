@@ -1,0 +1,58 @@
+{
+    "manifest_version": 3,
+    "name": "TaxSync Matrix Suite - Automatización SRI",
+    "version": "2.0.0",
+    "description": "Automatización RPA en bucle para Declaraciones de IVA, Sincronización Bóveda y Extracción de Métricas.",
+    "permissions": [
+        "storage",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "https://srienlinea.sri.gob.ec/*",
+        "https://santiagocordova.com/*",
+        "https://*.santiagocordova.com/*",
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon16.png",
+            "48": "icon48.png",
+            "128": "icon128.png"
+        }
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://srienlinea.sri.gob.ec/*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "run_at": "document_idle",
+            "all_frames": true
+        },
+        {
+            "matches": [
+                "http://localhost/*",
+                "http://localhost:*/*",
+                "http://127.0.0.1/*",
+                "http://127.0.0.1:*/*",
+                "https://santiagocordova.com/*",
+                "https://*.santiagocordova.com/*"
+            ],
+            "js": [
+                "bridge_content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "icons": {
+        "16": "icon16.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
+    }
+}

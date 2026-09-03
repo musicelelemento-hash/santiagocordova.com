@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "🔑 [SC PRO 02] - Asistente Claves SRI & Ecuafact",
+  "version": "1.1.0",
+  "description": "Asistente flotante para sugerir, transformar (* -> @) y autocompletar cambio de contraseñas en el portal SRI y Ecuafact conectado con SantiagoCordova.com.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://srienlinea.sri.gob.ec/*",
+    "https://app.ecuafact.com/*",
+    "https://*.ecuafact.com/*",
+    "https://santiagocordova.com/*",
+    "https://*.santiagocordova.com/*",
+    "https://*.supabase.co/*",
+    "http://localhost/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1/*",
+    "http://127.0.0.1:*/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SC PRO - Claves SRI & Ecuafact"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://srienlinea.sri.gob.ec/*",
+        "https://app.ecuafact.com/*",
+        "https://*.ecuafact.com/*"
+      ],
+      "js": [
+        "supabase_bridge.js",
+        "content.js"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*",
+        "https://santiagocordova.com/*",
+        "https://*.santiagocordova.com/*"
+      ],
+      "js": [
+        "bridge_content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

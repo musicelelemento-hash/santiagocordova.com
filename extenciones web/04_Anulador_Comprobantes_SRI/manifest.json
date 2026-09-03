@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "🚫 [SC PRO 04] - Anulador Masivo Comprobantes PDF",
+  "version": "2.1.0",
+  "description": "Llenador y procesador automático para solicitud de anulación de comprobantes SRI. Soluciones Tributarias Estratégicas - Santiago Córdova.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images.png",
+      "48": "images.png",
+      "128": "images.png"
+    }
+  },
+  "icons": {
+    "16": "images.png",
+    "48": "images.png",
+    "128": "images.png"
+  },
+  "host_permissions": [
+    "https://srienlinea.sri.gob.ec/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.santiago-cordova.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://srienlinea.sri.gob.ec/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "*://srienlinea.sri.gob.ec/*"
+      ],
+      "js": [
+        "libs/injected_bypass.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://*.santiago-cordova.com/*",
+        "file:///*"
+      ],
+      "js": [
+        "bridge_content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "libs/pdf.worker.mjs",
+        "libs/pdf.worker.js",
+        "libs/pdf.mjs",
+        "libs/injected_bypass.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

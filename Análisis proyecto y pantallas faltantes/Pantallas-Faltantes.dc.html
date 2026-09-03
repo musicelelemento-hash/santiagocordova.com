@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; background:#EEF0F8; color:#0A1140; font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  * { box-sizing:border-box; }
+  a { color:#16309B; text-decoration:none; }
+  a:hover { color:#0F2280; }
+  input { font-family:inherit; }
+  input::placeholder { color:#A6AFC8; }
+  @keyframes pi-rise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pi-blink { 0%,100% { opacity:1; } 50% { opacity:.25; } }
+  @keyframes pi-spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion:reduce) { * { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</helmet>
+
+<div style="padding:44px clamp(18px,3vw,44px) 90px;">
+<div style="max-width:1420px; margin:0 auto; display:flex; flex-direction:column; gap:34px;">
+
+  <div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <svg viewBox="0 0 34 34" style="width:30px; height:30px; display:block; flex-shrink:0;" aria-hidden="true"><path d="M29.1 10A14 14 0 1 0 29.1 24" fill="none" stroke="#16309B" stroke-width="6.2" stroke-linecap="round"></path><path d="M10.6 10.4h9v2.9h-3v7.4h3v2.9h-9v-2.9h3v-7.4h-3z" fill="#E70101" stroke="#FFC61A" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+      <span style="font-family:'Outfit',sans-serif; font-size:18px; font-weight:700; letter-spacing:-.02em; color:#0A1140;">Lo que faltaba · piezas del sistema</span>
+    </div>
+    <p style="margin:10px 0 0; font-size:14.5px; line-height:1.65; color:#5B6480; max-width:82ch;">Las seis piezas que el informe marcaba como “no existe”: buscador global, menú de sesión, estados vacíos, errores, avisos y la barra clara de los documentos impresos. Todas en tema claro y con los mismos tokens del panel. Son interactivas: abre el buscador, despliega la sesión, cambia de aviso y de formato de papel.</p>
+    <div style="display:flex; gap:9px; flex-wrap:wrap; margin-top:16px;">
+      <a href="Informe-Faltantes.dc.html" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; background:#fff; border:1px solid #D7DDF0; border-radius:10px; font-size:12.5px; font-weight:600;">← Informe</a>
+      <a href="Ingreso.dc.html" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; background:#fff; border:1px solid #D7DDF0; border-radius:10px; font-size:12.5px; font-weight:600;">Ingreso</a>
+      <a href="Nueva-Orden-Unificada.dc.html" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; background:#fff; border:1px solid #D7DDF0; border-radius:10px; font-size:12.5px; font-weight:600;">Nueva Orden</a>
+      <a href="Nueva-Orden-Movil.dc.html" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; background:#fff; border:1px solid #D7DDF0; border-radius:10px; font-size:12.5px; font-weight:600;">Nueva Orden · celular</a>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">1 · Buscador global y menú de sesión</div>
+    <div style="font-size:13px; color:#6B7590; margin-bottom:14px; max-width:80ch;">La cabecera del panel con sus dos piezas vivas. El buscador es el atajo que hoy no lleva a ningún lado; el avatar, el menú que hoy no abre nada.</div>
+
+    <div style="background:#F7F9FF; border:1px solid #E4E8F4; border-radius:18px; padding:18px; position:relative; overflow:hidden;">
+      <div style="background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:13px 18px; display:flex; align-items:center; justify-content:space-between; gap:18px; position:relative; z-index:3;">
+        <div style="min-width:0;">
+          <div style="font-family:'Outfit',sans-serif; font-size:16px; font-weight:600; letter-spacing:-.03em; color:#0A1140;">Órdenes de producción</div>
+          <div style="font-size:11.5px; color:#8A93AE; margin-top:2px;">18 activas · 3 urgentes</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:11px;">
+          <button onClick="{{ abrirBuscador }}" style="display:flex; align-items:center; gap:9px; padding:10px 13px; background:#F7F9FF; border:1px solid #D7DDF0; border-radius:10px; cursor:pointer; font-family:inherit; min-width:270px;" style-hover="border-color:#16309B;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#8A93AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            <span style="font-size:12.5px; color:#A6AFC8; flex:1; text-align:left;">Buscar orden, cliente o RUC</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; background:#EEF1FC; border-radius:5px; color:#16309B;">⌘K</span>
+          </button>
+          <button onClick="{{ toggleSesion }}" style="{{ sesionBtnStyle }}">
+            <span style="width:30px; height:30px; border-radius:9px; background:#16309B; color:#fff; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:800;">MC</span>
+            <span style="display:flex; flex-direction:column; align-items:flex-start; line-height:1.25;">
+              <span style="font-size:12.5px; font-weight:600; color:#0A1140;">Mayra Castro</span>
+              <span style="font-size:10.5px; color:#8A93AE;">Recepción</span>
+            </span>
+            <span style="font-size:11px; color:#8A93AE;">▾</span>
+          </button>
+        </div>
+      </div>
+
+      <sc-if value="{{ sesionAbierta }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute; right:18px; top:76px; width:290px; background:#fff; border:1px solid #E4E8F4; border-radius:14px; box-shadow:0 24px 48px -26px rgba(10,17,64,.4); z-index:4; overflow:hidden; animation:pi-rise .25s cubic-bezier(.2,.8,.2,1) both;">
+          <div style="padding:15px 16px; border-bottom:1px solid #EEF0F8;">
+            <div style="font-size:13.5px; font-weight:700; color:#0A1140;">Mayra Castro</div>
+            <div style="font-size:11.5px; color:#6B7590; margin-top:3px;">Recepción · turno 08:00–14:00</div>
+            <div style="display:flex; align-items:center; gap:7px; margin-top:9px; padding:7px 10px; background:#F2F7F2; border:1px solid #D8E8DC; border-radius:9px;">
+              <span style="width:6px; height:6px; border-radius:99px; background:#1B8A4B;"></span>
+              <span style="font-size:11px; font-weight:600; color:#1B6E3E;">Turno abierto hace 3 h 12 min</span>
+            </div>
+          </div>
+          <div style="padding:7px;">
+            <sc-for list="{{ sesionItems }}" as="s" hint-placeholder-count="4">
+              <span style="{{ s.style }}">
+                <span style="flex:1; min-width:0;">{{ s.label }}</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#A6AFC8;">{{ s.atajo }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="padding:11px 16px; background:#FAFBFF; border-top:1px solid #EEF0F8; display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#A6AFC8;">v2.4.1 · Machala</span>
+            <span style="font-size:11px; font-weight:700; color:#16309B; cursor:pointer;">Sincronizar</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="margin-top:16px; position:relative; min-height:330px; border-radius:14px; overflow:hidden; border:1px solid #E4E8F4; background:#fff;">
+        <div style="padding:16px 18px; display:flex; flex-direction:column; gap:9px; filter:{{ listaFiltro }};">
+          <sc-for list="{{ filasFondo }}" as="f" hint-placeholder-count="5">
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid #F2F4FA;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8A93AE; width:74px;">{{ f.id }}</span>
+              <span style="flex:1; font-size:13px; font-weight:600; color:#0A1140;">{{ f.cliente }}</span>
+              <span style="font-size:12.5px; color:#6B7590; flex:1;">{{ f.trabajo }}</span>
+              <span style="{{ f.pill }}"><span style="{{ f.dot }}"></span>{{ f.estado }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#0A1140; width:80px; text-align:right;">{{ f.total }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ buscadorAbierto }}" hint-placeholder-val="{{ true }}">
+          <div style="position:absolute; inset:0; background:rgba(10,17,64,.44); backdrop-filter:blur(3px); display:flex; align-items:flex-start; justify-content:center; padding:26px 20px;">
+            <div style="width:min(620px,100%); background:#fff; border:1px solid #E4E8F4; border-radius:16px; box-shadow:0 30px 60px -30px rgba(10,17,64,.5); overflow:hidden; animation:pi-rise .25s cubic-bezier(.2,.8,.2,1) both;">
+              <div style="display:flex; align-items:center; gap:11px; padding:14px 17px; border-bottom:1px solid #EEF0F8;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#16309B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; flex-shrink:0;"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <input value="{{ consulta }}" onInput="{{ setConsulta }}" placeholder="Orden, cliente, RUC o acción…" style="flex:1; border:none; outline:none; font-size:15.5px; color:#0A1140; background:transparent;" />
+                <button onClick="{{ cerrarBuscador }}" style="padding:5px 9px; background:#F2F4FA; border:none; border-radius:7px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#16309B; cursor:pointer;">ESC</button>
+              </div>
+              <div style="max-height:246px; overflow:auto;">
+                <sc-for list="{{ grupos }}" as="g" hint-placeholder-count="3">
+                  <div>
+                    <div style="padding:10px 17px 6px; font-size:9.5px; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; background:#FAFBFF;">{{ g.titulo }}</div>
+                    <sc-for list="{{ g.filas }}" as="r" hint-placeholder-count="2">
+                      <div style="{{ r.style }}">
+                        <span style="{{ r.icono }}">{{ r.inicial }}</span>
+                        <span style="flex:1; min-width:0;">
+                          <span style="display:block; font-size:13.5px; font-weight:600; color:#0A1140;">{{ r.titulo }}</span>
+                          <span style="display:block; font-size:11.5px; color:#8A93AE; margin-top:2px;">{{ r.detalle }}</span>
+                        </span>
+                        <span style="{{ r.meta }}">{{ r.valor }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ sinResultados }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:34px 20px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#0A1140;">Nada con “{{ consulta }}”</div>
+                    <div style="font-size:12.5px; color:#8A93AE; margin-top:5px; line-height:1.55;">Prueba con el número de orden, el RUC sin guiones o el nombre del cliente.</div>
+                    <button style="margin-top:14px; padding:10px 16px; background:#16309B; color:#fff; border:none; border-radius:10px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;">Crear orden para un cliente nuevo</button>
+                  </div>
+                </sc-if>
+              </div>
+              <div style="padding:10px 17px; background:#FAFBFF; border-top:1px solid #EEF0F8; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+                <sc-for list="{{ atajos }}" as="a" hint-placeholder-count="4">
+                  <span style="display:inline-flex; align-items:center; gap:6px;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:2px 6px; background:#EEF1FC; border-radius:5px; color:#16309B;">{{ a.tecla }}</span>
+                    <span style="font-size:11px; color:#8A93AE;">{{ a.que }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">2 · Estados vacíos honestos</div>
+    <div style="font-size:13px; color:#6B7590; margin-bottom:14px; max-width:80ch;">Tres vacíos distintos con tres respuestas distintas: uno por filtro, uno por dato inexistente y uno que es buena noticia. Ninguno inventa datos de muestra.</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px;">
+      <sc-for list="{{ vacios }}" as="v" hint-placeholder-count="3">
+        <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:26px 22px; text-align:center; display:flex; flex-direction:column; align-items:center;">
+          <span style="{{ v.iconoBox }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="{{ v.iconoColor }}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:23px; height:23px;"><path d="{{ v.icono }}"></path></svg>
+          </span>
+          <span style="display:block; font-size:9.5px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#8A93AE; margin-top:15px;">{{ v.contexto }}</span>
+          <span style="display:block; font-family:'Outfit',sans-serif; font-size:17px; font-weight:600; letter-spacing:-.03em; color:#0A1140; margin-top:7px;">{{ v.titulo }}</span>
+          <span style="display:block; font-size:12.5px; line-height:1.6; color:#6B7590; margin-top:7px; max-width:34ch;">{{ v.detalle }}</span>
+          <span style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; justify-content:center;">
+            <span style="{{ v.ctaStyle }}">{{ v.cta }}</span>
+            <sc-if value="{{ v.tieneSecundario }}" hint-placeholder-val="{{ true }}">
+              <span style="padding:10px 15px; background:#F2F4FA; color:#16309B; border-radius:10px; font-size:12.5px; font-weight:600; cursor:pointer;">{{ v.secundario }}</span>
+            </sc-if>
+          </span>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">3 · Errores y avisos</div>
+    <div style="font-size:13px; color:#6B7590; margin-bottom:14px; max-width:80ch;">El error tiene que decir qué se perdió y qué no. Los avisos viven abajo a la derecha en escritorio y sobre el pie fijo en celular, con “Deshacer” cuando la acción es reversible.</div>
+
+    <div style="display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:14px; align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="background:#FFFBEB; border:1px solid #F4E3A8; border-radius:14px; padding:15px 17px; display:flex; align-items:center; gap:13px; flex-wrap:wrap;">
+          <span style="width:34px; height:34px; border-radius:10px; background:#fff; border:1px solid #F4E3A8; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px; height:17px;"><path d="M12 20h.01"></path><path d="M8.5 16.4a5 5 0 0 1 7 0"></path><path d="M5 12.9a10 10 0 0 1 14 0"></path><path d="m2 8.8a15 15 0 0 1 20 0"></path></svg>
+          </span>
+          <span style="flex:1; min-width:200px;">
+            <span style="display:block; font-size:13.5px; font-weight:700; color:#7A5A00;">Sin conexión · trabajando en local</span>
+            <span style="display:block; font-size:12.5px; line-height:1.55; color:#7A5A00; margin-top:3px;">Las 2 órdenes tomadas desde las 11:04 están guardadas en este equipo y se subirán solas al volver la señal. No cierres el navegador.</span>
+          </span>
+          <span style="display:inline-flex; align-items:center; gap:8px; padding:9px 14px; background:#fff; border:1px solid #F4E3A8; border-radius:10px; font-size:12.5px; font-weight:600; color:#B45309; cursor:pointer;">Reintentar ahora</span>
+        </div>
+
+        <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:30px 26px; text-align:center;">
+          <span style="width:52px; height:52px; border-radius:99px; background:#FDEEEE; border:1px solid #F3C6C6; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#E70101" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:23px; height:23px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+          </span>
+          <div style="font-size:9.5px; font-weight:800; letter-spacing:.2em; text-transform:uppercase; color:#B91C1C; margin-top:15px;">Esta pantalla se cayó</div>
+          <div style="font-family:'Outfit',sans-serif; font-size:21px; font-weight:600; letter-spacing:-.035em; color:#0A1140; margin-top:7px;">No se pudo mostrar el flujo de caja</div>
+          <p style="margin:8px auto 0; font-size:13px; line-height:1.6; color:#6B7590; max-width:52ch;">Ninguna orden ni abono se perdió: el error es solo de esta vista. Puedes seguir atendiendo desde Órdenes mientras se revisa.</p>
+          <div style="display:flex; gap:9px; justify-content:center; margin-top:18px; flex-wrap:wrap;">
+            <span style="padding:12px 18px; background:#16309B; color:#fff; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">Recargar la vista</span>
+            <span style="padding:12px 18px; background:#fff; color:#16309B; border:1px solid #D7DDF0; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">Ir a Órdenes</span>
+            <span style="padding:12px 18px; background:#F2F4FA; color:#16309B; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">Copiar detalle técnico</span>
+          </div>
+          <div style="margin-top:16px; padding:11px 14px; background:#FAFBFF; border:1px solid #E4E8F4; border-radius:10px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#8A93AE; text-align:left; word-break:break-all;">ERR-CAJA-8831 · 01/09/2026 15:42 · usuario: mayra · vista: /finanzas</div>
+        </div>
+      </div>
+
+      <div style="background:#F7F9FF; border:1px solid #E4E8F4; border-radius:16px; padding:18px;">
+        <div style="display:flex; gap:7px; flex-wrap:wrap;">
+          <sc-for list="{{ avisoTabs }}" as="t" hint-placeholder-count="4">
+            <button onClick="{{ t.pick }}" style="{{ t.style }}">{{ t.label }}</button>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px; min-height:210px; background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:16px; position:relative; overflow:hidden;">
+          <div style="font-size:11.5px; color:#A6AFC8; line-height:1.6;">Contenido de la pantalla…</div>
+          <div style="position:absolute; right:14px; bottom:14px; width:min(320px,calc(100% - 28px));">
+            <div style="{{ avisoStyle }}">
+              <span style="{{ avisoIconoBox }}">
+                <sc-if value="{{ avisoCargando }}" hint-placeholder-val="{{ false }}">
+                  <span style="width:15px; height:15px; border:2px solid #D7DDF0; border-top-color:#16309B; border-radius:99px; animation:pi-spin 1s linear infinite; display:block;"></span>
+                </sc-if>
+                <sc-if value="{{ avisoConIcono }}" hint-placeholder-val="{{ true }}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="{{ avisoIconoColor }}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><path d="{{ avisoIcono }}"></path></svg>
+                </sc-if>
+              </span>
+              <span style="flex:1; min-width:0;">
+                <span style="display:block; font-size:13px; font-weight:700; color:{{ avisoTitColor }};">{{ avisoTitulo }}</span>
+                <span style="display:block; font-size:12px; line-height:1.5; color:{{ avisoTxtColor }}; margin-top:3px;">{{ avisoDetalle }}</span>
+              </span>
+              <sc-if value="{{ avisoAccion }}" hint-placeholder-val="{{ true }}">
+                <span style="{{ avisoAccionStyle }}">{{ avisoAccionLabel }}</span>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:13px; font-size:12px; line-height:1.6; color:#6B7590;">{{ avisoNota }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">4 · Barra clara de los documentos impresos</div>
+    <div style="font-size:13px; color:#6B7590; margin-bottom:14px; max-width:80ch;">El papel no se toca — blanco puro, tal como está. Lo que cambia es la barra alrededor: clara, con radios del sistema y el formato a la vista. Nada de esta barra se imprime.</div>
+
+    <div style="background:#F7F9FF; border:1px solid #E4E8F4; border-radius:18px; padding:18px;">
+      <div style="background:#fff; border:1px solid #E4E8F4; border-radius:14px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:13px; min-width:0;">
+          <span style="display:inline-flex; align-items:center; gap:8px; padding:9px 13px; background:#F2F4FA; border-radius:9px; font-size:12.5px; font-weight:600; color:#16309B; cursor:pointer;">‹ Volver a la orden</span>
+          <span style="display:flex; flex-direction:column; line-height:1.3; min-width:0;">
+            <span style="font-size:13.5px; font-weight:700; color:#0A1140;">{{ docTitulo }}</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8A93AE;">ORD-4821 · Ferretería El Oro Cía. · 01/09/2026</span>
+          </span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; flex-wrap:wrap;">
+          <div style="display:flex; gap:5px; padding:4px; background:#F7F9FF; border:1px solid #E4E8F4; border-radius:10px;">
+            <sc-for list="{{ formatos }}" as="f" hint-placeholder-count="3">
+              <button onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+          <span style="display:inline-flex; align-items:center; gap:8px; padding:11px 16px; background:#16309B; color:#fff; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px; height:16px;"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><path d="M6 9V3h12v6"></path><rect width="12" height="8" x="6" y="14"></rect></svg>
+            Imprimir
+          </span>
+          <span style="display:inline-flex; align-items:center; gap:8px; padding:11px 15px; background:#F2F7F2; color:#155C33; border:1px solid #D8E8DC; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer;">Enviar PDF</span>
+        </div>
+      </div>
+
+      <div style="margin-top:16px; display:flex; justify-content:center;">
+        <div style="{{ hojaStyle }}">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <svg viewBox="0 0 34 34" style="width:30px; height:30px; display:block; flex-shrink:0;" aria-hidden="true"><path d="M29.1 10A14 14 0 1 0 29.1 24" fill="none" stroke="#000088" stroke-width="6.2" stroke-linecap="round"></path><path d="M10.6 10.4h9v2.9h-3v7.4h3v2.9h-9v-2.9h3v-7.4h-3z" fill="#E00000" stroke="#F0F810" stroke-width="1.7" stroke-linejoin="round"></path></svg>
+              <span style="display:flex; flex-direction:column; line-height:1.25;">
+                <span style="font-family:'Outfit',sans-serif; font-size:14px; font-weight:700; letter-spacing:-.02em; color:#000;">IMPRENTA CÓRDOVA</span>
+                <span style="font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; color:#444;">Establecimiento gráfico autorizado · SRI 001-001</span>
+              </span>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:#444;">{{ docTitulo }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:#000; margin-top:3px;">N° 001-001-000842</div>
+            </div>
+          </div>
+          <div style="height:1px; background:#000; margin:14px 0; opacity:.8;"></div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <sc-for list="{{ docFilas }}" as="d" hint-placeholder-count="5">
+              <span style="display:flex; align-items:baseline; justify-content:space-between; gap:14px; font-size:11.5px; color:#000;">
+                <span style="color:#333;">{{ d.label }}</span>
+                <span style="font-family:'JetBrains Mono',monospace;">{{ d.value }}</span>
+              </span>
+            </sc-for>
+          </div>
+          <div style="height:1px; background:#000; margin:14px 0; opacity:.35;"></div>
+          <div style="font-size:9.5px; line-height:1.6; color:#333;">{{ docPie }}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px; text-align:center; font-size:11.5px; color:#8A93AE;">{{ formatoNota }}</div>
+    </div>
+  </div>
+
+  <div>
+    <div style="font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:#8A93AE; margin-bottom:6px;">5 · Recuperar acceso</div>
+    <div style="font-size:13px; color:#6B7590; margin-bottom:14px; max-width:80ch;">No hay correo de recuperación en el taller: la clave la repone el administrador. La pantalla dice exactamente eso, sin prometer un enlace que no existe.</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px;">
+      <div style="background:#fff; border:1px solid #E4E8F4; border-radius:16px; padding:24px 22px;">
+        <p style="margin:0; font-size:10.5px; font-weight:800; letter-spacing:.3em; text-transform:uppercase; color:#8A93AE;">Acceso</p>
+        <h2 style="margin:7px 0 0; font-family:'Outfit',sans-serif; font-size:22px; font-weight:600; letter-spacing:-.035em; color:#0A1140;">Recuperar el acceso</h2>
+        <p style="margin:8px 0 0; font-size:13px; line-height:1.6; color:#6B7590;">Escribe tu usuario y le llega el pedido al administrador por WhatsApp. Él repone la clave desde <b>Usuarios</b> y te avisa; toma un par de minutos.</p>
+        <label style="display:block; margin-top:16px;">
+          <span style="display:block; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:#8A93AE; margin-bottom:7px;">Usuario</span>
+          <input placeholder="Ej. Mayra" style="width:100%; padding:13px 14px; background:#fff; border:1px solid #D7DDF0; border-radius:10px; font-size:14px; color:#0A1140; outline:none;" style-focus="border-color:#16309B; background:#F7F9FF;" />
+        </label>
+        <span style="display:flex; align-items:center; justify-content:center; gap:9px; width:100%; margin-top:12px; padding:13px 16px; background:#16309B; color:#fff; border-radius:11px; font-size:13.5px; font-weight:600; cursor:pointer;">Avisar al administrador</span>
+        <div style="margin-top:14px; padding:13px 15px; background:#F2F7F2; border:1px solid #D8E8DC; border-radius:11px; font-size:12.5px; line-height:1.6; color:#155C33;">Mientras esperas puedes seguir tomando órdenes en papel: al entrar, el sistema te deja registrarlas con la hora real de recepción.</div>
+        <div style="margin-top:14px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:14px; border-top:1px solid #EEF0F8;">
+          <span style="font-size:12.5px; font-weight:600; color:#16309B; cursor:pointer;">‹ Volver al ingreso</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8A93AE;">099 123 4567</span>
+        </div>
+      </div>
+
+      <div style="background:#0A1140; border-radius:16px; padding:24px 22px; color:#fff;">
+        <div style="font-size:9.5px; font-weight:800; letter-spacing:.22em; text-transform:uppercase; color:#8E9AC4;">Para quien continúe</div>
+        <div style="font-family:'Outfit',sans-serif; font-size:20px; font-weight:600; letter-spacing:-.03em; margin-top:9px;">Instrucciones de implementación</div>
+        <p style="margin:9px 0 0; font-size:13px; line-height:1.65; color:#C2CAE6;">Todo lo de este archivo y de las otras tres pantallas está escrito, archivo por archivo, en <span style="font-family:'JetBrains Mono',monospace; color:#fff;">HANDOFF-CLAUDE-CODE.md</span>: qué tocar, en qué orden, con qué tokens y cómo se comprueba que quedó bien.</p>
+        <div style="display:flex; flex-direction:column; gap:0; margin-top:15px;">
+          <sc-for list="{{ handoffPasos }}" as="h" hint-placeholder-count="4">
+            <div style="display:flex; gap:11px; align-items:flex-start; padding:10px 0; border-top:1px solid rgba(255,255,255,.12);">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFC61A; flex-shrink:0; width:16px;">{{ h.n }}</span>
+              <span style="font-size:12.5px; line-height:1.55; color:#C2CAE6;">{{ h.texto }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <a href="HANDOFF-CLAUDE-CODE.md" style="display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:11px 16px; background:#FFC61A; color:#0A1140; border-radius:10px; font-size:12.5px; font-weight:700;">Abrir el handoff →</a>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1420,&quot;height&quot;:1500}}">
+const FILAS = [
+  { id:'ORD-4821', cliente:'Ferretería El Oro Cía.', trabajo:'Notas de venta · 100 juegos', estado:'En Prensa', total:'$ 48,00' },
+  { id:'ORD-4820', cliente:'Comercial Ana María', trabajo:'Facturas · 200 juegos', estado:'En Diseño', total:'$ 101,20' },
+  { id:'ORD-4819', cliente:'Distribuidora Sur', trabajo:'Sello Trodat 4913', estado:'Listo', total:'$ 29,90' },
+  { id:'ORD-4818', cliente:'Panadería La Espiga', trabajo:'Tarjetas soft touch · 500 u.', estado:'Pendiente', total:'$ 94,00' },
+  { id:'ORD-4817', cliente:'Taller Mecánico Vera', trabajo:'Talonarios · 50 juegos', estado:'En Prensa', total:'$ 33,20' },
+];
+
+const ESTADOS = {
+  Pendiente:  { color:'#B45309', bg:'#FFFBEB', border:'#F4E3A8', dot:'#FFC61A' },
+  'En Diseño':{ color:'#6D28D9', bg:'#F5F3FF', border:'#DDD3FE', dot:'#8B5CF6' },
+  'En Prensa':{ color:'#16309B', bg:'#EEF1FC', border:'#D7DDF0', dot:'#16309B' },
+  Listo:      { color:'#1B6E3E', bg:'#F2F7F2', border:'#D8E8DC', dot:'#1B8A4B' },
+};
+
+const RESULTADOS = [
+  { grupo:'Órdenes', titulo:'ORD-4821 · Ferretería El Oro Cía.', detalle:'Notas de venta · 100 juegos · En Prensa', valor:'$ 48,00', tono:'#16309B', inicial:'O' },
+  { grupo:'Órdenes', titulo:'ORD-4812 · Ferretería El Oro Cía.', detalle:'Sello fechador · entregado el 14 ago', valor:'$ 26,00', tono:'#16309B', inicial:'O' },
+  { grupo:'Clientes', titulo:'FERRETERÍA EL ORO CÍA. LTDA.', detalle:'RUC 0791234567001 · RIMPE Popular · saldo $ 60,00', valor:'14 órdenes', tono:'#1B6E3E', inicial:'F' },
+  { grupo:'Productos', titulo:'Notas de venta', detalle:'Preimpreso SRI · desde $ 0,48 el juego', valor:'no grava', tono:'#B45309', inicial:'N' },
+  { grupo:'Acciones', titulo:'Nueva orden para este cliente', detalle:'Abre el paso 1 con el cliente ya cargado', valor:'⏎', tono:'#6D28D9', inicial:'+' },
+  { grupo:'Acciones', titulo:'Registrar abono de $ 60,00', detalle:'Cuentas por cobrar · ORD-4821', valor:'⏎', tono:'#6D28D9', inicial:'$' },
+];
+
+const VACIOS = [
+  { contexto:'Órdenes · filtro “Listo”', titulo:'Nada listo todavía', detalle:'Hay 18 órdenes activas, ninguna terminó acabados hoy. Quita el filtro para verlas todas.',
+    icono:'M3 6h18M7 12h10M10 18h4', tono:'#16309B', bgTono:'#EEF1FC', cta:'Quitar el filtro', secundario:'Ver el taller', tieneSecundario:true },
+  { contexto:'Clientes · búsqueda', titulo:'Ese RUC no está registrado', detalle:'No existe ningún cliente con 0791234567001. Puedes crearlo con la cédula y el nombre; el resto se completa después.',
+    icono:'M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', tono:'#6D28D9', bgTono:'#F5F3FF', cta:'Crear cliente', secundario:'', tieneSecundario:false },
+  { contexto:'Bodega · stock bajo', titulo:'Ningún insumo en rojo', detalle:'Los 34 insumos están sobre el mínimo. El próximo en caer es papel bond A4, en unos 9 días al ritmo actual.',
+    icono:'M20 6 9 17l-5-5', tono:'#1B6E3E', bgTono:'#F2F7F2', cta:'Ver inventario', secundario:'Programar compra', tieneSecundario:true },
+];
+
+const AVISOS = {
+  'Guardado': { titulo:'Orden ORD-4822 guardada', detalle:'Solicitud del SRI enviada a la impresora A5.', icono:'M20 6 9 17l-5-5', bg:'#F2F7F2', border:'#D8E8DC', tit:'#155C33', txt:'#1B6E3E', ic:'#1B6E3E', accion:'Ver orden', accionBg:'#fff', accionColor:'#155C33', cargando:false,
+    nota:'Confirmación simple: 4 segundos y se va. No bloquea nada.' },
+  'Estado cambiado': { titulo:'ORD-4818 pasó a En Prensa', detalle:'Luis Vera quedó como responsable.', icono:'M5 12h14M13 6l6 6-6 6', bg:'#EEF1FC', border:'#D7DDF0', tit:'#0A1140', txt:'#16309B', ic:'#16309B', accion:'Deshacer', accionBg:'#fff', accionColor:'#16309B', cargando:false,
+    nota:'Toda acción reversible lleva “Deshacer” durante 8 segundos, y se escribe en el historial de la orden.' },
+  'Error al guardar': { titulo:'No se pudo guardar el abono', detalle:'La conexión se cortó a mitad. El monto quedó escrito en el formulario.', icono:'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z', bg:'#FDEEEE', border:'#F3C6C6', tit:'#B91C1C', txt:'#B91C1C', ic:'#E70101', accion:'Reintentar', accionBg:'#fff', accionColor:'#B91C1C', cargando:false,
+    nota:'El error nunca borra lo que el usuario escribió: se queda visible para reintentar.' },
+  'Sincronizando': { titulo:'Subiendo 2 órdenes locales', detalle:'Tomadas sin conexión a las 11:04 y 11:26.', icono:'', bg:'#FFFBEB', border:'#F4E3A8', tit:'#7A5A00', txt:'#7A5A00', ic:'#B45309', accion:'', accionBg:'', accionColor:'', cargando:true,
+    nota:'Los avisos de proceso no se cierran solos: desaparecen cuando termina el trabajo.' },
+};
+
+const DOCS = {
+  'A5': { titulo:'Solicitud de autorización de preimpresos', w:420, h:560, nota:'A5 · lo que pide el SRI para los preimpresos. Es el formato que sale al guardar una orden con documentos fiscales.' },
+  'A4': { titulo:'Orden de producción', w:470, h:640, nota:'A4 · la hoja que va al taller con el detalle del trabajo y el arte adjunto.' },
+  'Rollo': { titulo:'Recibo de abono (Epson)', w:250, h:430, nota:'Rollo de 80 mm · recibo térmico que se entrega al cliente cuando deja el abono.' },
+};
+
+class Component extends DCLogic {
+  state = { buscador:true, sesion:true, consulta:'Ferretería', aviso:'Estado cambiado', formato:'A5' };
+
+  renderVals() {
+    const st = this.state;
+    const q = st.consulta.trim().toLowerCase();
+    const hits = q ? RESULTADOS.filter(r => (r.titulo + ' ' + r.detalle).toLowerCase().includes(q)) : RESULTADOS;
+    const grupos = ['Órdenes','Clientes','Productos','Acciones']
+      .map(g => ({ titulo:g, filas: hits.filter(r => r.grupo === g) }))
+      .filter(g => g.filas.length)
+      .map(g => ({
+        titulo: g.titulo + ' · ' + g.filas.length,
+        filas: g.filas.map((r, i) => ({
+          titulo:r.titulo, detalle:r.detalle, inicial:r.inicial, valor:r.valor,
+          style: `display:flex; align-items:center; gap:12px; padding:11px 17px; border-top:1px solid #F2F4FA; cursor:pointer; background:${i === 0 && g.titulo.startsWith('Órdenes') ? '#F7F9FF' : '#fff'};`,
+          icono: `width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; background:#F2F4FA; color:${r.tono};`,
+          meta: `font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8A93AE; flex-shrink:0;`,
+        })),
+      }));
+
+    const a = AVISOS[st.aviso];
+    const doc = DOCS[st.formato];
+
+    return {
+      abrirBuscador: () => this.setState({ buscador:true }),
+      cerrarBuscador: () => this.setState({ buscador:false }),
+      buscadorAbierto: st.buscador,
+      listaFiltro: st.buscador ? 'blur(1px)' : 'none',
+      consulta: st.consulta,
+      setConsulta: e => this.setState({ consulta:e.target.value }),
+      grupos, sinResultados: grupos.length === 0,
+      atajos: [
+        { tecla:'↑ ↓', que:'moverse' }, { tecla:'⏎', que:'abrir' },
+        { tecla:'⌘⏎', que:'nueva orden con ese cliente' }, { tecla:'ESC', que:'cerrar' },
+      ],
+
+      toggleSesion: () => this.setState({ sesion: !st.sesion }),
+      sesionAbierta: st.sesion,
+      sesionBtnStyle: `display:flex; align-items:center; gap:10px; padding:7px 12px 7px 8px; background:${st.sesion ? '#F7F9FF' : '#fff'}; border:1px solid ${st.sesion ? '#16309B' : '#E4E8F4'}; border-radius:11px; cursor:pointer; font-family:inherit;`,
+      sesionItems: [
+        { label:'Mi perfil y contraseña', atajo:'' },
+        { label:'Cerrar turno y cuadrar caja', atajo:'' },
+        { label:'Atajos de teclado', atajo:'?' },
+        { label:'Cerrar sesión', atajo:'', peligro:true },
+      ].map(s => ({
+        ...s,
+        style: `display:flex; align-items:center; gap:10px; padding:10px 11px; border-radius:9px; font-size:12.5px; font-weight:600; cursor:pointer; color:${s.peligro ? '#B91C1C' : '#3C4763'};`,
+      })),
+
+      filasFondo: FILAS.map(f => {
+        const e = ESTADOS[f.estado];
+        return { ...f,
+          pill: `display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:99px; font-size:11.5px; font-weight:600; background:${e.bg}; border:1px solid ${e.border}; color:${e.color}; flex-shrink:0;`,
+          dot: `width:7px; height:7px; border-radius:99px; background:${e.dot}; display:inline-block;`,
+        };
+      }),
+
+      vacios: VACIOS.map(v => ({
+        ...v,
+        iconoColor: v.tono,
+        iconoBox: `width:52px; height:52px; border-radius:15px; background:${v.bgTono}; display:flex; align-items:center; justify-content:center;`,
+        ctaStyle: `padding:10px 16px; background:#16309B; color:#fff; border-radius:10px; font-size:12.5px; font-weight:600; cursor:pointer;`,
+      })),
+
+      avisoTabs: Object.keys(AVISOS).map(label => ({
+        label,
+        pick: () => this.setState({ aviso:label }),
+        style: `padding:8px 13px; border-radius:99px; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; border:1px solid ${label === st.aviso ? '#16309B' : '#D7DDF0'}; background:${label === st.aviso ? '#16309B' : '#fff'}; color:${label === st.aviso ? '#fff' : '#16309B'};`,
+      })),
+      avisoStyle: `display:flex; align-items:flex-start; gap:11px; padding:13px 14px; background:${a.bg}; border:1px solid ${a.border}; border-radius:13px; box-shadow:0 18px 34px -22px rgba(10,17,64,.4); animation:pi-rise .3s cubic-bezier(.2,.8,.2,1) both;`,
+      avisoIconoBox: `width:28px; height:28px; border-radius:9px; background:#fff; border:1px solid ${a.border}; display:flex; align-items:center; justify-content:center; flex-shrink:0;`,
+      avisoCargando: a.cargando, avisoConIcono: !a.cargando,
+      avisoIcono: a.icono, avisoIconoColor: a.ic,
+      avisoTitulo: a.titulo, avisoDetalle: a.detalle,
+      avisoTitColor: a.tit, avisoTxtColor: a.txt,
+      avisoAccion: !!a.accion, avisoAccionLabel: a.accion,
+      avisoAccionStyle: `flex-shrink:0; padding:7px 11px; background:${a.accionBg}; border:1px solid ${a.border}; border-radius:9px; font-size:11.5px; font-weight:700; color:${a.accionColor}; cursor:pointer;`,
+      avisoNota: a.nota,
+
+      formatos: Object.keys(DOCS).map(label => ({
+        label,
+        pick: () => this.setState({ formato:label }),
+        style: `padding:7px 12px; border-radius:8px; border:none; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; background:${label === st.formato ? '#16309B' : 'transparent'}; color:${label === st.formato ? '#fff' : '#16309B'};`,
+      })),
+      docTitulo: doc.titulo,
+      hojaStyle: `width:${doc.w}px; min-height:${doc.h}px; background:#fff; padding:26px 24px; box-shadow:0 24px 48px -30px rgba(10,17,64,.45); border:1px solid #E4E8F4;`,
+      docFilas: st.formato === 'Rollo'
+        ? [
+            { label:'Orden', value:'ORD-4821' }, { label:'Cliente', value:'FERRETERÍA EL ORO' },
+            { label:'Trabajo', value:'NOTAS DE VENTA 100' }, { label:'Total', value:'$ 48,00' },
+            { label:'Abono recibido', value:'$ 24,00' }, { label:'Saldo', value:'$ 24,00' },
+          ]
+        : [
+            { label:'Contribuyente', value:'FERRETERÍA EL ORO CÍA. LTDA.' },
+            { label:'RUC', value:'0791234567001' },
+            { label:'Documento', value:'NOTA DE VENTA · RIMPE POPULAR' },
+            { label:'Establecimiento / punto', value:'001 - 001' },
+            { label:'Numeración', value:'000842 al 000941' },
+            { label:'Cantidad', value:'100 JUEGOS (ORIG. + 1 COPIA)' },
+            { label:'Autorización anterior', value:'1234567890' },
+          ],
+      docPie: st.formato === 'Rollo'
+        ? 'Gracias por su compra. Este recibo no es comprobante de venta autorizado. Conserve el documento para el retiro del trabajo.'
+        : 'Solicitud presentada por Imprenta Córdova, establecimiento gráfico autorizado N° 001-001. El contribuyente declara que los datos son correctos y autoriza la impresión de los documentos detallados.',
+      formatoNota: doc.nota,
+
+      handoffPasos: [
+        { n:'1', texto:'Reescribir `components/ui/*` sobre `panelTheme.ts` — es lo que desbloquea todo lo demás.' },
+        { n:'2', texto:'Unificar `pages/NuevoPedido.tsx` en 4 pasos y mover el SRI a un bloque del paso 2.' },
+        { n:'3', texto:'Un solo `calcularPedido()` para resumen, pie móvil e impresión.' },
+        { n:'4', texto:'Montar estas piezas: buscador, menú de sesión, vacíos, errores, avisos y barras de documento.' },
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

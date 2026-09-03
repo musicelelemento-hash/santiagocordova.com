@@ -41,3 +41,13 @@ extenciones web/_EVIDENCIA_SRI/**/*.jpg
 extenciones web/_EVIDENCIA_SRI/**/*.jpeg
 extenciones web/_EVIDENCIA_SRI/**/*.png
 extenciones web/_EVIDENCIA_SRI/**/*.webp
+
+# ── Documentos de contribuyentes ───────────────────────────────────────
+# Facturas, retenciones, comprobantes y poderes de clientes reales que viven
+# sueltos en las carpetas de respaldo. NUNCA a git: sacarlos de la historia
+# después es carísimo. Si algún PDF es documentación (no dato de cliente),
+# agregalo a mano con: git add -f "ruta/al.pdf"
+*.pdf
+
+# El repo de la app web se versiona por separado (tiene su propio .git)
+santiagocordova-main/

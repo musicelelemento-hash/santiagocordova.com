@@ -1,0 +1,384 @@
+VENTAS
+VENTAS
+info_outline El valor de ventas que se muestra en Información Fiscal proviene de Facturación Electrónica, y corresponde al total de sus transacciones; distribuya este valor en los casilleros de acuerdo a su necesidad.
+RESUMEN DE VENTAS Y OTRAS OPERACIONES DEL PERÍODO QUE DECLARA
+VALOR BRUTO
+VALOR NETO
+IMPUESTO GENERADO
+.
+(VALOR BRUTO - N/C)
+.
+Ventas locales (excluye activos fijos) gravadas tarifa diferente de cero
+401
+1,000.00
+411
+1,000.00
+421
+150.00
+Ventas de activos fijos gravadas tarifa diferente de cero
+402
+0.00
+412
+0.00
+422
+0.00
+Ventas locales (excluye activos fijos) gravadas tarifa 5%
+425
+0.00
+435
+0.00
+445
+0.00
+IVA generado en la diferencia entre ventas y notas de crédito con distinta tarifa (ajuste a pagar)
+.
+423
+0.00
+IVA generado en la diferencia entre ventas y notas de crédito con distinta tarifa (ajuste a favor)
+.
+424
+0.00
+Ventas locales (excluye activos fijos) gravadas tarifa 0% que no dan derecho a crédito tributario
+403
+906.00
+413
+906.00
+.
+Ventas de activos fijos gravadas tarifa 0% que no dan derecho a crédito tributario
+404
+0.00
+414
+0.00
+.
+Ventas locales (excluye activos fijos) gravadas tarifa 0% que dan derecho a crédito tributario
+405
+0.00
+415
+0.00
+.
+Ventas de activos fijos gravadas tarifa 0% que dan derecho a crédito tributario
+406
+0.00
+416
+0.00
+.
+Exportaciones de bienes
+407
+0.00
+417
+0.00
+.
+Exportaciones de servicios y/o derechos
+408
+0.00
+418
+0.00
+.
+TOTAL VENTAS Y OTRAS OPERACIONES
+409
+1,906.00
+419
+1,906.00
+429
+150.00
+Transferencias de bienes y prestación de servicios no objeto o exentos de IVA
+431
+0.00
+441
+0.00
+.
+Notas de crédito tarifa 0% por compensar próximo mes
+.
+442
+0.00
+.
+Notas de crédito tarifa diferente de cero por compensar próximo mes
+.
+443
+0.00
+453
+0.00
+Ingresos por reembolso como intermediario / valores facturados por operadoras de transporte / ingresos obtenidos por parte de las sociedades de gestión colectiva como intermediarios (informativo)
+434
+0.00
+444
+0.00
+454
+0.00
+.
+LIQUIDACIÓN DEL IVA EN EL MES
+Total transferencias gravadas tarifa diferente de cero a contado este mes
+480
+1,000.00
+Total transferencias gravadas tarifa diferente de cero a crédito este mes
+481
+0.00
+Total impuesto generado
+(trasládese campo 429)
+482
+150.00
+Impuesto ventas netas a liquidar meses anteriores incluye activos fijos
+(verificar que el valor corresponda al campo 485 por ventas a crédito de periodos anteriores)
+483
+0.00
+Impuesto a liquidar en este mes
+484
+150.00
+Impuesto ventas netas a liquidar en los próximos meses por ventas a crédito incluye activos fijos
+(482-484)
+485
+0.00
+Mes a pagar el monto de IVA diferente de cero por ventas a crédito de este mes
+486
+0
+Tamaño COPCI
+487
+TOTAL IMPUESTO A LIQUIDAR EN ESTE MES
+(483+484)
+499
+150.00
+Total comprobantes de venta emitidos
+111
+0
+.
+Total comprobantes de venta anulados
+113
+0
+COMPRAS
+COMPRAS
+info_outline El valor de compras que se muestra en Información Fiscal proviene de Facturación Electrónica, y corresponde al total de sus adquisiciones; distribuya este valor en los casilleros de acuerdo a su necesidad. Recuerde verificar que estos valores sean exclusivamente de su actividad económica.
+RESUMEN DE ADQUISICIONES Y PAGOS DEL PERÍODO QUE DECLARA
+VALOR BRUTO
+VALOR NETO
+IMPUESTO GENERADO
+.
+(VALOR BRUTO - N/C)
+.
+Adquisiciones y pagos (excluye activos fijos) gravados tarifa diferente de cero (con derecho a crédito tributario)
+500
+1,098.48
+510
+1,098.48
+520
+164.77
+Adquisiciones locales de activos fijos gravados tarifa diferente de cero (con derecho a crédito tributario)
+501
+0.00
+511
+0.00
+521
+0.00
+Adquisiciones y pagos locales (excluye activos fijos) gravados con tarifa 5% (con derecho a crédito tributario)
+540
+0.00
+550
+0.00
+560
+0.00
+Otras adquisiciones y pagos gravados tarifa diferente de cero (sin derecho a crédito tributario)
+502
+0.00
+512
+0.00
+522
+0.00
+Importaciones de servicios y/o derechos gravados tarifa diferente de cero
+503
+0.00
+513
+0.00
+523
+0.00
+Importaciones de bienes (excluye activos fijos) gravados tarifa diferente de cero
+504
+0.00
+514
+0.00
+524
+0.00
+Importaciones de activos fijos gravados tarifa diferente de cero
+505
+0.00
+515
+0.00
+525
+0.00
+IVA generado en la diferencia entre adquisiciones y notas de crédito con distinta tarifa (ajuste en positivo al crédito tributario)
+.
+526
+0.00
+IVA generado en la diferencia entre adquisiciones y notas de crédito con distinta tarifa (ajuste en negativo al crédito tributario)
+.
+527
+0.00
+Importaciones de bienes (incluye activos fijos) gravados tarifa 0%
+506
+0.00
+516
+0.00
+.
+Adquisiciones y pagos (incluye activos fijos) gravados tarifa 0%
+507
+51.49
+517
+51.49
+.
+Adquisiciones realizadas a contribuyentes RISE (hasta diciembre 2021), NEGOCIOS POPULARES (desde enero 2022)
+508
+0.00
+518
+0.00
+.
+TOTAL ADQUISICIONES Y PAGOS
+509
+1,149.97
+519
+1,149.97
+529
+164.77
+Adquisiciones no objeto de IVA
+531
+0.00
+541
+0.00
+.
+Adquisiciones exentas del pago de IVA
+532
+0.00
+542
+0.00
+.
+Notas de crédito tarifa 0% por compensar próximo mes
+.
+543
+0.00
+.
+Notas de crédito tarifa diferente de cero por compensar próximo mes
+.
+544
+0.00
+554
+0.00
+Pagos netos por reembolso como intermediario / valores facturados por socios a operadoras de transporte / pagos realizados por parte de las sociedades de gestión colectiva como intermediarios (informativo)
+535
+0.00
+545
+0.00
+555
+0.00
+.
+Factor de proporcionalidad para crédito tributario
+(411+412+420+435+415+416+417+418) / 419
+563
+0.5247
+Crédito tributario aplicable en este período (de acuerdo al factor de proporcionalidad o a su contabilidad) (520+521+534+560+523+524+525+526-527) x 563
+Valor sugerido:
+86.45
+564
+86.45
+Valor de IVA no considerado como crédito tributario por factor de proporcionalidad
+Valor sugerido:
+78.32
+565
+78.32
+.
+Total comprobantes de venta recibidos por adquisiciones y pagos (excepto notas de venta)
+115
+0
+.
+Total notas de venta recibidas
+117
+0
+Total liquidaciones de compra emitidas (por pagos tarifa 0% de IVA, o por reembolsos en relación de dependencia)
+119
+0
+RESUMEN IMPOSITIVO
+RESUMEN IMPOSITIVO
+RESUMEN IMPOSITIVO: AGENTE DE PERCEPCIÓN DEL IMPUESTO AL VALOR AGREGADO
+Impuesto causado
+(si la diferencia de los campos 499-564 es mayor que cero)
+601
+63.55
+Crédito tributario aplicable en este período
+(si la diferencia de los campos 499-564 es menor que cero)
+602
+0.00
+(-) Compensación de IVA por ventas efectuadas con medio electrónico y/o IVA devuelto o descontado por transacciones realizadas con personas adultas mayores o personas con discapacidad
+603
+0.00
+(-) Saldo crédito tributario del mes anterior
+.
+Por adquisiciones e importaciones
+(trasládese el campo 615 de la declaración del período anterior)
+605
+100.00
+.
+Por retenciones en la fuente de IVA que le han sido efectuadas
+(trasládese el campo 617 de la declaración del período anterior)
+606
+18.00
+.
+Por compensación de IVA por ventas efectuadas con medio electrónico
+(trasládese el campo 618 de la declaración del período anterior)
+607
+0.00
+.
+Por compensación de IVA por ventas efectuadas en zonas afectadas - Ley de solidaridad, restitución de crédito tributario en resoluciones administrativas o sentencias judiciales de última instancia
+(trasládese el campo 619 de la declaración del período anterior)
+608
+0.00
+(-) Retenciones en la fuente de IVA que le han sido efectuadas en este período
+609
+30.00
+(-) IVA devuelto o descontado por transacciones realizadas con personas adultas mayores o personas con discapacidad
+622
+0.00
+(+) Ajuste por IVA devuelto o descontado por adquisiciones efectuadas con medio electrónico
+610
+0.00
+(+) Ajuste por IVA devuelto e IVA rechazado (por concepto de devoluciones de IVA), ajuste de IVA por procesos de control y otros (adquisiciones en importaciones), imputables al crédito tributario
+612
+0.00
+(+) Ajuste por IVA devuelto e IVA rechazado, ajuste de IVA por procesos de control y otros (por concepto retenciones en la fuente de IVA), imputables al crédito tributario
+613
+0.00
+(+) Ajuste por IVA devuelto por otras instituciones del sector público imputable al crédito tributario en el mes
+614
+0.00
+Saldo crédito tributario para el próximo mes
+.
+Por adquisiciones e importaciones
+Valor sugerido:
+36.45
+615
+36.45
+.
+Por retenciones en la fuente de IVA que le han sido efectuadas
+Valor sugerido:
+48.00
+617
+48.00
+.
+Por compensación de IVA por ventas efectuadas con medio electrónico
+618
+0.00
+.
+Por compensación de IVA por ventas efectuadas en zonas afectadas - Ley de solidaridad, restitución de crédito tributario en resoluciones administrativas o sentencias judiciales de última instancia
+Valor sugerido:
+0.00
+619
+0.00
+IVA pagado y no compensado, en la adquisición local o importación de bienes o servicios que se carga al gasto de Impuesto a la Renta.
+624
+0.00
+.
+Ajuste del crédito tributario de Impuesto al Valor Agregado pagado en adquisiciones locales e importaciones de bienes y servicios superior a cinco (5) años
+625
+0.00
+SUBTOTAL A PAGAR
+Si (601-602-603-604-605-606-607-608-623-609-622+610+611+612+613+614) > 0
+620
+0.00
+TOTAL IMPUESTO A PAGAR POR PERCEPCIÓN Y RETENCIONES EFECTUADAS EN VENTAS (varios porcentajes)
+(620+621)
+699
+0.00

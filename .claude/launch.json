@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "santiagocordova-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "santiagocordova-main", "run", "dev"],
+      "port": 3000
+    }
+  ]
+}

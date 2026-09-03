@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Declarador 2011 Elite</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #a855f7;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 400px;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text-main);
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 4px;
+            background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            padding: 4px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        /* WORKFLOW */
+        .workflow-step {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 16px;
+            border-radius: 18px;
+            margin-bottom: 16px;
+        }
+
+        .step-title {
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* BUTTONS */
+        .btn {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border: none;
+            color: white;
+            box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.5);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            box-shadow: 0 12px 24px -6px rgba(99, 102, 241, 0.6);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* STATUS */
+        .status-badge {
+            padding: 12px;
+            background: rgba(99, 102, 241, 0.1);
+            border-left: 4px solid var(--primary);
+            border-radius: 12px;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        /* GRID */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        input,
+        select {
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            outline: none;
+            width: 100%;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 14px;
+            border-radius: 16px;
+            margin-bottom: 10px;
+            border-left-width: 4px;
+        }
+
+        .result-val {
+            font-size: 24px;
+            font-weight: 800;
+            margin: 4px 0;
+            cursor: pointer;
+        }
+
+        .result-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        #borrarBtn {
+            margin-top: 10px;
+            opacity: 0.6;
+            font-size: 11px;
+            padding: 8px;
+        }
+
+        /* TOGGLE SWITCHES */
+        .toggle-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .toggle-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked+.slider {
+            background-color: var(--primary);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(14px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1><span style="font-size: 20px;">💎</span> Declarador 2011</h1>
+            <p class="subtitle">EDICIÓN ÉLITE • IVA MENSUAL</p>
+        </header>
+
+        <!-- INDICADOR OPERANDO / GRABANDO EN VIVO -->
+        <div id="recordingBadge" class="recording-badge idle" style="display: flex; align-items: center; gap: 12px; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 10px 14px; margin-bottom: 16px;">
+            <div class="pulse-red-dot-badge" style="width: 12px; height: 12px; background-color: #10b981; border-radius: 50%; flex-shrink: 0;"></div>
+            <div class="recording-info">
+                <div id="recordingTitle" style="font-size: 11px; font-weight: 800; color: #f8fafc; letter-spacing: 0.05em; text-transform: uppercase;">🟢 EXTENSIÓN LISTA</div>
+                <div id="recordingSubtext" style="font-size: 10px; color: #cbd5e1; font-weight: 500;">Sistema preparado para operar en SRI</div>
+            </div>
+        </div>
+
+        <!-- STATUS DISPLAY (Critical for feedback) -->
+        <div id="status" class="status-badge hidden"></div>
+
+        <!-- TABS NAVIGATION -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="clients">📋 CLIENTES SRI</button>
+            <button class="tab-btn" data-tab="panel">⚡ CONTROL PANEL</button>
+            <button class="tab-btn" data-tab="report">📜 REPORTE BULK</button>
+        </div>
+
+        <!-- TAB: CLIENTES SRI (Matrix Sync & Direct Launch) -->
+        <div id="clientsContainer">
+            <div style="display: flex; gap: 6px; margin-bottom: 12px; align-items: center;">
+                <input type="text" id="clientSearchInput" placeholder="🔍 Buscar por nombre o RUC..." style="flex: 1; padding: 6px 10px; font-size: 11px; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: white; border-radius: 8px;" />
+                <button id="btnRefreshClients" class="btn" style="width: auto; padding: 6px 10px; font-size: 10px; background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid #6366f1;">🔄</button>
+            </div>
+
+            <div id="clientsListContent" style="max-height: 380px; overflow-y: auto; padding-right: 4px;">
+                <!-- Client items injected dynamically -->
+            </div>
+        </div>
+
+        <!-- REPORTE CONTAINER (Hidden by default) -->
+        <div id="reportContainer" class="hidden">
+            <div id="reportEmptyState" style="text-align: center; padding: 30px; opacity: 0.5;">
+                <div style="font-size: 40px; margin-bottom: 10px;">📉</div>
+                <div>No hay reportes generados aún.</div>
+                <div style="font-size: 10px;">Ejecute un Modo Turbo Semestral/Anual para ver resultados aquí.</div>
+            </div>
+
+            <div id="reportContent" class="hidden">
+                <div class="result-card" style="border-left-color: #f59e0b; margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <div class="result-label">CLIENTE DETECTADO</div>
+                            <div id="reportClientName" style="font-size: 14px; font-weight: 800; color: white;">-</div>
+                            <div id="reportPeriodLabel" style="font-size: 10px; opacity: 0.7; margin-top: 2px;">-</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="result-label">TOTAL FACTURAS</div>
+                            <div id="reportTotalFacturas" style="font-size: 18px; font-weight: 800; color: #10b981;">0
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    style="max-height: 300px; overflow-y: auto; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 12px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+                        <thead style="background: rgba(255,255,255,0.05); position: sticky; top: 0;">
+                            <tr>
+                                <th style="padding: 8px; text-align: left; color: var(--text-dim);">MES</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-dim);">BASE 15%</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-dim);">BASE 0%</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-dim);">RET. IVA</th>
+                                <th style="padding: 8px; text-align: right; color: var(--text-dim);">RET. RENTA</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportTableBody">
+                            <!-- Rows will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <button id="btnCopyReport" class="btn btn-primary" style="margin-bottom: 10px;">
+                    📋 COPIAR REPORTE AL PORTAPAPELES
+                </button>
+                <div style="text-align: center; font-size: 9px; opacity: 0.5;">
+                    Compatible con Excel / Hojas de Cálculo
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN CONTAINER FOR STEP 1 -->
+        <div id="step1Container">
+            <!-- MANUAL CONTENT (Main View) -->
+            <div id="contentManual">
+
+
+                <!-- PASO 1: CONSULTA Y EXTRACCION -->
+                <div class="workflow-step">
+                    <div class="step-title">📡 PASO 1: PROCESO TURBO SELECTIVO</div>
+
+                    <div
+                        style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                        📅 CONFIGURACIÓN DE PROCESO:
+                    </div>
+
+                    <!-- TIPO DE FLUJO -->
+                    <div style="margin-bottom: 12px;">
+                        <span style="font-size: 10px; opacity: 0.5; display: block; margin-bottom: 4px;">TIPO DE
+                            FLUJO</span>
+                        <select id="bulkType" style="border-color: var(--primary); font-weight: bold;">
+                            <option value="monthly">📅 MENSUAL (ESTÁNDAR)</option>
+                            <option value="sem1">🌓 1ER SEMESTRE (ENE - JUN)</option>
+                            <option value="sem2">🌗 2DO SEMESTRE (JUL - DIC)</option>
+                            <option value="annual">☀️ AÑO COMPLETO (ENE - DIC)</option>
+                        </select>
+                    </div>
+
+                    <div class="grid-2" style="margin-bottom: 12px; gap: 8px;">
+                        <div style="position: relative;">
+                            <span
+                                style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.5;">AÑO</span>
+                            <input type="number" id="manualYearM" placeholder="2025"
+                                style="padding-left: 36px; border: 1px solid rgba(99, 102, 241, 0.4); font-weight: bold;">
+                        </div>
+                        <div style="position: relative;" id="monthSelectorContainer">
+                            <span
+                                style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 10px; opacity: 0.5;">MES</span>
+                            <select id="manualMonthM"
+                                style="padding-left: 36px; border: 1px solid rgba(168, 85, 247, 0.4); font-weight: bold; cursor: pointer;">
+                                <option value="0">ENE</option>
+                                <option value="1">FEB</option>
+                                <option value="2">MAR</option>
+                                <option value="3">ABR</option>
+                                <option value="4">MAY</option>
+                                <option value="5">JUN</option>
+                                <option value="6">JUL</option>
+                                <option value="7">AGO</option>
+                                <option value="8">SEP</option>
+                                <option value="9">OCT</option>
+                                <option value="10">NOV</option>
+                                <option value="11">DIC</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- SELECTIVE TOGGLES -->
+                    <div style="margin-bottom: 12px;">
+                        <div class="toggle-group">
+                            <span class="toggle-label">📊 FACTURAS</span>
+                            <label class="switch">
+                                <input type="checkbox" id="checkFacturas" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-group">
+                            <span class="toggle-label">💎 RETENCIONES</span>
+                            <label class="switch">
+                                <input type="checkbox" id="checkRetenciones" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-group">
+                            <span class="toggle-label">📉 NOTAS CRÉDITO</span>
+                            <label class="switch">
+                                <input type="checkbox" id="checkNC" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button id="navComprobantesBtn" class="btn" style="margin-bottom: 12px; font-size: 11px;">
+                        📂 IR A COMPROBANTES RECIBIDOS
+                    </button>
+
+                    <!-- BOTON PRINCIPAL TURBO -->
+                    <button id="btnStartTurboManual" class="btn btn-primary" style="
+                    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); 
+                    font-size: 13px; 
+                    padding: 16px;
+                    border: 1px solid #f59e0b;
+                    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+                    margin-bottom: 12px;
+                ">
+                        🚀 EJECUTAR MODO TURBO<br>
+                        <span style="font-size: 10px; opacity: 0.9; font-weight: normal;">(Facturas + Retenciones +
+                            NC)</span>
+                    </button>
+
+                    <div class="grid-2" style="font-size: 10px; gap: 6px;">
+                        <button id="btnManualFacturas" class="btn" style="padding: 8px;">📊 SOLO FACTURAS</button>
+                        <button id="btnManualRetenciones" class="btn" style="padding: 8px;">💎 SOLO RETEN.</button>
+                        <button id="btnManualNC" class="btn" style="padding: 8px; grid-column: span 2;">📉 SOLO NOTAS
+                            CRÉDITO</button>
+                    </div>
+                </div>
+
+                <!-- PASO 2: DECLARACIÓN -->
+                <div class="workflow-step">
+                    <div class="step-title">📝 PASO 2: DECLARACIÓN</div>
+                    <button id="openFormBtn" class="btn"
+                        style="margin-bottom: 12px; background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid #10b981;">
+                        🏃 IR AL FORMULARIO
+                    </button>
+
+                    <div class="grid-2" style="margin-bottom: 8px;">
+                        <button id="fillVentasBtn" class="btn">💰 VENTAS</button>
+                        <button id="fillComprasBtn" class="btn">🛒 COMPRAS</button>
+                    </div>
+                    <div class="grid-2">
+                        <button id="fillRetencionesBtn" class="btn">💎 RETEN. (609/610)</button>
+                        <button id="autoFillFormBtn" class="btn btn-primary" style="grid-column: span 2;">
+                            🚀 LLENAR TODO EL FORMULARIO
+                        </button>
+                    </div>
+                </div>
+            </div> <!-- Close contentManual -->
+        </div> <!-- Close step1Container -->
+
+        <!-- WORKFLOW STATUS PANEL (Automated Progress) -->
+        <div id="workflowStatus" class="hidden" style="margin-top: 10px;">
+            <div class="status-badge"
+                style="background: rgba(168, 85, 247, 0.1); border-color: var(--secondary); margin-bottom: 12px;">
+                <div id="statusText" style="font-size: 13px; font-weight: 600;">⌛ Iniciando motores...</div>
+            </div>
+            <div class="grid-2">
+                <button id="btnContinuar" class="btn btn-primary hidden">CONTINUAR</button>
+                <button id="btnPausar" class="btn hidden">PAUSAR</button>
+            </div>
+        </div>
+
+
+        <!-- UNIVERSAL RESULTS -->
+        <div id="periodContainer" class="result-card hidden" style="border-left-color: var(--primary);">
+            <div class="result-label">📍 Periodo en Memoria</div>
+            <div class="result-val" id="activePeriodValue" style="font-size: 16px;">-</div>
+        </div>
+
+        <div id="results" class="hidden">
+            <div class="result-card" style="border-left-color: var(--success);">
+                <div class="result-label">🟢 Compras IVA 0% (Cas. 507)</div>
+                <div id="iva0Value" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;"><span id="iva0Count">0</span> Facturas</div>
+            </div>
+            <div class="result-card" style="border-left-color: var(--warning);">
+                <div class="result-label">🟠 Compras IVA 15% (Cas. 500)</div>
+                <div id="iva15Value" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;"><span id="iva15Count">0</span> Facturas</div>
+            </div>
+        </div>
+
+        <div id="resultsRetenciones" class="hidden">
+            <div class="result-card" style="border-left-color: #f59e0b;">
+                <div class="result-label">💰 Base Imponible (Cas. 300+)</div>
+                <div id="retBaseValue" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;">Suma de bases imponibles</div>
+            </div>
+            <div class="result-card" style="border-left-color: #a855f7;">
+                <div class="result-label">💎 IVA Retenido (Cas. 609)</div>
+                <div id="ivaRetenidoValue" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;"><span id="ivaRetenidoCount">0</span> Retenciones</div>
+            </div>
+            <div class="result-card" style="border-left-color: #6366f1;">
+                <div class="result-label">📄 Renta Retenida (Cas. 610)</div>
+                <div id="rentaRetenidaValue" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;"><span id="rentaRetenidaCount">0</span> Retenciones</div>
+            </div>
+        </div>
+
+        <div id="resultsNotasCredito" class="hidden">
+            <div class="result-card" style="border-left-color: #ef4444;">
+                <div class="result-label">📉 NOTAS CRÉDITO (SIN IMPUESTOS)</div>
+                <div id="ncSinImpuestos" class="result-val">$0.00</div>
+                <div style="font-size: 10px; opacity: 0.6;"><span id="ncCount">0</span> Notas</div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button id="borrarBtn" class="btn" style="font-size: 11px;">🗑️ BORRAR MEMORIA</button>
+            <button id="stopAutoBtn" class="btn"
+                style="font-size: 11px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid #ef4444;">🛑
+                PARAR AUTO</button>
+        </div>
+    </div>
+
+    <script src="supabase_bridge.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,29 @@
+{
+    "manifest_version": 3,
+    "name": "📑 [SC PRO 03] - Llenador Anexo Gastos Personales",
+    "version": "1.1.0",
+    "description": "Automatiza el llenado del anexo de gastos personales en el portal del SRI.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "storage"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": "icon.png"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://sriservicios.sri.gob.ec/anexo-gastos-personales/facturas-electronicas.jsf*"
+            ],
+            "js": [
+                "content.js"
+            ],
+            "css": [
+                "content.css"
+            ],
+            "all_frames": true
+        }
+    ]
+}
