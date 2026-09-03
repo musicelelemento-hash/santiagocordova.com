@@ -1478,6 +1478,54 @@ function executeLogin(ruc, password) {
   }
 }
 
+/**
+ * Localiza los campos del formulario de credenciales del SRI.
+ * Devuelve {ruc, pass, btn} o null si esta pantalla no es el formulario.
+ *
+ * Ancla en el campo de clave (input[type=password]), que es inequívoco, y
+ * deriva el resto de ahí. Los IDs conocidos se prueban primero, pero la
+ * estructura es el respaldo que sobrevive a un rediseño del portal.
+ */
+function encontrarCamposLogin() {
+    const visible = (el) => {
+        if (!el) return false;
+        if (typeof esVisible === 'function') return esVisible(el);
+        return el.offsetParent !== null;
+    };
+
+    const pass = Array.from(document.querySelectorAll('input[type="password"]')).find(visible);
+    if (!pass) return null;
+
+    const form = pass.closest('form') || document;
+
+    // El RUC es el PRIMER campo de texto visible del formulario.
+    // El segundo es "C.I. adicional", que es opcional: NO se toca.
+    const textos = Array.from(form.querySelectorAll('input'))
+        .filter((el) => visible(el) && /^(text|tel|email|number|search|)$/i.test(el.type || ''));
+
+    const ruc = document.getElementById('usuario') ||
+                document.querySelector('input[name="usuario"]') ||
+                document.getElementById('username') ||
+                textos[0] || null;
+
+    const btn = document.getElementById('kc-login') ||
+        Array.from(form.querySelectorAll('button, input[type="submit"], a.ui-button'))
+            .find((el) => visible(el) && /ingresar|iniciar|entrar|acceder|login/i.test(el.innerText || el.value || '')) ||
+        form.querySelector('input[type="submit"], button[type="submit"]') ||
+        null;
+
+    return (ruc && pass && btn) ? { ruc, pass, btn } : null;
+}
+
+/** Escribe en un input avisando al framework que lo maneja. */
+function escribirCampo(input, valor) {
+    if (!input) return;
+    input.focus();
+    input.value = valor;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function isSRILoginPage() {
   const url = window.location.href.toLowerCase();
   const hasLoginUrl =

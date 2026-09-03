@@ -27,8 +27,11 @@ SafeStorage.get(null).then(async (items) => {
         }
     }
 
-    // ELITE FIX: Si el input de usuario está en pantalla, DEFINITIVAMENTE estamos afuera (no logueados)
-    const isExplicitlyOutside = !!(document.getElementById('usuario') || document.querySelector('input[name="usuario"]'));
+    // Si el formulario de credenciales está en pantalla, estamos afuera.
+    // Antes esto exigía un input llamado 'usuario'; como el de Keycloak no se
+    // llama así, la extensión creía estar en la portada y nunca llenaba nada.
+    const camposLogin = encontrarCamposLogin();
+    const isExplicitlyOutside = !!camposLogin;
 
     const isAlreadyLoggedIn = !isExplicitlyOutside && !!(
         document.getElementById('id_nombre_razon_social') || 
@@ -85,18 +88,26 @@ SafeStorage.get(null).then(async (items) => {
                 }
                 
                 loginAttempts++;
-                if (loginAttempts > 30) clearInterval(loginInterval); // Desistir tras 6 segundos
+                if (loginAttempts > 30) {
+                    clearInterval(loginInterval);
+                    console.warn('⚠️ [LOGIN] No apareció el botón "Iniciar sesión" de la portada tras 6s. Si estabas en la pantalla de credenciales, avisá: el detector no la reconoció.');
+                }
             }, 200);
             return;
         }
 
         let attempts = 0;
         const autoLoginInterval = setInterval(async () => {
-            const rucInput = document.getElementById('usuario') || document.querySelector('input[name="usuario"]') || document.querySelector('#username');
-            const passInput = document.getElementById('password') || document.querySelector('input[name="password"]');
-            const btn = document.getElementById('kc-login') || document.querySelector('input[type="submit"]');
+            const campos = encontrarCamposLogin();
+            const rucInput = campos && campos.ruc;
+            const passInput = campos && campos.pass;
+            const btn = campos && campos.btn;
 
             if (rucInput && passInput && btn) {
+                console.log('🔑 [LOGIN] Formulario localizado:',
+                    `ruc=#${rucInput.id || rucInput.name || '(sin id)'}`,
+                    `clave=#${passInput.id || passInput.name || '(sin id)'}`,
+                    `botón="${(btn.innerText || btn.value || '').trim()}"`);
                 clearInterval(autoLoginInterval);
                 let targetPass = items.pending_sri_autofill.password;
                 if (!targetPass) {
@@ -107,9 +118,11 @@ SafeStorage.get(null).then(async (items) => {
                     }
                 }
 
-                rucInput.value = items.pending_sri_autofill.ruc;
+                escribirCampo(rucInput, items.pending_sri_autofill.ruc);
                 if (targetPass) {
-                    passInput.value = targetPass;
+                    escribirCampo(passInput, targetPass);
+                } else {
+                    console.warn('⚠️ [LOGIN] Sin clave para este RUC: el formulario queda a medio llenar.');
                 }
 
                 // Guardar la clave en la caché local automáticamente si el usuario la escribe
