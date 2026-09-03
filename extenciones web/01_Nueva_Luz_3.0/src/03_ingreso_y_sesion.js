@@ -1096,9 +1096,12 @@ async function renderLoginCockpit(items) {
     const existingIsland = document.getElementById('sri-dynamic-island');
     if (existingIsland) existingIsland.remove();
 
-    const rucInput = document.getElementById('usuario') || document.querySelector('input[name="usuario"]') || document.querySelector('#username');
-    const passInput = document.getElementById('password') || document.querySelector('input[name="password"]');
-    const loginBtn = document.getElementById('kc-login') || document.querySelector('input[type="submit"]');
+    // Sin esto el cockpit no se dibujaba nunca en el login real: buscaba un
+    // input 'usuario' que el SRI no tiene y salía por el return.
+    const campos = encontrarCamposLogin();
+    const rucInput = campos && campos.ruc;
+    const passInput = campos && campos.pass;
+    const loginBtn = campos && campos.btn;
     if (!rucInput || !loginBtn) return;
 
     // Obtener clientes de la memoria local

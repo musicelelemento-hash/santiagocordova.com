@@ -1411,13 +1411,9 @@ async function handleBatchNextClient() {
 }
 
 function executeLogin(ruc, password) {
-  const rucInput =
-    document.getElementById("usuario") ||
-    document.querySelector('input[name="usuario"]') ||
-    document.querySelector("#username");
-  const passInput =
-    document.getElementById("password") ||
-    document.querySelector('input[name="password"]');
+  const campos = encontrarCamposLogin();
+  const rucInput = campos && campos.ruc;
+  const passInput = campos && campos.pass;
   const btn =
     document.getElementById("kc-login") ||
     document.querySelector('input[type="submit"]');
@@ -2091,16 +2087,12 @@ async function renderAnticipationWidget(items) {
     });
 
     const ejecutarLoginDOM = (ruc, pass) => {
-      const rucInput =
-        document.getElementById("usuario") ||
-        document.querySelector('input[name="usuario"]') ||
-        document.querySelector("#username");
-      const passInput =
-        document.getElementById("password") ||
-        document.querySelector('input[name="password"]');
-      const loginBtn =
-        document.getElementById("kc-login") ||
-        document.querySelector('input[type="submit"]');
+      // Lo usa "1-Clic Declarar": si no encontraba los campos se iba por la
+      // rama de "buscar el enlace de iniciar sesión" y el botón no entraba.
+      const campos = encontrarCamposLogin();
+      const rucInput = campos && campos.ruc;
+      const passInput = campos && campos.pass;
+      const loginBtn = campos && campos.btn;
 
       if (rucInput && passInput && loginBtn) {
         rucInput.value = ruc;
