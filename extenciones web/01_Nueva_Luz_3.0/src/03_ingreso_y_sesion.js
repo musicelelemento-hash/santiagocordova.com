@@ -9,7 +9,7 @@ SafeStorage.get(null).then(async (items) => {
         console.log(
             `🚦 [ESTADO] semáforo=${sem.estado}` +
             `${total ? ` · cliente ${sem.indice + 1}/${total}` : ' · sin lote'}` +
-            ` · autofill=${af ? `${af.name || af.ruc}${af.isBatch ? ' (lote)' : ' (manual)'}` : 'no'}` +
+            ` · autofill=${af ? `${af.name || af.ruc} [${[af.manual && 'manual', af.isBatch && 'lote', af.loginAttempted && 'login-hecho'].filter(Boolean).join(',') || 'sin banderas'}]` : 'no'}` +
             ` · acción=${items.pendingAction || '—'}` +
             ` · login=${isLoginPage ? 'sí' : 'no'}` +
             `${sem.motivo ? ' · ' + sem.motivo : ''}`
@@ -79,8 +79,14 @@ SafeStorage.get(null).then(async (items) => {
     }
 
 
-    if (isLoginPage && !isAlreadyLoggedIn && items.pending_sri_autofill && items.pending_sri_autofill.manual) {
-        console.log('🚀 SRI Assistant: Auto-Login trigger detectado...');
+    // Un cliente de LOTE también necesita auto-login: es el caso normal del
+    // bucle. Antes solo se aceptaba .manual y el lote se quedaba en el login
+    // con las credenciales cargadas, esperando a una persona que no iba a venir.
+    const autofillListo = items.pending_sri_autofill &&
+                          (items.pending_sri_autofill.manual || items.pending_sri_autofill.isBatch);
+
+    if (isLoginPage && !isAlreadyLoggedIn && autofillListo) {
+        console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
 
         // Si estamos en la portada de inicio del SRI (ej. inicio/NAT), hacer clic en "Iniciar sesión" para ir a Keycloak
         if (!isExplicitlyOutside) {
@@ -301,7 +307,11 @@ SafeStorage.get(null).then(async (items) => {
 
     if (items.pendingAction) {
         if (isLoginPage && !isAlreadyLoggedIn && (items.pendingAction === 'startIvaNavigation' || items.pendingAction === 'verifyProfile' || items.pendingAction.includes('turbo'))) {
-            console.log('🛑 SRI Assistant: Detectado Login. Esperando a que el usuario ingrese...');
+            if (autofillListo) {
+                console.log('🔑 SRI Assistant: En el login con credenciales cargadas. El auto-login se encarga.');
+            } else {
+                console.log('🛑 SRI Assistant: Detectado Login sin credenciales. Esperando a que el usuario ingrese...');
+            }
             return;
         }
 

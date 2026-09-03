@@ -1559,14 +1559,10 @@ function isSRILoginPage() {
     url.includes("sri-en-linea/inicio") ||
     url.includes("login.jsf") ||
     url.includes("login");
-  const hasLoginForm = !!(
-    document.getElementById("kc-login") ||
-    document.getElementById("usuario") ||
-    document.querySelector('input[name="usuario"]') ||
-    document.querySelector('input[name="password"]') ||
-    document.querySelector("#username") ||
-    document.querySelector('form[action*="login"]')
-  );
+  // Un solo detector para todo el código: si están los campos de credenciales,
+  // estamos en el login. Antes se enumeraban IDs (#usuario, #kc-login...) que
+  // en el SRI no existen, y la detección dependía solo de la URL.
+  const hasLoginForm = !!encontrarCamposLogin();
   return hasLoginUrl || hasLoginForm;
 }
 
@@ -2137,12 +2133,14 @@ async function renderAnticipationWidget(items) {
         const { pass, name } = await getCredsForRuc(ruc);
         if (!ruc || !pass) return alert("No hay clave disponible para este contribuyente.");
 
+        // El semáforo es la autoridad: encenderlo con una cola de un solo
+        // cliente. Antes se escribían las banderas viejas a mano y sc_loop
+        // quedaba en DETENIDO, así que puedeAvanzar() bloqueaba todo el flujo.
+        const periodo = { year: selectedYear, monthIndex: selectedMonth };
+        await SriLoop.iniciar([{ ruc, name, password: pass }], periodo);
+
         await SafeStorage.set({
-          sri_master_switch_on: true,
-          auto_batch_enabled: true,
-          sri_auto_mode: true,
-          autoDeclaration: true,
-          workflowPeriod: { year: selectedYear, monthIndex: selectedMonth },
+          workflowPeriod: periodo,
           pending_sri_autofill: {
             ruc,
             password: pass,
@@ -2158,6 +2156,7 @@ async function renderAnticipationWidget(items) {
           checkNC: true,
           actionTimestamp: Date.now()
         });
+        await SafeStorage.remove(['declaration_synced_flag']);
 
         ejecutarLoginDOM(ruc, pass);
       });
