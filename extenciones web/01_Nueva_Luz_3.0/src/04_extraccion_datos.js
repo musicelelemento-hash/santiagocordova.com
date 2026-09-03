@@ -1,0 +1,1297 @@
+// ── Navegación a Comprobantes Recibidos (Regla Inmutable) ──────────────
+async function navegarAComprobantes() {
+    const url = window.location.href.toLowerCase();
+    // Si estamos en login, ni lo intentamos
+    if (url.includes('/auth/realms/') || url.includes('login')) {
+        console.warn('🔒 Navegación abortada: Estamos en la página de login.');
+        return false;
+    }
+
+    // Si ya estamos en la página de comprobantes recibidos
+    if (url.includes('comprobantesrecibidos.jsf')) {
+        console.log('✅ Ya estamos en Comprobantes Recibidos.');
+        return true;
+    }
+
+    console.log('🚀 [REGLA INMUTABLE] Navegando directamente a Comprobantes Electrónicos Recibidos...');
+    if (typeof safeStatus === 'function') safeStatus('🚀 Abriendo Comprobantes Recibidos...');
+    window.location.href = SRI_RECIBIDOS_URL;
+    return true;
+}
+
+async function autoLlenarPeriodoFiscal(data) {
+    console.log('📅 Auto-llenando Periodo Fiscal...');
+
+    let anio, mesIndex;
+    if (data && data.year) {
+        anio = data.year;
+        mesIndex = data.monthIndex;
+    } else {
+        const fechaActual = new Date();
+        const mesAnterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1);
+        anio = mesAnterior.getFullYear();
+        mesIndex = mesAnterior.getMonth();
+    }
+
+    const valorPeriodo = `${(mesIndex + 1).toString().padStart(2, '0')}/${anio}`;
+    console.log(`   🎯 Periodo objetivo: ${valorPeriodo}`);
+
+    let camposLlenados = 0;
+
+    // 2. Llenar Selección (Obligación)
+    let obligacionSeleccionada = false;
+
+    // Buscar select de Obligación
+    const selects = document.querySelectorAll('select');
+    for (const s of selects) {
+        for (const opt of s.options) {
+            if (opt.text.toUpperCase().includes('DECLARACION DE IVA') || opt.value.includes('2011')) {
+                if (s.value !== opt.value) {
+                    s.value = opt.value;
+                    s.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log('   ✅ Obligación seleccionada');
+                    obligacionSeleccionada = true;
+                } else {
+                    console.log('   ℹ️ Obligación ya estaba seleccionada');
+                    obligacionSeleccionada = true;
+                }
+                break;
+            }
+        }
+        if (obligacionSeleccionada) break;
+    }
+
+    if (obligacionSeleccionada) {
+        console.log('   ⏳ Esperando actualización de campos (2.5s)...');
+        await sleep(2500); // Esperar reload de JSF
+    }
+
+    // 3. Llenar Periodo
+    console.log('   🔍 Buscando campo Periodo...');
+    let inputPeriodo = null;
+
+    // Estrategia 1: XPath exacto (Label -> Input)
+    const xpaths = [
+        "//label[contains(text(), 'Período')]/following::input[1]",
+        "//label[contains(text(), 'Periodo')]/following::input[1]",
+        "//span[contains(text(), 'Período')]/following::input[1]"
+    ];
+
+    for (const xpath of xpaths) {
+        try {
+            const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            if (result.singleNodeValue) {
+                inputPeriodo = result.singleNodeValue;
+                console.log(`   ✅ Encontrado por XPath: ${xpath}`);
+                break;
+            }
+        } catch (e) { }
+    }
+
+    // Estrategia 2: Selectores de ID comunes en PrimeFaces (calendar inputs)
+    if (!inputPeriodo) {
+        const inputs = document.querySelectorAll('input[type="text"]');
+        for (const inp of inputs) {
+            const id = inp.id.toLowerCase();
+            const placeholder = inp.placeholder ? inp.placeholder.toLowerCase() : '';
+
+            // "fecha", "periodo", "fiscal", o placeholder tipo fecha
+            if ((id.includes('periodo') || id.includes('fecha') || id.includes('fiscal')) &&
+                (placeholder.includes('/') || inp.classList.contains('hasDatepicker') || inp.className.includes('calendar'))) {
+                inputPeriodo = inp;
+                console.log(`   ✅ Encontrado por ID/Class: ${inp.id}`);
+                break;
+            }
+        }
+    }
+
+    if (inputPeriodo) {
+        // HACK PRIMEFACES: Simular interacción real
+        inputPeriodo.focus();
+        inputPeriodo.click();
+        await sleep(100);
+
+        // Intento 1: Escribir directo
+        inputPeriodo.value = valorPeriodo;
+        if (inputPeriodo.value !== valorPeriodo) {
+            console.warn('   ⚠️ Input tiene máscara/bloqueo, intentando forzar...');
+        }
+
+        // PrimeFaces no lee el .value asignado por script hasta que se notifica.
+        inputPeriodo.dispatchEvent(new Event('input', { bubbles: true }));
+        inputPeriodo.dispatchEvent(new Event('change', { bubbles: true }));
+        inputPeriodo.blur();
+        console.log(`   ✅ Periodo fiscal establecido: ${valorPeriodo}`);
+    }
+}
+
+async function extraerTodasLasFacturas() {
+    console.log('Iniciando extracción de facturas...');
+
+    const todasLasFacturas = [];
+    let paginaActual = 1;
+
+    while (true) {
+        console.log('Procesando página ' + paginaActual);
+        await esperarTabla();
+
+        // ELITE v13.1: Feedback de progreso en tiempo real
+        if (window.sriAssistant) {
+            window.sriAssistant.log(`📄 Procesando página ${paginaActual}...`);
+        }
+
+        const facturasPagina = extraerFacturasPaginaActual();
+        console.log('Extraídas ' + facturasPagina.length + ' facturas');
+
+        if (facturasPagina.length === 0) break;
+
+        todasLasFacturas.push(...facturasPagina);
+
+        const hayMasPaginas = await irSiguientePagina();
+        if (!hayMasPaginas) break;
+
+        paginaActual++;
+        // Reducido delay para modo Turbo
+        await sleep(800);
+    }
+
+    console.log('Total: ' + todasLasFacturas.length + ' facturas');
+
+    const resumen = calcularResumen(todasLasFacturas);
+    return resumen;
+}
+
+function extraerFacturasPaginaActual() {
+    console.log('🔍 DEBUG: Iniciando extraerFacturasPaginaActual');
+    const facturas = [];
+
+    // NUEVA ESTRATEGIA: Buscar tabla por encabezados de columna
+    let tabla = null;
+    const todasLasTablas = document.querySelectorAll('table');
+    console.log(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
+
+    for (const t of todasLasTablas) {
+        const encabezados = t.querySelectorAll('thead th, thead td');
+        const textoEncabezados = Array.from(encabezados).map(th => th.textContent.toLowerCase().trim()).join(' ');
+
+        // Buscar tabla que contenga los encabezados característicos de comprobantes
+        if (textoEncabezados.includes('valor sin impuestos') &&
+            textoEncabezados.includes('iva') &&
+            textoEncabezados.includes('importe total')) {
+            tabla = t;
+            console.log(`✅ DEBUG: Encontrada tabla de comprobantes por encabezados: id="${t.id}", class="${t.className}"`);
+            console.log(`   Encabezados: ${textoEncabezados.substring(0, 100)}...`);
+            break;
+        }
+    }
+
+    // Fallback: Intentar selectores tradicionales si no se encontró por encabezados
+    if (!tabla) {
+        console.log('🔍 DEBUG: No se encontró por encabezados, intentando selectores tradicionales...');
+        tabla = document.querySelector('table[id*="dtComprobantes"]');
+    }
+
+    if (!tabla) {
+        tabla = document.querySelector('table[id*="Comprobantes"]');
+    }
+
+    if (!tabla) {
+        tabla = document.querySelector('.ui-datatable-tablewrapper table');
+    }
+
+    // Buscar tabla RichFaces con clase rf-dt que tenga datos de comprobantes
+    if (!tabla) {
+        const tablasRF = document.querySelectorAll('table.rf-dt');
+        console.log(`🔍 DEBUG: Buscando entre ${tablasRF.length} tablas RichFaces...`);
+
+        for (const t of tablasRF) {
+            const primeraFila = t.querySelector('tbody tr');
+            if (primeraFila) {
+                const texto = primeraFila.textContent;
+                // Verificar si contiene datos que parecen de comprobantes (números largos, RUC, etc)
+                if (texto.match(/\d{13}/) || texto.toLowerCase().includes('factura') || texto.includes('$')) {
+                    tabla = t;
+                    console.log(`✅ DEBUG: Encontrada tabla RichFaces con datos de comprobantes: id="${t.id}"`);
+                    break;
+                }
+            }
+        }
+    }
+
+    console.log('🔍 DEBUG: Tabla encontrada:', tabla ? 'SÍ' : 'NO');
+
+    if (!tabla) {
+        console.error('❌ DEBUG: No se encontró tabla con ningún selector');
+        console.error('⚠️ POSIBLES CAUSAS:');
+        console.error('   1. No has hecho clic en el botón "Consultar" después de configurar la búsqueda');
+        console.error('   2. El CAPTCHA no se resolvió correctamente');
+        console.error('   3. No hay resultados para el período seleccionado');
+
+        console.log('📊 DEBUG: Tablas encontradas en la página:');
+        todasLasTablas.forEach((t, i) => {
+            const headers = t.querySelectorAll('thead th, thead td');
+            const headerText = Array.from(headers).map(h => h.textContent.trim()).join(', ');
+            console.log(`   Tabla ${i}: id="${t.id}", class="${t.className}"`);
+            if (headerText) {
+                console.log(`      Headers: ${headerText.substring(0, 80)}`);
+            }
+        });
+        return facturas;
+    }
+
+    // DETECCIÓN DINÁMICA DE COLUMNAS
+    let idxValorSinImpuestos = -1;
+    let idxIva = -1;
+    let idxImporteTotal = -1;
+
+    const thead = tabla.querySelector('thead');
+    if (thead) {
+        const headers = thead.querySelectorAll('th, td');
+        headers.forEach((th, index) => {
+            const texto = th.textContent.toLowerCase().trim();
+            if (texto.includes('valor sin impuestos') || texto.includes('base imponible') || texto.includes('subtotal')) {
+                idxValorSinImpuestos = index;
+            } else if (texto.includes('iva') && !texto.includes('ret')) {
+                idxIva = index;
+            } else if (texto.includes('importe total') || texto.includes('total')) {
+                idxImporteTotal = index;
+            }
+        });
+        console.log(`   🎯 Columnas detectadas: SinImpuestos=${idxValorSinImpuestos}, IVA=${idxIva}, Total=${idxImporteTotal}`);
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    console.log('📋 DEBUG: Filas encontradas en tbody:', filas.length);
+
+    filas.forEach((fila, idx) => {
+        try {
+            const celdas = fila.querySelectorAll('td');
+            console.log(`   Fila ${idx}: ${celdas.length} columnas`);
+
+            // Verificar que no sea mensaje de "no encontrado"
+            const textoCompleto = fila.textContent.trim();
+            if (textoCompleto.includes('No se encontraron')) {
+                console.log(`   ⚠️ Fila ${idx} descartada: mensaje "No se encontraron"`);
+                return;
+            }
+
+            // Necesitamos al menos 7 columnas para extraer datos básicos
+            if (celdas.length < 7) {
+                console.warn(`   ⚠️ Fila ${idx} descartada: solo tiene ${celdas.length} columnas (se requieren al menos 7)`);
+                return;
+            }
+
+            // console.log(`   ✅ Fila ${idx} válida - Extrayendo datos...`);
+
+            // Intentar detectar las columnas correctas
+            let valorSinImpuestos, iva, importeTotal;
+
+            // ESTRATEGIA 0: USAR INDICES DETECTADOS (Prioridad)
+            if (idxValorSinImpuestos !== -1 && idxIva !== -1 && idxImporteTotal !== -1 &&
+                celdas[idxValorSinImpuestos] && celdas[idxIva] && celdas[idxImporteTotal]) {
+
+                valorSinImpuestos = parseDecimal(celdas[idxValorSinImpuestos].textContent);
+                iva = parseDecimal(celdas[idxIva].textContent);
+                importeTotal = parseDecimal(celdas[idxImporteTotal].textContent);
+
+                // console.log(`      Usando índices dinámicos: SinImp=${valorSinImpuestos}, IVA=${iva}, Total=${importeTotal}`);
+            }
+            // Estrategia 1: Asumir estructura de 9+ columnas (fallback anterior)
+            else if (celdas.length >= 9) {
+                // console.log(`      Usando índices fijos (6,7,8)`);
+                valorSinImpuestos = parseDecimal(celdas[6].textContent);
+                iva = parseDecimal(celdas[7].textContent);
+                importeTotal = parseDecimal(celdas[8].textContent);
+            }
+            // Estrategia 2: Buscar columnas con valores numéricos al final
+            else {
+                // console.log(`      Usando estrategia alternativa (últimas 3)`);
+                // Las últimas 3 columnas suelen ser: Subtotal, IVA, Total
+                const ultimas3 = [
+                    celdas[celdas.length - 3],
+                    celdas[celdas.length - 2],
+                    celdas[celdas.length - 1]
+                ];
+
+                valorSinImpuestos = parseDecimal(ultimas3[0].textContent);
+                iva = parseDecimal(ultimas3[1].textContent);
+                importeTotal = parseDecimal(ultimas3[2].textContent);
+            }
+
+            // Validar que los valores sean razonables
+            if ((!importeTotal && !valorSinImpuestos) || (importeTotal === 0 && valorSinImpuestos === 0)) {
+                // console.warn(`   ⚠️ Fila ${idx} descartada: valores en 0`);
+                return;
+            }
+
+            facturas.push({
+                numero: idx + 1,
+                rucRazon: celdas[1] ? celdas[1].textContent.trim() : 'S/N',
+                valorSinImpuestos: valorSinImpuestos,
+                iva: iva,
+                importeTotal: importeTotal,
+                tieneIva: iva > 0
+            });
+
+            console.log(`      Factura agregada: SinImp=${valorSinImpuestos}, IVA=${iva}, Total=${importeTotal}`);
+        } catch (error) {
+            console.error('❌ Error en fila ' + idx, error);
+        }
+    });
+
+    console.log(`✅ DEBUG: Total facturas extraídas: ${facturas.length}`);
+    return facturas;
+}
+
+async function extraerTodasLasRetenciones() {
+    console.log("🚀 SRI Bot Content Script v4.0 - RETENCIONES FIX LOADED");
+    console.log('🚀 Iniciando extracción de retenciones...');
+    console.log('⚠️ MODO DEBUG ACTIVADO - Revisa la consola para detalles');
+
+    // Usar la misma estrategia de detección por encabezados
+    let tabla = null;
+    const todasLasTablas = document.querySelectorAll('table');
+    console.log(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
+
+    for (const t of todasLasTablas) {
+        const encabezados = t.querySelectorAll('thead th, thead td');
+        const textoEncabezados = Array.from(encabezados).map(th => th.textContent.toLowerCase().trim()).join(' ');
+
+        // Buscar tabla de retenciones (tiene "clave de acceso" y "comprobante")
+        if ((textoEncabezados.includes('clave de acceso') || textoEncabezados.includes('clave acceso')) &&
+            (textoEncabezados.includes('comprobante') || textoEncabezados.includes('retención'))) {
+            tabla = t;
+            console.log(`✅ DEBUG: Encontrada tabla de retenciones por encabezados: id="${t.id}"`);
+            break;
+        }
+    }
+
+    // Fallback: selector tradicional
+    if (!tabla) {
+        console.log('🔍 DEBUG: Intentando selector tradicional...');
+        tabla = document.querySelector('table[id*="dtComprobantes"]');
+    }
+
+    // FAST-FAIL: Verificar si hay mensaje de "No existen datos" antes de rendirse o esperar
+    const msgWarn = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail');
+    if (msgWarn && (msgWarn.textContent.includes('No existen datos') || msgWarn.textContent.includes('No se encontraron'))) {
+        console.warn('⚡ [Fast-Fail] Confirmado: No existen retenciones en este periodo.');
+        return { totalRetenciones: 0, ivaRetenido: { cantidad: 0, total: 0 }, rentaRetenida: { cantidad: 0, total: 0 } };
+    }
+
+    if (!tabla) {
+        console.error('❌ No se encontró tabla de retenciones');
+        console.error('⚠️ Asegúrate de:');
+        console.error('   1. Haber seleccionado "Comprobante de Retención" en el tipo');
+        console.error('   2. Haber hecho clic en "Consultar"');
+        console.error('   3. Que existan retenciones para el período');
+        return { totalRetenciones: 0, ivaRetenido: { cantidad: 0, total: 0 }, rentaRetenida: { cantidad: 0, total: 0 } };
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    console.log('📋 Filas encontradas:', filas.length);
+
+    if (filas.length > 0) {
+        const primeraFila = filas[0];
+        const celdas = primeraFila.querySelectorAll('td');
+        console.log('📊 Columnas en primera fila:', celdas.length);
+
+        if (celdas.length >= 4) {
+            const celdaClaveAcceso = celdas[3];
+            console.log('🔍 Contenido celda [3]:', celdaClaveAcceso.textContent.substring(0, 50));
+            console.log('🔍 HTML celda [3]:', celdaClaveAcceso.innerHTML.substring(0, 200));
+
+            const enlace = celdaClaveAcceso.querySelector('a');
+            console.log('🔗 Enlace encontrado:', enlace ? 'SÍ' : 'NO');
+
+            if (enlace) {
+                console.log('✅ Href:', enlace.href);
+                console.log('✅ Texto:', enlace.textContent.substring(0, 30));
+            } else {
+                console.warn('⚠️ NO HAY ENLACE - Buscando alternativas...');
+                // Intentar buscar cualquier elemento clickeable
+                const clickeable = celdaClaveAcceso.querySelector('span, div, button');
+                console.log('🔍 Elemento clickeable alternativo:', clickeable ? clickeable.tagName : 'NINGUNO');
+            }
+        }
+    }
+
+    const todasLasRetenciones = [];
+    let paginaActual = 1;
+
+    while (true) {
+        console.log(`📄 Procesando página ${paginaActual} de retenciones`);
+        await esperarTabla();
+
+        // ELITE v13.1: Feedback de progreso en tiempo real
+        if (window.sriAssistant) {
+            window.sriAssistant.log(`📄 Procesando página ${paginaActual} de retenciones...`);
+        }
+
+        const retencionesPagina = await extraerRetencionesPaginaActual();
+        console.log(`   Extraídas ${retencionesPagina.length} retenciones`);
+
+        if (retencionesPagina.length === 0) break;
+
+        todasLasRetenciones.push(...retencionesPagina);
+
+        const hayMasPaginas = await irSiguientePagina();
+        if (!hayMasPaginas) break;
+
+        paginaActual++;
+        await sleep(2000);
+    }
+
+    console.log(`✅ Total: ${todasLasRetenciones.length} retenciones`);
+
+    const resumen = calcularResumenRetenciones(todasLasRetenciones);
+    console.log('📊 Resumen final:', resumen);
+
+    // GUARDAR RESPALDO: Por si el mensaje falla
+    try {
+        await SafeStorage.set({ retenciones: resumen });
+        console.log('💾 Backup de retenciones guardado en storage');
+    } catch (e) {
+        console.warn('No se pudo guardar backup', e);
+    }
+
+    return resumen;
+}
+
+async function extraerRetencionesPaginaActual() {
+    const retenciones = [];
+
+    // Usar detección por encabezados (igual que en extraerTodasLasRetenciones)
+    let tabla = null;
+    const todasLasTablas = document.querySelectorAll('table');
+
+    for (const t of todasLasTablas) {
+        const encabezados = t.querySelectorAll('thead th, thead td');
+        const textoEncabezados = Array.from(encabezados).map(th => th.textContent.toLowerCase().trim()).join(' ');
+
+        if ((textoEncabezados.includes('clave de acceso') || textoEncabezados.includes('clave acceso')) &&
+            (textoEncabezados.includes('comprobante') || textoEncabezados.includes('retención'))) {
+            tabla = t;
+            break;
+        }
+    }
+
+    if (!tabla) {
+        console.warn('⚠️ No se encontró tabla en extraerRetencionesPaginaActual');
+        return retenciones;
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    console.log(`   🔍 Procesando ${filas.length} filas...`);
+
+    for (let idx = 0; idx < filas.length; idx++) {
+        const fila = filas[idx];
+
+        try {
+            const celdas = fila.querySelectorAll('td');
+            if (celdas.length < 9) {
+                console.log(`   ⚠️ Fila ${idx} descartada: solo ${celdas.length} columnas`);
+                continue;
+            }
+
+            const textoCompleto = fila.textContent.trim();
+            if (textoCompleto.includes('No se encontraron')) continue;
+
+            console.log(`   📋 Procesando retención ${idx + 1}`);
+
+            const celdaClaveAcceso = celdas[3];
+            const enlace = celdaClaveAcceso.querySelector('a');
+
+            if (!enlace) {
+                console.warn(`   ❌ No se encontró enlace en fila ${idx + 1}`);
+                continue;
+            }
+
+            console.log(`   🔗 Abriendo modal...`);
+            // Click robusto
+            enlace.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            enlace.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            enlace.click();
+
+            // Esperar más tiempo
+            await sleep(2500);
+
+            const datosRetencion = await extraerDatosModalRetencion();
+
+            if (datosRetencion) {
+                retenciones.push({
+                    idx: idx + 1,
+                    comprobanteNo: celdas[2].textContent.trim(),
+                    rucRazon: celdas[1].textContent.trim(),
+                    ivaRetenido: datosRetencion.ivaRetenido,
+                    rentaRetenida: datosRetencion.rentaRetenida,
+                    baseImponibleIva: datosRetencion.baseImponibleIva,
+                    baseImponibleRenta: datosRetencion.baseImponibleRenta
+                });
+
+                console.log(`   ✅ IVA: ${datosRetencion.ivaRetenido} (Base: ${datosRetencion.baseImponibleIva}), Renta: ${datosRetencion.rentaRetenida} (Base: ${datosRetencion.baseImponibleRenta})`);
+            } else {
+                console.warn('   ⚠️ No se pudieron extraer datos (modal no abrió o vacío)');
+            }
+
+            await cerrarModal();
+            await sleep(1000);
+
+        } catch (error) {
+            console.error(`   ❌ Error en fila ${idx}:`, error);
+            await cerrarModal();
+        }
+    }
+
+    // POR SI ACASO: Asegurar que el último modal se cierre (User request)
+    console.log('   🧹 Limpieza final: Asegurando cierre de modales...');
+    await cerrarModal();
+
+    return retenciones;
+}
+
+async function extraerDatosModalRetencion() {
+    console.log('      🔍 Buscando modal (Estrategia Headers de Tabla)...');
+
+    // Esperar a que cargue
+    await sleep(2000);
+
+    // 1. Buscar dentro de Dialogs (Prioridad)
+    const dialogs = document.querySelectorAll('.ui-dialog');
+
+    // Iterar en reverso (último abierto)
+    for (let i = dialogs.length - 1; i >= 0; i--) {
+        const d = dialogs[i];
+
+        // Buscar la tabla ESPECÍFICA dentro del diálogo
+        const tablas = d.querySelectorAll('table');
+        for (const t of tablas) {
+            const headers = t.textContent.toLowerCase();
+            // Headers clave que SIEMPRE aparecen en la tabla de retención
+            if (headers.includes('base imponible') && headers.includes('valor retenido')) {
+                console.log(`      ✅ Tabla encontrada en Dialog #${i} (por headers)`);
+                console.log(`      👀 Estado visible: ${d.style.display !== 'none'}`);
+
+                // FIX: Procesar SOLAMENTE esta tabla, no todas las del diálogo
+                const datos = procesarTablaRetencion(t);
+                return datos;
+            }
+        }
+    }
+
+    // 2. Fallback: Buscar cualquier tabla en el DOM con esos headers
+    console.log('      ⚠️ No encontrado en Dialogs. Escaneando TODAS las tablas del DOM...');
+    const todasLasTablas = document.querySelectorAll('table');
+
+    for (const t of todasLasTablas) {
+        const headers = t.textContent.toLowerCase();
+        if (headers.includes('base imponible') && headers.includes('valor retenido')) {
+            console.log('      ✅ Tabla "suelta" encontrada en DOM (por headers exactos)');
+            // FIX: Procesar directamente la tabla encontrada
+            return procesarTablaRetencion(t);
+        }
+    }
+
+    console.warn('      ❌ Falló estrategia headers. No se encontraron datos.');
+    return null;
+}
+
+function procesarTablaRetencion(tabla) {
+    console.log(`      📊 Procesando tabla específica...`);
+
+    let ivaRetenido = 0;
+    let rentaRetenida = 0;
+    let baseImponibleRenta = 0;
+    let baseImponibleIva = 0;
+
+    // INTENTO DE MAPEO DE COLUMNAS POR HEADER
+    let indiceValorRetenido = -1;
+    let indiceBaseImponible = -1;
+
+    // Buscar en thead o en la primera fila de la tabla si no hay thead
+    const headerSource = tabla.querySelector('thead') || tabla.querySelector('tbody tr');
+
+    if (headerSource) {
+        const potentialHeaders = headerSource.querySelectorAll('th, td');
+        potentialHeaders.forEach((th, index) => {
+            const texto = th.textContent.toLowerCase().trim();
+            if (texto.includes('valor retenido') || texto.includes('valor ret')) {
+                indiceValorRetenido = index;
+                console.log(`      🎯 Columna 'Valor Retenido' detectada en índice: ${index}`);
+            }
+            if (texto.includes('base imponible') || texto.includes('base imp')) {
+                indiceBaseImponible = index;
+                console.log(`      🎯 Columna 'Base Imponible' detectada en índice: ${index}`);
+            }
+        });
+    }
+
+    // Si no encontramos header (o no detectó columnas clave), usamos heurística
+    if (indiceValorRetenido === -1) {
+        const filas = tabla.querySelectorAll('tbody tr');
+        if (filas.length > 0) {
+            const celdas = filas[0].querySelectorAll('td');
+            if (celdas.length >= 5) {
+                indiceValorRetenido = 4; // Estándar SRI
+                indiceBaseImponible = 2; // Estándar SRI
+                console.log(`      ⚠️ Headers no detectados mediante texto. Usando índices estándar: Ret=${indiceValorRetenido}, Base=${indiceBaseImponible}`);
+            }
+        }
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    filas.forEach(fila => {
+        const textoFila = fila.textContent.toLowerCase();
+
+        // ELITE FIX: Si esta fila fue usada como header, saltarla para no procesarla como datos
+        if (headerSource && fila === headerSource && indiceValorRetenido !== -1) return;
+        const celdas = fila.querySelectorAll('td, th');
+
+        // Si tenemos índices confirmados
+        if (indiceValorRetenido !== -1 && celdas[indiceValorRetenido]) {
+            const textoCelda = celdas[indiceValorRetenido].textContent;
+            const val = parseDecimal(textoCelda);
+
+            let valBase = 0;
+            if (indiceBaseImponible !== -1 && celdas[indiceBaseImponible]) {
+                valBase = parseDecimal(celdas[indiceBaseImponible].textContent);
+            }
+
+            // RENTA
+            if (textoFila.includes('renta')) {
+                // Validar que no sea una fecha (sanity check)
+                if (!textoCelda.includes('-') && !textoCelda.includes('/')) {
+                    rentaRetenida += val;
+                    baseImponibleRenta += valBase;
+                    console.log(`      ✅ RENTA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
+                }
+            }
+
+            // IVA
+            if (textoFila.includes('iva')) {
+                if (!textoCelda.includes('-') && !textoCelda.includes('/')) {
+                    ivaRetenido += val;
+                    baseImponibleIva += valBase;
+                    console.log(`      ✅ IVA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
+                }
+            }
+        }
+        // FALLBACK ANTIGUO (Solo si falló detección de índice)
+        else if (celdas.length >= 5) {
+            // Buscar en últimas columnas descartando fechas
+            for (let i = celdas.length - 1; i >= 2; i--) {
+                const texto = celdas[i].textContent.trim();
+                // Ignorar fechas largas o años
+                if (texto.includes('-') || texto.includes('/') || (texto.length === 4 && parseInt(texto) > 1990)) continue;
+
+                const val = parseDecimal(texto);
+                if (val > 0) {
+                    if (texto.includes('%')) continue;
+
+                    if (textoFila.includes('renta')) {
+                        rentaRetenida += val;
+                        // En el fallback antiguo no tenemos el índice de base imponible fácilmente
+                        // pero podríamos asumir que es i - 2 (si i es 4, base es 2)
+                        if (celdas[i - 2]) baseImponibleRenta += parseDecimal(celdas[i - 2].textContent);
+
+                        console.log(`      ✅ RENTA (Fallback col ${i}): ${val}`);
+                        break;
+                    } else if (textoFila.includes('iva')) {
+                        ivaRetenido += val;
+                        if (celdas[i - 2]) baseImponibleIva += parseDecimal(celdas[i - 2].textContent);
+                        console.log(`      ✅ IVA (Fallback col ${i}): ${val}`);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    return { ivaRetenido, rentaRetenida, baseImponibleRenta, baseImponibleIva };
+}
+
+async function cerrarModal() {
+    try {
+        const botonesCerrar = document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick');
+        if (botonesCerrar.length > 0) {
+            botonesCerrar.forEach(btn => {
+                if (btn.offsetParent !== null) btn.click();
+            });
+            await sleep(500);
+        } else {
+            // Click fuera o Escape
+            document.body.click();
+        }
+    } catch (error) {
+        console.warn('Error cerrando modal');
+    }
+}
+
+async function esperarElemento(selector, timeout) {
+    return await waitFor(() => document.querySelector(selector), timeout, selector);
+}
+
+async function irSiguientePagina() {
+    const btnSiguiente = document.querySelector('.ui-paginator-next');
+    if (!btnSiguiente) return false;
+
+    const clases = btnSiguiente.className || '';
+    if (clases.includes('ui-state-disabled') || btnSiguiente.getAttribute('aria-disabled') === 'true') return false;
+
+    // Guardar referencia al contenido previo para detectar la mutación real de página
+    const primeraCeldaAntes = (document.querySelector('tbody tr td')?.textContent || '').trim();
+    const paginadorActivoAntes = (document.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '').trim();
+
+    // Scroll al botón para asegurar visibilidad
+    btnSiguiente.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await sleep(200);
+
+    btnSiguiente.click();
+
+    // Esperar reactivamente a que la tabla cambie de página o se procese el AJAX
+    const startWait = Date.now();
+    while (Date.now() - startWait < 8000) {
+        await sleep(250);
+
+        // Si aparece el spinner, esperar a que se oculte
+        const spinner = document.querySelector('.ui-blockui') || document.querySelector('.ui-widget-overlay');
+        if (spinner && getComputedStyle(spinner).display !== 'none') {
+            await esperarTabla();
+            break;
+        }
+
+        // Si el número de página activa cambió
+        const paginadorActivoDespues = (document.querySelector('.ui-paginator-page.ui-state-active')?.textContent || '').trim();
+        if (paginadorActivoDespues && paginadorActivoDespues !== paginadorActivoAntes) {
+            break;
+        }
+
+        // Si los datos de la primera celda cambiaron
+        const primeraCeldaDespues = (document.querySelector('tbody tr td')?.textContent || '').trim();
+        if (primeraCeldaDespues && primeraCeldaDespues !== primeraCeldaAntes) {
+            break;
+        }
+    }
+
+    // Margen de estabilidad para renderizado completo de PrimeFaces
+    await sleep(350);
+    return true;
+}
+
+/**
+ * ELITE v13.0: Maximiza el número de registros por página para acelerar la extracción.
+ * Intenta configurar el dropdown de PrimeFaces a "100" o el valor más alto disponible.
+ */
+async function optimizarTamanoPagina() {
+    try {
+        const dropdownRPP = document.querySelector('.ui-paginator-rpp-options, select[name*="rpp"]');
+        if (!dropdownRPP) return false;
+
+        const options = Array.from(dropdownRPP.options);
+        // Buscar la opción más alta o específicamente "100"
+        let targetOption = options.find(opt => opt.value === "100" || opt.text.includes("100"));
+        if (!targetOption && options.length > 0) {
+            targetOption = options[options.length - 1]; // La última suele ser la mas grande
+        }
+
+        if (targetOption && dropdownRPP.value !== targetOption.value) {
+            console.log(`🚀 Optimizando tamaño de página a: ${targetOption.text}`);
+            dropdownRPP.value = targetOption.value;
+            dropdownRPP.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Esperar a que la tabla se recargue con los nuevos datos
+            await sleep(1500);
+            await esperarTabla();
+            return true;
+        }
+    } catch (e) {
+        console.warn('⚠️ No se pudo optimizar el tamaño de la página:', e);
+    }
+    return false;
+}
+
+async function esperarTabla() {
+    await sleep(200);
+    if (typeof waitForPortal === 'function') {
+        await waitForPortal(8000);
+    } else {
+        let intentos = 0;
+        while (intentos < 35) {
+            const spinner = document.querySelector('.ui-blockui') || document.querySelector('.ui-widget-overlay');
+            if (!spinner || spinner.style.display === 'none' || spinner.offsetParent === null) break;
+            await sleep(200);
+            intentos++;
+        }
+    }
+    await sleep(300);
+}
+
+
+function calcularResumen(facturas) {
+    let periodo = "Desconocido";
+    if (facturas.length > 0) {
+        // Asumimos formato fecha dd/mm/yyyy o yyyy-mm-dd en propiedad algun lado?
+        // En extraerFacturasPaginaActual no grabamos fecha explicita, agreguemosla si es posible o usemos la fecha actual - 1 mes
+        // PERO: El usuario quiere el mes de los datos.
+        // Simulamos obteniendo de la busqueda actual
+        const fechaActual = new Date();
+        const mesAnterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1);
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        periodo = `${meses[mesAnterior.getMonth()]} ${mesAnterior.getFullYear()}`;
+    }
+
+    const resumen = {
+        totalFacturas: facturas.length,
+        iva0: { cantidad: 0, total: 0, baseImponible: 0, montoIva: 0 },
+        iva15: { cantidad: 0, total: 0, baseImponible: 0, montoIva: 0 },
+        periodo: periodo
+    };
+
+    facturas.forEach(factura => {
+        if (factura.iva === 0 || factura.iva === 0.00) {
+            resumen.iva0.cantidad++;
+            resumen.iva0.total += factura.importeTotal;
+            resumen.iva0.baseImponible += factura.valorSinImpuestos;
+            resumen.iva0.montoIva += factura.iva;
+        } else {
+            resumen.iva15.cantidad++;
+            resumen.iva15.total += factura.importeTotal;
+            resumen.iva15.baseImponible += factura.valorSinImpuestos;
+            resumen.iva15.montoIva += factura.iva;
+        }
+    });
+
+    resumen.iva0.total = redondear(resumen.iva0.total);
+    resumen.iva0.baseImponible = redondear(resumen.iva0.baseImponible);
+    resumen.iva0.montoIva = redondear(resumen.iva0.montoIva); // Should be 0
+
+    resumen.iva15.total = redondear(resumen.iva15.total);
+    resumen.iva15.baseImponible = redondear(resumen.iva15.baseImponible);
+    resumen.iva15.montoIva = redondear(resumen.iva15.montoIva);
+
+    return resumen;
+}
+
+function calcularResumenRetenciones(retenciones) {
+    let periodo = "Desconocido";
+    if (retenciones.length > 0) {
+        // Igual, usamos la logica de mes anterior por defecto ya que es lo que busca el bot
+        const fechaActual = new Date();
+        const mesAnterior = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - 1, 1);
+        const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        periodo = `${meses[mesAnterior.getMonth()]} ${mesAnterior.getFullYear()}`;
+    }
+
+    const resumen = {
+        totalRetenciones: retenciones.length,
+        ivaRetenido: { cantidad: 0, total: 0, baseTotal: 0, valores: [] },
+        rentaRetenida: { cantidad: 0, total: 0, baseTotal: 0, valores: [] },
+        listaNumeros: [],
+        periodo: periodo
+    };
+
+    retenciones.forEach(retencion => {
+        if (retencion.comprobanteNo) {
+            resumen.listaNumeros.push(retencion.comprobanteNo);
+        }
+
+        // Procesar IVA (si tiene valor o base)
+        if (retencion.ivaRetenido > 0 || (retencion.baseImponibleIva && retencion.baseImponibleIva > 0)) {
+            resumen.ivaRetenido.cantidad++;
+            resumen.ivaRetenido.total += (retencion.ivaRetenido || 0);
+            resumen.ivaRetenido.baseTotal += (retencion.baseImponibleIva || 0);
+            resumen.ivaRetenido.valores.push((retencion.ivaRetenido || 0).toFixed(2));
+        }
+
+        // Procesar Renta (si tiene valor o base)
+        if (retencion.rentaRetenida > 0 || (retencion.baseImponibleRenta && retencion.baseImponibleRenta > 0)) {
+            resumen.rentaRetenida.cantidad++;
+            resumen.rentaRetenida.total += (retencion.rentaRetenida || 0);
+            resumen.rentaRetenida.baseTotal += (retencion.baseImponibleRenta || 0);
+            resumen.rentaRetenida.valores.push((retencion.rentaRetenida || 0).toFixed(2));
+        }
+    });
+
+    resumen.ivaRetenido.total = redondear(resumen.ivaRetenido.total);
+    resumen.rentaRetenida.total = redondear(resumen.rentaRetenida.total);
+    resumen.ivaRetenido.baseTotal = redondear(resumen.ivaRetenido.baseTotal);
+    resumen.rentaRetenida.baseTotal = redondear(resumen.rentaRetenida.baseTotal);
+
+    // Generar strings de detalle (ej: "10.00 + 5.00")
+    resumen.ivaRetenido.detalleStr = resumen.ivaRetenido.valores.join(' + ');
+    resumen.rentaRetenida.detalleStr = resumen.rentaRetenida.valores.join(' + ');
+
+    return resumen;
+}
+
+// ============================================
+// EXTRACCIÓN DE NOTAS DE CRÉDITO
+// ============================================
+
+async function extraerTodasLasNotasCredito() {
+    console.log('🚀 Iniciando extracción de Notas de Crédito...');
+    const todasLasNC = [];
+    let paginaActual = 1;
+
+    while (true) {
+        console.log('Procesando página ' + paginaActual + ' de NC');
+        await esperarTabla();
+
+        // ELITE v13.1: Feedback de progreso en tiempo real
+        if (window.sriAssistant) {
+            window.sriAssistant.log(`📄 Procesando página ${paginaActual} de Notas de Crédito...`);
+        }
+
+        const ncPagina = await extraerNotasCreditoPaginaActualDeep();
+        console.log('Extraídas ' + ncPagina.length + ' notas de crédito');
+
+        if (ncPagina.length === 0 && paginaActual === 1) {
+            // Check if "No existen datos" message is present
+            const msgError = document.querySelector('.ui-messages-warn-detail, .ui-growl-item');
+            if (msgError && msgError.textContent.includes('No existen datos')) {
+                console.log('ℹ️ No hay notas de crédito.');
+                break;
+            }
+        }
+
+        if (ncPagina.length === 0 && paginaActual > 1) break; // Fin de paginación
+
+        todasLasNC.push(...ncPagina);
+
+        const hayMasPaginas = await irSiguientePagina();
+        if (!hayMasPaginas) break;
+
+        paginaActual++;
+        await sleep(1500);
+    }
+
+    console.log('Total: ' + todasLasNC.length + ' notas de crédito');
+    return calcularResumenNotasCredito(todasLasNC);
+}
+
+function extraerNotasCreditoPaginaActual() {
+    console.log('🔍 DEBUG: Iniciando extraerNotasCreditoPaginaActual');
+    const notas = [];
+
+    // Reusar lógica de búsqueda de tabla de Facturas (misma estructura generalmente)
+    let tabla = null;
+    const todasLasTablas = document.querySelectorAll('table');
+
+    for (const t of todasLasTablas) {
+        const encabezados = t.querySelectorAll('thead th, thead td');
+        const textoEncabezados = Array.from(encabezados).map(th => th.textContent.toLowerCase().trim()).join(' ');
+
+        // Tablas de NC suelen tener 'Valor sin impuestos' y 'Importe Total' igual que facturas
+        if ((textoEncabezados.includes('valor sin impuestos') || textoEncabezados.includes('base imponible')) &&
+            textoEncabezados.includes('importe total') &&
+            t.offsetParent !== null) { // Visible
+            tabla = t;
+            console.log(`✅ Tabla NC encontrada: ${t.id} (Headers: ${textoEncabezados})`);
+            break;
+        }
+    }
+
+    // Fallback selectors
+    if (!tabla) tabla = document.querySelector('table[id*="dtComprobantes"]');
+    if (!tabla) tabla = document.querySelector('table[id*="Comprobantes"]');
+
+    if (!tabla) {
+        console.warn('⚠️ No se encontró tabla de Notas de Crédito');
+        return notas;
+    }
+
+    // Indices (Generalmente iguales a Facturas, pero recalculamos por seguridad)
+    let idxValorSinImpuestos = -1;
+    let idxIva = -1;
+    let idxImporteTotal = -1;
+
+    const thead = tabla.querySelector('thead');
+    if (thead) {
+        const headers = thead.querySelectorAll('th, td');
+        headers.forEach((th, index) => {
+            const texto = th.textContent.toLowerCase().trim();
+            if (texto.includes('valor sin impuestos') || texto.includes('base imponible')) {
+                idxValorSinImpuestos = index;
+            } else if (texto.includes('iva') && !texto.includes('ret')) {
+                idxIva = index;
+            } else if (texto.includes('importe total') || texto.includes('total')) {
+                idxImporteTotal = index;
+            }
+        });
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    filas.forEach((fila, idx) => {
+        try {
+            const celdas = fila.querySelectorAll('td');
+            if (celdas.length < 7) return;
+
+            // Verificar mensaje
+            if (fila.textContent.includes('No se encontraron')) return;
+
+            let valorSinImpuestos = 0, iva = 0, importeTotal = 0;
+
+            // Estrategia Indices Dinámicos
+            if (idxValorSinImpuestos !== -1 && idxImporteTotal !== -1) {
+                valorSinImpuestos = parseDecimal(celdas[idxValorSinImpuestos].textContent);
+                if (idxIva !== -1) iva = parseDecimal(celdas[idxIva].textContent);
+                importeTotal = parseDecimal(celdas[idxImporteTotal].textContent);
+            }
+            // Estrategia  Falta (Últimas columnas)
+            else if (celdas.length >= 9) {
+                // Asumimos mismas posiciones que Facturas: 6=SinImp, 7=IVA, 8=Total
+                valorSinImpuestos = parseDecimal(celdas[6].textContent);
+                iva = parseDecimal(celdas[7].textContent);
+                importeTotal = parseDecimal(celdas[8].textContent);
+            }
+            else {
+                // Fallback últimas 3
+                const ultimas3 = [
+                    celdas[celdas.length - 3],
+                    celdas[celdas.length - 2],
+                    celdas[celdas.length - 1]
+                ];
+                valorSinImpuestos = parseDecimal(ultimas3[0].textContent);
+                iva = parseDecimal(ultimas3[1].textContent);
+                importeTotal = parseDecimal(ultimas3[2].textContent);
+            }
+
+            if (importeTotal === 0 && valorSinImpuestos === 0) return;
+
+            notas.push({
+                numero: idx + 1,
+                valorSinImpuestos: valorSinImpuestos,
+                iva: iva,
+                importeTotal: importeTotal
+            });
+
+        } catch (e) {
+            console.error('Error procesando fila NC ' + idx, e);
+        }
+    });
+
+    return notas;
+}
+
+async function extraerNotasCreditoPaginaActualDeep() {
+    const notas = [];
+    const todasLasTablas = document.querySelectorAll('table');
+    let tabla = null;
+
+    for (const t of todasLasTablas) {
+        const encabezados = t.querySelectorAll('thead th, thead td');
+        const textoEncabezados = Array.from(encabezados).map(th => th.textContent.toLowerCase().trim()).join(' ');
+
+        if ((textoEncabezados.includes('valor sin impuestos') || textoEncabezados.includes('base imponible')) &&
+            textoEncabezados.includes('importe total') &&
+            t.offsetParent !== null) {
+            tabla = t;
+            break;
+        }
+    }
+
+    if (!tabla) tabla = document.querySelector('table[id*="dtComprobantes"]');
+
+    if (!tabla) {
+        console.warn('⚠️ No se encontró tabla de Notas de Crédito');
+        return notas;
+    }
+
+    // DETECCIÓN DINÁMICA DE COLUMNAS PARA TABA EXTERNA
+    let idxValSin = -1, idxValIva = -1, idxValTot = -1;
+    const thead = tabla.querySelector('thead');
+    if (thead) {
+        const headers = thead.querySelectorAll('th, td');
+        headers.forEach((th, idx) => {
+            const h = th.textContent.toLowerCase().trim();
+            if (h.includes('valor sin') || h.includes('base imponible')) idxValSin = idx;
+            else if (h.includes('iva') && !h.includes('retención')) idxValIva = idx;
+            else if (h.includes('total')) idxValTot = idx;
+        });
+    }
+
+    const filas = tabla.querySelectorAll('tbody tr');
+    console.log(`🔍 Deep NC: Procesando ${filas.length} filas en tabla [${tabla.id || 'sin id'}]...`);
+
+    for (let idx = 0; idx < filas.length; idx++) {
+        const fila = filas[idx];
+        try {
+            const celdas = fila.querySelectorAll('td');
+            if (celdas.length < 8) continue;
+            if (fila.textContent.includes('No se encontraron')) continue;
+
+            const celdaEnlace = celdas[3]; // Clave de Acceso suele ser 3
+            const enlace = celdaEnlace.querySelector('a');
+
+            if (!enlace) {
+                console.warn(`   ⚠️ No se encontró enlace en fila ${idx + 1}`);
+                continue;
+            }
+
+            console.log(`📄 Deep NC [${idx + 1}]: Abriendo modal de detalle...`);
+            enlace.click();
+
+            // Esperar que el modal se abra (Checking for specific table presence)
+            let datosModal = null;
+            for (let t = 0; t < 6; t++) {
+                await sleep(800);
+                datosModal = await extraerDatosModalNC();
+                if (datosModal) break;
+            }
+
+            if (datosModal) {
+                notas.push({
+                    numero: idx + 1,
+                    valorSinImpuestos: datosModal.iva0 + datosModal.iva15,
+                    iva: datosModal.valorIva,
+                    importeTotal: datosModal.iva0 + datosModal.iva15 + datosModal.valorIva,
+                    iva0: datosModal.iva0,
+                    iva15: datosModal.iva15
+                });
+                console.log(`   ✅ Detalle NC [${idx + 1}]: Base0=$${datosModal.iva0}, Base15=$${datosModal.iva15}, IVA=$${datosModal.valorIva}`);
+            } else {
+                console.warn(`   ⚠️ Falló extracción en modal NC [${idx + 1}], usando datos de tabla externa.`);
+
+                // Usar índices detectados o fallback fijo
+                const cValSin = idxValSin !== -1 ? idxValSin : 6;
+                const cValIva = idxValIva !== -1 ? idxValIva : 7;
+                const cValTot = idxValTot !== -1 ? idxValTot : 8;
+
+                const valSin = parseDecimal(celdas[cValSin]?.textContent || '0');
+                const valIva = parseDecimal(celdas[cValIva]?.textContent || '0');
+                const valTot = parseDecimal(celdas[cValTot]?.textContent || '0');
+
+                notas.push({
+                    numero: idx + 1,
+                    valorSinImpuestos: valSin,
+                    iva: valIva,
+                    importeTotal: valTot,
+                    iva0: valIva === 0 ? valSin : 0,
+                    iva15: valIva > 0 ? valSin : 0
+                });
+                console.log(`   🔸 Fallback NC [${idx + 1}]: Sin=$${valSin}, IVA=$${valIva}`);
+            }
+
+            await cerrarModal();
+            await sleep(500);
+
+        } catch (e) {
+            console.error(`   ❌ Error en Deep NC fila ${idx}`, e);
+            await cerrarModal();
+        }
+    }
+
+    return notas;
+}
+
+async function extraerDatosModalNC() {
+    try {
+        await sleep(500); // Pequeña pausa inicial
+
+        // 1. ESTRATEGIA: ID Específico (según imagen del usuario)
+        let tablaTotales = document.querySelector('table[id*="tabla-totales-impuesto-nota-credito"]');
+
+        if (!tablaTotales) {
+            // 2. ESTRATEGIA: Búsqueda por headers en tablas del diálogo
+            const dialogTables = document.querySelectorAll('.ui-dialog table, [id*="form-detalle"] table');
+            for (const t of dialogTables) {
+                const hText = t.textContent.toLowerCase();
+                // Verificamos que sea la tabla de TOTALES y no la de ítems
+                if (hText.includes('totales por impuesto') ||
+                    (hText.includes('impuesto') && hText.includes('base imponible') && hText.includes('valor') && !hText.includes('precio unitario'))) {
+                    tablaTotales = t;
+                    break;
+                }
+            }
+        }
+
+        if (!tablaTotales) return null;
+
+        const filasTotales = Array.from(tablaTotales.querySelectorAll('tbody tr, .rf-dt-r'));
+        // IMPORTANTE: Si la tabla existe pero no tiene filas de datos (vacia o cargando), seguimos esperando
+        if (filasTotales.length === 0 || filasTotales[0].textContent.includes('No se encontraron')) {
+            return null;
+        }
+
+        console.log(`      ✅ Tabla NC hallada con ${filasTotales.length} filas de impuestos.`);
+        let iva0 = 0;
+        let iva15 = 0;
+        let valorIva = 0;
+
+        filasTotales.forEach(fila => {
+            const celdas = fila.querySelectorAll('td');
+            if (celdas.length >= 4) {
+                const impuesto = celdas[1].textContent.toLowerCase();
+                const codigo = celdas[2].textContent.trim();
+                const base = parseDecimal(celdas[3].textContent);
+                const valor = celdas[4] ? parseDecimal(celdas[4].textContent) : 0;
+
+                if (impuesto.includes('iva')) {
+                    // CÓDIGOS SRI: 0=0%, 2=12%, 3=14%, 4 o 10=15%
+                    if (codigo === '0.0' || codigo === '0') {
+                        iva0 += base;
+                    } else {
+                        iva15 += base;
+                        valorIva += valor;
+                    }
+                }
+            }
+        });
+
+        // Solo retornamos si al menos capturamos algo o confirmamos que procesamos filas
+        return { iva0, iva15, valorIva, processed: true };
+
+    } catch (e) {
+        console.error('❌ Error parseando modal NC:', e);
+        return null;
+    }
+}
+
+function calcularResumenNotasCredito(notas) {
+    const resumen = {
+        totalNotas: notas.length,
+        valorSinImpuestos: 0,
+        iva: { total: 0 },
+        totalGeneral: 0,
+        iva0: { baseImponible: 0, total: 0 },
+        iva15: { baseImponible: 0, total: 0 }
+    };
+
+    notas.forEach(nc => {
+        resumen.valorSinImpuestos += (nc.valorSinImpuestos || 0);
+        resumen.iva.total += (nc.iva || 0);
+        resumen.totalGeneral += (nc.importeTotal || 0);
+
+        // Si tenemos datos del deep extraction (iva0, iva15 específicos), los usamos
+        if (typeof nc.iva0 === 'number' && typeof nc.iva15 === 'number') {
+            resumen.iva0.baseImponible += nc.iva0;
+            resumen.iva0.total += nc.iva0; // Reflejar en el total de esa base
+            resumen.iva15.baseImponible += nc.iva15;
+            resumen.iva15.total += nc.iva15 + (nc.iva || 0);
+        } else {
+            // Fallback anterior
+            if (nc.iva === 0 || nc.iva === 0.00) {
+                resumen.iva0.baseImponible += nc.valorSinImpuestos;
+                resumen.iva0.total += nc.importeTotal;
+            } else {
+                resumen.iva15.baseImponible += nc.valorSinImpuestos;
+                resumen.iva15.total += nc.importeTotal;
+            }
+        }
+    });
+
+    resumen.valorSinImpuestos = redondear(resumen.valorSinImpuestos);
+    resumen.iva.total = redondear(resumen.iva.total);
+    resumen.totalGeneral = redondear(resumen.totalGeneral);
+    resumen.iva0.baseImponible = redondear(resumen.iva0.baseImponible);
+    resumen.iva0.total = redondear(resumen.iva0.total);
+    resumen.iva15.baseImponible = redondear(resumen.iva15.baseImponible);
+    resumen.iva15.total = redondear(resumen.iva15.total);
+
+    return resumen;
+}
+
+/**
+ * Motor de Cálculo Técnico Elite (Reinforcement Engine)
+ * Calcula 615 y 617 siguiendo las reglas técnicas del SRI cuando el sugerido no es detectable.
+ */

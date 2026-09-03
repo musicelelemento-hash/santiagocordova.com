@@ -1,0 +1,72 @@
+{
+    "manifest_version": 3,
+    "name": "⚡ [SC PRO 01] - Declaración IVA & Robot SRI (Nueva Luz 3.0)",
+    "version": "3.1.0",
+    "description": "Automatización inteligente de declaración de IVA, cálculo matemático Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
+    "permissions": [
+        "storage",
+        "activeTab"
+    ],
+    "host_permissions": [
+        "https://srienlinea.sri.gob.ec/*",
+        "https://*.supabase.co/*",
+        "https://*.workers.dev/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://santiagocordova.com/*",
+        "https://*.santiagocordova.com/*",
+        "https://santiago-cordova.com/*",
+        "https://*.santiago-cordova.com/*"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icon16.png",
+            "48": "icon48.png",
+            "128": "icon128.png"
+        }
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "vendor/jspdf.umd.min.js"
+            ],
+            "matches": [
+                "https://srienlinea.sri.gob.ec/*"
+            ]
+        }
+    ],
+    "content_scripts": [
+        {
+            "matches": [
+                "https://srienlinea.sri.gob.ec/*"
+            ],
+            "js": [
+                "shared_config.js",
+                "build/content.js"
+            ],
+            "run_at": "document_idle",
+            "all_frames": false
+        },
+        {
+            "matches": [
+                "http://localhost/*",
+                "http://127.0.0.1/*",
+                "https://santiagocordova.com/*",
+                "https://*.santiagocordova.com/*",
+                "https://santiago-cordova.com/*",
+                "https://*.santiago-cordova.com/*"
+            ],
+            "js": [
+                "shared_config.js",
+                "bridge_content.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "icons": {
+        "16": "icon16.png",
+        "48": "icon48.png",
+        "128": "icon128.png"
+    }
+}

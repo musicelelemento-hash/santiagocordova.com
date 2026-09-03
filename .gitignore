@@ -1,0 +1,43 @@
+# ── Seguridad: NUNCA commitear credenciales ─────────────────────────────
+# Export de contraseñas de Chrome en texto plano (crítico)
+Contraseñas de Chrome.csv
+import_passwords.js
+
+# Claves privadas / certificados de firma electrónica (SRI / Ecuafact)
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Otros archivos de datos sensibles
+*.csv
+
+# ── Entornos y secretos ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Dependencias y artefactos de build ─────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.zip
+*.log
+
+# ── Bases de datos locales / respaldos ─────────────────────────────────
+*.sqlite
+*.sqlite-*
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-*
+respaldos_locales/
+
+# ── Evidencia de pantallas del SRI ─────────────────────────────────────
+# Capturas del portal con RUC, nombre, email y teléfono de clientes reales.
+# El índice (.md) SÍ se versiona; las imágenes y PDFs NO.
+extenciones web/_EVIDENCIA_SRI/**/*.pdf
+extenciones web/_EVIDENCIA_SRI/**/*.jpg
+extenciones web/_EVIDENCIA_SRI/**/*.jpeg
+extenciones web/_EVIDENCIA_SRI/**/*.png
+extenciones web/_EVIDENCIA_SRI/**/*.webp
