@@ -227,11 +227,48 @@ SafeStorage.get(null).then(async (items) => {
         return;
     }
 
+    // ── El SRI exige cambiar la clave de este cliente ──────────────────────
+    // No se puede declarar hasta resolverlo, y cambiar contraseñas no es algo
+    // que este bot haga. Se marca al cliente y el lote sigue con el siguiente.
+    if (esPantallaCambioClave()) {
+        const ruc = items.pending_sri_autofill?.ruc;
+        const nombre = items.pending_sri_autofill?.name || ruc || 'este contribuyente';
+        console.warn(`🔑 [CLAVE] El SRI exige cambiar la clave de ${nombre}. El bot NO cambia contraseñas.`);
+
+        if (ruc) {
+            const resErr = await SafeStorage.get(['flagged_errors']);
+            const errs = resErr.flagged_errors || {};
+            errs[ruc] = true;
+            await SafeStorage.set({ flagged_errors: errs });
+            console.log(`   ${nombre} queda marcado: el lote lo va a omitir.`);
+        }
+
+        if (window.sriAssistant?.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '🔑 Clave caducada',
+                msg: `El SRI pide cambiar la clave de ${nombre}. Cambiala a mano (extensión 02) y reintentá.`,
+                duration: 9000
+            });
+        }
+
+        if (await SriLoop.puedeAvanzar()) {
+            console.log('⏭️ [BUCLE] Saltando al siguiente cliente...');
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'pending_sri_autofill']);
+            if (typeof handleBatchNextClient === 'function') await handleBatchNextClient();
+        }
+        return;
+    }
+
     // Antes leía las banderas sueltas: bastaba con basura en storage de una
     // corrida vieja para que arrancara un lote fantasma sin sesión iniciada.
     // (Ese era el "entra un segundo y sale" contra la pantalla de login.)
     const isAutoFlow = await SriLoop.puedeAvanzar();
-    if (isAutoFlow && items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.loginAttempted)) {
+    // Sin sesión no tiene sentido apuntar a Comprobantes Recibidos: antes se
+    // marcaba turbo_step1_facturas estando todavía en el login, y dos líneas
+    // después el propio código frenaba con "Detectado Login. Esperando...".
+    if (isAutoFlow && !isAlreadyLoggedIn) {
+        console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
+    } else if (isAutoFlow && items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.loginAttempted)) {
         console.log('🚀 Modo Bucle Activo: Dirigiendo a Comprobantes Electrónicos Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();

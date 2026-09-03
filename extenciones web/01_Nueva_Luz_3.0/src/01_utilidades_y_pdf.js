@@ -1526,6 +1526,31 @@ function escribirCampo(input, valor) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+/**
+ * ¿El SRI está exigiendo cambiar la clave antes de dejar entrar?
+ *
+ * Es una pantalla distinta del login: tiene tres campos (actual / nueva /
+ * confirmación). Nueva Luz no la conocía y el lote se quedaba clavado ahí
+ * hasta que la sesión caducaba.
+ *
+ * 🛑 Detectar NO es resolver: cambiar una contraseña es una operación de
+ * credenciales y este bot no la hace nunca. Solo marca al cliente y sigue.
+ */
+function esPantallaCambioClave() {
+    const campo = (n) => document.getElementById(n) ||
+                         document.querySelector(`input[formcontrolname="${n}"]`);
+    const actual = campo('actual');
+    const nuevo = campo('nuevo');
+    const confirmacion = campo('confirmacion');
+    if (actual && nuevo && confirmacion) return true;
+
+    // Respaldo por texto, por si el SRI renombra los campos.
+    const txt = (document.body ? document.body.textContent || '' : '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const pide = /actualice su clave|actualizar su clave|cambio de clave obligatorio|debe cambiar su clave|su clave ha caducado|clave expirada/.test(txt);
+    return pide && document.querySelectorAll('input[type="password"]').length >= 2;
+}
+
 function isSRILoginPage() {
   const url = window.location.href.toLowerCase();
   const hasLoginUrl =
