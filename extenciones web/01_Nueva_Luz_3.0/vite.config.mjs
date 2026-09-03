@@ -37,6 +37,18 @@ function concatPlugin() {
         }
       }
       
+      // 🏷️ Sello de compilación: versión del manifest + fecha/hora local.
+      // Permite saber en la consola del SRI si Chrome cargó este build o una
+      // copia vieja (hay que pulsar ↻ en chrome://extensions tras compilar).
+      const pkgVersion = JSON.parse(
+        fs.readFileSync(path.resolve(currentDir, 'manifest.json'), 'utf-8')
+      ).version;
+      const ahora = new Date();
+      const dosDigitos = (n) => String(n).padStart(2, '0');
+      const sello = `${pkgVersion}+${ahora.getFullYear()}${dosDigitos(ahora.getMonth() + 1)}${dosDigitos(ahora.getDate())}.${dosDigitos(ahora.getHours())}${dosDigitos(ahora.getMinutes())}`;
+      concatenatedCode = concatenatedCode.split('__SC_BUILD__').join(sello);
+      console.log(`\n  🏷️  build: ${sello}\n`);
+
       // 💡 MINIFICAR con esbuild: 870 KB → ~250 KB (menos parse/memoria en el SRI)
       const minified = await transform(concatenatedCode, {
         minify: true,

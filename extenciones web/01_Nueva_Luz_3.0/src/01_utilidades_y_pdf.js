@@ -1,9 +1,15 @@
 // ============================================================
 // HELPERS GLOBALES (v3.2)
+// __SC_BUILD__ lo reemplaza vite al compilar (ver vite.config.mjs).
+const SC_BUILD = "__SC_BUILD__";
+
 console.log(
-  "%c👻 SRI ASISTENTE v8.18 GHOST - INICIADO",
+  `%c👻 SRI ASISTENTE GHOST · build ${SC_BUILD} · INICIADO`,
   "background: #f8fafc; color: #64748b; font-size: 16px; font-weight: bold; padding: 10px; border-radius: 5px; border: 2px solid #cbd5e1; box-shadow: 0 0 15px rgba(0,0,0,0.1);",
 );
+
+// Para verificar desde la consola qué build está cargado realmente.
+if (typeof window !== "undefined") window.sriBuild = () => SC_BUILD;
 
 // ── Configuración central (ver shared_config.js) ──────────────────────
 // La URL y la llave `anon` viven en UN solo lugar: shared_config.js.
