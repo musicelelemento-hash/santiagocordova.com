@@ -7,11 +7,21 @@ SafeStorage.get(null).then(async (items) => {
     }
 
     if (items.sri_master_switch_on === false) {
-        if (items.pending_sri_autofill && items.pending_sri_autofill.manual) {
-            console.log('🔓 [SRI ELITE] Solicitud de Login Manual desde Popup. Despertando extensión...');
+        const autofill = items.pending_sri_autofill;
+        // Un cliente de LOTE nunca puede despertar la extensión por su cuenta:
+        // para eso está el semáforo. Solo un login manual suelto (el botón del
+        // popup o del panel) tiene permiso, porque lo acaba de pedir el usuario.
+        const esLoteSinPermiso = !!(autofill && autofill.isBatch) && !(await SriLoop.puedeAvanzar());
+
+        if (autofill && autofill.manual && !esLoteSinPermiso) {
+            console.log('🔓 [SRI ELITE] Login manual solicitado. Despertando extensión...');
             await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
             items.sri_master_switch_on = true;
         } else {
+            if (esLoteSinPermiso) {
+                console.log('🧹 [BUCLE] Resto de un lote detenido en storage. Se descarta.');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+            }
             console.log('💤 [SRI ELITE] Extensión en Modo Reposo (Apagada). Interacciones canceladas.');
             return;
         }

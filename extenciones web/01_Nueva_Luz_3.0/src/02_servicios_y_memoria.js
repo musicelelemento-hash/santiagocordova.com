@@ -65,7 +65,22 @@ const SriLoop = {
     },
 
     async _set(patch) {
-        const nuevo = Object.assign({}, await this.get(), patch);
+        const previo = await this.get();
+        const nuevo = Object.assign({}, previo, patch);
+
+        // Traza de transiciones: si algo apaga el bucle sin que se lo pidan,
+        // acá queda quién fue. Sin esto es imposible perseguir un apagón.
+        if (patch.estado && patch.estado !== previo.estado) {
+            let quien = '';
+            try {
+                const pila = (new Error().stack || '').split('\n').slice(2, 5)
+                    .map((l) => l.trim().replace(/^at\s+/, '').split(' ')[0])
+                    .filter((x) => x && x !== 'async').join(' ← ');
+                quien = pila ? `  [${pila}]` : '';
+            } catch (e) { /* sin pila */ }
+            console.log(`🚦 [BUCLE] ${previo.estado} → ${nuevo.estado}${nuevo.motivo ? ' · ' + nuevo.motivo : ''}${quien}`);
+        }
+
         await SafeStorage.set({ [this._KEY]: nuevo });
         return nuevo;
     },
