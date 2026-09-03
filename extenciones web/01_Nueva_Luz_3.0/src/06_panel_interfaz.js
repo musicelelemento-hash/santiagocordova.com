@@ -170,22 +170,44 @@ class SriAssistantPanel {
 
     // ELITE v14.5: Centraliza el inicio/fin del scanner de obligaciones
     checkScanRequirement() {
-        const isScanArea = window.location.href.includes('inicio.jsf') || 
-                          window.location.href.includes('general/inicio') ||
-                          window.location.href.includes('inicio/NAT');
-        
-        if (isScanArea) {
+        const url = window.location.href;
+        const enAreaDeEscaneo = url.includes('inicio.jsf') ||
+                                url.includes('general/inicio') ||
+                                url.includes('inicio/NAT') ||
+                                url.includes('/contribuyente/perfil');
+
+        // Con el formulario de credenciales en pantalla no hay sesión, y sin
+        // sesión no hay obligaciones que escanear.
+        const enLogin = typeof encontrarCamposLogin === 'function' && !!encontrarCamposLogin();
+
+        if (enAreaDeEscaneo && !enLogin) {
             if (!this.scanInterval) {
                 console.log('📡 [SCANNER] Iniciando escáner de obligaciones en esta área...');
+                this._escaneosVacios = 0;
                 setTimeout(() => this.scanObligacionesSRI(), 800);
                 this.scanInterval = setInterval(() => this.scanObligacionesSRI(), 5000);
             }
         } else {
-            if (this.scanInterval) {
-                console.log('🔕 [SCANNER] Saliendo de área de escaneo. Intervalo detenido.');
-                clearInterval(this.scanInterval);
-                this.scanInterval = null;
-            }
+            this.detenerEscaner(enLogin ? 'pantalla de login' : 'fuera del área');
+        }
+    }
+
+    detenerEscaner(motivo) {
+        if (!this.scanInterval) return;
+        console.log(`🔕 [SCANNER] Escáner detenido (${motivo}).`);
+        clearInterval(this.scanInterval);
+        this.scanInterval = null;
+    }
+
+    /**
+     * Corta el escaneo tras varios intentos sin encontrar el bloque de
+     * obligaciones. Antes seguía cada 5 segundos indefinidamente, llenando la
+     * consola en páginas donde ese bloque simplemente no existe (inicio/NAT).
+     */
+    registrarEscaneoVacio() {
+        this._escaneosVacios = (this._escaneosVacios || 0) + 1;
+        if (this._escaneosVacios >= 5) {
+            this.detenerEscaner('no hay bloque de obligaciones en esta página');
         }
     }
 
@@ -978,9 +1000,10 @@ class SriAssistantPanel {
         if (this.suggestionDismissed) return; // Respetar decisión del usuario
         if (this.contextCard) return; // No acosar si ya se está mostrando el mensaje
 
-        // ELITE FIX: Si estamos en la pantalla de login, no hay que escanear obligaciones
-        const isExplicitlyOutside = !!(document.getElementById('usuario') || document.querySelector('input[name="usuario"]'));
-        if (isExplicitlyOutside) {
+        // Si el formulario de credenciales está en pantalla, no hay sesión y no
+        // hay obligaciones que escanear. (Antes se buscaba un input llamado
+        // 'usuario', que en el login del SRI no existe.)
+        if (typeof encontrarCamposLogin === 'function' && encontrarCamposLogin()) {
             console.log('🔒 [ELITE SCANNER] Pantalla de login detectada. Escáner silenciado.');
             return;
         }

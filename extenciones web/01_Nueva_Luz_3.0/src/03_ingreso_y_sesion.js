@@ -1,6 +1,21 @@
 SafeStorage.get(null).then(async (items) => {
     const isLoginPage = isSRILoginPage();
 
+    // ── Radiografía de arranque ────────────────────────────────────────────
+    try {
+        const sem = await SriLoop.get();
+        const af = items.pending_sri_autofill;
+        const total = (sem.cola || []).length;
+        console.log(
+            `🚦 [ESTADO] semáforo=${sem.estado}` +
+            `${total ? ` · cliente ${sem.indice + 1}/${total}` : ' · sin lote'}` +
+            ` · autofill=${af ? `${af.name || af.ruc}${af.isBatch ? ' (lote)' : ' (manual)'}` : 'no'}` +
+            ` · acción=${items.pendingAction || '—'}` +
+            ` · login=${isLoginPage ? 'sí' : 'no'}` +
+            `${sem.motivo ? ' · ' + sem.motivo : ''}`
+        );
+    } catch (e) { /* no romper el arranque por un log */ }
+
     if (isLoginPage) {
         renderLoginCockpit(items);
         initLoginCockpitWatcher();

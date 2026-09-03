@@ -345,7 +345,11 @@ const findByText = (text, tag = '*') => {
     }
 
     if (candidates.length === 0) {
-        console.log(`🔎 findByText("${text}"): 0 candidatos.`);
+        // Silencioso a propósito: se llama en bucles de escaneo y llenaba la
+        // consola. Para verlo: window.sriDebug = true
+        if (typeof window !== 'undefined' && window.sriDebug) {
+            console.log(`🔎 findByText("${text}"): 0 candidatos.`);
+        }
         return null;
     }
 
