@@ -1489,7 +1489,11 @@ class SriAssistantPanel {
                         // 🧾 Dejar constancia ANTES de intentar subir nada: el portal
                         // tarda ~20 min en quitar la obligación y la subida puede
                         // fallar. Sin esto, el bot volvía a declarar (sustitutiva).
-                        await SriLoop.marcarDeclarado(info.ruc, { year: cYear, monthIndex: cMonth }, { nombre: info.name });
+                        // El periodo sale del lote, no de recalcular la fecha: es el que se está
+                        // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
+                        // todavía no existen: ReferenceError que abortaba el cierre entero.)
+                        const perDecl = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+                        await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
 
                         let preFetchedGhostData = {};
                         if (typeof GhostMemory !== 'undefined') {
@@ -3552,7 +3556,11 @@ class SriAssistantPanel {
         if (info.ruc) {
             // 🧾 Constancia primero: si la subida falla, igual quedó registrado
             // que este contribuyente ya declaró este periodo.
-            await SriLoop.marcarDeclarado(info.ruc, { year: cYear, monthIndex: cMonth }, { nombre: info.name });
+            // El periodo sale del lote, no de recalcular la fecha: es el que se está
+                        // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
+                        // todavía no existen: ReferenceError que abortaba el cierre entero.)
+                        const perDecl = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+                        await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
             await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, preFetchedGhostData, "completado");
         }
 
