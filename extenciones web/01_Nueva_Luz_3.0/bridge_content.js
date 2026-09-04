@@ -131,6 +131,31 @@ function syncFullClientsMatrix() {
   }
 }
 
+// Diagnóstico de arranque: el puente era mudo, así que cuando no sincronizaba
+// no había forma de saber si faltaba la sesión, la lista, o la clave correcta.
+(function diagnosticoPuente() {
+  const claves = ["sc_clients_history", "sc_pro_store", "sri_active_credentials", "_sri_autofill_pending"];
+  const halladas = claves.filter((k) => !!localStorage.getItem(k));
+  let cuantos = 0;
+  try {
+    const raw = localStorage.getItem("sc_clients_history") || localStorage.getItem("sc_pro_store");
+    if (raw) {
+      const p = JSON.parse(raw);
+      cuantos = Array.isArray(p) ? p.length : (p.state && p.state.clients ? p.state.clients.length : 0);
+    }
+  } catch (e) {}
+
+  if (cuantos > 0) {
+    console.log("✅ [SC PRO Bridge] " + cuantos + " clientes listos para sincronizar con la extensión.");
+  } else {
+    console.warn(
+      "⚠️ [SC PRO Bridge] No hay clientes que sincronizar.\n" +
+      "   La web solo escribe la lista cuando ya la cargó: hay que estar logueado y ver los clientes en pantalla.\n" +
+      "   Claves presentes en localStorage: " + (halladas.join(", ") || "ninguna")
+    );
+  }
+})();
+
 syncFullClientsMatrix();
 setInterval(syncFullClientsMatrix, 2500);
 
