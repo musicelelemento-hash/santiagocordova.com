@@ -43,6 +43,64 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Inyecta las variables y clases base de la interfaz. Idempotente.
+ *
+ * Existe porque había 396 atributos style="" inline contra 31 clases, y cuatro
+ * módulos dibujando interfaz sin compartir nada. Cambiar un color obligaba a
+ * tocar cientos de líneas.
+ */
+function instalarEstilosSC() {
+  if (typeof document === 'undefined' || document.getElementById('sc-tokens')) return;
+  const st = document.createElement('style');
+  st.id = 'sc-tokens';
+  st.textContent = `
+    :root{
+      --sc-fondo:rgba(5,20,36,.94);
+      --sc-fondo-2:rgba(255,255,255,.04);
+      --sc-borde:rgba(255,255,255,.14);
+      --sc-txt:#d5e4fa;
+      --sc-suave:#94a3b8;
+      --sc-tenue:#64748b;
+      --sc-ok:#4ade80;
+      --sc-activo:#7dd3fc;
+      --sc-alerta:#ffb95f;
+      --sc-mal:#f87171;
+      --sc-radio:14px;
+      --sc-radio-btn:10px;
+      --sc-sombra:0 10px 30px rgba(0,0,0,.5);
+      --sc-fuente:'Manrope','Inter',system-ui,sans-serif;
+    }
+    .sc-panel{
+      background:var(--sc-fondo); border:1px solid var(--sc-borde);
+      border-radius:var(--sc-radio); box-shadow:var(--sc-sombra);
+      color:var(--sc-txt); font-family:var(--sc-fuente);
+      backdrop-filter:blur(14px);
+    }
+    .sc-btn{
+      border:none; border-radius:var(--sc-radio-btn); cursor:pointer;
+      padding:7px 12px; font-size:12px; font-weight:800;
+      font-family:var(--sc-fuente); background:var(--sc-fondo-2);
+      color:var(--sc-txt); transition:filter .15s, transform .15s;
+    }
+    .sc-btn:hover{ filter:brightness(1.25) }
+    .sc-btn:active{ transform:scale(.97) }
+    .sc-btn--primario{ background:linear-gradient(135deg,#10b981,#059669); color:#fff }
+    .sc-btn--peligro{ background:rgba(239,68,68,.16); color:var(--sc-mal) }
+    .sc-btn--fantasma{ background:transparent; border:1px solid var(--sc-borde); color:var(--sc-suave) }
+    .sc-rotulo{
+      font-size:9.5px; letter-spacing:.09em; color:var(--sc-tenue);
+      font-weight:800; text-transform:uppercase;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(st);
+}
+
+if (typeof document !== 'undefined') {
+  if (document.head) instalarEstilosSC();
+  else document.addEventListener('DOMContentLoaded', instalarEstilosSC);
+}
+
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)

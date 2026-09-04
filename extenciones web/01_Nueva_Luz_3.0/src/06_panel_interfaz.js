@@ -2189,8 +2189,12 @@ class SriAssistantPanel {
 
                     <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; margin: 14px 0 2px;">⛔ CONTROL</div>
                     <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                        <button id="btn-panel-detener" style="display: flex; align-items: center; justify-content: center; gap: 4px; flex: 1.3; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); border: 1px solid rgba(255,255,255,0.25); color: white; padding: 8px 6px; border-radius: 8px; font-size: 11px; cursor: pointer; font-weight: 900; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);" title="Detener inmediatamente y pasar a control manual">🛑 DETENER</button>
-                        <button id="sri-panel-pause" style="display: flex; align-items: center; justify-content: center; gap: 4px; flex: 1; background: ${this.isPaused ? '#10b981' : '#f59e0b'}; border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 6px; border-radius: 8px; font-size: 10px; cursor: pointer; font-weight: 800;" title="Pausar o reanudar automatización">${this.isPaused ? '▶️ REANUDAR' : '⏸️ PAUSAR'}</button>
+                        <!-- ⛔ Pausa y parada viven SOLO en el HUD flotante.
+                             Había tres botones de detener y dos de pausar repartidos
+                             en dos widgets, sin nada que indicara cuál mandaba. -->
+                        <div class="sc-rotulo" style="flex:1.5;align-self:center;text-align:center;opacity:.75">
+                            Pausa y parada: en el HUD ↘
+                        </div>
                         <button id="btn-panel-force-next" style="flex: 0.8; background: #3b82f6; border: none; color: white; padding: 8px 4px; border-radius: 8px; font-size: 10px; cursor: pointer; font-weight: bold;" title="Forzar siguiente paso">⏭️ Next</button>
                         <button id="btn-panel-refresh" style="flex: 0.8; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 8px 4px; border-radius: 8px; font-size: 10px; cursor: pointer;" title="Actualizar datos">🔄 Recargar</button>
                     </div>
@@ -3109,6 +3113,7 @@ class SriAssistantPanel {
             };
         }
 
+        // Ya no existe en el panel: el control vive en el HUD.
         const pauseBtn = this.container.querySelector('#sri-panel-pause');
         if (pauseBtn) {
             pauseBtn.onclick = (e) => {
