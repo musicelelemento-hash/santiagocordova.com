@@ -108,8 +108,10 @@ SafeStorage.get(null).then(async (items) => {
         if (clientRuc && typeof SriCredentialVault !== 'undefined') {
             if (isAccountLocked) {
                 await SriCredentialVault.recordLocked(clientRuc, feedbackText || 'Cuenta bloqueada o intentos superados en el SRI');
+                await Omitidos.anotar(clientRuc, 'cuenta_bloqueada', { nombre: clientName, detalle: feedbackText });
             } else {
                 await SriCredentialVault.recordFailure(clientRuc, clientPass, feedbackText || 'Credenciales rechazadas en 1er intento');
+                await Omitidos.anotar(clientRuc, 'clave_incorrecta', { nombre: clientName, detalle: feedbackText });
             }
         } else if (clientRuc) {
             const resErr = await SafeStorage.get(['flagged_errors']);
@@ -158,6 +160,8 @@ SafeStorage.get(null).then(async (items) => {
             const checkVault = await SriCredentialVault.canAttemptLogin(clientRuc, clientPass);
             if (!checkVault.allowed) {
                 console.warn(`🛑 [BLINDAJE SEGURIDAD PREVENTIVO] Omitiendo login de ${clientRuc}: ${checkVault.reason}`);
+                await Omitidos.anotar(clientRuc, 'cuenta_bloqueada', {
+                    nombre: items.pending_sri_autofill.name, detalle: checkVault.reason });
                 await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
                 if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
                     window.sriAssistant.showEliteToast({
@@ -307,6 +311,7 @@ SafeStorage.get(null).then(async (items) => {
             errs[ruc] = true;
             await SafeStorage.set({ flagged_errors: errs });
             console.log(`   ${nombre} queda marcado: el lote lo va a omitir.`);
+            await Omitidos.anotar(ruc, 'clave_caducada', { nombre });
         }
 
         if (window.sriAssistant?.showEliteToast) {
@@ -486,6 +491,9 @@ async function ejecutarAccionPendiente(items) {
             console.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
                           'No se toca nada: se cierra sesión para que entre el cliente correcto.');
             anotarBitacora('⛔ identidad no coincide', `sesión=${enPantalla.ruc} · esperado=${esperado}`);
+            await Omitidos.anotar(esperado, 'identidad', {
+                nombre: items.pending_sri_autofill.name,
+                detalle: `la sesión abierta era de ${enPantalla.ruc}` });
             await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
             if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
             return;

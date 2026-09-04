@@ -1581,6 +1581,8 @@ class SriAssistantPanel {
                 const sigueElLote = await loteDebeContinuar();
                 if (sigueElLote) {
                     this.log(`🔄 [MODO AUTO BUCLE] Cliente con saldo a pagar ($${totalValor}). Guardado en la nube. Avanzando al siguiente...`);
+                    await Omitidos.anotar(info.ruc, 'saldo_a_pagar', {
+                        nombre: info.name, detalle: `saldo $${totalValor}` });
                     this.showEliteToast({ title: '⏩ Omitiendo (Por Pagar)', msg: 'Impuestos detectados. Cerrando sesión...', duration: 3500 });
                     
                     setTimeout(async () => {
@@ -1996,6 +1998,7 @@ class SriAssistantPanel {
             const errs = resErr.flagged_errors || {};
             errs[ruc] = 'omitido_manual';
             await SafeStorage.set({ flagged_errors: errs });
+            await Omitidos.anotar(ruc, 'omitido_manual', { nombre: name });
         }
 
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod']);

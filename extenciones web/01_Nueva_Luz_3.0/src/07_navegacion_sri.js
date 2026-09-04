@@ -40,11 +40,13 @@ const SriLoopHUD = {
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
             '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
+            '<button id="slh-omitidos" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:6px 9px;background:rgba(245,158,11,0.18);color:#fbbf24;font-weight:800;font-size:11px;cursor:pointer">⚠️ 0</button>',
             '<button id="slh-copiar" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(148,163,184,0.16);color:#cbd5e1;font-size:12px;cursor:pointer">📋</button>',
             '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
             '</div>',
             // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
-            '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
+            '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
+            '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -87,6 +89,28 @@ const SriLoopHUD = {
         el.querySelector('#slh-aqui').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             await this._declararEsteCliente();
+            this.pintar();
+        });
+
+        el.querySelector('#slh-omitidos').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-omitidos-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            await this.pintarOmitidos();
+            panel.style.display = 'block';
+        });
+
+        // Delegación: los botones de cada fila se crean y se destruyen al
+        // repintar, así que el listener vive en el contenedor, no en la fila.
+        el.querySelector('#slh-omitidos-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('[data-reintentar]');
+            if (!btn) return;
+            ev.stopPropagation();
+            const ruc = btn.getAttribute('data-reintentar');
+            await Omitidos.reintentar(ruc);
+            this._aviso('♻️ Vuelve a la cola',
+                `${ruc} se reintentará en el próximo lote. Si la causa era la clave, cambiala antes.`, 6000);
+            await this.pintarOmitidos();
             this.pintar();
         });
 
@@ -146,6 +170,8 @@ const SriLoopHUD = {
             });
         } catch (e) { /* sin listener */ }
         setInterval(() => this.pintar(), 2000);
+        setInterval(() => this.refrescarContadorOmitidos(), 5000);
+        this.refrescarContadorOmitidos();
         this.pintar();
     },
 
@@ -421,6 +447,47 @@ const SriLoopHUD = {
         } else {
             window.location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&response_mode=fragment&response_type=code&scope=openid';
         }
+    },
+
+    /** Mantiene al día el contador del botón ⚠️, que solo aparece si hay alguno. */
+    async refrescarContadorOmitidos() {
+        const btn = document.getElementById('slh-omitidos');
+        if (!btn) return;
+        try {
+            const lista = await Omitidos.lista();
+            btn.textContent = `⚠️ ${lista.length}`;
+            btn.style.display = lista.length ? '' : 'none';
+        } catch (e) { /* el contador nunca rompe el HUD */ }
+    },
+
+    /** Dibuja la lista de omitidos con el motivo y qué se puede hacer. */
+    async pintarOmitidos() {
+        const panel = document.getElementById('slh-omitidos-panel');
+        if (!panel) return;
+        const lista = await Omitidos.lista();
+
+        if (!lista.length) {
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">✅ Ningún cliente quedó afuera.</div>';
+            return;
+        }
+
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const filas = lista.map((o) => {
+            const ayuda = Omitidos.ARREGLO[o.motivo] || o.detalle || '';
+            return [
+                '<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06)">',
+                `  <div style="display:flex;align-items:center;gap:6px">`,
+                `    <span style="font-weight:800;font-size:11px;flex:1">${esc(o.nombre || o.ruc)}</span>`,
+                `    <button data-reintentar="${esc(o.ruc)}" style="border:none;border-radius:8px;padding:3px 8px;background:rgba(56,189,248,0.18);color:#7dd3fc;font-size:10px;font-weight:800;cursor:pointer">♻️ Reintentar</button>`,
+                '  </div>',
+                `  <div style="font-size:10px;color:#fbbf24;margin-top:2px">${esc(o.motivo.replace(/_/g, ' '))}${o.veces > 1 ? ` · ${o.veces} veces` : ''}</div>`,
+                ayuda ? `  <div style="font-size:10px;opacity:0.65;margin-top:2px">${esc(ayuda)}</div>` : '',
+                '</div>'
+            ].join('');
+        }).join('');
+
+        panel.innerHTML =
+            `<div style="font-size:10px;opacity:0.7;margin-bottom:4px">${lista.length} sin declarar</div>` + filas;
     },
 
     async pintar() {

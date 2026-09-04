@@ -341,7 +341,7 @@ const SriLoop = {
             }
 
             const clave = c.password || c.sri_password || c.sriPassword || '';
-            if (!clave) { sinClave++; continue; }
+            if (!clave) { sinClave++; await Omitidos.anotar(c.ruc, 'sin_clave', { nombre: c.name }); continue; }
 
             // 🛡️ Filtro de seguridad: si la clave falló y no ha cambiado, omitir de la cola
             if (typeof SriCredentialVault !== 'undefined') {
@@ -599,6 +599,100 @@ async function loteDebeContinuar() {
     // Sin semáforo: corrida vieja ya empezada, valen las banderas.
     const r = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
     return !!(r.auto_batch_enabled || r.sri_auto_mode);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REGISTRO DE OMITIDOS
+//
+// Todo cliente que el lote saltó, con el motivo y la fecha. Es la lista para
+// revisar al final de la corrida: qué quedó sin declarar y por qué, y qué se
+// puede arreglar (una clave vencida se cambia; una cuenta bloqueada no).
+//
+//   window.sriOmitidos()          → tabla en consola
+//   window.sriReintentar('RUC')   → lo saca de la lista para volver a intentarlo
+//   window.sriOmitidosLimpiar()   → vacía la lista entera
+// ═══════════════════════════════════════════════════════════════════════════
+const Omitidos = {
+    _KEY: 'sc_omitidos',
+
+    // Motivo → si tiene arreglo por parte del usuario y cuál.
+    ARREGLO: {
+        sin_clave:          'Cargar la clave del SRI en la ficha del cliente.',
+        clave_caducada:     'El SRI pide cambiar la clave. Cambiala a mano y reintentá.',
+        clave_incorrecta:   'Revisar la clave guardada: el SRI la rechazó.',
+        cuenta_bloqueada:   'Cuenta bloqueada en el SRI. Hay que desbloquearla en el portal.',
+        omitido_manual:     'Lo omitiste vos. Reintentá cuando quieras.',
+        saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',
+        identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
+        sin_datos:          'No se pudieron extraer comprobantes.'
+    },
+
+    async anotar(ruc, motivo, extra = {}) {
+        if (!ruc) return;
+        try {
+            const r = await SafeStorage.get([this._KEY]);
+            const lista = r[this._KEY] || {};
+            lista[ruc] = {
+                ruc,
+                nombre: extra.nombre || lista[ruc]?.nombre || '',
+                motivo,
+                detalle: String(extra.detalle || '').slice(0, 200),
+                periodo: extra.periodo || '',
+                cuando: Date.now(),
+                veces: (lista[ruc]?.veces || 0) + 1
+            };
+            await SafeStorage.set({ [this._KEY]: lista });
+            console.log(`⏭️ [OMITIDO] ${extra.nombre || ruc}: ${motivo}`);
+            anotarBitacora('omitido', `${extra.nombre || ruc} · ${motivo}`);
+        } catch (e) { /* nunca romper el lote por registrar */ }
+    },
+
+    async lista() {
+        const r = await SafeStorage.get([this._KEY]);
+        return Object.values(r[this._KEY] || {}).sort((a, b) => b.cuando - a.cuando);
+    },
+
+    /** Lo saca de la lista Y le limpia las banderas, para que el lote lo vuelva a tomar. */
+    async reintentar(ruc) {
+        const r = await SafeStorage.get([this._KEY, 'flagged_errors', 'sri_tried_credentials']);
+        const lista = r[this._KEY] || {};
+        const errs = r.flagged_errors || {};
+        const tried = r.sri_tried_credentials || {};
+        const habia = !!lista[ruc];
+
+        delete lista[ruc];
+        delete errs[ruc];
+        delete tried[ruc];
+        await SafeStorage.set({ [this._KEY]: lista, flagged_errors: errs, sri_tried_credentials: tried });
+
+        console.log(habia
+            ? `♻️ ${ruc} vuelve a la cola: se borraron su marca de omitido y sus banderas de error.`
+            : `♻️ ${ruc} no estaba omitido, pero igual se limpiaron sus banderas.`);
+        return habia;
+    },
+
+    async limpiar() {
+        await SafeStorage.remove([this._KEY]);
+        console.log('🧹 Lista de omitidos vaciada. Las banderas de error NO se tocaron.');
+    }
+};
+
+if (typeof window !== 'undefined') {
+    window.sriOmitidos = async () => {
+        const l = await Omitidos.lista();
+        if (!l.length) { console.log('✅ No hay clientes omitidos.'); return []; }
+        console.table(l.map(o => ({
+            RUC: o.ruc,
+            nombre: o.nombre,
+            motivo: o.motivo,
+            'qué hacer': Omitidos.ARREGLO[o.motivo] || o.detalle || '—',
+            cuando: new Date(o.cuando).toLocaleString('es-EC')
+        })));
+        console.log('Para reintentar uno: sriReintentar("RUC")');
+        return l;
+    };
+    window.sriReintentar = (ruc) => Omitidos.reintentar(String(ruc).trim());
+    window.sriOmitidosLimpiar = () => Omitidos.limpiar();
 }
 
 function anotarBitacora(evento, detalle = '') {
