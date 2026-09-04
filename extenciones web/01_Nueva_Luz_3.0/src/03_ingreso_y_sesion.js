@@ -109,9 +109,11 @@ SafeStorage.get(null).then(async (items) => {
             if (isAccountLocked) {
                 await SriCredentialVault.recordLocked(clientRuc, feedbackText || 'Cuenta bloqueada o intentos superados en el SRI');
                 await Omitidos.anotar(clientRuc, 'cuenta_bloqueada', { nombre: clientName, detalle: feedbackText });
+                await marcarCredencialEnLaWeb(clientRuc, 'bloqueada', feedbackText || 'Cuenta bloqueada en el SRI');
             } else {
                 await SriCredentialVault.recordFailure(clientRuc, clientPass, feedbackText || 'Credenciales rechazadas en 1er intento');
                 await Omitidos.anotar(clientRuc, 'clave_incorrecta', { nombre: clientName, detalle: feedbackText });
+                await marcarCredencialEnLaWeb(clientRuc, 'incorrecta', feedbackText || 'El SRI rechazó la clave guardada');
             }
         } else if (clientRuc) {
             const resErr = await SafeStorage.get(['flagged_errors']);
@@ -312,6 +314,7 @@ SafeStorage.get(null).then(async (items) => {
             await SafeStorage.set({ flagged_errors: errs });
             console.log(`   ${nombre} queda marcado: el lote lo va a omitir.`);
             await Omitidos.anotar(ruc, 'clave_caducada', { nombre });
+            await marcarCredencialEnLaWeb(ruc, 'caducada', 'El SRI exige cambiar la clave antes de entrar');
         }
 
         if (window.sriAssistant?.showEliteToast) {
@@ -380,6 +383,10 @@ SafeStorage.get(null).then(async (items) => {
     } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
         if (typeof SriCredentialVault !== 'undefined' && items.pending_sri_autofill?.ruc) {
             await SriCredentialVault.recordSuccess(items.pending_sri_autofill.ruc, items.pending_sri_autofill.password);
+        }
+        // Entró bien: si había un aviso de clave en la web, ya no corresponde.
+        if (items.pending_sri_autofill?.ruc) {
+            marcarCredencialEnLaWeb(items.pending_sri_autofill.ruc, 'ok').catch(() => {});
         }
         // Entró: el rescate (si lo hubo) cumplió. Contador a cero.
         if (items.pending_sri_autofill?.ruc && items.sc_rescates?.[items.pending_sri_autofill.ruc]) {

@@ -1232,6 +1232,66 @@ async function checkDeclarationPdfInDb(ruc, targetPeriodStr) {
 }
 
 // Sincronización ultraligera con Supabase enviando estructura StoredFile compatible
+/**
+ * Deja constancia EN LA WEB de que la clave del SRI de este contribuyente no
+ * sirve, para que se vea desde SantiagoCordova.com sin abrir la extensión.
+ * Nunca escribe la clave: solo su estado.
+ *
+ * @param {string} ruc
+ * @param {'ok'|'incorrecta'|'caducada'|'bloqueada'} estado
+ * @param {string} motivo Texto corto para mostrar en la ficha.
+ */
+async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
+  if (!ruc || !SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) return false;
+  const cab = {
+    apikey: SC_SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const r = await fetch(
+      `${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&is_deleted=eq.false&select=id,tax_profile`,
+      { headers: cab }
+    );
+    if (!r.ok) { console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}`); return false; }
+
+    const filas = await r.json();
+    if (!filas.length) { console.warn(`⚠️ [WEB] ${ruc} no está en la base web; no se marca nada.`); return false; }
+
+    const cli = filas[0];
+    const perfil = (cli.tax_profile && typeof cli.tax_profile === 'object') ? cli.tax_profile : {};
+
+    // Si vuelve a andar, se limpia la marca en vez de dejar un aviso viejo.
+    if (estado === 'ok') {
+      if (!perfil.sriCredencial) return true;
+      delete perfil.sriCredencial;
+    } else {
+      perfil.sriCredencial = {
+        estado,
+        motivo: String(motivo || '').slice(0, 200),
+        cuando: new Date().toISOString(),
+        marcado_por: 'Nueva Luz'
+      };
+    }
+
+    const p = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?id=eq.${cli.id}`, {
+      method: 'PATCH',
+      headers: { ...cab, Prefer: 'return=minimal' },
+      body: JSON.stringify({ tax_profile: perfil, updated_at: new Date().toISOString() })
+    });
+
+    if (!p.ok) { console.warn(`⚠️ [WEB] No pude marcar a ${ruc}: HTTP ${p.status}`); return false; }
+    console.log(estado === 'ok'
+      ? `🌐 [WEB] ${ruc}: aviso de clave retirado, la credencial funciona.`
+      : `🌐 [WEB] ${ruc} marcado en la web: clave ${estado}.`);
+    return true;
+  } catch (e) {
+    console.warn('⚠️ [WEB] Error marcando la credencial:', e);
+    return false;
+  }
+}
+
 async function syncDeclarationToSupabase(
   ruc,
   periodStr,
