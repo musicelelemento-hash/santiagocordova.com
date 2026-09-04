@@ -1099,9 +1099,11 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
 
   if (r && r.ok && r.url) {
     console.log(`✅ [R2] Comprobante subido (${r.via}):`, r.url);
+    if (typeof Bitacora !== 'undefined') Bitacora.anotar('PDF SUBIDO', r.via);
     return r.url;
   }
 
+  if (typeof Bitacora !== 'undefined') Bitacora.anotar('PDF NO SUBIÓ', (r && r.error) || 'sin detalle');
   console.error("❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.");
   if (r && r.error) console.error("   Motivo:", r.error);
   throw new Error("No se pudo subir a Cloudflare R2");

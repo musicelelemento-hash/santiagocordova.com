@@ -79,6 +79,7 @@ const SriLoop = {
                 quien = pila ? `  [${pila}]` : '';
             } catch (e) { /* sin pila */ }
             console.log(`🚦 [BUCLE] ${previo.estado} → ${nuevo.estado}${nuevo.motivo ? ' · ' + nuevo.motivo : ''}${quien}`);
+            Bitacora.anotar(`semáforo ${previo.estado}→${nuevo.estado}`, nuevo.motivo || '');
         }
 
         await SafeStorage.set({ [this._KEY]: nuevo });
@@ -247,6 +248,7 @@ const SriLoop = {
         };
         await SafeStorage.set({ sc_declaraciones_locales: reg });
         console.log(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
+        Bitacora.anotar('DECLARADA', `${extra.nombre || ruc} · ${reg[clave].periodo}`);
     },
 
     /** ¿Ya declaramos a este contribuyente en este periodo? */
@@ -556,6 +558,81 @@ if (typeof window !== 'undefined') {
                     e.motivo ? '· ' + e.motivo : '');
         return e;
     };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BITÁCORA DE CORRIDA
+//
+// Una corrida atraviesa muchas navegaciones, y con cada una la consola se
+// borra: para diagnosticar había que pegar fragmentos sueltos y adivinar el
+// orden. Esto anota los hitos en chrome.storage, que sí sobrevive, y los
+// devuelve como un texto comparable con una traza de Burp.
+//
+//   window.sriBitacora()        → la imprime
+//   window.sriBitacoraTexto()   → la devuelve como texto para copiar
+//   window.sriBitacoraLimpiar() → empieza de cero
+// ═══════════════════════════════════════════════════════════════════════════
+const Bitacora = {
+    _KEY: 'sc_bitacora',
+    MAX: 400,
+
+    async anotar(evento, detalle = '') {
+        try {
+            const r = await SafeStorage.get([this._KEY, 'pending_sri_autofill']);
+            const lista = Array.isArray(r[this._KEY]) ? r[this._KEY] : [];
+            const af = r.pending_sri_autofill || {};
+
+            let sem = {};
+            try { sem = await SriLoop.get(); } catch (e) {}
+
+            lista.push({
+                t: Date.now(),
+                evento,
+                detalle: String(detalle).slice(0, 200),
+                url: location.pathname.split('/').slice(-1)[0] || location.pathname,
+                cliente: af.name || '',
+                paso: (sem.cola && sem.cola.length) ? `${(sem.indice || 0) + 1}/${sem.cola.length}` : '',
+                estado: sem.estado || ''
+            });
+
+            while (lista.length > this.MAX) lista.shift();
+            await SafeStorage.set({ [this._KEY]: lista });
+        } catch (e) { /* nunca romper el flujo por anotar */ }
+    },
+
+    async texto() {
+        const r = await SafeStorage.get([this._KEY]);
+        const lista = Array.isArray(r[this._KEY]) ? r[this._KEY] : [];
+        if (!lista.length) return '(bitácora vacía)';
+
+        const hora = (t) => new Date(t).toLocaleTimeString('es-EC', { hour12: false });
+        const filas = lista.map((e, i) => {
+            const dt = i === 0 ? 0 : Math.round((e.t - lista[i - 1].t) / 1000);
+            const salto = dt >= 8 ? `  ⏱️+${dt}s` : '';
+            const quien = e.cliente ? ` · ${e.cliente.split(' ').slice(0, 2).join(' ')}` : '';
+            const paso = e.paso ? ` [${e.paso}]` : '';
+            return `${hora(e.t)}${paso}  ${e.evento}${e.detalle ? ': ' + e.detalle : ''}${quien}${salto}`;
+        });
+
+        const dur = Math.round((lista[lista.length - 1].t - lista[0].t) / 1000);
+        return [
+            `BITÁCORA — ${lista.length} hitos en ${Math.floor(dur / 60)}m ${dur % 60}s`,
+            `build ${typeof SC_BUILD !== 'undefined' ? SC_BUILD : '?'}`,
+            '─'.repeat(70),
+            ...filas
+        ].join('\n');
+    },
+
+    async limpiar() {
+        await SafeStorage.remove([this._KEY]);
+        console.log('🧹 Bitácora vaciada.');
+    }
+};
+
+if (typeof window !== 'undefined') {
+    window.sriBitacora = async () => { console.log(await Bitacora.texto()); };
+    window.sriBitacoraTexto = () => Bitacora.texto();
+    window.sriBitacoraLimpiar = () => Bitacora.limpiar();
 }
 
 const findByText = (text, tag = '*') => {
