@@ -368,8 +368,108 @@ const SriLoop = {
 // Se ejecuta una sola vez: apaga cualquier lote fantasma heredado.
 SriLoop.normalizarEstadoInicial();
 
-// Helper para la consola del usuario.
+// ── Atajos de consola para probar sin depender del puente web ──────────────
+// La caché de clientes la llena bridge_content.js al abrir SantiagoCordova.com.
+// Cuando eso no ocurre (perfil nuevo de Chrome, Burp interceptando, la web sin
+// sincronizar) no hay forma de arrancar un lote. Estos helpers permiten cargar
+// un contribuyente a mano para poder capturar una corrida.
 if (typeof window !== 'undefined') {
+    /**
+     * Agrega o actualiza un contribuyente en la caché local.
+     *   sriAgregarCliente('1102605118001', 'MiClave123', 'LABANDA ARMIJOS')
+     * La clave queda SOLO en este navegador, igual que las que sincroniza la web.
+     */
+    window.sriAgregarCliente = async (ruc, clave, nombre) => {
+        ruc = String(ruc || '').trim();
+        if (!/^\d{10,13}$/.test(ruc)) {
+            console.error('❌ RUC inválido. Esperaba 10 a 13 dígitos. Uso: sriAgregarCliente("1790000000001", "clave", "NOMBRE")');
+            return null;
+        }
+        if (!clave) {
+            console.error('❌ Falta la clave. Sin ella el auto-login no puede entrar.');
+            return null;
+        }
+
+        const r = await SafeStorage.get(['sc_clients_cache']);
+        const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        const entrada = {
+            ruc,
+            name: nombre || `Contribuyente ${ruc}`,
+            password: clave,
+            sri_password: clave,
+            sriPassword: clave,
+            regime: 'Régimen General',
+            tax_profile: { ivaFrequency: 'Mensual' },
+            taxProfile: { ivaFrequency: 'Mensual' },
+            ivaFrequency: 'Mensual',
+            declarations: []
+        };
+
+        const i = lista.findIndex((c) => c && c.ruc === ruc);
+        if (i >= 0) lista[i] = { ...lista[i], ...entrada };
+        else lista.push(entrada);
+
+        await SafeStorage.set({ sc_clients_cache: lista });
+        // Un cliente marcado con error quedaría fuera de la cola.
+        const errs = (await SafeStorage.get(['flagged_errors'])).flagged_errors || {};
+        if (errs[ruc]) { delete errs[ruc]; await SafeStorage.set({ flagged_errors: errs }); }
+
+        console.log(`✅ ${entrada.name} (${ruc}) cargado. La caché tiene ${lista.length} cliente(s).`);
+        console.log('   Ahora pulsá ▶ en el HUD, o corré: window.sriProbarCon("' + ruc + '")');
+        return entrada.name;
+    };
+
+    /**
+     * Carga el cliente (si hace falta) y arranca el lote con él, sin pasar por
+     * el confirm. Pensado para capturar una corrida con Burp.
+     *   sriProbarCon('1102605118001', 'MiClave123', 'LABANDA')
+     *   sriProbarCon('1102605118001')            // si ya está en la caché
+     */
+    window.sriProbarCon = async (ruc, clave, nombre) => {
+        if (clave) await window.sriAgregarCliente(ruc, clave, nombre);
+
+        const r = await SafeStorage.get(['sc_clients_cache']);
+        const c = (r.sc_clients_cache || []).find((x) => x && x.ruc === String(ruc).trim());
+        if (!c) {
+            console.error(`❌ ${ruc} no está en la caché. Cargalo primero: sriAgregarCliente("${ruc}", "clave", "NOMBRE")`);
+            return false;
+        }
+        const pass = c.password || c.sri_password || c.sriPassword;
+        if (!pass) {
+            console.error(`❌ ${c.name} no tiene clave guardada. Pasala: sriProbarCon("${ruc}", "clave")`);
+            return false;
+        }
+
+        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+        await SriLoop.iniciar([{ ruc: c.ruc, name: c.name, password: pass }], periodo);
+        await SriLoop.prepararCliente({ ruc: c.ruc, name: c.name, password: pass }, periodo);
+
+        const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+        console.log(`🚀 Lote de prueba iniciado con ${c.name} · periodo ${MESES[periodo.monthIndex]} ${periodo.year}.`);
+        console.log('   Redirigiendo al login del SRI; el auto-login sigue desde ahí.');
+        await sleep(600);
+        window.location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&response_mode=fragment&response_type=code&scope=openid';
+        return true;
+    };
+
+    /** Lista lo que hay en la caché, sin mostrar las claves. */
+    window.sriVerClientes = async () => {
+        const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors']);
+        const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        const errs = r.flagged_errors || {};
+        if (!lista.length) {
+            console.log('📭 La caché está vacía. Cargá uno con sriAgregarCliente("RUC", "clave", "NOMBRE").');
+            return [];
+        }
+        console.table(lista.map((c) => ({
+            RUC: c.ruc,
+            nombre: c.name,
+            clave: (c.password || c.sri_password || c.sriPassword) ? '✅ guardada' : '❌ falta',
+            marcado: errs[c.ruc] ? '⚠️ con error' : ''
+        })));
+        return lista.length;
+    };
+
     window.sriLimpiarEstado = () => SriLoop.limpiarEstado();
     window.sriEstado = async () => {
         const e = await SriLoop.get();
