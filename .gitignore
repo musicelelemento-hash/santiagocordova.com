@@ -23,6 +23,7 @@ dist/
 dist-ssr/
 *.zip
 *.log
+scratch/
 
 # ── Bases de datos locales / respaldos ─────────────────────────────────
 *.sqlite
@@ -41,6 +42,9 @@ extenciones web/_EVIDENCIA_SRI/**/*.jpg
 extenciones web/_EVIDENCIA_SRI/**/*.jpeg
 extenciones web/_EVIDENCIA_SRI/**/*.png
 extenciones web/_EVIDENCIA_SRI/**/*.webp
+extenciones web/_EVIDENCIA_SRI/**/*.xml
+extenciones web/_EVIDENCIA_SRI/**/*.txt
+extenciones web/*recorrido*
 
 # ── Documentos de contribuyentes ───────────────────────────────────────
 # Facturas, retenciones, comprobantes y poderes de clientes reales que viven

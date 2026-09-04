@@ -12,20 +12,9 @@ async function navegarAComprobantes() {
         console.log('✅ Ya estamos en Comprobantes Recibidos.');
         return true;
     }
-
-    // DETECCIÓN DE SESIÓN FRÍA (TÉCNICA EXTRACTOR V1)
-    // Si estamos en Angular (/perfil) y no hay sesión de tuportal-internet activa,
-    // calentar sesión primero para que Keycloak transfiera la cookie SSO sin pedir clave
-    const hasMenu = document.querySelector('.ui-menuitem, #cssmenu, .mostrarMenu, a#menu-button, .menu-button');
-    if (!hasMenu && !url.includes('tuportal-internet') && url.includes('/perfil')) {
-        console.log('❄️ Sesión fría en perfil. Calentando vía tuportal-internet...');
-        window.location.href = 'https://srienlinea.sri.gob.ec/tuportal-internet/inicio.jsf';
-        return false;
-    }
-
-    console.log('🚀 [REGLA INMUTABLE] Navegando a Comprobantes Electrónicos Recibidos...');
+    console.log('🚀 [REGLA INMUTABLE] Navegando a Comprobantes Electrónicos Recibidos vía Puente SSO...');
     if (typeof safeStatus === 'function') safeStatus('🚀 Abriendo Comprobantes Recibidos...');
-    window.location.href = SRI_RECIBIDOS_URL;
+    window.location.href = SRI_PUENTE_RECIBIDOS;
     return true;
 }
 
@@ -722,18 +711,21 @@ function procesarTablaRetencion(tabla) {
 
 async function cerrarModal() {
     try {
-        const botonesCerrar = document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick');
-        if (botonesCerrar.length > 0) {
-            botonesCerrar.forEach(btn => {
-                if (btn.offsetParent !== null) btn.click();
-            });
+        const botonesCerrar = Array.from(document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick, button[aria-label*="Close" i], button[aria-label*="Cerrar" i]'));
+        const botonVisible = botonesCerrar.find(btn => (typeof esVisible === 'function' ? esVisible(btn) : true));
+        if (botonVisible) {
+            if (typeof clickElement === 'function') clickElement(botonVisible, 'Cerrar Modal Retención');
+            else botonVisible.click();
+            await sleep(500);
+        } else if (botonesCerrar.length > 0) {
+            botonesCerrar[0].click();
             await sleep(500);
         } else {
             // Click fuera o Escape
             document.body.click();
         }
     } catch (error) {
-        console.warn('Error cerrando modal');
+        console.warn('Error cerrando modal:', error);
     }
 }
 
@@ -824,7 +816,7 @@ async function esperarTabla() {
         let intentos = 0;
         while (intentos < 35) {
             const spinner = document.querySelector('.ui-blockui') || document.querySelector('.ui-widget-overlay');
-            if (!spinner || spinner.style.display === 'none' || spinner.offsetParent === null) break;
+            if (!spinner || spinner.style.display === 'none' || (typeof esVisible === 'function' && !esVisible(spinner))) break;
             await sleep(200);
             intentos++;
         }
@@ -990,7 +982,7 @@ function extraerNotasCreditoPaginaActual() {
         // Tablas de NC suelen tener 'Valor sin impuestos' y 'Importe Total' igual que facturas
         if ((textoEncabezados.includes('valor sin impuestos') || textoEncabezados.includes('base imponible')) &&
             textoEncabezados.includes('importe total') &&
-            t.offsetParent !== null) { // Visible
+            esVisible(t)) {
             tabla = t;
             console.log(`✅ Tabla NC encontrada: ${t.id} (Headers: ${textoEncabezados})`);
             break;
@@ -1090,7 +1082,7 @@ async function extraerNotasCreditoPaginaActualDeep() {
 
         if ((textoEncabezados.includes('valor sin impuestos') || textoEncabezados.includes('base imponible')) &&
             textoEncabezados.includes('importe total') &&
-            t.offsetParent !== null) {
+            esVisible(t)) {
             tabla = t;
             break;
         }

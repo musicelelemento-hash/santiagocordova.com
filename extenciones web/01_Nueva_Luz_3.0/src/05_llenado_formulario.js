@@ -27,76 +27,6 @@ async function calculateEliteFinancials(targetField) {
     return result;
 }
 
-function parseDecimal(texto) {
-    if (texto === null || texto === undefined) return 0;
-    if (typeof texto === 'number') return isNaN(texto) ? 0 : texto;
-    
-    // Quitar TODO lo que no sea dígito, separador o signo: símbolos de moneda,
-    // códigos ("USD", "US$"), NBSP, etiquetas sueltas. Antes solo se limpiaba
-    // "$" y espacios, y "USD 45.30" terminaba siendo NaN -> 0.
-    let limpio = String(texto).replace(/[^\d.,\-]/g, '').trim();
-    // Notación contable de negativos: (45.30) -> -45.30
-    if (/^\(.*\)$/.test(String(texto).trim())) limpio = '-' + limpio;
-    if (!limpio || !/\d/.test(limpio)) return 0;
-
-    const hasDot = limpio.includes('.');
-    const hasComma = limpio.includes(',');
-
-    if (hasDot && hasComma) {
-        if (limpio.lastIndexOf(',') > limpio.lastIndexOf('.')) {
-            // Formato europeo/latino: 1.234,56 -> 1234.56
-            limpio = limpio.replace(/\./g, '').replace(',', '.');
-        } else {
-            // Formato anglosajón: 1,234.56 -> 1234.56
-            limpio = limpio.replace(/,/g, '');
-        }
-    } else if (hasComma) {
-        if (limpio.split(',').length > 2) {
-            // Múltiples comas: 1,234,567 -> 1234567
-            limpio = limpio.replace(/,/g, '');
-        } else if (/^-?\d{1,3},\d{3}$/.test(limpio)) {
-            // Miles sin decimales con coma: 1,234 -> 1234
-            limpio = limpio.replace(',', '');
-        } else {
-            // Coma como decimal: 1234,56 -> 1234.56
-            limpio = limpio.replace(',', '.');
-        }
-    } else if (hasDot) {
-        if (limpio.split('.').length > 2) {
-            // Múltiples puntos: 1.234.567 -> 1234567
-            limpio = limpio.replace(/\./g, '');
-        } else if (/^-?\d{1,3}\.\d{3}$/.test(limpio)) {
-            // Punto como separador de miles: 1.234 -> 1234
-            limpio = limpio.replace('.', '');
-        }
-        // Si no cumple lo anterior, se conserva el punto como separador decimal (ej: 12.34, 0.00)
-    }
-
-    const numero = parseFloat(limpio);
-    return isNaN(numero) ? 0 : numero;
-}
-
-/**
- * Igual que parseDecimal pero devuelve **null** cuando no hay ningún número
- * legible, en vez de 0.
- *
- * Es la diferencia entre "el saldo es cero" y "no pude leer el saldo", y de eso
- * depende que el bot envíe o frene. parseDecimal() nunca puede usarse para
- * decidir un envío porque colapsa los dos casos en 0.
- */
-function parseImporteEstricto(texto) {
-    if (texto === null || texto === undefined) return null;
-    if (typeof texto === 'number') return isNaN(texto) ? null : texto;
-    const crudo = String(texto);
-    if (!/\d/.test(crudo)) return null;
-    const n = parseDecimal(crudo);
-    return (typeof n === 'number' && !isNaN(n)) ? n : null;
-}
-
-function redondear(numero) {
-    return Math.round(numero * 100) / 100;
-}
-
 
 // ============================================
 // AUTO-LLENAR FORMULARIO
@@ -629,7 +559,7 @@ async function llenarCampo(casillero, valor) {
     }
 
     // --- ELITE FIX: Auto-expandir si el elemento está oculto ---
-    if (input.offsetParent === null) {
+    if (typeof esVisible === 'function' ? !esVisible(input) : input.offsetParent === null) {
         console.log(`🔍 Casillero ${casillero} encontrado pero OCULTO. Intentando expandir sección...`);
         const parentSection = input.closest('.ui-accordion-content') || input.closest('fieldset') || input.closest('div[id*="seccion"]');
         if (parentSection) {

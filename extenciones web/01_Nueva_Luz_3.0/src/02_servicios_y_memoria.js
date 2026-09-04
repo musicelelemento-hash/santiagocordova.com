@@ -357,7 +357,7 @@ const findByText = (text, tag = '*') => {
     for (let i = 0; i < result.snapshotLength; i++) {
         const el = result.snapshotItem(i);
         // Filtramos contenedores base y elementos invisibles
-        if (el.offsetParent !== null && !['SCRIPT', 'STYLE', 'HTML', 'BODY', 'SRI-ROOT'].includes(el.tagName)) {
+        if (esVisible(el) && !['SCRIPT', 'STYLE', 'HTML', 'BODY', 'SRI-ROOT'].includes(el.tagName)) {
             candidates.push(el);
         }
     }
@@ -382,21 +382,7 @@ const findByText = (text, tag = '*') => {
     return bestMatch;
 };
 
-/**
- * ¿El elemento está realmente renderizado?
- *
- * ⚠️ NO usar `offsetParent !== null` para esto: en Chrome un elemento
- * `position: fixed` SIEMPRE tiene `offsetParent === null`, y casi todos los
- * modales del SRI (PrimeFaces y Angular Material) son fixed. Ese test los
- * declaraba invisibles y los dejaba pasar.
- */
-const esVisible = (el) => {
-    if (!el) return false;
-    const cs = getComputedStyle(el);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-};
+// esVisible(el) está declarada como función global en 01_utilidades_y_pdf.js
 
 const clickElement = (el, name) => {
     if (!el) {
@@ -657,11 +643,11 @@ const waitForPortal = async (maxWait = 10000) => {
         await dismissSridialogs();
 
         const overlay = document.querySelector('.ui-blockui') || document.querySelector('.ui-widget-overlay');
-        const overlayHidden = !overlay || overlay.offsetParent === null;
+        const overlayHidden = !overlay || !esVisible(overlay);
 
         // 2. Verificar splash screen de Angular
         const splash = document.getElementById('id-sri-splash') || document.querySelector('.sri-splash');
-        const splashHidden = !splash || splash.offsetParent === null || getComputedStyle(splash).display === 'none';
+        const splashHidden = !splash || !esVisible(splash) || getComputedStyle(splash).display === 'none';
 
         // 3. Verificar overlay de validación de navegador
         const disablingDiv = document.getElementById('disablingDiv');
@@ -1031,19 +1017,24 @@ function initDeclarationSuccessWatcher() {
         }
 
         // ⚡ PERF: textContent en vez de innerText
+        // ⚡ PERF: textContent en vez de innerText
         const bodyText = (document.body?.textContent || '').toLowerCase();
-        const hasImprimirBtn = Array.from(document.querySelectorAll('span.ui-button-text, button')).some(span => {
+        const successPanel = document.getElementById('panelSinValorAPagar');
+        const printBtn = document.getElementById('frmFlujoDeclaracion:btnDescargarComprobante');
+        const hasImprimirBtn = (printBtn && esVisible(printBtn)) || Array.from(document.querySelectorAll('span.ui-button-text, button')).some(span => {
             const txt = (span.textContent || '').trim().toUpperCase();
             return txt === 'IMPRIMIR' || txt.includes('IMPRIMIR COMPROBANTE');
         });
 
-        const isSuccessPage = hasImprimirBtn && (
+        const isSuccessPage = !!successPanel || (hasImprimirBtn && (
             bodyText.includes('declaración procesada') ||
+            bodyText.includes('su declaración ha sido procesada') ||
             bodyText.includes('declaracion enviada con exito') ||
             bodyText.includes('comprobante de declaracion') ||
             bodyText.includes('imprimir comprobante') ||
-            bodyText.includes('declaración enviada')
-        );
+            bodyText.includes('declaración enviada') ||
+            bodyText.includes('cep #')
+        ));
 
         if (isSuccessPage) {
             const state = await SafeStorage.get(['declaration_synced_flag']);
@@ -1065,16 +1056,23 @@ function findAceptarBtnOnSummary() {
     // Solo relevante dentro del formulario IVA
     if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return null;
 
-    // 1. Buscar botón verde principal 'green-btn' en la página de resumen
+    // 1. CONFIRMADO DOM REAL (03-sep-2026): id="frmFlujoDeclaracion:divBotonContinuarConfirmacion"
+    const confirmedBtn = document.getElementById('frmFlujoDeclaracion:divBotonContinuarConfirmacion');
+    if (confirmedBtn && esVisible(confirmedBtn) && !confirmedBtn.closest('.ui-dialog, .ui-helper-hidden')) {
+        console.log('🎯 [SUMMARY SEARCH] Botón oficial Aceptar/Enviar localizado por ID confirmado:', confirmedBtn);
+        return confirmedBtn;
+    }
+
+    // 2. Buscar botón verde principal 'green-btn' en la página de resumen
     const greenBtn = document.getElementById('frmFlujoDeclaracion:btnAceptar') ||
                      document.getElementById('frmFlujoDeclaracion:btnEnviar') ||
                      document.querySelector('button[id*="btnAceptar"]') ||
                      document.querySelector('button[id*="btnEnviar"]');
 
-    if (greenBtn && greenBtn.offsetParent !== null && !greenBtn.closest('.ui-dialog, .ui-helper-hidden')) {
+    if (greenBtn && esVisible(greenBtn) && !greenBtn.closest('.ui-dialog, .ui-helper-hidden')) {
         const btnTxt = (greenBtn.innerText || greenBtn.textContent || '').toLowerCase();
         if (!btnTxt.includes('borrador')) {
-            console.log('🎯 [SUMMARY SEARCH] Botón principal Aceptar localizado por ID:', greenBtn);
+            console.log('🎯 [SUMMARY SEARCH] Botón principal Aceptar localizado por ID secundario:', greenBtn);
             return greenBtn;
         }
     }
@@ -1082,7 +1080,7 @@ function findAceptarBtnOnSummary() {
     // 2. Búsqueda por texto "Aceptar" / "Enviar" en botones o spans, ignorando modales/diálogos ocultos
     const elements = Array.from(document.querySelectorAll('button, a.ui-button, div.ui-button, span.ui-button-text, span[class*="ui-button"]'));
     for (const el of elements) {
-        if (el.offsetParent === null) continue;
+        if (!esVisible(el)) continue;
         const txtRaw = (el.innerText || el.textContent || '').trim().toLowerCase();
         if (txtRaw.includes('borrador')) continue;
         const btn = el.closest('button, a, div[class*="button"]') || el;
@@ -1096,7 +1094,7 @@ function findAceptarBtnOnSummary() {
 
         const txt = (el.innerText || el.textContent || '').trim().toLowerCase();
         if (txt === 'aceptar' || txt === 'enviar' || txt === 'aceptar y enviar' || txt === 'firmar y enviar') {
-            if (btn && btn.offsetParent !== null) return btn;
+            if (btn && esVisible(btn)) return btn;
         }
     }
     return null;
@@ -1113,7 +1111,7 @@ function initSummaryPageWatcher() {
 
         // 🛑 PROTECCIÓN DE NAVEGACIÓN: Si todavía estamos editando casilleros (concepto401 visible) o navegando en el wizard, NO actuar.
         const casilleroForm = document.getElementById('concepto401') || document.getElementById('concepto500') || document.getElementById('frmFlujoDeclaracion:calPeriodo');
-        if (casilleroForm && casilleroForm.offsetParent !== null) return;
+        if (casilleroForm && esVisible(casilleroForm)) return;
 
         // ⚡ PERF: ver nota en initDeclarationSuccessWatcher.
         const bodyText = (document.body?.textContent || '').toLowerCase();
@@ -1165,8 +1163,11 @@ function initSummaryPageWatcher() {
 async function autoDismissSriWarnings() {
     // Helper: encuentra el botón Aceptar/Continuar dentro de un contenedor de diálogo
     function findAceptarInContainer(container) {
-        // Primero: buscar por ID directo
-        const byId = container.querySelector('button[id*="btnAceptar"], button[id*="btnContinuar"], button[id*="btnSi"], button[id*="confirm"]');
+        // Primero: buscar por ID directo oficial o patrones conocidos
+        const directIdBtn = document.getElementById('frmFlujoDeclaracion:j_idt947');
+        if (directIdBtn && getComputedStyle(directIdBtn).display !== 'none') return directIdBtn;
+
+        const byId = container.querySelector('button[id*="j_idt947"], button[id*="btnAceptar"], button[id*="btnContinuar"], button[id*="btnSi"], button[id*="confirm"]');
         // No usamos offsetParent aquí porque en Chrome los modales position:fixed tienen offsetParent === null
         if (byId && getComputedStyle(byId).display !== 'none') return byId;
 
@@ -1184,7 +1185,7 @@ async function autoDismissSriWarnings() {
 
     // Buscar SOLO en diálogos modales verdaderamente visibles (NO panelDialogos que es persistente)
     const dialogs = Array.from(document.querySelectorAll(
-        'div.ui-dialog, div.ui-confirm-dialog, div[id*="dlgAdvertencia"], div[id*="dlgValidacion"]'
+        'div#dlgConfirmacionEnvioFormulario, div.ui-dialog, div.ui-confirm-dialog, div[id*="dlgAdvertencia"], div[id*="dlgValidacion"]'
     )).filter(d =>
         // ELITE FIX: No usar offsetParent para dialogos, ya que en Chrome position:fixed => offsetParent null
         getComputedStyle(d).display !== 'none' &&

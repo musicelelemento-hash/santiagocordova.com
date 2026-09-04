@@ -62,13 +62,16 @@ SafeStorage.get(null).then(async (items) => {
         )
     );
 
-    // ── Blindaje Anti-Bloqueo de Cuenta (Límite 5 Intentos del SRI) ─────────
-    // Si el SRI rechaza las credenciales, NUNCA se reintenta: se detiene al
-    // PRIMER intento fallido, se purga el storage, se marca en flagged_errors y el lote continúa.
-    const feedbackEl = document.querySelector('.alert-error, .alert-danger, .kc-feedback-text');
+    // ── Blindaje Anti-Bloqueo de Cuenta (Límite 1 Intento por Cliente) ─────────
+    // Si el SRI rechaza las credenciales o la página recarga y sigue en el login
+    // tras haberlo intentado, NUNCA se reintenta: se detiene al PRIMER intento fallido,
+    // se purga el storage, se marca en flagged_errors y el lote continúa con el siguiente.
+    const feedbackEl = document.querySelector('.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, .alert');
     const feedbackText = feedbackEl ? (feedbackEl.innerText || feedbackEl.textContent || '').trim() : '';
+    const yaIntentoLogin = isLoginPage && isExplicitlyOutside && !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
     const hasLoginError = isLoginPage && (
-        (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad/i.test(feedbackText)) ||
+        yaIntentoLogin ||
+        (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad|superado|fallid/i.test(feedbackText)) ||
         /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
         /credencial(es)? (inv[aá]lid|incorrect)/i.test(document.body.innerText) ||
         /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(document.body.innerText) ||
@@ -78,7 +81,7 @@ SafeStorage.get(null).then(async (items) => {
     );
 
     if (hasLoginError) {
-        console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o cuenta con alerta en el SRI. Deteniendo reintentos para evitar bloqueo (límite 5 intentos).');
+        console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o reintento bloqueado. Deteniendo para blindar la cuenta contra bloqueos.');
         const clientRuc = items.pending_sri_autofill?.ruc;
         const clientName = items.pending_sri_autofill?.name || clientRuc || 'este cliente';
 
@@ -94,15 +97,15 @@ SafeStorage.get(null).then(async (items) => {
 
         if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
             window.sriAssistant.showEliteToast({
-                title: '🔒 Clave SRI Incorrecta',
-                msg: `El SRI rechazó las credenciales de ${clientName}. Proceso detenido en el 1er intento para blindar la cuenta contra bloqueos.`,
+                title: '🔒 Acceso Detenido (1er Intento)',
+                msg: `No se pudo ingresar con las credenciales de ${clientName}. Proceso detenido en el 1er intento para proteger la cuenta.`,
                 duration: 9000
             });
         }
 
         const isLoop = items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch) || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
         if (isLoop) {
-            console.log(`⏩ [AUTO BATCH] Cliente ${clientRuc || ''} omitido por error de clave. Avanzando al siguiente cliente en 3s...`);
+            console.log(`⏩ [AUTO BATCH] Cliente ${clientRuc || ''} omitido por seguridad. Avanzando al siguiente cliente en 3s...`);
             setTimeout(async () => {
                 if (typeof handleBatchNextClient === 'function') {
                     await handleBatchNextClient();
@@ -171,11 +174,21 @@ SafeStorage.get(null).then(async (items) => {
                 }
 
                 escribirCampo(rucInput, items.pending_sri_autofill.ruc);
+                const hiddenUser = document.getElementById('username');
+                if (hiddenUser && hiddenUser !== rucInput) {
+                    hiddenUser.value = items.pending_sri_autofill.ruc;
+                }
                 if (targetPass) {
                     escribirCampo(passInput, targetPass);
                 } else {
                     console.warn('⚠️ [LOGIN] Sin clave para este RUC: el formulario queda a medio llenar.');
                 }
+
+                // Desactivar overlays de bloqueo de navegador del SRI si estuvieran activos
+                ['disablingDiv', 'advertenciaNavegador', 'noSoportado'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.style.display !== 'none') el.style.display = 'none';
+                });
 
                 // Guardar la clave en la caché local automáticamente si el usuario la escribe
                 passInput.addEventListener('change', async () => {
@@ -294,7 +307,7 @@ SafeStorage.get(null).then(async (items) => {
             if (typeof navegarAComprobantes === 'function') {
                 navegarAComprobantes();
             } else {
-                window.location.href = SRI_RECIBIDOS_URL;
+                window.location.href = SRI_PUENTE_RECIBIDOS;
             }
             return;
         }
@@ -459,9 +472,9 @@ async function ejecutarAccionPendiente(items) {
 
         // Si no estamos en la página de comprobantes recibidos, redirigir directamente
         if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-            console.log('🚀 [MODO TURBO] Redirigiendo DIRECTAMENTE a Comprobantes Recibidos...');
+            console.log('🚀 [MODO TURBO] Redirigiendo vía puente a Comprobantes Recibidos...');
             if (typeof renderEmergencyStopBar === 'function') renderEmergencyStopBar();
-            window.location.href = SRI_RECIBIDOS_URL;
+            window.location.href = SRI_PUENTE_RECIBIDOS;
             return;
         }
 
@@ -766,7 +779,7 @@ async function ejecutarAccionPendiente(items) {
             actionTimestamp: Date.now(),
             skipSafetyCheck: true
         });
-        window.location.href = SRI_RECIBIDOS_URL;
+        window.location.href = SRI_PUENTE_RECIBIDOS;
         return;
     }
 
@@ -993,15 +1006,15 @@ async function autoLlenarBusqueda(data) {
     }
 
     console.log('🔎 Buscando botón Consultar...');
-    // ID TATUADO OFICIAL CONFIRMADO: frmPrincipal:btnConsultar
-    const directBtn = document.getElementById('frmPrincipal:btnConsultar');
-    let btnConsultar = (directBtn && (typeof esVisible === 'function' ? esVisible(directBtn) : true)) ? directBtn : null;
+    // ID TATUADO OFICIAL CONFIRMADO: frmPrincipal:btnConsultarSinRe (o fallback frmPrincipal:btnConsultar)
+    const directBtn = document.getElementById('frmPrincipal:btnConsultarSinRe') || document.getElementById('frmPrincipal:btnConsultar');
+    let btnConsultar = (directBtn && esVisible(directBtn)) ? directBtn : null;
 
     if (!btnConsultar) {
         const botones = Array.from(document.querySelectorAll('button, input[type="submit"], span.ui-button-text'));
         btnConsultar = botones.find(b => {
             const txt = (b.innerText || b.value || b.textContent || "").toUpperCase();
-            return txt.includes('CONSULTAR') && (typeof esVisible === 'function' ? esVisible(b) : b.offsetParent !== null);
+            return txt.includes('CONSULTAR') && esVisible(b);
         });
     }
 
@@ -1058,7 +1071,7 @@ async function autoLlenarBusqueda(data) {
 
             // Detección de Tabla Vacía (PrimeFaces empty message)
             const emptyTable = document.querySelector('.ui-datatable-empty-message');
-            if (emptyTable && (typeof esVisible === 'function' ? esVisible(emptyTable) : emptyTable.offsetParent !== null)) {
+            if (emptyTable && esVisible(emptyTable)) {
                 console.warn('⚡ [Fast-Fail] Tabla vacía encontrada.');
                 return { tableFound: false, noData: true };
             }

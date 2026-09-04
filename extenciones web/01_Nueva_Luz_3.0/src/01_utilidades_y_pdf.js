@@ -30,8 +30,13 @@ if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
   console.error('[Nueva Luz 3.0] shared_config.js no cargado: faltan credenciales de Supabase.');
 }
 
-// ── Rutas Canónicas del SRI (Tatuadas) ──────────────────────────────
-const SRI_RECIBIDOS_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf?&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=Facturaci%F3n%20Electr%F3nca&actualMPT=Comprobantes%20electr%F3nicos%20recibidos%20&linkMPT=%2Fcomprobantes-electronicos-internet%2Fpages%2Fconsultas%2Frecibidos%2FcomprobantesRecibidos.jsf%3F&esFavorito=S';
+// ── Rutas Canónicas y Puentes SSO del SRI (Tatuadas) ──────────────────────────────
+const SRI_PUENTE_RECIBIDOS = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=57&idGrupo=55';
+const SRI_RECIBIDOS_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf?&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=Facturaci%F3n%20Electr%F3nica&actualMPT=Comprobantes%20electr%F3nicos%20recibidos%20&linkMPT=%2Fcomprobantes-electronicos-internet%2Fpages%2Fconsultas%2Frecibidos%2FcomprobantesRecibidos.jsf%3F&esFavorito=S';
+const SRI_PUENTE_FORMULARIO_IVA = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=310&idGrupo=201';
+const SRI_FORMULARIO_IVA_URL = 'https://srienlinea.sri.gob.ec/sri-declaraciones-web-internet/pages/recepcion/recibirDeclaracion.jsf?identificadorGrupoObligacion=IVA';
+const SRI_FORMULARIO_IVA_URL_LEGACY = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaracionesWeb/FormularioIva/Opciones/declaracionImpuesto.jsf';
+const SRI_SALIR_URL = 'https://srienlinea.sri.gob.ec/sri-declaraciones-web-internet/pages/salir.jsp';
 
 
 function sleep(ms) {
@@ -46,6 +51,84 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+/**
+ * ¿El elemento está realmente renderizado y visible?
+ * ⚠️ NO usar `offsetParent !== null`: en Chrome todo elemento `position: fixed`
+ * (modales PrimeFaces, Material, dialogs, toasts, pickers) tiene `offsetParent === null`.
+ */
+function esVisible(el) {
+  if (!el) return false;
+  const cs = getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function parseDecimal(texto) {
+  if (texto === null || texto === undefined) return 0;
+  if (typeof texto === 'number') return isNaN(texto) ? 0 : texto;
+
+  let limpio = String(texto).replace(/[^\d.,\-]/g, '').trim();
+  if (/^\(.*\)$/.test(String(texto).trim())) limpio = '-' + limpio;
+  if (!limpio || !/\d/.test(limpio)) return 0;
+
+  const hasDot = limpio.includes('.');
+  const hasComma = limpio.includes(',');
+
+  if (hasDot && hasComma) {
+    if (limpio.lastIndexOf(',') > limpio.lastIndexOf('.')) {
+      limpio = limpio.replace(/\./g, '').replace(',', '.');
+    } else {
+      limpio = limpio.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    if (limpio.split(',').length > 2) {
+      limpio = limpio.replace(/,/g, '');
+    } else if (/^-?\d{1,3},\d{3}$/.test(limpio)) {
+      limpio = limpio.replace(',', '');
+    } else {
+      limpio = limpio.replace(',', '.');
+    }
+  } else if (hasDot) {
+    if (limpio.split('.').length > 2) {
+      limpio = limpio.replace(/\./g, '');
+    } else if (/^-?\d{1,3}\.\d{3}$/.test(limpio)) {
+      limpio = limpio.replace('.', '');
+    }
+  }
+
+  const numero = parseFloat(limpio);
+  return isNaN(numero) ? 0 : numero;
+}
+
+/**
+ * Igual que parseDecimal pero devuelve null cuando no hay ningún número
+ * legible, en vez de 0.
+ */
+function parseImporteEstricto(texto) {
+  if (texto === null || texto === undefined) return null;
+  if (typeof texto === 'number') return isNaN(texto) ? null : texto;
+  const crudo = String(texto);
+  if (!/\d/.test(crudo)) return null;
+  const n = parseDecimal(crudo);
+  return (typeof n === 'number' && !isNaN(n)) ? n : null;
+}
+
+function redondear(numero) {
+  return Math.round(numero * 100) / 100;
+}
+
+function getSriNinthDigit(ruc) {
+  if (!ruc || ruc.length < 9) return 99;
+  const d = parseInt(ruc.charAt(8), 10);
+  return isNaN(d) ? 99 : (d === 0 ? 10 : d);
+}
+
+function getSriDueDateDay(ninthDigit) {
+  const map = { 1: 10, 2: 12, 3: 14, 4: 16, 5: 18, 6: 20, 7: 22, 8: 24, 9: 26, 0: 28, 10: 28 };
+  return map[ninthDigit] || 28;
 }
 
 function isClientMensual(db) {
@@ -436,17 +519,23 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
 
   if (shouldClickPrint) {
     // Si hay un botón visible de "Imprimir Comprobante" o "Descargar PDF"
+    // ID confirmado DOM real (03-sep-2026): frmFlujoDeclaracion:btnDescargarComprobante
+    const confirmedPrintBtn = document.getElementById('frmFlujoDeclaracion:btnDescargarComprobante');
     const printBtns = Array.from(
       document.querySelectorAll('button, a.ui-button, input[type="button"]'),
     ).filter((el) => {
+      if (confirmedPrintBtn && el === confirmedPrintBtn) return true;
       const txt = (el.innerText || el.value || "").toLowerCase();
       return (
         (txt.includes("imprimir") ||
           txt.includes("comprobante") ||
           txt.includes("descargar pdf")) &&
-        el.offsetParent !== null
+        esVisible(el)
       );
     });
+    if (confirmedPrintBtn && esVisible(confirmedPrintBtn) && !printBtns.includes(confirmedPrintBtn)) {
+      printBtns.unshift(confirmedPrintBtn);
+    }
 
     if (printBtns.length > 0) {
       const btn = printBtns[0];
@@ -1421,23 +1510,21 @@ function executeLogin(ruc, password) {
   const campos = encontrarCamposLogin();
   const rucInput = campos && campos.ruc;
   const passInput = campos && campos.pass;
-  const btn =
+  const btn = (campos && campos.btn) ||
     document.getElementById("kc-login") ||
     document.querySelector('input[type="submit"]');
 
   if (rucInput && passInput && btn) {
-    rucInput.value = ruc;
-    passInput.value = password;
-
-    rucInput.dispatchEvent(new Event("input", { bubbles: true }));
-    rucInput.dispatchEvent(new Event("change", { bubbles: true }));
-    passInput.dispatchEvent(new Event("input", { bubbles: true }));
-    passInput.dispatchEvent(new Event("change", { bubbles: true }));
+    escribirCampo(rucInput, ruc);
+    escribirCampo(passInput, password);
 
     console.log(
       "✅ Credenciales inyectadas desde Widget Flotante. Ingresando...",
     );
-    setTimeout(() => btn.click(), 300);
+    setTimeout(() => {
+      if (typeof clickElement === "function") clickElement(btn, "Botón Login Keycloak");
+      else btn.click();
+    }, 300);
   } else {
     // Estamos en la portada de inicio (ej. sri-en-linea/inicio/NAT)
     console.log(
@@ -1490,11 +1577,7 @@ function executeLogin(ruc, password) {
  * estructura es el respaldo que sobrevive a un rediseño del portal.
  */
 function encontrarCamposLogin() {
-    const visible = (el) => {
-        if (!el) return false;
-        if (typeof esVisible === 'function') return esVisible(el);
-        return el.offsetParent !== null;
-    };
+    const visible = esVisible;
 
     const pass = Array.from(document.querySelectorAll('input[type="password"]')).find(visible);
     if (!pass) return null;
@@ -1525,6 +1608,15 @@ function escribirCampo(input, valor) {
     if (!input) return;
     input.focus();
     input.value = valor;
+    // Si estamos en Keycloak del SRI, sincronizar el input oculto #username con el RUC
+    if (input.id === 'usuario' || input.name === 'usuario') {
+        const hiddenUser = document.getElementById('username');
+        if (hiddenUser && hiddenUser !== input) {
+            hiddenUser.value = valor;
+            hiddenUser.dispatchEvent(new Event('input', { bubbles: true }));
+            hiddenUser.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+    }
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
 }

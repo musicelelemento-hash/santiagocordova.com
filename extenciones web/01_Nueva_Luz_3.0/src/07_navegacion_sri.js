@@ -230,12 +230,8 @@ if (document.readyState === 'loading') {
     SriLoopHUD.montar();
 }
 
-// ── URL canónica del wizard de recepción de declaraciones ───────────────────
-// CONFIRMADA contra el portal real el 03-sep-2026 (ver _EVIDENCIA_SRI, entradas
-// 04 y 05). La ruta vieja 'sri-en-linea/SriDeclaracionesWeb/FormularioIva/...'
-// quedó como respaldo por si el SRI mantiene el redirect.
-const SRI_FORMULARIO_IVA_URL = 'https://srienlinea.sri.gob.ec/sri-declaraciones-web-internet/pages/recepcion/recibirDeclaracion.jsf?identificadorGrupoObligacion=IVA';
-const SRI_FORMULARIO_IVA_URL_LEGACY = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaracionesWeb/FormularioIva/Opciones/declaracionImpuesto.jsf';
+// ── Detección del wizard de recepción de declaraciones ───────────────────
+// (Las constantes SRI_FORMULARIO_IVA_URL y SRI_PUENTE_* viven en 01_utilidades_y_pdf.js)
 
 // El wizard puede vivir en cualquiera de las dos rutas: para DETECTAR aceptamos ambas.
 function estaEnFormularioIva(url = window.location.href) {
@@ -270,7 +266,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         // Espera optimizada: Si el splash se va, arrancamos.
         await waitFor(() => {
             const splash = document.getElementById('id-sri-splash') || document.querySelector('.sri-splash');
-            const splashHidden = !splash || splash.offsetParent === null || getComputedStyle(splash).display === 'none';
+            const splashHidden = !splash || !esVisible(splash);
             // Verificación secundaria simplificada (Header de usuario presente)
             const headerUsuario = document.getElementById('nombreRuc') || document.querySelector('.nombre-comercial-header');
             // Menos estricto con document.readyState para ganar velocidad
@@ -324,8 +320,8 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                         const href = el.getAttribute('href') || '';
                         return href.includes('redireccion=310') ||
                                href.includes('declaracionImpuesto') ||
-                               (txt.includes('DECLARACIÓN DE IMPUESTOS') && !txt.includes('CONSULTA') && el.offsetParent !== null) ||
-                               ((txt.includes('DECLARACIÓN') || txt.includes('FORMULARIO')) && txt.includes('IVA') && el.offsetParent !== null);
+                               (txt.includes('DECLARACIÓN DE IMPUESTOS') && !txt.includes('CONSULTA') && esVisible(el)) ||
+                               ((txt.includes('DECLARACIÓN') || txt.includes('FORMULARIO')) && txt.includes('IVA') && esVisible(el));
                     });
                 }, 4000, 'Tarjeta IVA en Índice');
 
@@ -334,8 +330,8 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     clickElement(cardIva, 'Tarjeta Declaración IVA');
                     await sleep(2500);
                 } else {
-                    console.warn('⚠️ No se detectó tarjeta en índice. Forzando navegación directa al formulario IVA...');
-                    window.location.href = SRI_FORMULARIO_IVA_URL;
+                    console.warn('⚠️ No se detectó tarjeta en índice. Forzando navegación vía puente SSO al formulario IVA...');
+                    window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                     await sleep(4000);
                     return;
                 }
@@ -388,9 +384,9 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         if (!lblObligacion) {
             // Último recurso: si todavía no estamos en el wizard, navegar directo.
             if (!estaEnFormularioIva()) {
-                console.warn('⚠️ Wizard no visible en DOM tras navegación SPA. Forzando el formulario IVA...');
+                console.warn('⚠️ Wizard no visible en DOM tras navegación SPA. Forzando el formulario IVA vía puente SSO...');
                 safeStatus('⚡ Abriendo Formulario IVA directo...');
-                window.location.href = SRI_FORMULARIO_IVA_URL;
+                window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                 await sleep(5000);
                 return;
             }
@@ -429,7 +425,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     const allItems = Array.from(document.querySelectorAll('.ui-selectonemenu-item, li'));
                     return allItems.find(li => 
                         li.textContent.includes('2011') && 
-                        li.offsetParent !== null // Solo elementos visibles
+                        esVisible(li) // Solo elementos visibles
                     );
                 }, 3000, `Opción 2011 (Intento ${attempt + 1})`);
 
@@ -474,7 +470,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 document.getElementById('frmFlujoDeclaracion:calPeriodo_input') ||
                 document.querySelector('input[id*="calPeriodo"]') ||
                 document.querySelector('.month-year-input');
-            return (el && el.offsetParent !== null) ? el : null;
+            return (el && esVisible(el)) ? el : null;
         }, 8000, 'Calendar Input Periodo');
 
         if (calendarInput) {
@@ -485,10 +481,10 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 const isCalendarVisible = () => {
                     const picker = document.querySelector('.ui-datepicker:not(.ui-helper-hidden)') || 
                                    document.querySelector('.ui-dialog[aria-hidden="false"] .button-3');
-                    if (picker && picker.offsetParent !== null) return true;
+                    if (picker && esVisible(picker)) return true;
                     // Búsqueda profunda de cualquier contenedor con botones de mes
                     return !!Array.from(document.querySelectorAll('.button-3, .ui-datepicker-calendar'))
-                                .find(el => el.offsetParent !== null);
+                                .find(el => esVisible(el));
                 };
 
                 if (isCalendarVisible()) return true;
@@ -527,7 +523,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     if (!datepickerDiv) {
                         datepickerDiv = Array.from(document.querySelectorAll('.ui-datepicker, .ui-dialog, .ui-widget-content'))
                             .find(d => {
-                                if (d.offsetParent === null) return false;
+                                if (!esVisible(d)) return false;
                                 // Si tiene el botón-3 que el usuario reportó, este es el contenedor
                                 return !!d.querySelector('.button-3');
                             });
@@ -596,7 +592,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 // Buscamos todos los elementos que parezcan botones de mes
                 const candidates = Array.from(root.querySelectorAll('a.ui-button, button.ui-button, .button-3, td'))
                     .filter(el => {
-                        if (el.offsetParent === null) return false;
+                        if (!esVisible(el)) return false;
                         const txt = el.textContent.trim().toUpperCase();
                         // Filtrar para que sea EXACTO o contenga el mes pero no sea el año
                         return txt.length > 0 && (txt === targetText || txt === shortText || (txt.includes(targetText) && !txt.match(/20\d{2}/)));
@@ -634,7 +630,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 await waitFor(() => {
                     const picker = document.querySelector('.ui-datepicker:not(.ui-helper-hidden)') || 
                                    document.querySelector('.ui-dialog[aria-hidden="false"] .button-3');
-                    return !picker || picker.offsetParent === null;
+                    return !picker || !esVisible(picker);
                 }, 3000, 'Cierre de Calendario');
 
                 await waitForPortal();
@@ -669,7 +665,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const findClassicDropdown = async (labelMatch, idMatch) => {
                 return await waitFor(() => {
                     const elId = document.getElementById(idMatch);
-                    if (elId && elId.offsetParent !== null) return elId;
+                    if (elId && esVisible(elId)) return elId;
                     const label = findByText(labelMatch, 'label');
                     if (label) {
                         const container = label.closest('.ui-selectonemenu') || label.parentElement.querySelector('.ui-selectonemenu');
@@ -791,7 +787,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const btn = document.getElementById('frmFlujoDeclaracion:btnObligacionSiguiente') ||
                         document.querySelector('button[id*="btnObligacionSiguiente"]') ||
                         Array.from(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('SIGUIENTE'));
-            return (btn && !btn.disabled && btn.offsetParent !== null) ? btn : null;
+            return (btn && !btn.disabled && esVisible(btn)) ? btn : null;
         }, 8000, 'Boton Siguiente Obligación');
 
         if (btnSiguiente) {
@@ -863,7 +859,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const btnFinal = document.getElementById('frmFlujoDeclaracion:clkFormularioCompleto') ||
                 document.getElementById('frmFlujoDeclaracion:btnVerFormularioCompleto') ||
                 findByText('Ver formulario completo');
-            if (btnFinal && btnFinal.offsetParent !== null) {
+            if (btnFinal && esVisible(btnFinal)) {
                 console.log('⏩ No hay preguntas. Saltando al Paso 6.');
                 return 'SKIPPED';
             }

@@ -139,12 +139,21 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 
 > **REGLA DE TATUAJE PERMANENTE:** Esta sección está fijada en la memoria permanente del sistema. NINGUNA IA debe borrar, ignorar o alterar estos identificadores y selectores oficiales del SRI.
 
-### A. Rutas Canónicas Directas (URLs Oficiales)
-* **Comprobantes Electrónicos Recibidos:**
+### A. Rutas Canónicas Directas (URLs y Puentes Oficiales)
+* **Puente SSO a Comprobantes Electrónicos Recibidos:**
   ```javascript
-  const SRI_RECIBIDOS_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf?&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=Facturaci%F3n%20Electr%F3nca&actualMPT=Comprobantes%20electr%F3nicos%20recibidos%20&linkMPT=%2Fcomprobantes-electronicos-internet%2Fpages%2Fconsultas%2Frecibidos%2FcomprobantesRecibidos.jsf%3F&esFavorito=S';
+  const SRI_PUENTE_RECIBIDOS = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=57&idGrupo=55';
   ```
-  *(REGLA: NUNCA usar clics en el menú lateral de Angular para ir a Recibidos desde `/perfil`; los enlaces tienen `href="#"` y no navegan entre subsistemas JSF. Usar SIEMPRE redirección directa `window.location.href = SRI_RECIBIDOS_URL`).*
+  *(CONFIRMADO 03-sep-2026: Genera token automáticamente y transfiere la sesión de Angular a JSF).*
+* **URL Directa de Comprobantes Recibidos:**
+  ```javascript
+  const SRI_RECIBIDOS_URL = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf?&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=Facturaci%F3n%20Electr%F3nica&actualMPT=Comprobantes%20electr%F3nicos%20recibidos%20&linkMPT=%2Fcomprobantes-electronicos-internet%2Fpages%2Fconsultas%2Frecibidos%2FcomprobantesRecibidos.jsf%3F&esFavorito=S';
+  ```
+* **Puente SSO a Wizard de Formulario IVA (2011):**
+  ```javascript
+  const SRI_PUENTE_FORMULARIO_IVA = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=310&idGrupo=201';
+  ```
+  *(CONFIRMADO 03-sep-2026: Transfiere la sesión hacia el wizard de recepción de declaraciones).*
 * **Menú de declaraciones (índice de tarjetas):**
   `https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones`
   *(CONFIRMADO 03-sep-2026 — Biblia entrada 06)*
@@ -152,15 +161,12 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
   ```javascript
   const SRI_FORMULARIO_IVA_URL = 'https://srienlinea.sri.gob.ec/sri-declaraciones-web-internet/pages/recepcion/recibirDeclaracion.jsf?identificadorGrupoObligacion=IVA';
   ```
-  *(CONFIRMADO 03-sep-2026 — Biblia entradas 07 y 08).*
-  ⚠️ La ruta vieja `sri-en-linea/SriDeclaracionesWeb/FormularioIva/Opciones/declaracionImpuesto.jsf`
-  **no es la que sirve el portal**; queda solo como `_LEGACY`. Para DETECTAR si
-  estamos en el wizard usar `estaEnFormularioIva()`, que acepta ambas.
-  El wizard **no cambia de URL entre sus 4 pasos** (Período Fiscal → Preguntas →
-  Formulario → Pago): no intentes distinguir el paso por la URL.
+  *(CONFIRMADO 03-sep-2026 — Biblia entradas 07 a 12).*
+  El wizard **no cambia de URL entre sus 4 pasos** (Período Fiscal → Preguntas → Formulario → Pago): no intentes distinguir el paso por la URL.
 * **Perfil del Contribuyente (Auditoría de Obligaciones):**
   `https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil`
-* **Cierre de Sesión:**
+* **Cierre de Sesión Limpio:**
+  `https://srienlinea.sri.gob.ec/sri-declaraciones-web-internet/pages/salir.jsp`
   `https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/logout`
 
 ### B. IDs de Comprobantes Recibidos (`comprobantesRecibidos.jsf`)
@@ -168,17 +174,20 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | :--- | :--- | :--- |
 | **Año** | `frmPrincipal:ano` | `document.getElementById('frmPrincipal:ano')` |
 | **Mes** | `frmPrincipal:mes` | `document.getElementById('frmPrincipal:mes')` |
-| **Día** | `frmPrincipal:dia` | `document.getElementById('frmPrincipal:dia')` (Valor 'TODOS') |
-| **Tipo Comprobante** | `frmPrincipal:cmbTipoComprobante` | ⚠️ CORREGIDO 03-sep-2026: `frmPrincipal:tipoComprobante` **no existe**. `option value="1"` = Factura. |
-| **Botón Consultar** | `frmPrincipal:btnConsultar` | Botón con texto `CONSULTAR` (visibilidad comprobada) |
-| **Tabla de Facturas** | `dtComprobantes` | Encabezados: `VALOR SIN IMPUESTOS`, `IVA`, `IMPORTE TOTAL` |
-| **Paginador** | `.ui-paginator-next` | Botón siguiente de PrimeFaces |
+| **Día** | `frmPrincipal:dia` | `document.getElementById('frmPrincipal:dia')` (Valor '0' = TODOS) |
+| **Tipo Comprobante** | `frmPrincipal:cmbTipoComprobante` | `option value="1"` = Factura, `value="6"` = Retención, `value="3"` = NC |
+| **Botón Consultar** | `frmPrincipal:btnConsultarSinRe` | `document.getElementById('frmPrincipal:btnConsultarSinRe')` |
+| **Tabla de Facturas** | `frmPrincipal:tablaCompRecibidos` | `document.getElementById('frmPrincipal:tablaCompRecibidos')` |
+| **Paginador** | `frmPrincipal:tablaCompRecibidos_paginator_bottom` | Paginador PrimeFaces (`.ui-paginator-next`, selector `25, 50, 75`) |
 
-### C. IDs del Wizard y Formulario de IVA (`declaracionImpuesto.jsf`)
+### C. IDs del Wizard, Formulario y Cierre Mágico de IVA (`recibirDeclaracion.jsf`)
 | Elemento | ID en el DOM | Selector / Estrategia |
 | :--- | :--- | :--- |
-| **Ver Formulario Completo** | `frmFlujoDeclaracion:clkFormularioCompleto` | ⚠️ CORREGIDO 03-sep-2026: es un `<a class="ui-commandlink">`, no un botón. `btnVerFormularioCompleto` **no existe**. Saltea el paso 2 «Preguntas». |
-| **Siguiente Formulario** | `frmFlujoDeclaracion:btnFormularioSiguiente` | Botón "Siguiente" antes del resumen |
+| **Obligación IVA (Paso 1)** | `frmFlujoDeclaracion:somObligacion_1` | `data-label="2011 DECLARACION DE IVA"` |
+| **Período (calendario Paso 1)** | `frmFlujoDeclaracion:calPeriodo` | `data-p-pattern="mm/yy"` (ej: `08/2026`) |
+| **Siguiente (Paso 1 a 2)** | `frmFlujoDeclaracion:btnObligacionSiguiente` | Botón PrimeFaces AJAX |
+| **Saltar Preguntas (Paso 2)** | `frmFlujoDeclaracion:clkFormularioCompleto` | `<a class="ui-commandlink">` "Ver formulario completo" |
+| **Siguiente Formulario (Paso 3)** | `frmFlujoDeclaracion:btnFormularioSiguiente` | Botón "Siguiente" antes del resumen |
 | **Casillero 401 (Ventas 15%)** | `concepto401` | Input casillero 401 |
 | **Casillero 411 (Ventas Netas 15%)** | `concepto411` | Input casillero 411 |
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
@@ -187,9 +196,13 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 609 (Retenciones IVA)** | `concepto609` | Input retenciones IVA del mes |
 | **Casilleros Sugeridos** | `615`, `617`, `564`, `565` | Clases `.sugerido` (respetar `0.00` oficial) |
 | **Total a pagar (TOTALES)** | `concepto2610` | Input readonly dentro del formulario |
-| **Total a pagar (resumen)** | `frmFlujoDeclaracion:totalAPagar` | `<span>` con texto **`USD 0.00`** — CONFIRMADO 03-sep-2026 |
-| **Período (calendario)** | `frmFlujoDeclaracion:calPeriodo` | `data-p-pattern="mm/yy"` |
-| **Obligación IVA** | `frmFlujoDeclaracion:somObligacion_1` | `data-label="2011 DECLARACION DE IVA"` |
+| **Modal Advertencias** | `dlgConfirmacionEnvioFormulario` | Diálogo PrimeFaces "¿Desea continuar?" |
+| **Aceptar Advertencias (Diálogo)** | `frmFlujoDeclaracion:j_idt947` | Botón verde "Aceptar" del diálogo |
+| **Total a pagar (Resumen Paso 4)** | `frmFlujoDeclaracion:totalAPagar` | `<span>` con texto **`USD 0.00`** — CONFIRMADO 03-sep-2026 |
+| **Botón Enviar Declaración (Resumen)** | `frmFlujoDeclaracion:divBotonContinuarConfirmacion` | Botón verde con texto **"Aceptar"** |
+| **Contenedor Éxito / Confirmación** | `#panelSinValorAPagar` | Contenedor oficial de declaración procesada |
+| **Botón Imprimir Comprobante** | `frmFlujoDeclaracion:btnDescargarComprobante` | Botón verde flat con texto **"Imprimir"** |
+| **Botón Nueva Declaración** | `frmFlujoDeclaracion:btnSinValorPagarNuevaDeclaracion` | Botón con texto "Nueva declaración" |
 
 > ⚠️ **El saldo viene como `USD 0.00`, no como `0.00`.** Nunca uses `parseDecimal()`
 > para decidir un envío: devuelve `0` tanto para "cero" como para "no pude leer".

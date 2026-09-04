@@ -3423,10 +3423,9 @@ class SriAssistantPanel {
                 return;
             }
 
-            // Si no estamos en el buscador de comprobantes, vamos allá directamente
             if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-                console.log('🚀 [TURBO_FULL] Navegando DIRECTAMENTE a Comprobantes Recibidos...');
-                window.location.href = SRI_RECIBIDOS_URL;
+                console.log('🚀 [TURBO_FULL] Navegando vía puente SSO a Comprobantes Recibidos...');
+                window.location.href = SRI_PUENTE_RECIBIDOS;
             } else {
                 window.location.reload(); // Recargar para iniciar el flujo limpio
             }
@@ -3683,12 +3682,12 @@ class SriAssistantPanel {
 
             L.push('--- 3. MENSAJES DEL SRI ---');
             document.querySelectorAll('[class*="ui-messages"],[class*="Mensajes"],.ui-growl-item').forEach((el) => {
-                if (el.offsetParent) L.push('  class="' + el.className + '" -> "' + txt(el) + '"');
+                if (typeof esVisible === 'function' ? esVisible(el) : el.offsetParent) L.push('  class="' + el.className + '" -> "' + txt(el) + '"');
             });
 
             L.push('--- 4. BOTONES VISIBLES ---');
             document.querySelectorAll('button,a.ui-button,div.ui-button').forEach((el) => {
-                if (el.offsetParent && !el.closest('.ui-dialog')) L.push('  id="' + el.id + '" -> "' + txt(el) + '"');
+                if ((typeof esVisible === 'function' ? esVisible(el) : el.offsetParent) && !el.closest('.ui-dialog')) L.push('  id="' + el.id + '" -> "' + txt(el) + '"');
             });
 
             const reporte = L.join('\n');

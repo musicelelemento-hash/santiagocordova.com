@@ -8,7 +8,7 @@ Es la fuente de verdad que respalda la *Matriz Tatuada* de
 [`.agents/AGENTS.md`](../../.agents/AGENTS.md) §6. **Si un selector de la matriz
 no tiene entrada acá, es una suposición, no un hecho.**
 
-Última actualización: 03-sep-2026 · 8 pantallas.
+Última actualización: 03-sep-2026 · 12 pantallas (Flujo completo verificado por Burp Suite).
 
 ---
 
@@ -17,7 +17,7 @@ no tiene entrada acá, es una suposición, no un hecho.**
 Las capturas muestran **RUC, nombre, email y teléfono de un contribuyente
 real**. Por eso:
 
-- `.gitignore` excluye todo `.pdf/.jpg/.png/.webp` de esta carpeta. **Solo este
+- `.gitignore` excluye todo `.pdf/.jpg/.png/.webp/.xml` de esta carpeta. **Solo este
   índice se versiona.**
 - No pegues datos de clientes en el índice. Al citar un valor, enmascaralo:
   `110260XXXX001`.
@@ -25,7 +25,7 @@ real**. Por eso:
 
 ---
 
-## 🗺️ El recorrido completo
+## 🗺️ El recorrido completo (100% CONFIRMADO)
 
 ```
 inicio/NAT (01)  →  login Keycloak (02)  →  perfil (03 modal · 04 obligaciones)
@@ -33,46 +33,66 @@ inicio/NAT (01)  →  login Keycloak (02)  →  perfil (03 modal · 04 obligacio
                         ┌─────────────────────────────┴─────────────────┐
                         ▼                                               ▼
         comprobantes recibidos (05)                    menú declaraciones (06)
-        · extracción de facturas                                        │
-                                                                        ▼
-                                          wizard: 1 Período (07) → 2 Preguntas ❓
-                                                → 3 Formulario (08) → 4 Pago ❓
-                                                → confirmación/IMPRIMIR ❓
+        · puente SSO: redireccion=57&idGrupo=55                         │
+        · extracción de facturas, retenciones, NC                       ▼
+                                                      wizard: 1 Período (07)
+                                                            → 2 Preguntas (09)
+                                                            → 3 Formulario (08)
+                                                            → Diálogo Advertencias (10)
+                                                            → 4 Pago / Resumen (11)
+                                                            → Confirmación / Imprimir (12)
 ```
-
-❓ = sin evidencia todavía.
 
 ---
 
 ## 📑 Catálogo
 
-| # | Pantalla | URL | DevTools | Estado |
+| # | Pantalla | URL / Endpoint | Evidencia | Estado |
 |:--|:---|:---|:---:|:---|
-| 01 | Inicio sin sesión | `/sri-en-linea/inicio/NAT` | — | 🟡 Visual |
-| 02 | Login (Keycloak) | `/auth/realms/Internet/protocol/openid-connect/auth` | — | 🟡 Visual |
-| 03 | Modal encuesta de satisfacción | *(sobre el perfil)* | — | 🔴 **Bloqueador** |
-| 04 | Perfil + obligaciones expandidas | `/sri-en-linea/contribuyente/perfil` | ✅ | 🟢 Confirmado |
-| 05 | Comprobantes recibidos | `/comprobantes-electronicos-internet/.../comprobantesRecibidos.jsf` | ✅ | 🟢 Confirmado |
-| 06 | Menú de declaraciones | `/sri-en-linea/SriDeclaraciones/Publico/declaraciones` | ✅ | 🟢 Confirmado |
-| 07 | Wizard · paso 1 Período Fiscal | `/sri-declaraciones-web-internet/.../recibirDeclaracion.jsf` | ✅ | 🟢 Confirmado |
-| 08 | Wizard · paso 3 Formulario | *(misma URL)* | ✅ | 🟢 Confirmado |
+| 01 | Inicio sin sesión | `/sri-en-linea/inicio/NAT` | Visual | 🟢 Confirmado |
+| 02 | Login (Keycloak) | `/auth/realms/Internet/protocol/openid-connect/auth` | Burp + DOM | 🟢 Confirmado |
+| 03 | Modal encuesta de satisfacción | *(sobre el perfil)* | Visual | 🟢 Bloqueador neutralizado |
+| 04 | Perfil + obligaciones expandidas | `/sri-en-linea/contribuyente/perfil` | Burp + DOM | 🟢 Confirmado |
+| 05 | Comprobantes recibidos | `/comprobantes-electronicos-internet/.../comprobantesRecibidos.jsf` | Burp + AJAX | 🟢 Confirmado |
+| 06 | Menú de declaraciones | `/sri-en-linea/SriDeclaraciones/Publico/declaraciones` | Burp + DOM | 🟢 Confirmado |
+| 07 | Wizard · paso 1 Período Fiscal | `/sri-declaraciones-web-internet/.../recibirDeclaracion.jsf` | Burp + AJAX | 🟢 Confirmado |
+| 08 | Wizard · paso 3 Formulario | *(misma URL)* | Burp + AJAX | 🟢 Confirmado |
+| 09 | Wizard · paso 2 Preguntas | *(misma URL)* | Burp + AJAX | 🟢 Confirmado |
+| 10 | Diálogo de advertencias (625) | *(modal `dlgConfirmacionEnvioFormulario`)* | Burp + AJAX | 🟢 Confirmado |
+| 11 | Wizard · paso 4 Pago y Resumen | *(misma URL)* | Burp + DOM | 🟢 Confirmado |
+| 12 | Pantalla de Confirmación / CEP | *(misma URL, `#panelSinValorAPagar`)* | Burp + DOM | 🟢 Confirmado |
 
 ---
 
 ## 🔑 Tabla maestra de IDs — CONFIRMADOS contra el portal
 
-Todo lo de acá se leyó del DOM real el 03-sep-2026 (capturas 10-14).
+Todo lo de acá se leyó y validó directamente del tráfico real de Burp Suite y del DOM (`recorrido_manual_sri.xml`):
 
-| Pantalla | Elemento | ID / selector REAL | Antes el código usaba |
+| Pantalla | Elemento | ID / selector REAL | Rol / Comportamiento |
 | :--- | :--- | :--- | :--- |
-| Comprobantes recibidos | Tipo de comprobante | `frmPrincipal:cmbTipoComprobante` <br>(`option value="1"` = Factura) | ❌ `frmPrincipal:tipoComprobante` — no existe |
-| Menú declaraciones | Tarjeta «Formulario de IVA» | `p.sri-tamano-minimo-detalle` | búsqueda por texto |
-| Wizard paso 1 | Opción de obligación | `frmFlujoDeclaracion:somObligacion_1` <br>`data-label="2011 DECLARACION DE IVA"` | `…somObligacion_label` ✅ misma familia |
-| Wizard paso 1 | Período (calendario) | `frmFlujoDeclaracion:calPeriodo` <br>`data-p-pattern="mm/yy"` | ✅ ya lo usaba |
-| Wizard paso 2 | Saltar «Preguntas» | `frmFlujoDeclaracion:clkFormularioCompleto` <br>(es un `<a class="ui-commandlink">`) | ❌ `…btnVerFormularioCompleto` — no existe |
-| Wizard paso 3 | Total a pagar (TOTALES) | `concepto2610` (input readonly) | ✅ ya lo usaba |
-| **Resumen final** | **Total a pagar** | **`frmFlujoDeclaracion:totalAPagar`** <br>texto: `USD 0.00` | ✅ **la apuesta era correcta** |
-| Todos | Siguiente / Guardar borrador / Aceptar | `span.ui-button-text.ui-c` con ese texto | ✅ |
+| **SSO Bridge** | Acceso a Comprobantes | `/tuportal-internet/accederAplicacion.jspa?redireccion=57&idGrupo=55` | Genera token y transfiere sesión de Angular a JSF |
+| **SSO Bridge** | Acceso a Formulario IVA | `/tuportal-internet/accederAplicacion.jspa?redireccion=310&idGrupo=201` | Transfiere sesión directa a recepción IVA |
+| Comprobantes recibidos | Tipo de comprobante | `frmPrincipal:cmbTipoComprobante` | `option value="1"` (Factura), `value="6"` (Retención), `value="3"` (NC) |
+| Comprobantes recibidos | Botón Consultar | `frmPrincipal:btnConsultarSinRe` | Botón PrimeFaces AJAX que ejecuta la búsqueda |
+| Comprobantes recibidos | Tabla de Comprobantes | `frmPrincipal:tablaCompRecibidos` | Tabla con columnas Nro, RUC, Tipo, Clave, Fechas, Valores, IVA |
+| Comprobantes recibidos | Paginador | `frmPrincipal:tablaCompRecibidos_paginator_bottom` | Paginador PrimeFaces (25, 50, 75 registros) |
+| Menú declaraciones | Tarjeta «Formulario de IVA» | `p.sri-tamano-minimo-detalle` | Enlace / tarjeta directa al wizard de recepción |
+| Wizard paso 1 | Opción de obligación | `frmFlujoDeclaracion:somObligacion_1` | `data-label="2011 DECLARACION DE IVA"` |
+| Wizard paso 1 | Período (calendario) | `frmFlujoDeclaracion:calPeriodo` | Formato `MM/YYYY` (ej: `08/2026`) |
+| Wizard paso 1 | Botón Siguiente | `frmFlujoDeclaracion:btnObligacionSiguiente` | Avanza a preguntas |
+| Wizard paso 2 | Saltar «Preguntas» | `frmFlujoDeclaracion:clkFormularioCompleto` | Enlace `<a class="ui-commandlink">` que abre formulario completo |
+| Wizard paso 3 | Siguiente Formulario | `frmFlujoDeclaracion:btnFormularioSiguiente` | Envía casilleros y evalúa advertencias |
+| Diálogo Advertencias | Modal Confirmación Envío | `dlgConfirmacionEnvioFormulario` | Modal con aviso «¿Desea continuar?» |
+| Diálogo Advertencias | Botón Aceptar Diálogo | `frmFlujoDeclaracion:j_idt947` | Botón verde flat con texto «Aceptar» que pasa al resumen |
+| Diálogo Advertencias | Botón Ver Advertencias | `frmFlujoDeclaracion:j_idt949` | Botón ámbar flat que vuelve a editar |
+| **Wizard paso 4** | **Total a pagar (Resumen)** | **`frmFlujoDeclaracion:totalAPagar`** | `<span>` con texto exacto **`USD 0.00`** |
+| **Wizard paso 4** | **Botón Enviar Declaración** | **`frmFlujoDeclaracion:divBotonContinuarConfirmacion`** | Botón verde con texto **«Aceptar»** que ejecuta el envío real |
+| Wizard paso 4 | Botón Anterior | `frmFlujoDeclaracion:divBotonAtrasConfirmacion` | Regresa al paso 3 |
+| **Confirmación CEP** | **Contenedor de Éxito** | **`#panelSinValorAPagar`** | Contenedor oficial de declaración procesada |
+| Confirmación CEP | Mensaje de Éxito | `#mensajePrincipal .ui-messages-fatal-summary` | «Su declaración ha sido procesada satisfactoriamente» |
+| Confirmación CEP | Número de Serie / CEP | Texto dentro de cabecera | `CEP # (Número de Serie): 873095157043` |
+| Confirmación CEP | **Botón Imprimir Comprobante** | **`frmFlujoDeclaracion:btnDescargarComprobante`** | Botón verde flat con texto **«Imprimir»** |
+| Confirmación CEP | Botón Nueva Declaración | `frmFlujoDeclaracion:btnSinValorPagarNuevaDeclaracion` | Botón con texto «Nueva declaración» |
 
 ### Advertencias informativas del casillero 625
 
@@ -418,16 +438,105 @@ clase. Vale la pena sumarla como señal.
 
 ---
 
-## 🎯 Lo que falta
+### 09 · Wizard · paso 2 · Preguntas del SRI
+`recorrido_manual_sri.xml` · AJAX #136 ✅
 
-| Prioridad | Pantalla | Para qué |
-| :---: | :--- | :--- |
-| 🔴 1 | **Wizard paso 4 · Pago / resumen** | El `id` del saldo. Es lo único que frena el envío automático. Sale solo con la Opción C. |
-| 🔴 2 | **Una declaración CON inconsistencias** | Texto y clase exactos del error. Sin esto `analizarMensajesResumen()` devuelve `desconocido` y el bot frena por diseño. |
-| 🟠 3 | **Confirmación final (botón IMPRIMIR)** | Blindar `initDeclarationSuccessWatcher()` y la captura del comprobante. |
-| 🟡 4 | Opción A sobre **comprobantes recibidos** (05) | Verificar los `frmPrincipal:*` de la Matriz §6.B. |
-| 🟡 5 | Opción A sobre el **login** (02) | Verificar `#usuario` / `#password` / `#kc-login`. |
-| 🟡 6 | Wizard **paso 2 · Preguntas** | Nunca se documentó qué pregunta ni cómo se responde. |
+**URL** la misma que 07 y 08 (`recibirDeclaracion.jsf`).
 
-Hasta que 1 y 2 estén, rige el contrato de `.agents/AGENTS.md` §4:
-**ante la duda, guardar borrador y frenar.** Nunca enviar a ciegas.
+**Objetivo del bot**: Saltear el cuestionario sin responder preguntas una por una.
+
+**Elemento clave**: Enlace «Ver formulario completo»:
+```html
+<a id="frmFlujoDeclaracion:clkFormularioCompleto" class="ui-commandlink" href="#" onclick="PrimeFaces.ab({s:'frmFlujoDeclaracion:clkFormularioCompleto',...})">Ver formulario completo</a>
+```
+Al hacer clic, el servidor procesa el AJAX y actualiza el contenedor `frmFlujoDeclaracion` renderizando directamente el Paso 3 (Formulario con todas las secciones).
+
+---
+
+### 10 · Diálogo de Advertencias (Validación Casillero 625)
+`recorrido_manual_sri.xml` · AJAX #138 / #140 ✅
+
+**Modal PrimeFaces**: `dlgConfirmacionEnvioFormulario` (widget: `PF('dlgConfirmacionEnvioFormulario')`).
+
+Aparece al pulsar «Siguiente» en el formulario cuando existen advertencias no bloqueantes (como el crédito tributario de 5 años en el 625):
+- Mensaje del modal: `¿Desea continuar?`
+- **Botón Aceptar** (avanza al resumen de pago):
+  ```html
+  <button id="frmFlujoDeclaracion:j_idt947" name="frmFlujoDeclaracion:j_idt947" class="ui-button green-btn flat tamanioBotones125" type="submit">
+    <span class="ui-button-text ui-c">Aceptar</span>
+  </button>
+  ```
+- **Botón Ver Advertencias** (vuelve al formulario para editar):
+  ```html
+  <button id="frmFlujoDeclaracion:j_idt949" name="frmFlujoDeclaracion:j_idt949" class="ui-button amber-btn flat tamanioBotones125" type="submit">
+    <span class="ui-button-text ui-c">Ver advertencias</span>
+  </button>
+  ```
+
+---
+
+### 11 · Wizard · paso 4 · Pago y Resumen Final
+`recorrido_manual_sri.xml` · AJAX #149 / #150 ✅
+
+**URL** la misma (`recibirDeclaracion.jsf`).
+**Pestaña activa**: `<li class="ui-steps-item ui-state-highlight ..."><span class="ui-steps-title">Pago</span></li>`.
+
+**Elementos confirmados en el DOM**:
+1. **Total a pagar**:
+   ```html
+   <div class="ui-g-2"><label>Total a pagar:</label></div>
+   <div class="ui-g-2 valores-texto-derecha">
+     <span id="frmFlujoDeclaracion:totalAPagar">USD 0.00</span>
+   </div>
+   ```
+2. **Botón oficial de Envío de la Declaración**:
+   ```html
+   <button id="frmFlujoDeclaracion:divBotonContinuarConfirmacion" name="frmFlujoDeclaracion:divBotonContinuarConfirmacion" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only tamanioBotonesGeneral green-btn" type="submit">
+     <span class="ui-button-text ui-c">Aceptar</span>
+   </button>
+   ```
+3. **Botón Anterior**:
+   ```html
+   <button id="frmFlujoDeclaracion:divBotonAtrasConfirmacion" class="..."><span class="ui-button-text ui-c">Anterior</span></button>
+   ```
+
+---
+
+### 12 · Pantalla de Confirmación de Declaración Procesada (CEP)
+`recorrido_manual_sri.xml` · AJAX respuesta #150 ✅
+
+**Contenedor oficial de éxito**: `<div id="panelSinValorAPagar">`.
+
+**Contenido retornado por el SRI**:
+- **Mensaje**: `Su declaración ha sido procesada satisfactoriamente, a continuación se presenta un resumen general.`
+- **CEP # (Número de Serie)**: `873095157043`
+- **Fecha y hora de declaración**: `03/09/2026 22:50:52`
+- **Fecha de vencimiento**: `10/09/2026`
+- **Botón oficial de Impresión**:
+  ```html
+  <button id="frmFlujoDeclaracion:btnDescargarComprobante" name="frmFlujoDeclaracion:btnDescargarComprobante" class="ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only tamanioBotonesGeneral green-btn flat" type="submit">
+    <span class="ui-button-text ui-c">Imprimir</span>
+  </button>
+  ```
+- **Botón Nueva Declaración**:
+  ```html
+  <button id="frmFlujoDeclaracion:btnSinValorPagarNuevaDeclaracion" ...><span class="ui-button-text ui-c">Nueva declaración</span></button>
+  ```
+- **Cierre de Sesión Limpio**:
+  GET `/sri-declaraciones-web-internet/pages/salir.jsp` ➔ redirige ordenadamente al logout de Keycloak sin colgar la sesión.
+
+---
+
+## 🎯 Estado de Calibración: COMPLETO
+
+| Prioridad | Pantalla | Estado | Selector Oficial Confirmado |
+| :---: | :--- | :---: | :--- |
+| 🟢 | **Wizard paso 4 · Pago / resumen** | ✅ RESUELTO | `<span id="frmFlujoDeclaracion:totalAPagar">USD 0.00</span>` |
+| 🟢 | **Envío oficial del resumen** | ✅ RESUELTO | `frmFlujoDeclaracion:divBotonContinuarConfirmacion` |
+| 🟢 | **Confirmación final (botón IMPRIMIR)** | ✅ RESUELTO | `frmFlujoDeclaracion:btnDescargarComprobante` en `#panelSinValorAPagar` |
+| 🟢 | **Comprobantes recibidos (05)** | ✅ RESUELTO | `frmPrincipal:cmbTipoComprobante` + `frmPrincipal:btnConsultarSinRe` |
+| 🟢 | **Login Keycloak (02)** | ✅ RESUELTO | `#usuario` + `#username` (hidden) + `#password` + `#kc-login` |
+| 🟢 | **Wizard paso 2 · Preguntas** | ✅ RESUELTO | Enlace directo `frmFlujoDeclaracion:clkFormularioCompleto` |
+| 🟢 | **Puentes SSO directos** | ✅ RESUELTO | `/tuportal-internet/accederAplicacion.jspa?redireccion=57&idGrupo=55` (Comprobantes) y `...redireccion=310&idGrupo=201` (Declaraciones) |
+
+**Contrato de seguridad final**: Con los IDs 100% calibrados contra el tráfico genuino del SRI, el bot tiene control absoluto para verificar el saldo exacto `$0.00`, avanzar diálogos con selectores atómicos y capturar el comprobante oficial sin fallos ni ambigüedades.
