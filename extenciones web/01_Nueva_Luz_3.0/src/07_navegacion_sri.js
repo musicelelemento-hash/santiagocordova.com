@@ -122,7 +122,28 @@ const SriLoopHUD = {
         this._hacerArrastrable(el);
 
         try {
-            chrome.storage.onChanged.addListener((c) => { if (c.sc_loop) this.pintar(); });
+            chrome.storage.onChanged.addListener(async (c) => {
+                if (!c.sc_loop) return;
+                this.pintar();
+
+                const antes = c.sc_loop.oldValue || {};
+                const ahora = c.sc_loop.newValue || {};
+                const seReanudo = antes.estado !== 'CORRIENDO' && ahora.estado === 'CORRIENDO';
+                if (!seReanudo) return;
+
+                // Solo si hay algo concreto que retomar, y una sola vez.
+                const r = await SafeStorage.get(['pendingAction', 'pending_sri_autofill']);
+                if (!r.pendingAction || !r.pending_sri_autofill) return;
+                if (this._reanudando) return;
+                this._reanudando = true;
+
+                console.log(`▶️ [BUCLE] Reanudado con "${r.pendingAction}" pendiente. Recargando para retomarlo...`);
+                anotarBitacora('reanudado', r.pendingAction);
+                // Refrescamos el timestamp: si no, la acción puede llegar caducada.
+                await SafeStorage.set({ actionTimestamp: Date.now() });
+                await sleep(600);
+                window.location.reload();
+            });
         } catch (e) { /* sin listener */ }
         setInterval(() => this.pintar(), 2000);
         this.pintar();

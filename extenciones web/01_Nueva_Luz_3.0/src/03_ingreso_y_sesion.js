@@ -39,7 +39,10 @@ SafeStorage.get(null).then(async (items) => {
         // Un cliente de LOTE nunca puede despertar la extensión por su cuenta:
         // para eso está el semáforo. Solo un login manual suelto (el botón del
         // popup o del panel) tiene permiso, porque lo acaba de pedir el usuario.
-        const esLoteSinPermiso = !!(autofill && autofill.isBatch) && !(await SriLoop.puedeAvanzar());
+        // Un lote en pausa NO es un lote sin permiso: sus datos se conservan.
+        const semAhora = await SriLoop.get();
+        const enPausa = semAhora.estado === 'PAUSADO' || semAhora.estado === 'PAUSANDO';
+        const esLoteSinPermiso = !!(autofill && autofill.isBatch) && !enPausa && !(await SriLoop.puedeAvanzar());
 
         if (autofill && autofill.manual && !esLoteSinPermiso) {
             console.log('🔓 [SRI ELITE] Login manual solicitado. Despertando extensión...');
@@ -462,7 +465,14 @@ async function ejecutarAccionPendiente(items) {
     // la pantalla de login y moría ("entra un segundo y sale").
     const esDeLote = !!(items.pending_sri_autofill && items.pending_sri_autofill.isBatch);
     if (esDeLote && typeof SriLoop !== 'undefined' && !(await SriLoop.puedeAvanzar())) {
-        console.log('🧹 Acción de lote descartada: el semáforo no está en CORRIENDO. Usá ▶ para arrancar.');
+        const sem = await SriLoop.get();
+        if (sem.estado === 'PAUSADO' || sem.estado === 'PAUSANDO') {
+            // En pausa NO se toca nada: el cliente y su acción quedan esperando.
+            console.log(`⏸️ [BUCLE] En pausa en ${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc}. Todo queda guardado; pulsá ▶ para seguir.`);
+            anotarBitacora('en pausa', items.pending_sri_autofill.name || items.pending_sri_autofill.ruc);
+            return;
+        }
+        console.log('🧹 Acción de lote descartada: el semáforo está DETENIDO. Usá ▶ para arrancar.');
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'pending_sri_autofill']);
         return;
     }
