@@ -274,9 +274,12 @@ SafeStorage.get(null).then(async (items) => {
     // corrida vieja para que arrancara un lote fantasma sin sesión iniciada.
     // (Ese era el "entra un segundo y sale" contra la pantalla de login.)
     const isAutoFlow = await SriLoop.puedeAvanzar();
+    const hasActiveAction = !!(items.pendingAction && (!items.actionTimestamp || (Date.now() - items.actionTimestamp < 120000)));
+    const isFreshLogin = !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
+
     if (isAutoFlow && !isAlreadyLoggedIn) {
         console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
-    } else if (isAlreadyLoggedIn && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.loginAttempted || items.pending_sri_autofill.manual)))) {
+    } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
@@ -544,7 +547,8 @@ async function ejecutarAccionPendiente(items) {
                     currentAction = 'FIN_TURBO';
                 } else {
                     await SafeStorage.set({ pendingAction: nextAction, actionTimestamp: Date.now() });
-                    setTimeout(() => window.location.reload(), 2000);
+                    await sleep(1000);
+                    window.location.reload();
                     return;
                 }
             } else {
@@ -637,7 +641,8 @@ async function ejecutarAccionPendiente(items) {
                     // Limpiar memoria temporal para el siguiente mes
                     await GhostMemory.clearCurrent();
 
-                    setTimeout(() => window.location.reload(), 2000);
+                    await sleep(1000);
+                    window.location.reload();
                     return;
                 } else {
                     // FIN DEL BULK TOTAL
@@ -1029,16 +1034,15 @@ async function autoLlenarBusqueda(data) {
             });
         }
 
-        console.log('✅ Click en Consultar', btnConsultar);
-
-        // ELITE v12.6: Esperar reCAPTCHA antes de disparar el evento
+        // ELITE v12.6: Esperar reCAPTCHA antes de disparar el evento si existe widget
         await waitForRecaptchaReady();
-        await sleep(500); // Pequeño margen de seguridad extra
+        await sleep(300); // Margen de seguridad extra
 
         // ELITE v12.7: Limpiar mensajes de growl previos para evitar falsos positivos de "no hay datos"
         const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn');
         oldMessages.forEach(m => m.remove());
 
+        console.log('✅ Click en Consultar', btnConsultar);
         btnConsultar.click();
         // Nota: El SRI a veces requiere el click en el span interno o en el botón padre, 
         // pero disparar ambos simultáneamente puede causar race conditions en reCAPTCHA.

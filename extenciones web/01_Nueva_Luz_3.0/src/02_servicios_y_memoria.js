@@ -407,6 +407,12 @@ const clickElement = (el, name) => {
 };
 
 async function waitForRecaptchaReady(timeout = 4000) {
+    // Si no existe ningún elemento o iframe de reCAPTCHA en la página, no perder tiempo
+    const hasRecaptcha = document.querySelector('iframe[src*="recaptcha"], div.g-recaptcha, [data-sitekey]');
+    if (!hasRecaptcha) {
+        return true;
+    }
+
     // ELITE v13.1: Detección ultra-rápida. Si ya hay una tabla o el SRI está validado, no esperamos.
     if (document.querySelector('.ui-datatable-data tr') || document.querySelector('.sri-verified')) {
         return true;
@@ -414,16 +420,8 @@ async function waitForRecaptchaReady(timeout = 4000) {
 
     console.log('🤖 Verificando reCAPTCHA...');
     return await waitFor(() => {
-        const grecaptcha = window.grecaptcha || (window.grecaptcha && window.grecaptcha.enterprise);
-        if (!grecaptcha) return false;
-
-        const isClientReady = typeof grecaptcha.execute === 'function' ||
-            (grecaptcha.enterprise && typeof grecaptcha.enterprise.execute === 'function');
-
         const recaptchaIframe = document.querySelector('iframe[src*="recaptcha"]');
-
-        // Si hay iframe de error o ya expiró, procedemos igual para que el usuario actue
-        return isClientReady || recaptchaIframe !== null;
+        return recaptchaIframe !== null;
     }, timeout, 'reCAPTCHA Ready');
 }
 
