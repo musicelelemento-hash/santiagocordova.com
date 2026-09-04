@@ -45,6 +45,9 @@ const SriLoopHUD = {
             '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
             '</div>',
             // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
+            '<div id="slh-barra" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(148,163,184,0.16);border-radius:0 0 14px 14px;overflow:hidden">',
+            '  <div id="slh-barra-fill" style="position:relative;overflow:hidden;height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#7dd3fc);transition:width .7s cubic-bezier(.22,1,.36,1)"></div>',
+            '</div>',
             '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
             '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>'
         ].join('');
@@ -59,7 +62,17 @@ const SriLoopHUD = {
                 '.slh-p{display:flex;align-items:center;gap:7px;padding:2px 0;animation:slh-entra .25s ease-out}',
                 '.slh-punto{width:8px;height:8px;border-radius:50%;flex:0 0 8px}',
                 '.slh-activo .slh-punto{animation:slh-latido 1.1s ease-in-out infinite}',
-                '.slh-linea{height:2px;flex:1;border-radius:2px;background-image:repeating-linear-gradient(90deg,rgba(125,211,252,.55) 0 7px,transparent 7px 14px);background-size:22px 2px;animation:slh-avance .8s linear infinite}'
+                '.slh-linea{height:2px;flex:1;border-radius:2px;background-image:repeating-linear-gradient(90deg,rgba(125,211,252,.55) 0 7px,transparent 7px 14px);background-size:22px 2px;animation:slh-avance .8s linear infinite}',
+                // Cambio de cliente: un destello corto, lo justo para que el ojo lo registre.
+                '@keyframes slh-salta{0%{transform:translateY(6px);opacity:0}55%{transform:translateY(-2px)}100%{transform:none;opacity:1}}',
+                '.slh-salta{animation:slh-salta .45s cubic-bezier(.22,1,.36,1)}',
+                // Mientras corre, el rótulo de estado respira.
+                '@keyframes slh-respira{0%,100%{opacity:1}50%{opacity:.62}}',
+                '.slh-respira{animation:slh-respira 1.9s ease-in-out infinite}',
+                // Brillo que recorre la barra: dice "esto sigue vivo" aunque el
+                // porcentaje no se mueva en varios minutos.
+                '@keyframes slh-brillo{from{transform:translateX(-100%)}to{transform:translateX(320%)}}',
+                '.slh-brillo::after{content:"";position:absolute;inset:0;width:30%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:slh-brillo 2.2s ease-in-out infinite}'
             ].join('');
             document.head.appendChild(st);
         }
@@ -283,6 +296,10 @@ const SriLoopHUD = {
                       ${activo ? '<span class="slh-linea"></span>' : ''}
                     </div>`;
         }).join('');
+
+        const firma = `${fase}|${i}|${cliente.ruc || ''}|${per}|${exige}`;
+        if (this._firmaPlan === firma) return;   // nada cambió: dejar animar
+        this._firmaPlan = firma;
 
         cont.innerHTML = `
             <div style="font-size:9.5px;letter-spacing:.09em;color:#64748b;font-weight:800;margin-bottom:5px">
@@ -524,7 +541,33 @@ const SriLoopHUD = {
         play.style.color = m.fg;
         est.textContent = m.txt;
         est.style.color = m.fg;
-        det.textContent = total ? `cliente ${pos} de ${total}` : (e.motivo || 'lote vacío');
+        const nuevoDetalle = total ? `cliente ${pos} de ${total}` : (e.motivo || 'lote vacío');
+        if (det.textContent !== nuevoDetalle) {
+            det.textContent = nuevoDetalle;
+            // Solo al pasar de cliente, no en cada repintado.
+            if (total && this._ultimaPos !== undefined && this._ultimaPos !== pos) {
+                det.classList.remove('slh-salta');
+                void det.offsetWidth;          // reinicia la animación
+                det.classList.add('slh-salta');
+            }
+            this._ultimaPos = pos;
+        }
+
+        est.classList.toggle('slh-respira', e.estado === 'CORRIENDO');
+
+        // Barra de avance: cuántos clientes quedaron atrás.
+        const barra = this._el.querySelector('#slh-barra');
+        const fill = this._el.querySelector('#slh-barra-fill');
+        if (barra && fill) {
+            if (total) {
+                barra.style.display = 'block';
+                fill.style.width = `${Math.round((e.indice / total) * 100)}%`;
+                fill.classList.toggle('slh-brillo', e.estado === 'CORRIENDO');
+            } else {
+                barra.style.display = 'none';
+            }
+        }
+
         stop.style.opacity = (e.estado === 'DETENIDO') ? '0.35' : '1';
     },
 
