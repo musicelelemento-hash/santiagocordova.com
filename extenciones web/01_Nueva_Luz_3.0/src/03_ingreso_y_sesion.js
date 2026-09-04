@@ -214,50 +214,11 @@ SafeStorage.get(null).then(async (items) => {
                     return;
                 }
 
-                if (items.sri_auto_mode !== false) {
-                    console.log('✅ Credenciales inyectadas. Iniciando sesión...');
-                    setTimeout(() => btn.click(), 400);
-                } else {
-                    console.log('⏳ Modo Monitoreo: Esperando 3 segundos antes de iniciar sesión...');
-                    let timeLeft = 3;
-                    const overlay = document.createElement('div');
-                    overlay.style.cssText = `
-                        position: absolute; top: -50px; left: 0; width: 100%; text-align: center;
-                        background: #1e293b; color: white; padding: 10px; border-radius: 8px;
-                        font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 100;
-                        border: 1px solid #3b82f6; font-size: 13px;
-                    `;
-                    overlay.innerHTML = `Entrando en <span id="sri-timer-sec">${timeLeft}</span>s... <button id="sri-cancel-login" style="margin-left: 10px; background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Cancelar</button>`;
-                    
-                    if (btn.parentElement) {
-                        btn.parentElement.style.position = 'relative';
-                        btn.parentElement.appendChild(overlay);
-                    }
-
-                    let cancelled = false;
-                    document.getElementById('sri-cancel-login').onclick = (e) => {
-                        e.preventDefault();
-                        cancelled = true;
-                        overlay.remove();
-                        console.log('🛑 Auto-Login cancelado por el usuario.');
-                        // Limpiar pendingAction para no quedar atascado
-                        SafeStorage.remove(['pendingAction', 'actionTimestamp']);
-                    };
-
-                    const timerInt = setInterval(() => {
-                        if (cancelled) { clearInterval(timerInt); return; }
-                        timeLeft--;
-                        const tEl = document.getElementById('sri-timer-sec');
-                        if (tEl) tEl.innerText = timeLeft;
-                        
-                        if (timeLeft <= 0) {
-                            clearInterval(timerInt);
-                            overlay.remove();
-                            console.log('✅ Tiempo agotado. Iniciando sesión...');
-                            btn.click();
-                        }
-                    }, 1000);
-                }
+                console.log('✅ Credenciales inyectadas. Iniciando sesión...');
+                setTimeout(() => {
+                    if (typeof clickElement === 'function') clickElement(btn, 'Boton Login Keycloak');
+                    else btn.click();
+                }, 400);
             }
             attempts++;
             if (attempts > 25) clearInterval(autoLoginInterval);

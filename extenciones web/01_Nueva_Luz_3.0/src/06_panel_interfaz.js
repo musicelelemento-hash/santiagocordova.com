@@ -2682,7 +2682,7 @@ class SriAssistantPanel {
             if (this.contextCard) this.contextCard.remove();
             if (this.contextOverlay) this.contextOverlay.remove();
             
-            let secondsLeft = (data.timeout !== undefined && data.timeout !== null) ? Math.floor(data.timeout / 1000) : (data.timeout === null ? null : 4);
+            let secondsLeft = (typeof data.timeout === 'number' && data.timeout > 0) ? Math.floor(data.timeout / 1000) : null;
             let countdownInterval = null;
 
             // Crear overlay oscuro

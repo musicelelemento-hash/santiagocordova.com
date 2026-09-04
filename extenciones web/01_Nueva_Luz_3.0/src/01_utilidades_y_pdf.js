@@ -177,7 +177,16 @@ function renderEmergencyStopBar() {
   }).catch(() => {});
 }
 
-async function cerrarSesionSRI() {
+async function cerrarSesionSRI(force = false) {
+  // 🛑 GUARD: En modo manual o sin lote activo, no cerrar la sesión del usuario a menos que sea forzado explícitamente
+  if (!force && typeof SriLoop !== 'undefined') {
+    const puede = await SriLoop.puedeAvanzar();
+    if (!puede) {
+      console.log("ℹ️ [LOGOUT PROTEGIDO] No hay lote activo corriendo. Manteniendo la sesión abierta para el usuario.");
+      return;
+    }
+  }
+
   console.log(
     "🔒 [LOGOUT] Cerrando sesión SRI con purga extrema (Cierre Limpio Radical)...",
   );

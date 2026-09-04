@@ -513,24 +513,13 @@ async function verifySessionConsistency() {
     const info = window.sriAssistant ? window.sriAssistant.extractClientInfo() : { ruc: null };
     if (!info.ruc || !info.highConfidence) return true;
 
-    // Buscar RUC en elementos de identificación del formulario
-    const idFields = Array.from(document.querySelectorAll('td, span, label, div'))
-        .filter(el => {
-            const t = el.textContent;
-            return (t.includes('Identificación') || t.includes('RUC')) && /\d{13}/.test(t) && el.offsetParent !== null;
-        });
-
-    for (const field of idFields) {
-        const match = field.textContent.match(/\d{13}/);
+    // Buscar RUC únicamente en la cabecera / barra de usuario autenticado (NUNCA en tablas de comprobantes)
+    const headerContainers = Array.from(document.querySelectorAll('.area-usuario, .topbar, #nombreRuc, .nombre-contribuyente, label.titulo-perfil, #id_nombre_razon_social'));
+    for (const container of headerContainers) {
+        const text = container.textContent || '';
+        const match = text.match(/\b\d{13}\b/);
         if (match && match[0] !== info.ruc) {
-            console.error(`🛑 INCONSISTENCIA CRÍTICA: Portal Login (${info.ruc}) != Formulario Data (${match[0]})`);
-            alert(`🚀 BLOQUEO DE SEGURIDAD ELITE:\n\nSe ha detectado una inconsistencia de sesión en el portal del SRI.\n\nUsuario Logueado: ${info.ruc}\nUsuario en Vista: ${match[0]}\n\nPor favor, cierra sesión y vuelve a ingresar para evitar errores contables.`);
-            // Guardar flag para que content.js sepa que debe iniciar al cargar
-            await SafeStorage.set({
-                pendingAction: 'fillSearch',
-                actionTimestamp: Date.now()
-            });
-            window.location.reload();
+            console.warn(`🛑 Inconsistencia de cabecera: Header (${match[0]}) != Esperado (${info.ruc})`);
             return false;
         }
     }
