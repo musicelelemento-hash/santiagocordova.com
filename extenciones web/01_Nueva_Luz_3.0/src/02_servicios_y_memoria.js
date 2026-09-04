@@ -259,6 +259,12 @@ const SriLoop = {
     },
 
     /** ¿Ya declaramos a este contribuyente en este periodo? */
+    /** La entrada del registro local, con su estado de PDF. null si no declaró. */
+    async declaracionLocal(ruc, periodo) {
+        const r = await SafeStorage.get(['sc_declaraciones_locales']);
+        return (r.sc_declaraciones_locales || {})[this._claveDecl(ruc, periodo)] || null;
+    },
+
     async yaDeclaro(ruc, periodo) {
         const r = await SafeStorage.get(['sc_declaraciones_locales']);
         const reg = r.sc_declaraciones_locales || {};
@@ -266,12 +272,14 @@ const SriLoop = {
     },
 
     /** Marca que el comprobante finalmente sí llegó a la nube. */
-    async marcarPdfSubido(ruc, periodo) {
+    async marcarPdfSubido(ruc, periodo, extra = {}) {
         const r = await SafeStorage.get(['sc_declaraciones_locales']);
         const reg = r.sc_declaraciones_locales || {};
         const clave = this._claveDecl(ruc, periodo);
         if (reg[clave]) {
             reg[clave].pdfSubido = true;
+            reg[clave].pdfUrl = extra.url || '';
+            reg[clave].pdfDonde = extra.provider || '';
             await SafeStorage.set({ sc_declaraciones_locales: reg });
         }
     },
@@ -287,7 +295,7 @@ const SriLoop = {
             nombre: d.nombre,
             periodo: d.periodo,
             cuando: new Date(d.cuando).toLocaleString('es-EC'),
-            PDF: d.pdfSubido ? '✅ subido' : '⚠️ pendiente de subir'
+            PDF: d.pdfSubido ? `✅ ${d.pdfDonde || 'subido'}` : '⚠️ pendiente de subir'
         })));
         return filas;
     },
@@ -332,6 +340,7 @@ const SriLoop = {
 
         const cola = [];
         let sinClave = 0, yaHechos = 0, excluidosSeguridad = 0;
+        const sinPdf = [];   // declararon, pero su comprobante no quedó guardado
 
         for (const c of lista) {
             if (!c || !c.ruc) continue;
@@ -357,7 +366,12 @@ const SriLoop = {
 
             // El registro local manda: el portal tarda ~20 min en actualizarse
             // y la subida del PDF puede haber fallado.
-            if (await this.yaDeclaro(c.ruc, periodo)) { yaHechos++; continue; }
+            const yaDecl = await this.declaracionLocal(c.ruc, periodo);
+            if (yaDecl) {
+                if (yaDecl.pdfSubido) { yaHechos++; }
+                else { sinPdf.push({ ruc: c.ruc, name: c.name || 'Cliente SRI', password: clave }); }
+                continue;
+            }
 
             const decs = Array.isArray(c.declarations) ? c.declarations
                        : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
@@ -375,12 +389,44 @@ const SriLoop = {
         });
 
         console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
-        return { cola, yaHechos, sinClave, excluidosSeguridad, total: lista.length };
+        if (sinPdf.length) {
+            console.warn(`🧾 [BUCLE] ${sinPdf.length} declararon pero su comprobante NO quedó guardado: ` +
+                         sinPdf.map((c) => c.name).join(', '));
+            console.log('   Se recuperan desde Consulta de declaraciones, sin volver a declarar.');
+        }
+        return { cola, yaHechos, sinClave, excluidosSeguridad, sinPdf, total: lista.length };
     },
 
     /** Deja listo el auto-login del cliente que toca. */
     async prepararCliente(cliente, periodo) {
         anotarBitacora('credenciales listas', cliente.name || cliente.ruc);
+
+        if (cliente.soloRecuperar) {
+            console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
+            await SafeStorage.set({
+                pending_sri_autofill: {
+                    ruc: cliente.ruc, password: cliente.password, name: cliente.name,
+                    timestamp: Date.now(), manual: true, isBatch: true
+                },
+                // Entra, y apenas haya sesión el flujo cruza a Consulta de
+                // declaraciones. Nada de abrir el wizard de recepción.
+                pendingAction: 'recuperar_comprobante',
+                recuperarComprobante: {
+                    ruc: cliente.ruc, nombre: cliente.name, periodo,
+                    per: `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`,
+                    intentos: 0
+                },
+                workflowPeriod: periodo,
+                actionTimestamp: Date.now(),
+                autoDeclaration: false,
+                sri_auto_mode: true,
+                sri_master_switch_on: true,
+                sriAutomationPaused: false,
+                ghost_manual_mode: false
+            });
+            await SafeStorage.remove(['declaration_synced_flag']);
+            return;
+        }
         await SafeStorage.set({
             pending_sri_autofill: {
                 ruc: cliente.ruc,
@@ -412,12 +458,18 @@ const SriLoop = {
      */
     async arrancarLote(periodo) {
         const p = periodo || this.periodoPorDefecto();
-        const { cola, yaHechos, sinClave, total } = await this.armarCola(p);
+        const { cola, yaHechos, sinClave, sinPdf, total } = await this.armarCola(p);
+        // Los que solo necesitan recuperar el comprobante van primero y marcados:
+        // no se les vuelve a declarar nada.
+        const colaFinal = [
+            ...(sinPdf || []).map((c) => ({ ...c, soloRecuperar: true })),
+            ...cola
+        ];
 
         if (total === 0) {
             return { ok: false, motivo: 'No hay clientes en la caché. Abrí SantiagoCordova.com para sincronizar.' };
         }
-        if (cola.length === 0) {
+        if (colaFinal.length === 0) {
             return { ok: false, motivo: `Nada pendiente: ${yaHechos} ya declarados${sinClave ? `, ${sinClave} sin clave` : ''}.` };
         }
 
@@ -425,9 +477,9 @@ const SriLoop = {
         // handleBatchNextClient() (01) lee la cola desde auto_batch_queue/auto_batch_index,
         // NO desde sc_loop. Antes arrancarLote solo escribía sc_loop, así que auto_batch_queue
         // quedaba vacío y el lote moría en silencio después del primer cliente.
-        await this.iniciar(cola, p);
+        await this.iniciar(colaFinal, p);
         await SafeStorage.set({
-            auto_batch_queue: cola,
+            auto_batch_queue: colaFinal,
             auto_batch_index: 0,
             auto_batch_enabled: true,
             auto_batch_mode: 'turbo_step1_facturas'

@@ -1451,6 +1451,20 @@ async function syncDeclarationToSupabase(
       }
     }
 
+    // 🧾 Constancia del resultado de la subida, junto a la de la declaración.
+    if (typeof SriLoop !== 'undefined') {
+      try {
+        const per = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod
+                 || SriLoop.periodoPorDefecto();
+        if (pdfUrl) {
+          await SriLoop.marcarPdfSubido(ruc, per, { url: pdfUrl, provider: storageProvider });
+          await anotarBitacora('comprobante guardado', storageProvider);
+        } else {
+          await anotarBitacora('⚠️ sin comprobante', 'la declaración quedó sin PDF en la nube');
+        }
+      } catch (e) { console.warn('No se pudo registrar el estado del PDF:', e); }
+    }
+
     const fetchRes = await fetch(
       `${SUPABASE_URL}/rest/v1/clients?ruc=eq.${ruc}&select=id,declaration_history`,
       {

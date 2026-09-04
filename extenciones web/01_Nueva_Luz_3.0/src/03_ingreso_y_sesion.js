@@ -394,6 +394,14 @@ SafeStorage.get(null).then(async (items) => {
             delete cont[items.pending_sri_autofill.ruc];
             await SafeStorage.set({ sc_rescates: cont });
         }
+        // 🧾 Este cliente solo necesita su comprobante: no se le declara nada.
+        if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante) {
+            console.log('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
+            await SafeStorage.set({ actionTimestamp: Date.now() });
+            window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
+            return;
+        }
+
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
@@ -970,6 +978,16 @@ async function ejecutarAccionPendiente(items) {
     }
 
     // CASO ANULADO: Recuperación de PDF Faltante en Consulta de Documentos
+    // 🧾 Recuperar el comprobante de una declaración ya presentada, sin volver
+    // a declararla. Cruza a otra aplicación del portal, así que puede tardar
+    // varias cargas: refrescamos el reloj para que no la mate la guarda de
+    // acciones caducadas mientras el puente SSO hace lo suyo.
+    if (items.pendingAction === 'recuperar_comprobante') {
+        const listo = await ejecutarRecuperacionComprobante();
+        if (!listo) await SafeStorage.set({ actionTimestamp: Date.now() });
+        return;
+    }
+
     if (items.pendingAction === 'recoverPDF') {
         console.log('🛑 [SRI ASSISTANT] recoverPDF anulado por el usuario. Limpiando acción pendiente...');
         await SafeStorage.remove(['pendingAction', 'actionTimestamp']);

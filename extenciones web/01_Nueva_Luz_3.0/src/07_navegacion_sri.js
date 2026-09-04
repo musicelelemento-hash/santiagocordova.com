@@ -6,6 +6,150 @@
 //   ⏸  CORRIENDO → pausa suave: termina el cliente y ahí para
 //   🛑 EMERGENCIA → corta en el acto
 // ═══════════════════════════════════════════════════════════════════════════
+const SRI_PUENTE_CONSULTA_DECLARACIONES =
+    'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1292&idGrupo=73';
+
+const SRI_CONSULTA_DECLARACIONES_PATH = 'sri-eyr-consulta-web-internet';
+
+/** ¿Estamos dentro de Consulta de declaraciones? */
+function enConsultaDeclaraciones() {
+    return window.location.href.includes(SRI_CONSULTA_DECLARACIONES_PATH);
+}
+
+/**
+ * Arranca la recuperación: guarda a quién y qué periodo, y cruza el puente SSO.
+ * El resto sigue del otro lado, cuando la página cargue.
+ */
+async function irARecuperarComprobante(ruc, periodo, nombre = '') {
+    if (!ruc || !periodo) { console.warn('🧾 [RECUPERAR] Falta el RUC o el periodo.'); return false; }
+    const per = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
+    console.log(`🧾 [RECUPERAR] Buscando el comprobante de ${nombre || ruc} · ${per} en Consulta de declaraciones...`);
+    await anotarBitacora('recuperar comprobante', `${nombre || ruc} · ${per}`);
+
+    await SafeStorage.set({
+        pendingAction: 'recuperar_comprobante',
+        actionTimestamp: Date.now(),
+        recuperarComprobante: { ruc, nombre, periodo, per, intentos: 0 }
+    });
+    window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
+    return true;
+}
+
+/**
+ * Del otro lado del puente: elegir obligación y periodo, encontrar la fila del
+ * periodo pedido y pulsar su descarga. El PDF lo levanta el interceptor de
+ * URL.createObjectURL que ya vive en el módulo 01.
+ */
+async function ejecutarRecuperacionComprobante() {
+    const st = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
+    if (!st) { console.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
+
+    // Tope duro: sin esto una pantalla que no carga se vuelve un bucle de
+    // recargas contra el portal del SRI.
+    if ((st.intentos || 0) >= 3) {
+        console.error('🧾 [RECUPERAR] Tres intentos sin éxito. Se abandona.');
+        await anotarBitacora('⛔ recuperación fallida', `${st.nombre || st.ruc} · ${st.per}`);
+        await SafeStorage.remove(['recuperarComprobante', 'pendingAction', 'actionTimestamp']);
+        return false;
+    }
+    await SafeStorage.set({ recuperarComprobante: { ...st, intentos: (st.intentos || 0) + 1 } });
+
+    if (!enConsultaDeclaraciones()) {
+        console.log('🧾 [RECUPERAR] Todavía no llegamos a Consulta de declaraciones. Esperando el puente...');
+        return false;
+    }
+
+    // 1 · Elegir el grupo de obligación (IVA) y aceptar el periodo. Los dos
+    // botones tienen id estable según la traza; si el portal los cambia,
+    // preferimos abandonar antes que pulsar algo a ciegas.
+    const buscar = document.getElementById('formPresentada:btnBuscarGrupoObligacion');
+    if (buscar && esVisible(buscar)) {
+        clickElement(buscar, 'Consulta · buscar grupo de obligación');
+        await sleep(2500);
+    }
+    const aceptar = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion');
+    if (aceptar && esVisible(aceptar)) {
+        clickElement(aceptar, 'Consulta · aceptar periodo');
+        await sleep(3000);
+    }
+
+    // 2 · La tabla de declaraciones presentadas.
+    const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
+    if (!tabla) {
+        console.warn('🧾 [RECUPERAR] La tabla de declaraciones todavía no está. Se reintenta al recargar.');
+        return false;
+    }
+
+    // 3 · La fila del periodo pedido. Se busca por el texto del periodo, no por
+    //     posición: el orden de la tabla no está garantizado.
+    const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                   'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const mes = MESES[st.periodo.monthIndex];
+    const anio = String(st.periodo.year);
+
+    const filas = Array.from(tabla.querySelectorAll('tbody tr'));
+    const fila = filas.find((tr) => {
+        const t = (tr.textContent || '').toUpperCase();
+        return t.includes(anio) && (t.includes(mes) || t.includes(st.per));
+    });
+
+    if (!fila) {
+        console.warn(`🧾 [RECUPERAR] No encontré una declaración de ${mes} ${anio} en la tabla (${filas.length} filas).`);
+        return false;
+    }
+
+    // 4 · El disparador de descarga de esa fila. NUNCA por j_idt: en la traza
+    //     era j_idt66 y ese número cambia entre versiones del portal.
+    const disparador = fila.querySelector('a[id*="tblConsultaDeclaracion"], button[id*="tblConsultaDeclaracion"]')
+                    || fila.querySelector('a.ui-commandlink, button.ui-button, a[onclick], button');
+    if (!disparador) {
+        console.warn('🧾 [RECUPERAR] La fila no tiene un control de descarga reconocible.');
+        return false;
+    }
+
+    console.log(`🧾 [RECUPERAR] Descargando el comprobante de ${mes} ${anio}...`);
+    capturedPdfBase64 = null;
+    clickElement(disparador, 'Consulta · descargar comprobante');
+
+    // 5 · Esperar a que el interceptor levante el PDF.
+    for (let i = 0; i < 20; i++) {
+        await sleep(700);
+        if (capturedPdfBase64) break;
+    }
+
+    if (!capturedPdfBase64) {
+        console.warn('🧾 [RECUPERAR] Se pulsó la descarga pero no llegó ningún PDF.');
+        return false;
+    }
+
+    console.log('🧾 [RECUPERAR] Comprobante capturado. Subiéndolo...');
+    await anotarBitacora('comprobante recuperado', `${st.nombre || st.ruc} · ${st.per}`);
+
+    await syncDeclarationToSupabase(st.ruc, st.per, null, st.nombre, null, 'completado');
+    await SafeStorage.remove(['recuperarComprobante', 'pendingAction', 'actionTimestamp']);
+
+    if (window.sriAssistant?.showEliteToast) {
+        window.sriAssistant.showEliteToast({
+            title: '🧾 Comprobante recuperado',
+            msg: `${st.nombre || st.ruc} · ${st.per}. No hizo falta volver a declarar.`,
+            duration: 7000
+        });
+    }
+    return true;
+}
+
+if (typeof window !== 'undefined') {
+    /** Uso a mano: sriRecuperarComprobante('RUC') para el periodo del lote. */
+    window.sriRecuperarComprobante = async (ruc, year, month) => {
+        const per = (year && month)
+            ? { year: Number(year), monthIndex: Number(month) - 1 }
+            : ((await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto());
+        const cache = (await SafeStorage.get(['sc_clients_cache'])).sc_clients_cache || [];
+        const c = cache.find((x) => x && x.ruc === String(ruc).trim());
+        return irARecuperarComprobante(String(ruc).trim(), per, c ? c.name : '');
+    };
+}
+
 const SriLoopHUD = {
     _el: null,
     _POS_KEY: 'sc_loop_hud_pos',
@@ -272,6 +416,30 @@ const SriLoopHUD = {
 
         if (e.estado === 'DETENIDO') { cont.style.display = 'none'; return; }
         cont.style.display = 'block';
+
+        // Modo recuperación: el contribuyente ya declaró, solo falta el papel.
+        const rec = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
+        if (rec) {
+            const firmaRec = `rec|${rec.ruc}|${rec.per}|${rec.intentos || 0}`;
+            if (this._firmaPlan === firmaRec) return;
+            this._firmaPlan = firmaRec;
+            cont.innerHTML = `
+                <div style="font-size:9.5px;letter-spacing:.09em;color:#64748b;font-weight:800;margin-bottom:5px">
+                  YA DECLARÓ · FALTA EL COMPROBANTE
+                </div>
+                <div style="font-size:11px;color:#7dd3fc;font-weight:700;margin-bottom:8px">
+                  ${escapeHtml(rec.nombre || rec.ruc)} · ${escapeHtml(rec.per)}
+                </div>
+                <div class="slh-p slh-activo" style="color:#7dd3fc;font-size:10.5px;font-weight:800">
+                  <span class="slh-punto" style="background:#7dd3fc"></span>
+                  <span>🧾 Buscando el comprobante presentado</span>
+                  <span class="slh-linea"></span>
+                </div>
+                <div style="font-size:10px;opacity:0.6;margin-top:6px">
+                  No se vuelve a declarar: sería una sustitutiva.
+                </div>`;
+            return;
+        }
 
         const fase = await this._faseActual();
         const i = this.FASES.findIndex((f) => f.id === fase);
