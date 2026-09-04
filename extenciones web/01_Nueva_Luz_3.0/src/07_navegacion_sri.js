@@ -40,8 +40,26 @@ const SriLoopHUD = {
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
             '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
-            '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>'
+            '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
+            '</div>',
+            // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
+            '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
         ].join('');
+
+        if (!document.getElementById('slh-anim')) {
+            const st = document.createElement('style');
+            st.id = 'slh-anim';
+            st.textContent = [
+                '@keyframes slh-latido{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.82)}}',
+                '@keyframes slh-avance{from{background-position:0 0}to{background-position:22px 0}}',
+                '@keyframes slh-entra{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}',
+                '.slh-p{display:flex;align-items:center;gap:7px;padding:2px 0;animation:slh-entra .25s ease-out}',
+                '.slh-punto{width:8px;height:8px;border-radius:50%;flex:0 0 8px}',
+                '.slh-activo .slh-punto{animation:slh-latido 1.1s ease-in-out infinite}',
+                '.slh-linea{height:2px;flex:1;border-radius:2px;background-image:repeating-linear-gradient(90deg,rgba(125,211,252,.55) 0 7px,transparent 7px 14px);background-size:22px 2px;animation:slh-avance .8s linear infinite}'
+            ].join('');
+            document.head.appendChild(st);
+        }
 
         document.body.appendChild(el);
         this._el = el;
@@ -92,6 +110,120 @@ const SriLoopHUD = {
         } else {
             console.log(`${title} — ${msg}`);
         }
+    },
+
+    /** Las fases del ciclo, en orden, con la señal que las identifica. */
+    FASES: [
+        { id: 'login',     icono: '🔑', txt: 'Entrar al SRI' },
+        { id: 'extraer',   icono: '📥', txt: 'Traer comprobantes recibidos' },
+        { id: 'formulario',icono: '📝', txt: 'Llenar el formulario' },
+        { id: 'verificar', icono: '⚖️', txt: 'Verificar que el saldo sea $0' },
+        { id: 'enviar',    icono: '🚀', txt: 'Enviar la declaración' },
+        { id: 'respaldo',  icono: '🧾', txt: 'Guardar el comprobante' },
+        { id: 'siguiente', icono: '⏭️', txt: 'Pasar al siguiente' }
+    ],
+
+    /**
+     * Anuncia en el perfil qué encontró y qué va a hacer, ANTES de irse a
+     * comprobantes recibidos.
+     *
+     * Sin esto el bot entraba al perfil y desaparecía hacia otra pantalla sin
+     * decir nada: desde afuera parecía que se había ido por su cuenta.
+     * Se muestra una sola vez por carga de página.
+     */
+    async anunciarEnPerfil(e) {
+        if (this._anunciado) return;
+        if (e.estado !== 'CORRIENDO') return;
+        if (!location.href.includes('/contribuyente/perfil')) return;
+
+        this._anunciado = true;
+
+        const cliente = (e.cola || [])[e.indice] || {};
+        const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                       'agosto','septiembre','octubre','noviembre','diciembre'];
+        const per = e.periodo ? `${MESES[e.periodo.monthIndex]} ${e.periodo.year}` : 'el periodo';
+
+        // Lo que el propio SRI muestra como pendiente en esta pantalla.
+        const txt = (document.body && document.body.textContent) || '';
+        const m = txt.match(/2011\s+DECLARACI[ÓO]N[^-]*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i);
+
+        const quien = cliente.name ? String(cliente.name).split(' ').slice(0, 2).join(' ') : 'este contribuyente';
+        const detalle = m
+            ? `El SRI marca pendiente el IVA de ${m[1].toLowerCase()}, vence el ${m[2]}.`
+            : `Queda pendiente el IVA de ${per}.`;
+
+        console.log(`📋 [PERFIL] ${detalle} Voy a declararlo para ${quien}.`);
+
+        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '📋 Declaración pendiente',
+                msg: `${detalle}<br><br>Voy a traer los comprobantes recibidos, llenar el formulario y verificar el saldo antes de enviar.`,
+                duration: 7000
+            });
+        }
+    },
+
+    /** ¿En qué fase estamos? Se deduce de la URL y del estado guardado. */
+    async _faseActual() {
+        const u = window.location.href;
+        const st = await SafeStorage.get(['pendingAction', 'declaration_synced_flag']);
+        if (st.declaration_synced_flag) return 'respaldo';
+        if (typeof encontrarCamposLogin === 'function' && encontrarCamposLogin()) return 'login';
+        if (u.includes('comprobantesRecibidos')) return 'extraer';
+        if (typeof estaEnFormularioIva === 'function' && estaEnFormularioIva()) {
+            return document.getElementById('frmFlujoDeclaracion:totalAPagar') ? 'verificar' : 'formulario';
+        }
+        if (String(st.pendingAction || '').includes('turbo')) return 'extraer';
+        return 'login';
+    },
+
+    /**
+     * Dibuja qué pide el SRI y en qué paso va el bot.
+     * Nace de una duda concreta del usuario: ver entrar al bot a "documentos
+     * recibidos" sin saber por qué daba desconfianza.
+     */
+    async pintarPlan(e) {
+        const cont = this._el && this._el.querySelector('#slh-plan');
+        if (!cont) return;
+
+        if (e.estado === 'DETENIDO') { cont.style.display = 'none'; return; }
+        cont.style.display = 'block';
+
+        const fase = await this._faseActual();
+        const i = this.FASES.findIndex((f) => f.id === fase);
+        const cliente = (e.cola || [])[e.indice] || {};
+        const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                       'agosto','septiembre','octubre','noviembre','diciembre'];
+        const per = e.periodo ? `${MESES[e.periodo.monthIndex]} ${e.periodo.year}` : '';
+
+        // Lo que pide el SRI: la obligación detectada en pantalla.
+        let exige = '';
+        const txt = (document.body && document.body.textContent) || '';
+        const m = txt.match(/2011\s+DECLARACI[ÓO]N[^-]*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i);
+        if (m) exige = `IVA ${m[1].toLowerCase()} · vence ${m[2]}`;
+
+        const filas = this.FASES.map((f, k) => {
+            const hecho = k < i, activo = k === i;
+            const color = hecho ? '#4ade80' : activo ? '#7dd3fc' : 'rgba(148,163,184,0.45)';
+            const punto = hecho ? '#4ade80' : activo ? '#7dd3fc' : 'rgba(148,163,184,0.28)';
+            return `<div class="slh-p ${activo ? 'slh-activo' : ''}" style="color:${color};font-size:10.5px;${activo ? 'font-weight:800' : ''}">
+                      <span class="slh-punto" style="background:${punto}"></span>
+                      <span style="opacity:${hecho ? 0.75 : 1}">${hecho ? '✓' : f.icono} ${f.txt}</span>
+                      ${activo ? '<span class="slh-linea"></span>' : ''}
+                    </div>`;
+        }).join('');
+
+        cont.innerHTML = `
+            <div style="font-size:9.5px;letter-spacing:.09em;color:#64748b;font-weight:800;margin-bottom:5px">
+              EL SRI PIDE
+            </div>
+            <div style="font-size:11px;color:#ffb95f;font-weight:700;margin-bottom:8px">
+              ${exige ? escapeHtml(exige) : (per ? 'IVA ' + per : 'Declaración de IVA')}
+            </div>
+            <div style="font-size:9.5px;letter-spacing:.09em;color:#64748b;font-weight:800;margin-bottom:5px">
+              PLAN ${cliente.name ? '· ' + escapeHtml(String(cliente.name).split(' ').slice(0, 2).join(' ')) : ''}
+            </div>
+            ${filas}`;
     },
 
     /**
@@ -252,6 +384,9 @@ const SriLoopHUD = {
         const play = this._el.querySelector('#slh-play');
         const est = this._el.querySelector('#slh-estado');
         const det = this._el.querySelector('#slh-detalle');
+        this.pintarPlan(e).catch(() => {});
+        this.anunciarEnPerfil(e).catch(() => {});
+
         const aqui = this._el.querySelector('#slh-aqui');
         if (aqui) {
             const corriendo = e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO';
