@@ -605,6 +605,71 @@ TXT. Mandar el tipo en la petición de descarga no alcanza.
 
 ---
 
+## 🧾 Consulta de declaraciones — recuperar el comprobante ya presentado
+
+Confirmado el 04-sep-2026 con la traza `flujo_de_consuta_de_declaraciones_iva_renta`.
+**Permite bajar el CEP de una declaración ya hecha sin volver a declarar** — que
+es lo que hace falta para los contribuyentes que declararon pero cuyo PDF no
+llegó a subirse.
+
+### Es otra aplicación, con su propio puente SSO
+
+```javascript
+const SRI_PUENTE_CONSULTA_DECLARACIONES =
+  'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1292&idGrupo=73';
+```
+
+Aterriza en:
+
+```
+/sri-eyr-consulta-web-internet/pages/consulta/obligacion/lista-obligaciones.jsf
+```
+
+Ojo: es `sri-eyr-consulta-web-internet`, un contexto distinto del wizard de
+recepción (`sri-declaraciones-web-internet`) y del de comprobantes recibidos.
+
+### La secuencia
+
+| # | Acción JSF | Qué hace |
+| :---: | :--- | :--- |
+| 1 | `formPresentada:btnBuscarGrupoObligacion` | Elegir el grupo de obligación (IVA / Renta) |
+| 2 | `formPresentada:btnAceptarPeriodoSeleccion` | Confirmar el periodo |
+| 3 | `formPresentada:tblConsultaDeclaracion` | Se puebla la tabla de declaraciones presentadas |
+| 4 | `formPresentada:tblConsultaDeclaracion:<N>:j_idtXX` | Botón de la fila N → descarga el PDF |
+
+### La descarga
+
+```
+POST /sri-eyr-consulta-web-internet/pages/consulta/obligacion/lista-obligaciones.jsf
+  formPresentada:somAnioFiscal_input               = 2026
+  formPresentada:tblConsultaDeclaracion:<N>:j_idtXX = (vacío, es el disparador)
+  formPresentada:tblConsultaDeclaracion_rppDD      = 10        (filas por página)
+  javax.faces.ClientWindow                          = <token de ventana>
+
+→ Content-Disposition: attachment;filename=873083870866.pdf
+  Content-Type: application/pdf
+```
+
+El nombre del archivo **es el número de CEP**. Coinciden con los PDFs de
+`modelo para comprobante/` (873083870866, 873083940138, 873083952107), lo que
+confirma que ese es el identificador del comprobante.
+
+### Columnas útiles de la tabla
+
+`colNumeroSerial` · `colEstadoPago` · `colEstadoDeclaracion` — las tres tienen
+filtro propio (`:filter`), así que se puede acotar la búsqueda sin paginar.
+
+### ⚠️ De nuevo los `j_idt`
+
+El disparador de la fila es `j_idt66` en esta traza, igual que en comprobantes
+recibidos — y ya sabemos que ese número cambia entre versiones. **Localizar el
+botón por su posición en la fila o por su texto, nunca por el `j_idt`.**
+
+También aparece `javax.faces.ClientWindow`, que es un token por ventana: hay
+que tomarlo del DOM en el momento, no fijarlo.
+
+---
+
 ## 🎯 Estado de Calibración: COMPLETO
 
 | Prioridad | Pantalla | Estado | Selector Oficial Confirmado |
