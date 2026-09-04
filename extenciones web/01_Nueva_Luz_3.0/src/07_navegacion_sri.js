@@ -39,6 +39,7 @@ const SriLoopHUD = {
             '  <span id="slh-estado" style="font-weight:800;font-size:11px">DETENIDO</span>',
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
+            '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
             '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>'
         ].join('');
 
@@ -64,6 +65,12 @@ const SriLoopHUD = {
             this.pintar();
         });
 
+        el.querySelector('#slh-aqui').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            await this._declararEsteCliente();
+            this.pintar();
+        });
+
         el.querySelector('#slh-stop').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             await SriLoop.emergencia();
@@ -85,6 +92,76 @@ const SriLoopHUD = {
         } else {
             console.log(`${title} — ${msg}`);
         }
+    },
+
+    /**
+     * 🎯 Declarar AL QUE YA ESTÁ ADENTRO.
+     *
+     * El ▶ arma un lote desde la base de clientes; esto es lo contrario: leer
+     * quién está logueado en esta pestaña y declararlo, sin depender de que la
+     * caché esté sincronizada. Es el caso de "entré a mano y quiero que siga él".
+     */
+    async _declararEsteCliente() {
+        const info = (window.sriAssistant && window.sriAssistant.extractClientInfo)
+            ? window.sriAssistant.extractClientInfo() : { ruc: '', name: '' };
+
+        if (!info.ruc) {
+            this._aviso('🎯 No veo a nadie',
+                'No detecto un RUC en esta pantalla. Entrá al SRI con el contribuyente y probá de nuevo.', 7000);
+            return;
+        }
+
+        // La clave: primero la caché, y si no está se la pedimos al usuario.
+        const r = await SafeStorage.get(['sc_clients_cache']);
+        const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        const enCache = lista.find((c) => c && c.ruc === info.ruc);
+        let clave = enCache && (enCache.password || enCache.sri_password || enCache.sriPassword);
+        const nombre = (enCache && enCache.name) || info.name || info.ruc;
+
+        if (!clave) {
+            clave = prompt(
+                `Clave del SRI de ${nombre} (${info.ruc}).\n\n` +
+                'Hace falta para volver a entrar al pasar de pantalla.\n' +
+                'Queda guardada solo en este navegador.'
+            );
+            if (!clave) { console.log('🎯 Cancelado: sin clave no se puede continuar.'); return; }
+            if (typeof window.sriAgregarCliente === 'function') {
+                await window.sriAgregarCliente(info.ruc, clave, nombre);
+            }
+        }
+
+        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+        const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                       'agosto','septiembre','octubre','noviembre','diciembre'];
+
+        if (!confirm(
+            `Declarar a ${nombre} (${info.ruc})\n` +
+            `Periodo: ${MESES[periodo.monthIndex]} ${periodo.year}\n\n` +
+            'El bot va a extraer los comprobantes, llenar el formulario y frenar\n' +
+            'antes de enviar si el saldo no es cero.\n\n¿Seguimos?'
+        )) { console.log('🎯 Arranque cancelado por el usuario.'); return; }
+
+        const cliente = { ruc: info.ruc, name: nombre, password: clave };
+        await SriLoop.iniciar([cliente], periodo);
+        await SriLoop.prepararCliente(cliente, periodo);
+
+        // Ya hay sesión abierta: entramos directo a la extracción en vez de
+        // pasar por el login como hace el arranque de lote.
+        await SafeStorage.set({
+            pendingAction: 'turbo_step1_facturas',
+            checkFacturas: true,
+            checkRetenciones: true,
+            checkNC: true,
+            actionTimestamp: Date.now(),
+            skipSafetyCheck: true
+        });
+
+        this._aviso('🎯 En marcha', `Declarando a ${nombre} · ${MESES[periodo.monthIndex]} ${periodo.year}`, 5000);
+        console.log(`🎯 [AQUÍ] Arrancando con ${nombre} (${info.ruc}).`);
+        await sleep(700);
+
+        if (typeof navegarAComprobantes === 'function') navegarAComprobantes();
+        else window.location.href = SRI_RECIBIDOS_URL;
     },
 
     /**
@@ -175,6 +252,11 @@ const SriLoopHUD = {
         const play = this._el.querySelector('#slh-play');
         const est = this._el.querySelector('#slh-estado');
         const det = this._el.querySelector('#slh-detalle');
+        const aqui = this._el.querySelector('#slh-aqui');
+        if (aqui) {
+            const corriendo = e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO';
+            aqui.style.display = corriendo ? 'none' : '';
+        }
         const stop = this._el.querySelector('#slh-stop');
         if (!play || !est || !det) return;
 
