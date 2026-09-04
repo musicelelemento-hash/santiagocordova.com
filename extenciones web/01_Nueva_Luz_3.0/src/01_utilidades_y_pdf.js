@@ -1012,7 +1012,40 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
   const bucketName = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_BUCKET_NAME) || "santiagocordova-files";
   const publicUrlBase = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_PUBLIC_URL) || "https://pub-0f0bf9175c8a41f1bb854a22ca33390d.r2.dev";
 
-  // Tier 1A: S3 SigV4 Directo a Cloudflare R2 (Rápido, 100% nativo, sin dependencias)
+  // ── ORDEN DE INTENTOS ──────────────────────────────────────────────────
+  // El Worker va PRIMERO. La subida directa a R2 apunta a
+  // <cuenta>.r2.cloudflarestorage.com, dominio que NO está en host_permissions
+  // del manifest: sin ese permiso el fetch queda sujeto al CORS de la página
+  // del SRI y el navegador lo bloquea siempre. Intentarlo primero solo
+  // retrasaba cada subida con un fallo garantizado.
+  //
+  // Además el Worker no necesita la R2_SECRET_ACCESS_KEY en el cliente, que
+  // es justamente para lo que se creó el relay.
+
+  // Tier 1: Worker Relay — camino principal, sin credenciales en el cliente
+  const workerUrl = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT);
+  if (workerUrl) {
+    try {
+      console.log(`🚀 [R2 WORKER RELAY] Intentando vía ${workerUrl}/upload/${key}...`);
+      const workerRes = await fetch(`${workerUrl}/upload/${key}`, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body: blob,
+      });
+      if (workerRes.ok) {
+        const wData = await workerRes.json().catch(() => ({}));
+        const fileUrl = wData.url || `${workerUrl}/files/${key}`;
+        console.log(`✅ [R2 WORKER RELAY] ¡Subida exitosa vía Worker!`, fileUrl);
+        return fileUrl;
+      }
+    } catch (errWorker) {
+      console.warn("⚠️ [R2 WORKER RELAY] Worker relay no disponible:", errWorker);
+    }
+  }
+
+
+  // Tier 2: S3 SigV4 directo — solo funciona si se agrega
+  // "https://*.r2.cloudflarestorage.com/*" a host_permissions del manifest.
   if (accountId && accessKeyId && secretAccessKey && bucketName) {
     try {
       console.log(`🚀 [R2 DIRECT S3] Subiendo directamente a Cloudflare R2 (${bucketName}/${key})...`);
@@ -1086,27 +1119,7 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
     }
   }
 
-  // Tier 1B: Worker Relay (Fallback si worker está desplegado)
-  const workerUrl = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT);
-  if (workerUrl) {
-    try {
-      console.log(`🚀 [R2 WORKER RELAY] Intentando vía ${workerUrl}/upload/${key}...`);
-      const workerRes = await fetch(`${workerUrl}/upload/${key}`, {
-        method: "POST",
-        headers: { "Content-Type": contentType },
-        body: blob,
-      });
-      if (workerRes.ok) {
-        const wData = await workerRes.json().catch(() => ({}));
-        const fileUrl = wData.url || `${workerUrl}/files/${key}`;
-        console.log(`✅ [R2 WORKER RELAY] ¡Subida exitosa vía Worker!`, fileUrl);
-        return fileUrl;
-      }
-    } catch (errWorker) {
-      console.warn("⚠️ [R2 WORKER RELAY] Worker relay no disponible:", errWorker);
-    }
-  }
-
+  console.error('❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.');
   throw new Error("No se pudo subir a Cloudflare R2");
 }
 

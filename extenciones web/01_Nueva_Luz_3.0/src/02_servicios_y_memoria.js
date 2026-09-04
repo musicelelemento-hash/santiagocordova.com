@@ -225,7 +225,25 @@ const SriLoop = {
      */
     async armarCola(periodo) {
         const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
-        const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        let lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+
+        // La caché se llena al abrir SantiagoCordova.com (bridge_content.js).
+        // Si está vacía —sesión nueva, otro perfil de Chrome, caché limpiada—
+        // pedimos la lista a Supabase para al menos poder decir QUIÉNES faltan.
+        // Las claves NO viajan desde la nube: viven solo en este navegador.
+        if (lista.length === 0 && typeof fetchClientsDirectly === 'function') {
+            console.log('📭 [BUCLE] Caché local vacía. Consultando la lista en Supabase...');
+            try {
+                const remotos = await fetchClientsDirectly();
+                if (remotos.length) {
+                    lista = remotos;
+                    await SafeStorage.set({ sc_clients_cache: remotos });
+                    console.log(`☁️ [BUCLE] ${remotos.length} clientes recuperados de la nube (sin claves).`);
+                }
+            } catch (e) {
+                console.warn('No se pudo consultar la lista remota:', e);
+            }
+        }
         const errs = r.flagged_errors || {};
         const tried = r.sri_tried_credentials || {};
         const pStr = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;

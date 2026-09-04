@@ -105,12 +105,20 @@ const SriLoopHUD = {
         const { cola, yaHechos, sinClave, total } = await SriLoop.armarCola(periodo);
 
         if (total === 0) {
-            this._aviso('ℹ️ Sin clientes', 'La caché está vacía. Abrí SantiagoCordova.com para sincronizar.');
+            this._aviso('ℹ️ Sin clientes',
+                'No hay clientes ni en la caché local ni en Supabase. Abrí SantiagoCordova.com estando logueado para sincronizar.', 8000);
+            return;
+        }
+        if (cola.length === 0 && sinClave > 0) {
+            // Caso típico tras una caché limpia: los clientes están, las claves no.
+            this._aviso('🔑 Faltan las claves',
+                `Hay ${sinClave} contribuyentes pendientes de ${etiqueta}, pero sin clave guardada. ` +
+                'Las claves solo viven en este navegador: abrí SantiagoCordova.com para sincronizarlas, ' +
+                'o cargalas a mano con el ✏️ de la lista.', 10000);
             return;
         }
         if (cola.length === 0) {
-            this._aviso('🎉 Nada pendiente',
-                `${yaHechos} ya tienen comprobante de ${etiqueta}` + (sinClave ? ` · ${sinClave} sin clave` : ''));
+            this._aviso('🎉 Nada pendiente', `${yaHechos} ya tienen comprobante de ${etiqueta}.`);
             return;
         }
 
