@@ -547,6 +547,64 @@ Aparece al pulsar «Siguiente» en el formulario cuando existen advertencias no 
 
 ---
 
+## 📥 Descarga del listado en TXT (`lnkTxtlistado`)
+
+Confirmado el 04-sep-2026 con la traza `flujo de reportes de documentos
+electronicos recibidos`. **Una sola petición reemplaza el raspado de la tabla y
+toda la paginación.**
+
+```
+POST /comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf
+  frmPrincipal:opciones            = ruc
+  frmPrincipal:ano                 = 2026
+  frmPrincipal:mes                 = 8
+  frmPrincipal:dia                 = 0          (0 = todos)
+  frmPrincipal:cmbTipoComprobante  = 1 | 3 | 6
+  frmPrincipal:lnkTxtlistado       = frmPrincipal:lnkTxtlistado
+
+→ Content-Disposition: attachment; filename="<RUC>_Recibidos.txt"
+  Content-Type: application/txt
+```
+
+**Columnas** (separadas por tabulador):
+
+```
+RUC_EMISOR · RAZON_SOCIAL_EMISOR · TIPO_COMPROBANTE · SERIE_COMPROBANTE
+CLAVE_ACCESO · FECHA_AUTORIZACION · FECHA_EMISION · IDENTIFICACION_RECEPTOR
+VALOR_SIN_IMPUESTOS · IVA · IMPORTE_TOTAL · NUMERO_DOCUMENTO_MODIFICADO
+```
+
+### Qué trae cada tipo
+
+| Tipo | `cmbTipoComprobante` | ¿Trae los valores? |
+| :--- | :---: | :--- |
+| **Factura** | `1` | ✅ Sí — `VALOR_SIN_IMPUESTOS=61`, `IVA=1.83`, `IMPORTE_TOTAL=62.84` |
+| **Nota de crédito** | `3` | ✅ Sí (mismo esquema) |
+| **Retención** | `6` | ❌ **NO** — las tres columnas de valores vienen **vacías** |
+
+Para retenciones el TXT solo da metadatos: emisor, serie, clave de acceso,
+fechas y documento modificado. **El desglose de IVA retenido vs renta retenida
+no está**, y ese desglose es justo lo que necesita el casillero 609. Por eso
+hoy hay que abrir el modal de cada retención (`tablaCompRecibidos:N:j_idtXX`).
+
+Alternativa sin modales para retenciones: el TXT sí trae la **CLAVE_ACCESO**
+(49 dígitos) de cada comprobante. Con ella se puede pedir el XML autorizado al
+SRI, que trae el desglose estructurado. Siguen siendo N peticiones, pero XML
+liviano en vez de un postback JSF con render de modal — y sin depender de
+`j_idtXX`, que cambia entre versiones.
+
+### ⚠️ El TXT refleja la consulta del servidor, no sus propios parámetros
+
+En la traza, la petición #28 pidió `cmbTipoComprobante=6` y la #30 pidió `=1`,
+y **ambas devolvieron el mismo archivo de 1838 bytes** (retenciones), porque la
+última *Consultar* del servidor había sido de retenciones. Recién en la #33,
+después de consultar facturas, el TXT vino con las facturas (8225 bytes).
+
+**Regla**: pulsar `btnConsultarSinRe` con el tipo deseado y *después* pedir el
+TXT. Mandar el tipo en la petición de descarga no alcanza.
+
+---
+
 ## 🎯 Estado de Calibración: COMPLETO
 
 | Prioridad | Pantalla | Estado | Selector Oficial Confirmado |
