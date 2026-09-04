@@ -135,6 +135,13 @@ const SriLoop = {
         if (e.estado !== 'CORRIENDO') return;
         console.log('⏸️ [BUCLE] Pausa pedida: se terminará el cliente actual y ahí para.');
         await this._set({ estado: 'PAUSANDO', motivo: 'Pausa pedida por el usuario' });
+        if (typeof window !== 'undefined' && window.sriAssistant?.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '⏸️ Pausa pedida',
+                msg: 'Se termina el cliente actual y ahí para. Para cortar ya mismo usá 🛑.',
+                duration: 7000
+            });
+        }
     },
 
     /** Corte inmediato: no se da un paso más, aunque quede algo a medias. */
@@ -579,8 +586,17 @@ if (typeof window !== 'undefined') {
  */
 async function loteDebeContinuar() {
     try {
-        if (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar()) return true;
+        if (typeof SriLoop !== 'undefined') {
+            const sem = await SriLoop.get();
+            // Hay lote en el semáforo: manda él y no se consulta nada más.
+            // Sin este corte, una pausa quedaba anulada por las banderas viejas,
+            // que pausar() no apaga.
+            if (Array.isArray(sem.cola) && sem.cola.length > 0) {
+                return await SriLoop.puedeAvanzar();
+            }
+        }
     } catch (e) { /* seguimos al respaldo */ }
+    // Sin semáforo: corrida vieja ya empezada, valen las banderas.
     const r = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
     return !!(r.auto_batch_enabled || r.sri_auto_mode);
 }
