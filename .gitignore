@@ -34,14 +34,16 @@ scratch/
 *.db-*
 respaldos_locales/
 
-# ── Evidencia de pantallas del SRI ─────────────────────────────────────
-# Capturas del portal con RUC, nombre, email y teléfono de clientes reales.
-# El índice (.md) SÍ se versiona; las imágenes y PDFs NO.
-extenciones web/_EVIDENCIA_SRI/**/*.pdf
-extenciones web/_EVIDENCIA_SRI/**/*.jpg
-extenciones web/_EVIDENCIA_SRI/**/*.jpeg
-extenciones web/_EVIDENCIA_SRI/**/*.png
-extenciones web/_EVIDENCIA_SRI/**/*.webp
+# ── Evidencia de pantallas y tráfico del SRI ───────────────────────────
+# Capturas con RUC, nombre, email y teléfono de contribuyentes reales, y
+# exports de Burp Suite con cookies de sesión vivas (y a veces contraseñas
+# en texto plano en el POST de login).
+#
+# Se listaba por extensión, pero las trazas de Burp no tienen ninguna. Se
+# invierte: queda fuera TODO salvo el índice y las herramientas.
+extenciones web/_EVIDENCIA_SRI/*
+!extenciones web/_EVIDENCIA_SRI/*.md
+!extenciones web/_EVIDENCIA_SRI/*.js
 extenciones web/_EVIDENCIA_SRI/**/*.xml
 extenciones web/_EVIDENCIA_SRI/**/*.txt
 extenciones web/_EVIDENCIA_SRI/prueba*
