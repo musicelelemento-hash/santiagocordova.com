@@ -1549,6 +1549,7 @@ class SriAssistantPanel {
                     motivo = 'No pude confirmar que la declaración esté limpia (selector sin calibrar)';
                 }
                 this.log(`🛑 Bloqueo Seguro: ${motivo}. NUNCA se intenta pagar automáticamente.`);
+                anotarBitacora('⛔ NO se envió', motivo);
                 if (!saldoConocido || estadoMensajes === 'desconocido') {
                     this.log('🔎 Corré window.sriAssistant.verDiagnosticoResumen() y pasá la salida para calibrar los selectores.');
                 }

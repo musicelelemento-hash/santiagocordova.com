@@ -79,7 +79,7 @@ const SriLoop = {
                 quien = pila ? `  [${pila}]` : '';
             } catch (e) { /* sin pila */ }
             console.log(`🚦 [BUCLE] ${previo.estado} → ${nuevo.estado}${nuevo.motivo ? ' · ' + nuevo.motivo : ''}${quien}`);
-            Bitacora.anotar(`semáforo ${previo.estado}→${nuevo.estado}`, nuevo.motivo || '');
+            anotarBitacora(`semáforo ${previo.estado}→${nuevo.estado}`, nuevo.motivo || '');
         }
 
         await SafeStorage.set({ [this._KEY]: nuevo });
@@ -248,7 +248,7 @@ const SriLoop = {
         };
         await SafeStorage.set({ sc_declaraciones_locales: reg });
         console.log(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
-        Bitacora.anotar('DECLARADA', `${extra.nombre || ruc} · ${reg[clave].periodo}`);
+        anotarBitacora('DECLARADA', `${extra.nombre || ruc} · ${reg[clave].periodo}`);
     },
 
     /** ¿Ya declaramos a este contribuyente en este periodo? */
@@ -373,6 +373,7 @@ const SriLoop = {
 
     /** Deja listo el auto-login del cliente que toca. */
     async prepararCliente(cliente, periodo) {
+        anotarBitacora('credenciales listas', cliente.name || cliente.ruc);
         await SafeStorage.set({
             pending_sri_autofill: {
                 ruc: cliente.ruc,
@@ -572,6 +573,10 @@ if (typeof window !== 'undefined') {
 //   window.sriBitacoraTexto()   → la devuelve como texto para copiar
 //   window.sriBitacoraLimpiar() → empieza de cero
 // ═══════════════════════════════════════════════════════════════════════════
+function anotarBitacora(evento, detalle = '') {
+    try { return Bitacora.anotar(evento, detalle); } catch (e) { /* aún no existe */ }
+}
+
 const Bitacora = {
     _KEY: 'sc_bitacora',
     MAX: 400,

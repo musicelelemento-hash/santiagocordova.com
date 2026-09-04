@@ -14,6 +14,12 @@ SafeStorage.get(null).then(async (items) => {
             ` · login=${isLoginPage ? 'sí' : 'no'}` +
             `${sem.motivo ? ' · ' + sem.motivo : ''}`
         );
+        // Solo se anota si hay lote o credenciales en juego: en navegación
+        // suelta del usuario la bitácora no tiene nada que explicar.
+        if (sem.estado !== 'DETENIDO' || af) {
+            await anotarBitacora('carga página',
+                `${location.pathname.split('/').pop() || '/'} · login=${isLoginPage ? 'sí' : 'no'} · autofill=${af ? (af.name || af.ruc) : 'no'}`);
+        }
     } catch (e) { /* no romper el arranque por un log */ }
 
     if (window.location.href.includes('pagina-no-encontrada')) {
@@ -166,6 +172,7 @@ SafeStorage.get(null).then(async (items) => {
         }
 
         console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
+        anotarBitacora('auto-login', items.pending_sri_autofill.name || items.pending_sri_autofill.ruc);
 
         // Si estamos en la portada de inicio del SRI (ej. inicio/NAT), hacer clic en "Iniciar sesión" para ir a Keycloak
         if (!isExplicitlyOutside) {
@@ -309,6 +316,7 @@ SafeStorage.get(null).then(async (items) => {
 
         if (await SriLoop.puedeAvanzar()) {
             console.log('⏭️ [BUCLE] Saltando al siguiente cliente...');
+            anotarBitacora('salta cliente', 'clave caducada');
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'pending_sri_autofill']);
             if (typeof handleBatchNextClient === 'function') await handleBatchNextClient();
         }
@@ -323,6 +331,11 @@ SafeStorage.get(null).then(async (items) => {
 
     if (isAutoFlow && !isAlreadyLoggedIn) {
         console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
+        // Este es el punto donde el lote se queda plantado: anotamos SI había
+        // credenciales, que es lo que distingue "espera normal" de "se perdió
+        // el autofill y no va a entrar nunca".
+        anotarBitacora('esperando login',
+            items.pending_sri_autofill ? 'con credenciales' : '⚠️ SIN credenciales');
     } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
         if (typeof SriCredentialVault !== 'undefined' && items.pending_sri_autofill?.ruc) {
             await SriCredentialVault.recordSuccess(items.pending_sri_autofill.ruc, items.pending_sri_autofill.password);
@@ -716,6 +729,8 @@ async function ejecutarAccionPendiente(items) {
                 const isAuto = porSemaforo || porBandera;
                 console.log(`🔀 [FASE 1→2] Extracción lista. ¿Pasar a declarar? ${isAuto ? 'SÍ' : 'NO'} ` +
                             `(semáforo=${porSemaforo}, autoDeclaration=${porBandera})`);
+                anotarBitacora('extracción lista',
+                    isAuto ? 'pasa a declarar' : `⚠️ NO pasa (semáforo=${porSemaforo}, bandera=${porBandera})`);
 
                 if (window.sriAssistant) {
                     window.sriAssistant.setWorking(false);
