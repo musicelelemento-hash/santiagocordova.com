@@ -1005,121 +1005,47 @@ const R2_DIRECT_CONFIG = {
 };
 
 // ── SUBIDA ROBUSTA A CLOUDFLARE R2 (S3 SigV4 Directo + Worker Relay) ──────
+// ── SUBIDA DEL COMPROBANTE (vía service worker) ─────────────────────────────
+// ⚠️ NO subir desde acá con fetch directo. Desde Chrome 85 los content scripts
+// están sujetos a CORS y host_permissions NO los exime: tanto el Worker relay
+// como R2 rechazaban el preflight con
+//   "blocked by CORS policy: No 'Access-Control-Allow-Origin' header".
+//
+// El service worker (background.js) sí puede hacer la petición cross-origin
+// con las host_permissions del manifest. Acá solo le pasamos el PDF.
 async function uploadToCloudflareR2Direct(key, blob, contentType = "application/pdf") {
-  const accountId = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_ACCOUNT_ID) || "5daf9742bb674b34c0a69fb60557c90b";
-  const accessKeyId = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_ACCESS_KEY_ID) || "add05f5db1cf3dcb52c98d7fb61645d4";
-  const secretAccessKey = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_SECRET_ACCESS_KEY) || "bac5532e941cd72dcf8c219ab48053862abd00db2a8b3c16a6e2e41f6edcac1c";
-  const bucketName = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_BUCKET_NAME) || "santiagocordova-files";
-  const publicUrlBase = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_PUBLIC_URL) || "https://pub-0f0bf9175c8a41f1bb854a22ca33390d.r2.dev";
+  const cfg = (typeof window !== "undefined" && window.SC_CONFIG) || {};
 
-  // ── ORDEN DE INTENTOS ──────────────────────────────────────────────────
-  // El Worker va PRIMERO. La subida directa a R2 apunta a
-  // <cuenta>.r2.cloudflarestorage.com, dominio que NO está en host_permissions
-  // del manifest: sin ese permiso el fetch queda sujeto al CORS de la página
-  // del SRI y el navegador lo bloquea siempre. Intentarlo primero solo
-  // retrasaba cada subida con un fallo garantizado.
-  //
-  // Además el Worker no necesita la R2_SECRET_ACCESS_KEY en el cliente, que
-  // es justamente para lo que se creó el relay.
+  // El service worker no recibe Blobs por mensaje: va como base64.
+  const base64 = await new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = () => reject(new Error("No se pudo leer el PDF"));
+    fr.readAsDataURL(blob);
+  });
 
-  // Tier 1: Worker Relay — camino principal, sin credenciales en el cliente
-  const workerUrl = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT);
-  if (workerUrl) {
-    try {
-      console.log(`🚀 [R2 WORKER RELAY] Intentando vía ${workerUrl}/upload/${key}...`);
-      const workerRes = await fetch(`${workerUrl}/upload/${key}`, {
-        method: "POST",
-        headers: { "Content-Type": contentType },
-        body: blob,
-      });
-      if (workerRes.ok) {
-        const wData = await workerRes.json().catch(() => ({}));
-        const fileUrl = wData.url || `${workerUrl}/files/${key}`;
-        console.log(`✅ [R2 WORKER RELAY] ¡Subida exitosa vía Worker!`, fileUrl);
-        return fileUrl;
-      }
-    } catch (errWorker) {
-      console.warn("⚠️ [R2 WORKER RELAY] Worker relay no disponible:", errWorker);
-    }
+  let r;
+  try {
+    r = await chrome.runtime.sendMessage({
+      tipo: "SC_SUBIR_COMPROBANTE",
+      key,
+      base64,
+      contentType,
+      config: cfg,
+    });
+  } catch (e) {
+    console.error("❌ [R2] No se pudo hablar con el service worker:", e.message);
+    console.error("   Si la extensión se acaba de actualizar, recargá la página.");
+    throw new Error("Service worker no disponible");
   }
 
-
-  // Tier 2: S3 SigV4 directo — solo funciona si se agrega
-  // "https://*.r2.cloudflarestorage.com/*" a host_permissions del manifest.
-  if (accountId && accessKeyId && secretAccessKey && bucketName) {
-    try {
-      console.log(`🚀 [R2 DIRECT S3] Subiendo directamente a Cloudflare R2 (${bucketName}/${key})...`);
-      const host = `${accountId}.r2.cloudflarestorage.com`;
-      const endpoint = `https://${host}/${bucketName}/${key}`;
-      const now = new Date();
-      const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
-      const dateStamp = amzDate.substring(0, 8);
-
-      const arrayBuffer = await blob.arrayBuffer();
-      const payloadHashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-      const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-
-      const canonicalUri = `/${bucketName}/${key}`;
-      const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
-      const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
-      const canonicalRequest = `PUT\n${canonicalUri}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
-
-      const encoder = new TextEncoder();
-      const reqHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest));
-      const reqHash = Array.from(new Uint8Array(reqHashBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-
-      const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
-      const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${reqHash}`;
-
-      async function hmac(k, str) {
-        const keyObj = await crypto.subtle.importKey(
-          'raw',
-          typeof k === 'string' ? encoder.encode(k) : k,
-          { name: 'HMAC', hash: 'SHA-256' },
-          false,
-          ['sign']
-        );
-        return await crypto.subtle.sign('HMAC', keyObj, encoder.encode(str));
-      }
-
-      const kDate = await hmac('AWS4' + secretAccessKey, dateStamp);
-      const kRegion = await hmac(kDate, 'auto');
-      const kService = await hmac(kRegion, 's3');
-      const kSigning = await hmac(kService, 'aws4_request');
-      const signatureBuffer = await hmac(kSigning, stringToSign);
-      const signature = Array.from(new Uint8Array(signatureBuffer))
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-
-      const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-      const res = await fetch(endpoint, {
-        method: 'PUT',
-        headers: {
-          Authorization: authHeader,
-          'x-amz-date': amzDate,
-          'x-amz-content-sha256': payloadHash,
-          'Content-Type': contentType
-        },
-        body: blob
-      });
-
-      if (res.ok) {
-        const fileUrl = `${publicUrlBase}/${key}`;
-        console.log(`✅ [R2 DIRECT S3] ¡PDF subido exitosamente a Cloudflare R2! URL:`, fileUrl);
-        return fileUrl;
-      }
-      console.warn(`⚠️ [R2 DIRECT S3] HTTP ${res.status} al subir a R2:`, await res.text());
-    } catch (eDirect) {
-      console.warn("⚠️ [R2 DIRECT S3] Error en subida directa a R2:", eDirect);
-    }
+  if (r && r.ok && r.url) {
+    console.log(`✅ [R2] Comprobante subido (${r.via}):`, r.url);
+    return r.url;
   }
 
-  console.error('❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.');
+  console.error("❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.");
+  if (r && r.error) console.error("   Motivo:", r.error);
   throw new Error("No se pudo subir a Cloudflare R2");
 }
 
