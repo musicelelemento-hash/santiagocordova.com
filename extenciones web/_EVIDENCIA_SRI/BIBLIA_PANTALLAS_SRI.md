@@ -94,6 +94,26 @@ Todo lo de acá se leyó y validó directamente del tráfico real de Burp Suite 
 | Confirmación CEP | **Botón Imprimir Comprobante** | **`frmFlujoDeclaracion:btnDescargarComprobante`** | Botón verde flat con texto **«Imprimir»** |
 | Confirmación CEP | Botón Nueva Declaración | `frmFlujoDeclaracion:btnSinValorPagarNuevaDeclaracion` | Botón con texto «Nueva declaración» |
 
+### ⚠️ Los identificadores `j_idt*` NO son estables
+
+Las tres trazas de Burp se contradicen entre sí, así que **no se pueden tratar
+como confirmados** aunque aparezcan en la tabla de arriba:
+
+| Elemento | Recorrido manual | Comparación 3 | Corrida del bot |
+| :--- | :--- | :--- | :--- |
+| Aceptar del diálogo de advertencias | `j_idt947` | **`j_idt946`**, `j_idt944` | — |
+| Ver advertencias | `j_idt949` | `j_idt552` | — |
+| Detalle en la tabla | `j_idt85` | `j_idt66` | `j_idt66` |
+
+Son ids autogenerados por JSF: cambian entre versiones y entre renders. Sirven
+como **pista**, nunca como ancla. Buscá por texto o por id semántico
+(`btnAceptar`, `btnContinuar`).
+
+Los que **sí** son estables y se pueden fijar: `frmPrincipal:btnConsultarSinRe`,
+`frmFlujoDeclaracion:somObligacion`, `calPeriodo`, `btnObligacionSiguiente`,
+`clkFormularioCompleto`, `btnFormularioSiguiente`, `totalAPagar`,
+`divBotonContinuarConfirmacion`, `#panelSinValorAPagar`, `btnDescargarComprobante`.
+
 ### Advertencias informativas del casillero 625
 
 Salen **siempre** y NO impiden declarar. Vienen como `<li class="estiloItemsMensajes">`,

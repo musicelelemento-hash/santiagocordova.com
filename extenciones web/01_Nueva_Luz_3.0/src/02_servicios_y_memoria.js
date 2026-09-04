@@ -564,7 +564,8 @@ async function dismissSridialogs() {
         console.log('🛡️ SRI Assistant: Diálogo obstructor detectado. Limpiando...');
 
         // Multi-estrategia para el botón Aceptar/OK
-        const btnAceptar = modal.querySelector('[id*="j_idt195"]') ||
+        // j_idt195 no aparece en ninguna traza real de Burp: era una suposición.
+        const btnAceptar = modal.querySelector('button[id*="btnAceptar"], button[id*="btnContinuar"]') ||
             modal.querySelector('button.green-btn') ||
             Array.from(modal.querySelectorAll('button')).find(b => {
                 const t = b.textContent.toUpperCase();
@@ -1177,13 +1178,17 @@ function initSummaryPageWatcher() {
 async function autoDismissSriWarnings() {
     // Helper: encuentra el botón Aceptar/Continuar dentro de un contenedor de diálogo
     function findAceptarInContainer(container) {
-        // Primero: buscar por ID directo oficial o patrones conocidos
-        const directIdBtn = document.getElementById('frmFlujoDeclaracion:j_idt947');
-        if (directIdBtn && getComputedStyle(directIdBtn).display !== 'none') return directIdBtn;
-
-        const byId = container.querySelector('button[id*="j_idt947"], button[id*="btnAceptar"], button[id*="btnContinuar"], button[id*="btnSi"], button[id*="confirm"]');
-        // No usamos offsetParent aquí porque en Chrome los modales position:fixed tienen offsetParent === null
-        if (byId && getComputedStyle(byId).display !== 'none') return byId;
+        // ⚠️ Nada de getElementById global acá: buscaba en TODO el documento e
+        // ignoraba el diálogo actual, así que podía devolver el botón de otro
+        // modal. Se busca SIEMPRE dentro del contenedor recibido.
+        //
+        // Y primero los ids semánticos: los j_idt* son autogenerados por JSF y
+        // cambian entre corridas (947 en una traza de Burp, 946 en otra), así
+        // que valen como pista, nunca como ancla.
+        const porIdSemantico = container.querySelector(
+            'button[id*="btnAceptar"], button[id*="btnContinuar"], button[id*="btnSi"], button[id*="btnConfirmar"], button[id*="confirm"]'
+        );
+        if (esVisible(porIdSemantico)) return porIdSemantico;
 
         // Segundo: buscar por texto en botones y spans (incluye ui-c, ui-button-text)
         const candidates = Array.from(container.querySelectorAll('button, a[class*="ui-button"], span.ui-button-text, span[class*="ui-button-text"]'));

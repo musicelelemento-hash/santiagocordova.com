@@ -711,7 +711,11 @@ async function ejecutarAccionPendiente(items) {
             if (currentAction === 'FIN_TURBO') {
                 await SafeStorage.remove(['pendingAction']);
                 const storage = await SafeStorage.get(['autoDeclaration']);
-                const isAuto = storage.autoDeclaration === true;
+                const porSemaforo = await SriLoop.puedeAvanzar();
+                const porBandera = storage.autoDeclaration === true;
+                const isAuto = porSemaforo || porBandera;
+                console.log(`🔀 [FASE 1→2] Extracción lista. ¿Pasar a declarar? ${isAuto ? 'SÍ' : 'NO'} ` +
+                            `(semáforo=${porSemaforo}, autoDeclaration=${porBandera})`);
 
                 if (window.sriAssistant) {
                     window.sriAssistant.setWorking(false);
@@ -795,7 +799,7 @@ async function ejecutarAccionPendiente(items) {
         showBulkEliteToast(totals, items.bulkFlow, items.workflowPeriod);
 
         const storage = await SafeStorage.get(['autoDeclaration']);
-        const isAuto = storage.autoDeclaration === true;
+        const isAuto = (await SriLoop.puedeAvanzar()) || storage.autoDeclaration === true;
 
         await SafeStorage.remove(['pendingAction', 'bulkFlow', 'sriAutomationPaused']);
         
