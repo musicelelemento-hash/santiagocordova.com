@@ -1471,6 +1471,11 @@ class SriAssistantPanel {
                         // en paralelo y termine sincronizando/cerrando sesión por duplicado.
                         await SafeStorage.set({ declaration_synced_flag: true });
 
+                        // 🧾 Dejar constancia ANTES de intentar subir nada: el portal
+                        // tarda ~20 min en quitar la obligación y la subida puede
+                        // fallar. Sin esto, el bot volvía a declarar (sustitutiva).
+                        await SriLoop.marcarDeclarado(info.ruc, { year: cYear, monthIndex: cMonth }, { nombre: info.name });
+
                         let preFetchedGhostData = {};
                         if (typeof GhostMemory !== 'undefined') {
                             preFetchedGhostData = await GhostMemory.getData().catch(() => ({}));
@@ -3525,6 +3530,9 @@ class SriAssistantPanel {
         }
 
         if (info.ruc) {
+            // 🧾 Constancia primero: si la subida falla, igual quedó registrado
+            // que este contribuyente ya declaró este periodo.
+            await SriLoop.marcarDeclarado(info.ruc, { year: cYear, monthIndex: cMonth }, { nombre: info.name });
             await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, preFetchedGhostData, "completado");
         }
 

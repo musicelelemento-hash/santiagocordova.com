@@ -210,6 +210,68 @@ const SriLoop = {
         return habia;
     },
 
+    /** Clave del registro local para un contribuyente y periodo. */
+    _claveDecl(ruc, periodo) {
+        const p = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
+        return `${ruc}|${p}`;
+    },
+
+    /**
+     * Deja constancia de que ESTE contribuyente ya declaró ESTE periodo.
+     * Se llama en cuanto el SRI confirma el envío, antes de intentar subir nada.
+     */
+    async marcarDeclarado(ruc, periodo, extra = {}) {
+        if (!ruc || !periodo) return;
+        const r = await SafeStorage.get(['sc_declaraciones_locales']);
+        const reg = r.sc_declaraciones_locales || {};
+        const clave = this._claveDecl(ruc, periodo);
+
+        reg[clave] = {
+            ruc,
+            periodo: `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`,
+            cuando: Date.now(),
+            nombre: extra.nombre || '',
+            cep: extra.cep || '',
+            pdfSubido: !!extra.pdfSubido
+        };
+        await SafeStorage.set({ sc_declaraciones_locales: reg });
+        console.log(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
+    },
+
+    /** ¿Ya declaramos a este contribuyente en este periodo? */
+    async yaDeclaro(ruc, periodo) {
+        const r = await SafeStorage.get(['sc_declaraciones_locales']);
+        const reg = r.sc_declaraciones_locales || {};
+        return !!reg[this._claveDecl(ruc, periodo)];
+    },
+
+    /** Marca que el comprobante finalmente sí llegó a la nube. */
+    async marcarPdfSubido(ruc, periodo) {
+        const r = await SafeStorage.get(['sc_declaraciones_locales']);
+        const reg = r.sc_declaraciones_locales || {};
+        const clave = this._claveDecl(ruc, periodo);
+        if (reg[clave]) {
+            reg[clave].pdfSubido = true;
+            await SafeStorage.set({ sc_declaraciones_locales: reg });
+        }
+    },
+
+    /** Las declaraciones registradas localmente, para el panel y la consola. */
+    async verDeclaraciones() {
+        const r = await SafeStorage.get(['sc_declaraciones_locales']);
+        const reg = r.sc_declaraciones_locales || {};
+        const filas = Object.values(reg).sort((a, b) => b.cuando - a.cuando);
+        if (!filas.length) { console.log('🧾 Todavía no hay declaraciones registradas.'); return []; }
+        console.table(filas.map((d) => ({
+            RUC: d.ruc,
+            nombre: d.nombre,
+            periodo: d.periodo,
+            cuando: new Date(d.cuando).toLocaleString('es-EC'),
+            PDF: d.pdfSubido ? '✅ subido' : '⚠️ pendiente de subir'
+        })));
+        return filas;
+    },
+
     /** Periodo por defecto: el mes anterior (el que se declara). */
     periodoPorDefecto() {
         const h = new Date();
@@ -272,6 +334,10 @@ const SriLoop = {
                 excluidosSeguridad++;
                 continue;
             }
+
+            // El registro local manda: el portal tarda ~20 min en actualizarse
+            // y la subida del PDF puede haber fallado.
+            if (await this.yaDeclaro(c.ruc, periodo)) { yaHechos++; continue; }
 
             const decs = Array.isArray(c.declarations) ? c.declarations
                        : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
@@ -453,6 +519,7 @@ if (typeof window !== 'undefined') {
     };
 
     /** Lista lo que hay en la caché, sin mostrar las claves. */
+    window.sriVerDeclaraciones = () => SriLoop.verDeclaraciones();
     window.sriVerClientes = async () => {
         const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors']);
         const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
