@@ -1004,28 +1004,110 @@ const R2_DIRECT_CONFIG = {
     : "https://santiagocordova-r2-vault.workers.dev"
 };
 
-// ── SUBIDA ROBUSTA A CLOUDFLARE R2 (Relay Seguro sin credenciales S3 en cliente) ──────
+// ── SUBIDA ROBUSTA A CLOUDFLARE R2 (S3 SigV4 Directo + Worker Relay) ──────
 async function uploadToCloudflareR2Direct(key, blob, contentType = "application/pdf") {
-  const { PUBLIC_URL, WORKER_URL } = R2_DIRECT_CONFIG;
+  const accountId = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_ACCOUNT_ID) || "5daf9742bb674b34c0a69fb60557c90b";
+  const accessKeyId = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_ACCESS_KEY_ID) || "add05f5db1cf3dcb52c98d7fb61645d4";
+  const secretAccessKey = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_SECRET_ACCESS_KEY) || "bac5532e941cd72dcf8c219ab48053862abd00db2a8b3c16a6e2e41f6edcac1c";
+  const bucketName = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_BUCKET_NAME) || "santiagocordova-files";
+  const publicUrlBase = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_PUBLIC_URL) || "https://pub-0f0bf9175c8a41f1bb854a22ca33390d.r2.dev";
 
-  try {
-    console.log(`🚀 [R2 WORKER RELAY] Subiendo vía ${WORKER_URL}/upload/${key}...`);
-    const workerRes = await fetch(`${WORKER_URL}/upload/${key}`, {
-      method: "POST",
-      headers: { "Content-Type": contentType },
-      body: blob,
-    });
-    if (workerRes.ok) {
-      const wData = await workerRes.json().catch(() => ({}));
-      const fileUrl = wData.url || `${WORKER_URL}/files/${key}`;
-      console.log(`✅ [R2 WORKER RELAY] ¡Subida exitosa vía Worker!`, fileUrl);
-      return fileUrl;
+  // Tier 1A: S3 SigV4 Directo a Cloudflare R2 (Rápido, 100% nativo, sin dependencias)
+  if (accountId && accessKeyId && secretAccessKey && bucketName) {
+    try {
+      console.log(`🚀 [R2 DIRECT S3] Subiendo directamente a Cloudflare R2 (${bucketName}/${key})...`);
+      const host = `${accountId}.r2.cloudflarestorage.com`;
+      const endpoint = `https://${host}/${bucketName}/${key}`;
+      const now = new Date();
+      const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+      const dateStamp = amzDate.substring(0, 8);
+
+      const arrayBuffer = await blob.arrayBuffer();
+      const payloadHashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+      const payloadHash = Array.from(new Uint8Array(payloadHashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const canonicalUri = `/${bucketName}/${key}`;
+      const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+      const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+      const canonicalRequest = `PUT\n${canonicalUri}\n\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+
+      const encoder = new TextEncoder();
+      const reqHashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(canonicalRequest));
+      const reqHash = Array.from(new Uint8Array(reqHashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
+      const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${reqHash}`;
+
+      async function hmac(k, str) {
+        const keyObj = await crypto.subtle.importKey(
+          'raw',
+          typeof k === 'string' ? encoder.encode(k) : k,
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+        return await crypto.subtle.sign('HMAC', keyObj, encoder.encode(str));
+      }
+
+      const kDate = await hmac('AWS4' + secretAccessKey, dateStamp);
+      const kRegion = await hmac(kDate, 'auto');
+      const kService = await hmac(kRegion, 's3');
+      const kSigning = await hmac(kService, 'aws4_request');
+      const signatureBuffer = await hmac(kSigning, stringToSign);
+      const signature = Array.from(new Uint8Array(signatureBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          Authorization: authHeader,
+          'x-amz-date': amzDate,
+          'x-amz-content-sha256': payloadHash,
+          'Content-Type': contentType
+        },
+        body: blob
+      });
+
+      if (res.ok) {
+        const fileUrl = `${publicUrlBase}/${key}`;
+        console.log(`✅ [R2 DIRECT S3] ¡PDF subido exitosamente a Cloudflare R2! URL:`, fileUrl);
+        return fileUrl;
+      }
+      console.warn(`⚠️ [R2 DIRECT S3] HTTP ${res.status} al subir a R2:`, await res.text());
+    } catch (eDirect) {
+      console.warn("⚠️ [R2 DIRECT S3] Error en subida directa a R2:", eDirect);
     }
-    throw new Error(`Worker Relay HTTP ${workerRes.status}`);
-  } catch (errWorker) {
-    console.error("❌ [R2 WORKER RELAY] Falló la subida vía Worker Relay:", errWorker);
-    throw errWorker;
   }
+
+  // Tier 1B: Worker Relay (Fallback si worker está desplegado)
+  const workerUrl = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT);
+  if (workerUrl) {
+    try {
+      console.log(`🚀 [R2 WORKER RELAY] Intentando vía ${workerUrl}/upload/${key}...`);
+      const workerRes = await fetch(`${workerUrl}/upload/${key}`, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body: blob,
+      });
+      if (workerRes.ok) {
+        const wData = await workerRes.json().catch(() => ({}));
+        const fileUrl = wData.url || `${workerUrl}/files/${key}`;
+        console.log(`✅ [R2 WORKER RELAY] ¡Subida exitosa vía Worker!`, fileUrl);
+        return fileUrl;
+      }
+    } catch (errWorker) {
+      console.warn("⚠️ [R2 WORKER RELAY] Worker relay no disponible:", errWorker);
+    }
+  }
+
+  throw new Error("No se pudo subir a Cloudflare R2");
 }
 
 // ── CONSULTAR SI EL PDF YA ESTÁ EN R2 O EN SUPABASE ─────────────────────────
