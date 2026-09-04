@@ -54,8 +54,8 @@ class SriAssistantPanel {
         try {
             // ELITE v13.0: XML Trap Escape (Bugs de PrimeFaces SRI)
             if (document instanceof XMLDocument || document.contentType?.includes('xml') || document.querySelector('partial-response')) {
-                console.error('❌ [SRI ELITE] Trampa XML detectada. El SRI colapsó el ViewState. Escapando al índice...');
-                window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones';
+                console.error('❌ [SRI ELITE] Trampa XML detectada. El SRI colapsó el ViewState. Escapando vía puente SSO...');
+                window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                 return;
             }
 
@@ -3459,7 +3459,16 @@ class SriAssistantPanel {
                 actionTimestamp: Date.now(),
                 skipSafetyCheck: true
             });
-            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones';
+            console.log('🚀 [NAVIGATE_AND_FILL] Navegando vía puente SSO oficial al Formulario IVA...');
+            if (window.location.href.includes('recibirDeclaracion')) {
+                if (typeof ejecutarNavegacionDeclaracion === 'function') {
+                    ejecutarNavegacionDeclaracion(period);
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                window.location.href = SRI_PUENTE_FORMULARIO_IVA;
+            }
         } else if (workType === 'NAVIGATE_ONLY') {
             safeStatus('🚀 Iniciando Navegación Inteligente...');
             const p = this.getDefaultPeriod(); // {year, monthIndex}
@@ -3472,7 +3481,16 @@ class SriAssistantPanel {
                 actionTimestamp: Date.now(),
                 skipSafetyCheck: true
             });
-            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones';
+            console.log('🚀 [NAVIGATE_ONLY] Navegando vía puente SSO oficial al Formulario IVA...');
+            if (window.location.href.includes('recibirDeclaracion')) {
+                if (typeof ejecutarNavegacionDeclaracion === 'function') {
+                    ejecutarNavegacionDeclaracion(p);
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                window.location.href = SRI_PUENTE_FORMULARIO_IVA;
+            }
         } else {
             // Sin esta rama, un workType no soportado dejaba el panel bloqueado
             // en estado "trabajando" sin ninguna señal para el usuario.

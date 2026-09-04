@@ -506,35 +506,72 @@ async function extraerRetencionesPaginaActual() {
                 continue;
             }
 
-            console.log(`   🔗 Abriendo modal...`);
-            // Click robusto
+            console.log(`   🔗 Abriendo modal de retención fila ${idx + 1}...`);
+            
+            // 1. Asegurar que no haya overlay o modal previo bloqueando el click (Fix Burp Item 109)
+            await waitFor(() => {
+                const shade = document.querySelector('.ui-widget-overlay, .rf-pp-sh, #disablingDiv');
+                return !shade || !esVisible(shade);
+            }, 2000, 'Espera de Overlay Libre');
+
+            // 2. Click en enlace de detalle
+            enlace.scrollIntoView({ behavior: 'auto', block: 'center' });
             enlace.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
             enlace.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
             enlace.click();
 
-            // Esperar más tiempo
-            await sleep(2500);
+            // 3. Espera reactiva del panel de retenciones (SRI responde en ~250-350ms)
+            const tablaDetalle = await waitFor(() => {
+                // Selector directo confirmado en Burp Suite (form-detalle-comprobante-retencion:tabla-impuestos-comprobante-retencion)
+                const direct = document.getElementById('form-detalle-comprobante-retencion:tabla-impuestos-comprobante-retencion');
+                if (direct && (typeof esVisible === 'function' ? esVisible(direct) : true)) {
+                    const rows = direct.querySelectorAll('tbody tr');
+                    if (rows.length > 0) return direct;
+                }
+                // Fallback: Diálogos visibles en DOM
+                const dialogs = Array.from(document.querySelectorAll('.ui-dialog, .rf-pp-cntr')).filter(d => (typeof esVisible === 'function' ? esVisible(d) : true));
+                for (const d of dialogs) {
+                    const tables = d.querySelectorAll('table');
+                    for (const t of tables) {
+                        const h = (t.textContent || '').toLowerCase();
+                        if (h.includes('base imponible') && h.includes('valor retenido')) {
+                            const rows = t.querySelectorAll('tbody tr');
+                            if (rows.length > 0) return t;
+                        }
+                    }
+                }
+                return null;
+            }, 3500, `Modal Retención ${idx + 1}`);
 
-            const datosRetencion = await extraerDatosModalRetencion();
+            if (tablaDetalle) {
+                const datosRetencion = procesarTablaRetencion(tablaDetalle);
+                if (datosRetencion) {
+                    retenciones.push({
+                        idx: idx + 1,
+                        comprobanteNo: celdas[2]?.textContent.trim() || '',
+                        rucRazon: celdas[1]?.textContent.trim() || '',
+                        ivaRetenido: datosRetencion.ivaRetenido,
+                        rentaRetenida: datosRetencion.rentaRetenida,
+                        baseImponibleIva: datosRetencion.baseImponibleIva,
+                        baseImponibleRenta: datosRetencion.baseImponibleRenta
+                    });
 
-            if (datosRetencion) {
-                retenciones.push({
-                    idx: idx + 1,
-                    comprobanteNo: celdas[2].textContent.trim(),
-                    rucRazon: celdas[1].textContent.trim(),
-                    ivaRetenido: datosRetencion.ivaRetenido,
-                    rentaRetenida: datosRetencion.rentaRetenida,
-                    baseImponibleIva: datosRetencion.baseImponibleIva,
-                    baseImponibleRenta: datosRetencion.baseImponibleRenta
-                });
-
-                console.log(`   ✅ IVA: ${datosRetencion.ivaRetenido} (Base: ${datosRetencion.baseImponibleIva}), Renta: ${datosRetencion.rentaRetenida} (Base: ${datosRetencion.baseImponibleRenta})`);
+                    console.log(`   ⚡ Retención ${idx + 1} extraída en tiempo récord: IVA $${datosRetencion.ivaRetenido} (Base $${datosRetencion.baseImponibleIva}), Renta $${datosRetencion.rentaRetenida} (Base $${datosRetencion.baseImponibleRenta})`);
+                }
             } else {
-                console.warn('   ⚠️ No se pudieron extraer datos (modal no abrió o vacío)');
+                console.warn(`   ⚠️ Timeout esperando modal de retención fila ${idx + 1}`);
             }
 
+            // 4. Cerrar modal inmediatamente y esperar a que el DOM y el overlay queden libres
             await cerrarModal();
-            await sleep(1000);
+            await waitFor(() => {
+                const panel = document.getElementById('form-detalle-comprobante-retencion:panel-detalle-comprobante-retencion');
+                const shade = document.querySelector('.ui-widget-overlay, .rf-pp-sh, #disablingDiv');
+                const panelHidden = !panel || !esVisible(panel);
+                const shadeHidden = !shade || !esVisible(shade);
+                return panelHidden && shadeHidden;
+            }, 2000, 'Cierre Modal Retención');
+            await sleep(80);
 
         } catch (error) {
             console.error(`   ❌ Error en fila ${idx}:`, error);
@@ -542,7 +579,7 @@ async function extraerRetencionesPaginaActual() {
         }
     }
 
-    // POR SI ACASO: Asegurar que el último modal se cierre (User request)
+    // POR SI ACASO: Asegurar que cualquier modal residual quede cerrado
     console.log('   🧹 Limpieza final: Asegurando cierre de modales...');
     await cerrarModal();
 
@@ -552,41 +589,28 @@ async function extraerRetencionesPaginaActual() {
 async function extraerDatosModalRetencion() {
     console.log('      🔍 Buscando modal (Estrategia Headers de Tabla)...');
 
-    // Esperar a que cargue
-    await sleep(2000);
-
-    // 1. Buscar dentro de Dialogs (Prioridad)
-    const dialogs = document.querySelectorAll('.ui-dialog');
+    // 1. Buscar dentro de Dialogs visibles (Prioridad)
+    const dialogs = Array.from(document.querySelectorAll('.ui-dialog, .rf-pp-cntr')).filter(d => (typeof esVisible === 'function' ? esVisible(d) : true));
 
     // Iterar en reverso (último abierto)
     for (let i = dialogs.length - 1; i >= 0; i--) {
         const d = dialogs[i];
-
-        // Buscar la tabla ESPECÍFICA dentro del diálogo
         const tablas = d.querySelectorAll('table');
         for (const t of tablas) {
             const headers = t.textContent.toLowerCase();
-            // Headers clave que SIEMPRE aparecen en la tabla de retención
             if (headers.includes('base imponible') && headers.includes('valor retenido')) {
                 console.log(`      ✅ Tabla encontrada en Dialog #${i} (por headers)`);
-                console.log(`      👀 Estado visible: ${d.style.display !== 'none'}`);
-
-                // FIX: Procesar SOLAMENTE esta tabla, no todas las del diálogo
-                const datos = procesarTablaRetencion(t);
-                return datos;
+                return procesarTablaRetencion(t);
             }
         }
     }
 
     // 2. Fallback: Buscar cualquier tabla en el DOM con esos headers
-    console.log('      ⚠️ No encontrado en Dialogs. Escaneando TODAS las tablas del DOM...');
     const todasLasTablas = document.querySelectorAll('table');
-
     for (const t of todasLasTablas) {
         const headers = t.textContent.toLowerCase();
         if (headers.includes('base imponible') && headers.includes('valor retenido')) {
             console.log('      ✅ Tabla "suelta" encontrada en DOM (por headers exactos)');
-            // FIX: Procesar directamente la tabla encontrada
             return procesarTablaRetencion(t);
         }
     }
@@ -711,18 +735,33 @@ function procesarTablaRetencion(tabla) {
 
 async function cerrarModal() {
     try {
+        // Prioridad 1: Buscar botón cerrar en el diálogo específico de retenciones
+        const formRet = document.getElementById('form-detalle-comprobante-retencion') ||
+                        document.getElementById('form-detalle-comprobante-retencion:panel-detalle-comprobante-retencion');
+        const dialogPadre = formRet?.closest('.ui-dialog, .rf-pp-cntr');
+        if (dialogPadre) {
+            const btnClosePadre = dialogPadre.querySelector('.ui-dialog-titlebar-close, .ui-icon-closethick, [id*="close"], a[href="#"]');
+            if (btnClosePadre && (typeof esVisible === 'function' ? esVisible(btnClosePadre) : true)) {
+                btnClosePadre.click();
+                await sleep(80);
+                return;
+            }
+        }
+
+        // Prioridad 2: Buscar cualquier botón cerrar visible
         const botonesCerrar = Array.from(document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick, button[aria-label*="Close" i], button[aria-label*="Cerrar" i]'));
         const botonVisible = botonesCerrar.find(btn => (typeof esVisible === 'function' ? esVisible(btn) : true));
         if (botonVisible) {
             if (typeof clickElement === 'function') clickElement(botonVisible, 'Cerrar Modal Retención');
             else botonVisible.click();
-            await sleep(500);
+            await sleep(80);
         } else if (botonesCerrar.length > 0) {
             botonesCerrar[0].click();
-            await sleep(500);
+            await sleep(80);
         } else {
             // Click fuera o Escape
             document.body.click();
+            await sleep(80);
         }
     } catch (error) {
         console.warn('Error cerrando modal:', error);

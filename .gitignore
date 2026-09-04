@@ -44,6 +44,7 @@ extenciones web/_EVIDENCIA_SRI/**/*.png
 extenciones web/_EVIDENCIA_SRI/**/*.webp
 extenciones web/_EVIDENCIA_SRI/**/*.xml
 extenciones web/_EVIDENCIA_SRI/**/*.txt
+extenciones web/_EVIDENCIA_SRI/prueba*
 extenciones web/*recorrido*
 
 # ── Documentos de contribuyentes ───────────────────────────────────────

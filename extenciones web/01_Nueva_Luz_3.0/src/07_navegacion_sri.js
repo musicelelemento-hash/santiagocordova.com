@@ -267,13 +267,11 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         await waitFor(() => {
             const splash = document.getElementById('id-sri-splash') || document.querySelector('.sri-splash');
             const splashHidden = !splash || !esVisible(splash);
-            // Verificación secundaria simplificada (Header de usuario presente)
             const headerUsuario = document.getElementById('nombreRuc') || document.querySelector('.nombre-comercial-header');
-            // Menos estricto con document.readyState para ganar velocidad
             return splashHidden && (!!headerUsuario || document.readyState === 'complete' || document.readyState === 'interactive');
-        }, 5000, 'Portal Splash'); // Reducido timeout a 5s
+        }, 5000, 'Portal Splash');
 
-        await sleep(300); // Pequeña pausa de estabilidad
+        await sleep(300);
         progress(15);
 
         // PASO 1: UBICACIÓN Y NAVEGACIÓN RESILIENTE AL WIZARD (ELITE v10.0)
@@ -284,10 +282,11 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         // ¿Ya estamos en el Wizard de Formulario IVA?
         const checkWizardInDOM = () => {
             return document.getElementById('frmFlujoDeclaracion:somObligacion_label') ||
+                document.getElementById('frmFlujoDeclaracion:somObligacion') ||
                 document.querySelector('div[id*="somObligacion"]') ||
                 document.querySelector('[id*="somObligacion"]') ||
-                window.location.href.includes('somObligacion') ||
-                window.location.href.includes('declaracionImpuesto');
+                window.location.href.includes('recibirDeclaracion') ||
+                window.location.href.includes('identificadorGrupoObligacion=IVA');
         };
 
         let enWizard = !!checkWizardInDOM();
@@ -309,11 +308,9 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
                 // Esperar a que las tarjetas del dashboard Angular se rendericen
                 const cardIva = await waitFor(() => {
-                    // 1. Enlace directo a declaracionImpuesto o redireccion=310
                     const direct = document.querySelector('a[href*="declaracionImpuesto"], a[href*="redireccion=310"]');
                     if (direct) return direct;
 
-                    // 2. Tarjetas o items de PrimeFaces / Angular
                     const items = Array.from(document.querySelectorAll('.card, .ui-panel, .dashboard-item, mat-card, .p-card, a, button, div[role="button"], span'));
                     return items.find(el => {
                         const txt = (el.innerText || el.textContent || '').toUpperCase();
@@ -336,34 +333,12 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     return;
                 }
             } else {
-                // CASO B: Estamos en otra página (perfil, inicio.jsf, etc.)
-                console.log('🔍 Buscando acceso a declaraciones desde la vista actual...');
-
-                // 1. Selector directo por href
-                const directLink = document.querySelector('a[href*="declaracionImpuesto"], a[href*="redireccion=310"]');
-                if (directLink) {
-                    console.log('✅ Enlace directo a IVA encontrado. Clickeando...');
-                    clickElement(directLink, 'Enlace Directo IVA');
-                    await sleep(2500);
-                } else {
-                    // 2. Buscar menú "Elaboración y envío de declaraciones"
-                    const menuElab = Array.from(document.querySelectorAll('.ui-menuitem-text, span[role="menuitem"], a, button')).find(el => {
-                        const txt = (el.textContent || el.innerText || '').toUpperCase();
-                        return txt.includes('ELABORACIÓN Y ENVÍO DE DECLARACIONES') || 
-                               txt === 'DECLARACIONES';
-                    });
-
-                    if (menuElab) {
-                        console.log('✅ Menú de Declaraciones detectado. Clickeando...', menuElab);
-                        clickElement(menuElab, 'Menú Elaboración Declaraciones');
-                        await sleep(2500);
-                    } else {
-                        console.warn('⚠️ No se encontró menú interactivo. Navegando al índice de declaraciones...');
-                        window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones';
-                        await sleep(4000);
-                        return;
-                    }
-                }
+                // CASO B: Estamos en otra página (comprobantesRecibidos, perfil, inicio.jsf, etc.)
+                console.log('🚀 [WIZARD NAV] Navegando inmediatamente vía puente SSO oficial al Formulario IVA...');
+                safeStatus('⚡ Accediendo a Formulario IVA...');
+                window.location.href = SRI_PUENTE_FORMULARIO_IVA;
+                await sleep(4000);
+                return;
             }
 
             // Verificar si entramos al Wizard tras este paso
@@ -1062,7 +1037,7 @@ function showEliteToast(data, workflowPeriod) {
                 actionTimestamp: Date.now()
             });
 
-            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/declaraciones';
+            window.location.href = SRI_PUENTE_FORMULARIO_IVA;
         };
     }
 
