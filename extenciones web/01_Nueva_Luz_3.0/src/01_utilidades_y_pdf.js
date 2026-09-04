@@ -1584,6 +1584,7 @@ async function handleBatchNextClient() {
     "flagged_errors",
     "sc_clients_cache",
     "sri_tried_credentials",
+    "sc_declaraciones_locales",
   ]);
   let queue = Array.isArray(res.auto_batch_queue) ? res.auto_batch_queue : [];
   let currentIndex = res.auto_batch_index || 0;
@@ -1663,8 +1664,15 @@ async function handleBatchNextClient() {
     }
   }
 
+  const registroLocal = res.sc_declaraciones_locales || {};
+
   const isClientDoneOrError = (clientRuc) => {
     if (!clientRuc || flaggedErrs[clientRuc]) return true;
+    // 🧾 Constancia de esta misma corrida: si ya declaró el periodo, no se vuelve.
+    if (registroLocal[`${clientRuc}|${targetPeriodStr}`]) {
+      console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${targetPeriodStr} en esta corrida.`);
+      return true;
+    }
     if (tried[clientRuc] && (tried[clientRuc].status === 'failed' || tried[clientRuc].status === 'locked' || tried[clientRuc].status === 'blocked')) return true;
     const found = cacheList.find((c) => c.ruc === clientRuc);
     if (found) {

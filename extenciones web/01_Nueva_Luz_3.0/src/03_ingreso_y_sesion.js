@@ -477,6 +477,21 @@ async function ejecutarAccionPendiente(items) {
         return;
     }
 
+    // 🪪 La sesión abierta debe ser la del cliente que el lote está declarando.
+    if (esDeLote && items.pending_sri_autofill?.ruc) {
+        const enPantalla = (window.sriAssistant && window.sriAssistant.extractClientInfo)
+            ? window.sriAssistant.extractClientInfo() : {};
+        const esperado = items.pending_sri_autofill.ruc;
+        if (enPantalla.ruc && enPantalla.highConfidence && enPantalla.ruc !== esperado) {
+            console.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
+                          'No se toca nada: se cierra sesión para que entre el cliente correcto.');
+            anotarBitacora('⛔ identidad no coincide', `sesión=${enPantalla.ruc} · esperado=${esperado}`);
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+            if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
+            return;
+        }
+    }
+
     if (!(await verifySessionConsistency())) return;
 
     if (!(await checkSessionAlive())) {
