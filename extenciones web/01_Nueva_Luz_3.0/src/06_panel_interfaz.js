@@ -232,7 +232,7 @@ class SriAssistantPanel {
         let found = false;
         for (const sel of successSelectors) {
             const el = document.querySelector(sel);
-            if (el && el.offsetParent !== null) {
+            if (el && (typeof esVisible === 'function' ? esVisible(el) : el.offsetParent !== null)) {
                 const text = el.innerText.toUpperCase();
                 if (successText.some(t => text.includes(t))) {
                     found = true;
@@ -1370,14 +1370,14 @@ class SriAssistantPanel {
         try {
             // Paso 1: Siguiente Principal (solo si TODAVÍA no estamos en el resumen)
             const yaEnResumen = typeof findAceptarBtnOnSummary === 'function'
-                ? !!(findAceptarBtnOnSummary()?.offsetParent)
+                ? !!(findAceptarBtnOnSummary())
                 : false;
 
             if (yaEnResumen) {
                 this.log('📄 Ya estamos en el resumen; se omite "Siguiente".');
             } else {
                 let btnSiguiente = findByText('Siguiente', 'span');
-                if (btnSiguiente && btnSiguiente.offsetParent !== null) {
+                if (btnSiguiente && (typeof esVisible === 'function' ? esVisible(btnSiguiente) : btnSiguiente.offsetParent !== null)) {
                     this.log('➡️ Pulsando Siguiente...');
                     btnSiguiente.click();
                     await sleep(3000);
@@ -3146,14 +3146,14 @@ class SriAssistantPanel {
         this.bindBtn('#btn-panel-force-next', async () => {
             this.log('⏭️ Forzando paso manual...');
             let dismissed = false;
-            const dialogs = Array.from(document.querySelectorAll('div.ui-dialog, div.ui-confirm-dialog')).filter(d => d.offsetParent !== null && getComputedStyle(d).display !== 'none');
+            const dialogs = Array.from(document.querySelectorAll('div.ui-dialog, div.ui-confirm-dialog')).filter(d => (typeof esVisible === 'function' ? esVisible(d) : d.offsetParent !== null) && getComputedStyle(d).display !== 'none');
             for (const dlg of dialogs) {
                 const candidates = Array.from(dlg.querySelectorAll('button, span.ui-button-text'));
                 for (const el of candidates) {
                     const txt = (el.innerText || '').trim().toLowerCase();
                     if (txt === 'aceptar' || txt === 'continuar' || txt === 'si' || txt === 'sí') {
                         const btn = el.closest('button, a') || el;
-                        if (btn.offsetParent !== null) {
+                        if (typeof esVisible === 'function' ? esVisible(btn) : btn.offsetParent !== null) {
                             btn.click();
                             dismissed = true;
                             this.log('✅ Diálogo forzado a Aceptar.');
@@ -3229,7 +3229,7 @@ class SriAssistantPanel {
 
                 // Salida temprana si el resumen ya cargó (verificación robusta)
                 const btnAceptarRes = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : null;
-                if (btnAceptarRes && btnAceptarRes.offsetParent !== null) {
+                if (btnAceptarRes && (typeof esVisible === 'function' ? esVisible(btnAceptarRes) : true)) {
                     console.log('✅ Resumen real detectado (Botón Aceptar visible). Saliendo del bucle de advertencias temprano.');
                     reachedSummary = true;
                     break;
@@ -3242,7 +3242,7 @@ class SriAssistantPanel {
             const panelMsg = document.getElementById('frmFlujoDeclaracion:panelMensajes') ||
                              document.querySelector('[id*="panelMensajes"]');
 
-            if (panelMsg && panelMsg.offsetParent !== null) {
+            if (panelMsg && (typeof esVisible === 'function' ? esVisible(panelMsg) : true)) {
                 const msgItems = Array.from(panelMsg.querySelectorAll('li.estiloItemsMensajes, li[class*="Mensajes"], .ui-messages-warn li, .ui-messages-info li'));
                 const msgTexts = msgItems.map(li => (li.innerText || '').trim().toLowerCase());
 
@@ -3283,7 +3283,7 @@ class SriAssistantPanel {
                             
                             // Verificar robustamente si llegamos al resumen
                             const btnAceptarRes = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : null;
-                            if (btnAceptarRes && btnAceptarRes.offsetParent !== null) {
+                            if (btnAceptarRes && (typeof esVisible === 'function' ? esVisible(btnAceptarRes) : true)) {
                                 console.log('✅ [ELITE] Resumen real detectado tras advertencias 625 (Botón Aceptar visible). Bucle terminado.');
                                 break;
                             }

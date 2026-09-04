@@ -404,6 +404,10 @@ const clickElement = (el, name) => {
         console.warn(`❌ No se pudo clickear: ${name} (Elemento null)`);
         return false;
     }
+    const disabling = document.getElementById('disablingDiv');
+    if (disabling && disabling.style.display !== 'none' && getComputedStyle(disabling).display !== 'none') {
+        console.warn(`⚠️ [AJAX BLOQUEO] PrimeFaces #disablingDiv activo al intentar clic en: ${name}.`);
+    }
     GhostBlackBox.add('CLICK', `Clic en: ${name}`, { tag: el.tagName, id: el.id || 'sin-id', text: (el.innerText || '').trim().substring(0, 30) });
     console.log(`✅ Clickeando: ${name}`, el);
     const events = ['mouseover', 'mousedown', 'mouseup', 'click'];

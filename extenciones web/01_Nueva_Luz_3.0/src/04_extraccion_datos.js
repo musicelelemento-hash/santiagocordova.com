@@ -13,7 +13,17 @@ async function navegarAComprobantes() {
         return true;
     }
 
-    console.log('🚀 [REGLA INMUTABLE] Navegando directamente a Comprobantes Electrónicos Recibidos...');
+    // DETECCIÓN DE SESIÓN FRÍA (TÉCNICA EXTRACTOR V1)
+    // Si estamos en Angular (/perfil) y no hay sesión de tuportal-internet activa,
+    // calentar sesión primero para que Keycloak transfiera la cookie SSO sin pedir clave
+    const hasMenu = document.querySelector('.ui-menuitem, #cssmenu, .mostrarMenu, a#menu-button, .menu-button');
+    if (!hasMenu && !url.includes('tuportal-internet') && url.includes('/perfil')) {
+        console.log('❄️ Sesión fría en perfil. Calentando vía tuportal-internet...');
+        window.location.href = 'https://srienlinea.sri.gob.ec/tuportal-internet/inicio.jsf';
+        return false;
+    }
+
+    console.log('🚀 [REGLA INMUTABLE] Navegando a Comprobantes Electrónicos Recibidos...');
     if (typeof safeStatus === 'function') safeStatus('🚀 Abriendo Comprobantes Recibidos...');
     window.location.href = SRI_RECIBIDOS_URL;
     return true;
@@ -725,10 +735,6 @@ async function cerrarModal() {
     } catch (error) {
         console.warn('Error cerrando modal');
     }
-}
-
-async function esperarElemento(selector, timeout) {
-    return await waitFor(() => document.querySelector(selector), timeout, selector);
 }
 
 async function irSiguientePagina() {

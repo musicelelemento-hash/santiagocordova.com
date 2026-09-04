@@ -288,10 +288,14 @@ SafeStorage.get(null).then(async (items) => {
             skipSafetyCheck: true
         });
 
-        // Si ya estamos adentro y no estamos en la página de comprobantes recibidos, redirigir de una vez
+        // Si ya estamos adentro y no estamos en la página de comprobantes recibidos, redirigir ordenadamente
         if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-            console.log('✈️ [AUTO FLIGHT] Redirigiendo de inmediato a Comprobantes Recibidos (Paso 1)...');
-            window.location.href = SRI_RECIBIDOS_URL;
+            console.log('✈️ [AUTO FLIGHT] Navegando a Comprobantes Recibidos (Paso 1)...');
+            if (typeof navegarAComprobantes === 'function') {
+                navegarAComprobantes();
+            } else {
+                window.location.href = SRI_RECIBIDOS_URL;
+            }
             return;
         }
     } else if (items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted) {
@@ -989,11 +993,17 @@ async function autoLlenarBusqueda(data) {
     }
 
     console.log('🔎 Buscando botón Consultar...');
-    const botones = Array.from(document.querySelectorAll('button, input[type="submit"], span.ui-button-text'));
-    const btnConsultar = botones.find(b => {
-        const txt = (b.innerText || b.value || b.textContent || "").toUpperCase();
-        return txt.includes('CONSULTAR') && b.offsetParent !== null;
-    });
+    // ID TATUADO OFICIAL CONFIRMADO: frmPrincipal:btnConsultar
+    const directBtn = document.getElementById('frmPrincipal:btnConsultar');
+    let btnConsultar = (directBtn && (typeof esVisible === 'function' ? esVisible(directBtn) : true)) ? directBtn : null;
+
+    if (!btnConsultar) {
+        const botones = Array.from(document.querySelectorAll('button, input[type="submit"], span.ui-button-text'));
+        btnConsultar = botones.find(b => {
+            const txt = (b.innerText || b.value || b.textContent || "").toUpperCase();
+            return txt.includes('CONSULTAR') && (typeof esVisible === 'function' ? esVisible(b) : b.offsetParent !== null);
+        });
+    }
 
     if (btnConsultar) {
         // En modo Turbo, guardamos el siguiente estado ANTES de clickear por si hay reload
@@ -1048,7 +1058,7 @@ async function autoLlenarBusqueda(data) {
 
             // Detección de Tabla Vacía (PrimeFaces empty message)
             const emptyTable = document.querySelector('.ui-datatable-empty-message');
-            if (emptyTable && emptyTable.offsetParent !== null) {
+            if (emptyTable && (typeof esVisible === 'function' ? esVisible(emptyTable) : emptyTable.offsetParent !== null)) {
                 console.warn('⚡ [Fast-Fail] Tabla vacía encontrada.');
                 return { tableFound: false, noData: true };
             }

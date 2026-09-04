@@ -957,20 +957,5 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
 }
 
 
-async function detectarValorSugerido() {
-    const input564 = await encontrarInputPorCasillero('564');
-    const res = await detectarValorSugeridoEnDOM('564', input564);
-    return res.found ? res.value : 0;
-}
 
-// Función genérica para detectar y llenar valor sugerido de cualquier campo
-async function llenarValorSugeridoCampo(casillero) {
-    return await procesarCampoConSugerido(casillero);
-}
-
-
-
-// ============================================
-// ASISTENTE FLOTANTE (PANEL EN PAGINA)
-// ============================================
 
