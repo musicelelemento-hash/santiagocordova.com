@@ -12,7 +12,28 @@ async function calculateEliteFinancials(targetField) {
     const totalCredito = (credAnterior || 0) + (credEsteMes || 0);
     const totalRetenciones = (retAnterior || 0) + (retEsteMes || 0);
 
-    if (targetField === '615') {
+    if (targetField === '564' || targetField === '565') {
+        // Cálculo del Factor de Proporcionalidad (Art. 66 LRTI Ecuador)
+        const ventas15 = (await leerCampo('411')) || (await leerCampo('401')) || 0;
+        const ventas0 = ((await leerCampo('413')) || (await leerCampo('403')) || 0) +
+                        ((await leerCampo('415')) || (await leerCampo('405')) || 0) +
+                        ((await leerCampo('417')) || (await leerCampo('407')) || 0) +
+                        ((await leerCampo('418')) || (await leerCampo('408')) || 0);
+        const ivaCompras = (await leerCampo('520')) || (await leerCampo('539')) || 0;
+        const totalVentas = ventas15 + ventas0;
+
+        let factor = 1.0;
+        if (totalVentas > 0) {
+            factor = Math.min(1, Math.max(0, ventas15 / totalVentas));
+        }
+        console.log(`   💡 Proporcionalidad: Ventas15=$${ventas15}, Ventas0=$${ventas0}, Total=$${totalVentas} -> Factor=${factor.toFixed(4)}, IVA Compras=$${ivaCompras}`);
+
+        const credito564 = Math.round((ivaCompras * factor) * 100) / 100;
+        const gasto565 = Math.max(0, Math.round((ivaCompras - credito564) * 100) / 100);
+
+        result = (targetField === '564') ? credito564 : gasto565;
+        console.log(`   💡 Cálculo ${targetField}: 564=$${credito564}, 565=$${gasto565} (Suma=$${(credito564 + gasto565).toFixed(2)})`);
+    } else if (targetField === '615') {
         // Crédito Tributario próximo mes: (Crédito Total) - (Lo usado para cubrir 601)
         result = Math.max(0, totalCredito - impCausado);
         console.log(`   💡 Cálculo 615: (${totalCredito}) - ${impCausado} = ${result}`);
@@ -76,7 +97,7 @@ async function autoLlenarFormulario(data) {
             if (exito) {
                 total++;
                 await sleep(400);
-            } else if (['615', '617'].includes(f)) {
+            } else if (['564', '565', '615', '617'].includes(f)) {
                 console.log(`📡 Refuerzo Técnico para campo ${f}...`);
                 const technicalVal = await calculateEliteFinancials(f);
                 if (technicalVal > 0) {
@@ -358,16 +379,26 @@ async function llenarValorSugerido() {
         console.log('✅ Campo 564 llenado con valor sugerido.');
         await sleep(600);
     } else {
-        console.log('ℹ️ Campo 564: sin valor sugerido (se deja en 0).');
+        console.log('ℹ️ Campo 564: sin sugerido en DOM, aplicando Refuerzo Técnico...');
+        const val564 = await calculateEliteFinancials('564');
+        if (val564 > 0 && await llenarCampo('564', val564)) {
+            totalLlenados++;
+            console.log(`✅ Campo 564 llenado con Refuerzo Técnico ($${val564}).`);
+        }
     }
 
-    // Campo 565 (Crédito Tributario para el período siguiente)
+    // Campo 565 (Gasto sin crédito tributario / Factor de Proporcionalidad)
     console.log('🔍 Procesando campo sugerido → 565...');
     if (await procesarCampoConSugerido('565')) {
         totalLlenados++;
         console.log('✅ Campo 565 llenado con valor sugerido.');
     } else {
-        console.log('ℹ️ Campo 565: sin valor sugerido (se deja en 0).');
+        console.log('ℹ️ Campo 565: sin sugerido en DOM, aplicando Refuerzo Técnico...');
+        const val565 = await calculateEliteFinancials('565');
+        if (val565 > 0 && await llenarCampo('565', val565)) {
+            totalLlenados++;
+            console.log(`✅ Campo 565 llenado con Refuerzo Técnico ($${val565}).`);
+        }
     }
 
     return totalLlenados;

@@ -224,20 +224,36 @@ const SriLoop = {
      * guardada (sin clave el auto-login es imposible).
      */
     async armarCola(periodo) {
-        const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors']);
+        const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
         const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
         const errs = r.flagged_errors || {};
+        const tried = r.sri_tried_credentials || {};
         const pStr = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
 
         const cola = [];
-        let sinClave = 0, yaHechos = 0;
+        let sinClave = 0, yaHechos = 0, excluidosSeguridad = 0;
 
         for (const c of lista) {
             if (!c || !c.ruc) continue;
-            if (errs[c.ruc]) continue;
+            if (errs[c.ruc] === 'cuenta_bloqueada' || tried[c.ruc]?.status === 'locked') {
+                excluidosSeguridad++;
+                continue;
+            }
 
             const clave = c.password || c.sri_password || c.sriPassword || '';
             if (!clave) { sinClave++; continue; }
+
+            // 🛡️ Filtro de seguridad: si la clave falló y no ha cambiado, omitir de la cola
+            if (typeof SriCredentialVault !== 'undefined') {
+                const check = await SriCredentialVault.canAttemptLogin(c.ruc, clave);
+                if (!check.allowed) {
+                    excluidosSeguridad++;
+                    continue;
+                }
+            } else if (errs[c.ruc] || tried[c.ruc]?.status === 'failed') {
+                excluidosSeguridad++;
+                continue;
+            }
 
             const decs = Array.isArray(c.declarations) ? c.declarations
                        : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
@@ -254,8 +270,8 @@ const SriLoop = {
             return d(a.ruc) - d(b.ruc);
         });
 
-        console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave.`);
-        return { cola, yaHechos, sinClave, total: lista.length };
+        console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
+        return { cola, yaHechos, sinClave, excluidosSeguridad, total: lista.length };
     },
 
     /** Deja listo el auto-login del cliente que toca. */

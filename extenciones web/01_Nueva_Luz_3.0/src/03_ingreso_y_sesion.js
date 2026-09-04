@@ -72,52 +72,61 @@ SafeStorage.get(null).then(async (items) => {
     // ── Blindaje Anti-Bloqueo de Cuenta (Límite 1 Intento por Cliente) ─────────
     // Si el SRI rechaza las credenciales o la página recarga y sigue en el login
     // tras haberlo intentado, NUNCA se reintenta: se detiene al PRIMER intento fallido,
-    // se purga el storage, se marca en flagged_errors y el lote continúa con el siguiente.
+    // se purga el storage, se registra en SriCredentialVault y el bucle ferrocarril continúa.
     const feedbackEl = document.querySelector('.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, .alert');
     const feedbackText = feedbackEl ? (feedbackEl.innerText || feedbackEl.textContent || '').trim() : '';
     const yaIntentoLogin = isLoginPage && isExplicitlyOutside && !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
+    const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || document.body.innerText) ||
+        /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || document.body.innerText);
     const hasLoginError = isLoginPage && (
         yaIntentoLogin ||
+        isAccountLocked ||
         (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad|superado|fallid/i.test(feedbackText)) ||
         /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
         /credencial(es)? (inv[aá]lid|incorrect)/i.test(document.body.innerText) ||
-        /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(document.body.innerText) ||
-        /n[uú]mero m[aá]ximo de intentos/i.test(document.body.innerText) ||
-        /superado el n[uú]mero de intentos/i.test(document.body.innerText) ||
         /identificaci[oó]n no registrada/i.test(document.body.innerText)
     );
 
     if (hasLoginError) {
         console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o reintento bloqueado. Deteniendo para blindar la cuenta contra bloqueos.');
         const clientRuc = items.pending_sri_autofill?.ruc;
+        const clientPass = items.pending_sri_autofill?.password;
         const clientName = items.pending_sri_autofill?.name || clientRuc || 'este cliente';
 
         // 🛡️ PURGA INMEDIATA: Borrar credenciales de storage para que ninguna recarga vuelva a enviar la clave mala
         await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
 
-        if (clientRuc) {
+        if (clientRuc && typeof SriCredentialVault !== 'undefined') {
+            if (isAccountLocked) {
+                await SriCredentialVault.recordLocked(clientRuc, feedbackText || 'Cuenta bloqueada o intentos superados en el SRI');
+            } else {
+                await SriCredentialVault.recordFailure(clientRuc, clientPass, feedbackText || 'Credenciales rechazadas en 1er intento');
+            }
+        } else if (clientRuc) {
             const resErr = await SafeStorage.get(['flagged_errors']);
             const errs = resErr.flagged_errors || {};
-            errs[clientRuc] = 'error_credenciales';
+            errs[clientRuc] = isAccountLocked ? 'cuenta_bloqueada' : 'error_credenciales';
             await SafeStorage.set({ flagged_errors: errs });
         }
 
         if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
             window.sriAssistant.showEliteToast({
-                title: '🔒 Acceso Detenido (1er Intento)',
-                msg: `No se pudo ingresar con las credenciales de ${clientName}. Proceso detenido en el 1er intento para proteger la cuenta.`,
+                title: isAccountLocked ? '🚨 Cuenta Bloqueada en SRI' : '🔒 Acceso Detenido (1er Intento)',
+                msg: isAccountLocked
+                    ? `El SRI reporta que la cuenta de ${clientName} está bloqueada/inactiva. Omitida para continuar el lote.`
+                    : `No se pudo ingresar con las credenciales de ${clientName}. Proceso detenido en el 1er intento para proteger la cuenta.`,
                 duration: 9000
             });
         }
 
         const isLoop = items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch) || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
         if (isLoop) {
-            console.log(`⏩ [AUTO BATCH] Cliente ${clientRuc || ''} omitido por seguridad. Avanzando al siguiente cliente en 3s...`);
+            console.log(`🚂 [FERROCARRIL] Cliente ${clientRuc || ''} omitido con seguridad. Continuando tren al siguiente cliente en 2s...`);
             setTimeout(async () => {
                 if (typeof handleBatchNextClient === 'function') {
                     await handleBatchNextClient();
                 }
-            }, 3000);
+            }, 2000);
         }
         return;
     }
@@ -127,6 +136,35 @@ SafeStorage.get(null).then(async (items) => {
     const autofillListo = !!(items.pending_sri_autofill && items.pending_sri_autofill.ruc);
 
     if (isLoginPage && !isAlreadyLoggedIn && autofillListo) {
+        const clientRuc = items.pending_sri_autofill.ruc;
+        let clientPass = items.pending_sri_autofill.password;
+        if (!clientPass) {
+            const cacheRes = await SafeStorage.get(['sc_clients_cache']);
+            const found = (cacheRes.sc_clients_cache || []).find(c => c.ruc === clientRuc);
+            if (found) clientPass = found.password || found.sri_password || found.sriPassword;
+        }
+
+        // 🛡️ VERIFICACIÓN PREVENTIVA DE BÓVEDA (ANTES DE TOCAR EL DOM)
+        if (typeof SriCredentialVault !== 'undefined') {
+            const checkVault = await SriCredentialVault.canAttemptLogin(clientRuc, clientPass);
+            if (!checkVault.allowed) {
+                console.warn(`🛑 [BLINDAJE SEGURIDAD PREVENTIVO] Omitiendo login de ${clientRuc}: ${checkVault.reason}`);
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+                if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+                    window.sriAssistant.showEliteToast({
+                        title: '🛡️ Bloqueo Preventivo',
+                        msg: `Omitido ${items.pending_sri_autofill.name || clientRuc}: ${checkVault.reason}`,
+                        duration: 6000
+                    });
+                }
+                const isLoop = items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch) || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+                if (isLoop && typeof handleBatchNextClient === 'function') {
+                    setTimeout(() => handleBatchNextClient(), 1500);
+                }
+                return;
+            }
+        }
+
         console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
 
         // Si estamos en la portada de inicio del SRI (ej. inicio/NAT), hacer clic en "Iniciar sesión" para ir a Keycloak
@@ -286,6 +324,9 @@ SafeStorage.get(null).then(async (items) => {
     if (isAutoFlow && !isAlreadyLoggedIn) {
         console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
     } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
+        if (typeof SriCredentialVault !== 'undefined' && items.pending_sri_autofill?.ruc) {
+            await SriCredentialVault.recordSuccess(items.pending_sri_autofill.ruc, items.pending_sri_autofill.password);
+        }
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
@@ -1470,6 +1511,22 @@ async function renderLoginCockpit(items) {
                 queue = [queue[selIdx], ...queue.slice(0, selIdx), ...queue.slice(selIdx + 1)];
             }
 
+            // 🛡️ Filtro de seguridad: excluir cuentas bloqueadas o con credenciales fallidas sin actualizar
+            if (typeof SriCredentialVault !== 'undefined') {
+                const safeQueue = [];
+                for (const q of queue) {
+                    const check = await SriCredentialVault.canAttemptLogin(q.ruc, q.password);
+                    if (check.allowed) safeQueue.push(q);
+                    else console.log(`🛡️ [COCKPIT] Excluyendo ${q.ruc} (${q.name}) del bucle: ${check.reason}`);
+                }
+                queue = safeQueue;
+            }
+
+            if (queue.length === 0) {
+                alert('⚠️ Todos los clientes pendientes tienen problemas de credenciales o cuentas bloqueadas en el SRI. Corrige sus claves antes de iniciar.');
+                return;
+            }
+
             const first = queue[0];
             if (!first.password) {
                 alert(`⚠️ El cliente ${first.name} (${first.ruc}) no tiene clave SRI guardada. Ingrésala usando el icono ✏️ antes de iniciar el bucle.`);
@@ -1518,6 +1575,16 @@ async function renderLoginCockpit(items) {
             e.preventDefault();
             const selRuc = clientSel?.value || rucInput.value;
             const cl = validClients.find(c => c.ruc === selRuc) || currentClient || { ruc: selRuc, password: passInput?.value || '', name: 'Cliente SRI' };
+
+            // 🛡️ Filtro de seguridad preventivo
+            if (typeof SriCredentialVault !== 'undefined') {
+                const check = await SriCredentialVault.canAttemptLogin(cl.ruc, cl.password);
+                if (!check.allowed) {
+                    alert(`🛑 [BLOQUEO PREVENTIVO] ${check.reason}\n\nActualiza la contraseña del cliente usando el icono ✏️ antes de intentar.`);
+                    return;
+                }
+            }
+
             updateCredentialsInForm(cl.ruc);
 
             await SafeStorage.set({

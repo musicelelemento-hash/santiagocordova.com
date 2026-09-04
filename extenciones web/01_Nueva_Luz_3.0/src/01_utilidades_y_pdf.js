@@ -53,6 +53,121 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// ============================================================
+// BÓVEDA INTELIGENTE DE SEGURIDAD DE CREDENCIALES (ANTI-BLOQUEO SRI)
+// ============================================================
+// El SRI bloquea cuentas de contribuyentes tras 5 intentos fallidos.
+// Esta bóveda garantiza:
+// 1. Límite estricto de 1 solo intento por clave.
+// 2. Registro persistente en `sri_tried_credentials`.
+// 3. Detección de firma/cambio de contraseña: si el usuario actualiza la clave
+//    en el dashboard de SantiagoCordova.com, se le concede 1 intento para la nueva clave.
+// 4. Bloqueo preventivo: nunca se tocan inputs ni se pulsa login si la clave ya falló.
+// 5. Exclusión automática del bucle ferrocarril para no frenar el lote.
+const SriCredentialVault = {
+  getSignature(password) {
+    if (!password) return '';
+    return `${password.length}_${password.slice(0, 2)}_${password.slice(-2)}`;
+  },
+
+  async getRegistry() {
+    const res = await SafeStorage.get(['sri_tried_credentials', 'flagged_errors']);
+    return {
+      tried: res.sri_tried_credentials || {},
+      flagged: res.flagged_errors || {}
+    };
+  },
+
+  async canAttemptLogin(ruc, password) {
+    if (!ruc) return { allowed: false, reason: 'RUC no especificado' };
+    const { tried, flagged } = await this.getRegistry();
+    const entry = tried[ruc];
+
+    if (entry && (entry.status === 'locked' || entry.status === 'blocked')) {
+      return {
+        allowed: false,
+        reason: `Cuenta reportada como bloqueada/inactiva en el portal SRI. Omitida para proteger al cliente.`
+      };
+    }
+
+    if (flagged[ruc] === 'error_credenciales' || (entry && entry.status === 'failed')) {
+      const currentSig = this.getSignature(password);
+      // Si la clave no ha cambiado respecto a la fallida, BLOQUEO TOTAL
+      if (!currentSig || !entry || !entry.signature || entry.signature === currentSig) {
+        return {
+          allowed: false,
+          reason: `Credencial previamente rechazada por el SRI. Prohibido reintentar para no bloquear la cuenta.`
+        };
+      }
+      // Si la clave cambió en la base/caché, conceder 1 intento para la nueva clave
+      console.log(`🔑 [VAULT] Nueva clave detectada para ${ruc} (firma anterior: ${entry.signature}, nueva: ${currentSig}). Concediendo 1 intento.`);
+    }
+
+    return { allowed: true };
+  },
+
+  async recordFailure(ruc, password, reason) {
+    if (!ruc) return;
+    const { tried, flagged } = await this.getRegistry();
+    flagged[ruc] = 'error_credenciales';
+    tried[ruc] = {
+      status: 'failed',
+      ruc,
+      timestamp: Date.now(),
+      signature: this.getSignature(password),
+      reason: reason || 'Credenciales incorrectas',
+      attempts: ((tried[ruc] && tried[ruc].attempts) || 0) + 1
+    };
+    await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
+    console.warn(`🛡️ [VAULT] Credencial fallida registrada para ${ruc}. Intentos: ${tried[ruc].attempts}. Motivo: ${reason}`);
+  },
+
+  async recordLocked(ruc, reason) {
+    if (!ruc) return;
+    const { tried, flagged } = await this.getRegistry();
+    flagged[ruc] = 'cuenta_bloqueada';
+    tried[ruc] = {
+      status: 'locked',
+      ruc,
+      timestamp: Date.now(),
+      reason: reason || 'Cuenta bloqueada o superado límite de intentos',
+      locked: true
+    };
+    await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
+    console.error(`🚨 [VAULT] Cuenta BLOQUEADA por SRI registrada para ${ruc}: ${reason}`);
+  },
+
+  async recordSuccess(ruc, password) {
+    if (!ruc) return;
+    const { tried, flagged } = await this.getRegistry();
+    if (flagged[ruc] === 'error_credenciales') {
+      delete flagged[ruc];
+    }
+    tried[ruc] = {
+      status: 'success',
+      ruc,
+      timestamp: Date.now(),
+      signature: this.getSignature(password),
+      reason: 'Acceso exitoso'
+    };
+    await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
+    console.log(`✅ [VAULT] Acceso exitoso registrado para ${ruc}. Bóveda actualizada.`);
+  },
+
+  async resetClient(ruc) {
+    if (!ruc) return;
+    const { tried, flagged } = await this.getRegistry();
+    delete tried[ruc];
+    delete flagged[ruc];
+    await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
+    console.log(`🔄 [VAULT] Registro de seguridad reiniciado para ${ruc}.`);
+  }
+};
+
+if (typeof window !== 'undefined') {
+  window.sriVault = SriCredentialVault;
+}
+
 /**
  * ¿El elemento está realmente renderizado y visible?
  * ⚠️ NO usar `offsetParent !== null`: en Chrome todo elemento `position: fixed`
@@ -1379,6 +1494,7 @@ async function handleBatchNextClient() {
     "auto_batch_mode",
     "flagged_errors",
     "sc_clients_cache",
+    "sri_tried_credentials",
   ]);
   let queue = Array.isArray(res.auto_batch_queue) ? res.auto_batch_queue : [];
   let currentIndex = res.auto_batch_index || 0;
@@ -1401,6 +1517,7 @@ async function handleBatchNextClient() {
   }
 
   const flaggedErrs = res.flagged_errors || {};
+  const tried = res.sri_tried_credentials || {};
   const cacheList = Array.isArray(res.sc_clients_cache)
     ? res.sc_clients_cache
     : [];
@@ -1422,8 +1539,41 @@ async function handleBatchNextClient() {
   }
   const targetPeriodStr = resolvedPeriodStr;
 
+  // 🚂 FERROCARRIL DINÁMICO: Si el usuario agregó clientes nuevos a la caché local o web
+  // mientras el tren estaba corriendo, los añadimos a la cola para no parar nunca.
+  const existingRucs = new Set(queue.map(q => q && q.ruc).filter(Boolean));
+  let nuevosAgregados = 0;
+  for (const c of cacheList) {
+    if (!c || !c.ruc) continue;
+    if (existingRucs.has(c.ruc)) continue;
+    const clave = c.password || c.sri_password || c.sriPassword;
+    if (!clave) continue;
+    if (flaggedErrs[c.ruc] || tried[c.ruc]?.status === 'failed' || tried[c.ruc]?.status === 'locked') continue;
+
+    const decs = Array.isArray(c.declarations) ? c.declarations
+               : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
+    const yaDeclarado = decs.some(d => d && (d.proof_file || d.pdfUrl || d.proofFile) && String(d.period || '').includes(targetPeriodStr));
+    if (yaDeclarado) continue;
+
+    queue.push({ ruc: c.ruc, name: c.name || 'Cliente SRI', password: clave });
+    existingRucs.add(c.ruc);
+    nuevosAgregados++;
+  }
+
+  if (nuevosAgregados > 0) {
+    console.log(`🚂 [FERROCARRIL] Se añadieron ${nuevosAgregados} nuevos clientes detectados a la cola del lote.`);
+    await SafeStorage.set({ auto_batch_queue: queue });
+    if (typeof SriLoop !== 'undefined') {
+      const loopActual = await SriLoop.get();
+      if (loopActual && loopActual.cola) {
+        await SafeStorage.set({ sc_loop: { ...loopActual, cola: queue } });
+      }
+    }
+  }
+
   const isClientDoneOrError = (clientRuc) => {
     if (!clientRuc || flaggedErrs[clientRuc]) return true;
+    if (tried[clientRuc] && (tried[clientRuc].status === 'failed' || tried[clientRuc].status === 'locked' || tried[clientRuc].status === 'blocked')) return true;
     const found = cacheList.find((c) => c.ruc === clientRuc);
     if (found) {
       const decs = Array.isArray(found.declarations)
@@ -1446,7 +1596,7 @@ async function handleBatchNextClient() {
     isClientDoneOrError(queue[nextIndex].ruc)
   ) {
     console.log(
-      `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado u omitido: ${queue[nextIndex].ruc}`,
+      `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado, con error o credencial fallida: ${queue[nextIndex].ruc}`,
     );
     nextIndex++;
   }
@@ -1519,7 +1669,22 @@ async function handleBatchNextClient() {
   }
 }
 
-function executeLogin(ruc, password) {
+async function executeLogin(ruc, password) {
+  if (typeof SriCredentialVault !== 'undefined') {
+    const check = await SriCredentialVault.canAttemptLogin(ruc, password);
+    if (!check.allowed) {
+      console.warn(`🛑 [BLINDAJE SEGURIDAD] executeLogin cancelado para ${ruc}: ${check.reason}`);
+      if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+        window.sriAssistant.showEliteToast({
+          title: '🛡️ Bloqueo Preventivo',
+          msg: `Acceso cancelado para ${ruc}: ${check.reason}`,
+          duration: 6000
+        });
+      }
+      return false;
+    }
+  }
+
   const campos = encontrarCamposLogin();
   const rucInput = campos && campos.ruc;
   const passInput = campos && campos.pass;
