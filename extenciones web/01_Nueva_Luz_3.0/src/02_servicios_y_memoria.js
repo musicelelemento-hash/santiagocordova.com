@@ -117,6 +117,17 @@ const SriLoop = {
         await this._sincronizarLegado(true);
     },
 
+    /**
+     * Mueve el puntero al cliente indicado. Lo llama handleBatchNextClient al
+     * saltar, para que el contador del HUD (cliente N/M) siga la realidad.
+     */
+    async avanzarIndice(indice) {
+        const e = await this.get();
+        if (e.estado !== 'CORRIENDO') return;
+        await this._set({ indice, latido: Date.now() });
+        console.log(`🚦 [BUCLE] Avanzando a cliente ${indice + 1}/${(e.cola || []).length}.`);
+    },
+
     /** Pausa suave: termina el cliente en curso y NO salta al siguiente. */
     async pausar() {
         const e = await this.get();

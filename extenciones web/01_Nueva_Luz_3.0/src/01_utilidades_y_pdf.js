@@ -1579,16 +1579,19 @@ async function handleBatchNextClient() {
   let currentIndex = res.auto_batch_index || 0;
   let batchEnabled = !!res.auto_batch_enabled;
 
-  if (typeof SriLoop !== 'undefined') {
-    const loopData = await SriLoop.get();
-    if (loopData && loopData.estado === 'CORRIENDO' && Array.isArray(loopData.cola) && loopData.cola.length > 0) {
-      batchEnabled = true;
-      if (queue.length === 0) {
+    if (typeof SriLoop !== 'undefined') {
+      const loopData = await SriLoop.get();
+      if (loopData && loopData.estado === 'CORRIENDO' && Array.isArray(loopData.cola) && loopData.cola.length > 0) {
+        // 🚦 El semáforo es LA autoridad sobre la cola, no un respaldo.
+        // Antes solo se usaba si auto_batch_queue venía vacía; con restos de
+        // una corrida anterior (un cliente, índice al final) el lote concluía
+        // que no había siguiente, cerraba sesión y se detenía.
+        batchEnabled = true;
         queue = loopData.cola;
         currentIndex = loopData.indice || 0;
+        console.log(`🚦 [BUCLE] Cola del semáforo: ${currentIndex + 1}/${queue.length}.`);
       }
     }
-  }
 
   if (!batchEnabled || queue.length === 0) {
     console.log("🏁 [MODO AUTO BUCLE] No hay cola activa de lote.");
@@ -1709,6 +1712,9 @@ async function handleBatchNextClient() {
       // Las banderas de encendido las gestiona SriLoop, no este método.
       // Escribirlas acá era lo que anulaba la pausa del usuario.
     });
+
+    // 🚦 Que el contador del HUD (cliente N/M) siga la realidad del lote.
+    if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
 
     if (typeof SriLoop !== 'undefined') await SriLoop.avanzarA(nextIndex);
 
