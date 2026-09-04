@@ -1210,6 +1210,21 @@ class SriAssistantPanel {
                </div>`
             : `<div style="text-align:center; margin-top:10px; font-size:12px; color:#94a3b8;">Verifica los valores antes de presionar Declarar.</div>`;
 
+        // 🛑 En modo automático NO se abre la tarjeta modal: showContextCard
+        // dibuja un overlay negro con blur sobre toda la página, así que el bot
+        // quedaba llenando el formulario detrás de un velo, y la tarjeta —que
+        // trae botón— parecía pedir permiso cuando en realidad ya había
+        // arrancado. El avance se sigue por el HUD y por un aviso no bloqueante.
+        if (isAuto) {
+            this.showEliteToast({
+                title: `💎 Declarando ${pMonthName} ${pYear}`,
+                msg: `${clientInfo.name || 'Cliente'} · Ventas $${analysis.ventasIva} · Retenciones $${analysis.retenciones}`,
+                duration: 4000
+            });
+            doFullFill();
+            return;
+        }
+
         this.showContextCard({
             title: `💎 Declaración SRI: ${pMonthName} ${pYear}`,
             subtitle: `${clientInfo.name || 'Cliente'} (${clientInfo.ruc || 'SRI'})`,
