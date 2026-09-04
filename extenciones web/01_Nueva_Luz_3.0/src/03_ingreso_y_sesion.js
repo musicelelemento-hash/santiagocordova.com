@@ -65,14 +65,16 @@ SafeStorage.get(null).then(async (items) => {
     // ── Blindaje Anti-Bloqueo de Cuenta (Límite 5 Intentos del SRI) ─────────
     // Si el SRI rechaza las credenciales, NUNCA se reintenta: se detiene al
     // PRIMER intento fallido, se purga el storage, se marca en flagged_errors y el lote continúa.
+    const feedbackEl = document.querySelector('.alert-error, .alert-danger, .kc-feedback-text');
+    const feedbackText = feedbackEl ? (feedbackEl.innerText || feedbackEl.textContent || '').trim() : '';
     const hasLoginError = isLoginPage && (
+        (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad/i.test(feedbackText)) ||
         /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
         /credencial(es)? (inv[aá]lid|incorrect)/i.test(document.body.innerText) ||
         /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(document.body.innerText) ||
         /n[uú]mero m[aá]ximo de intentos/i.test(document.body.innerText) ||
         /superado el n[uú]mero de intentos/i.test(document.body.innerText) ||
-        /identificaci[oó]n no registrada/i.test(document.body.innerText) ||
-        !!document.querySelector('.alert-error, .alert-danger, .kc-feedback-text')
+        /identificaci[oó]n no registrada/i.test(document.body.innerText)
     );
 
     if (hasLoginError) {
@@ -111,11 +113,8 @@ SafeStorage.get(null).then(async (items) => {
     }
 
 
-    // Un cliente de LOTE también necesita auto-login: es el caso normal del
-    // bucle. Antes solo se aceptaba .manual y el lote se quedaba en el login
-    // con las credenciales cargadas, esperando a una persona que no iba a venir.
-    const autofillListo = items.pending_sri_autofill &&
-                          (items.pending_sri_autofill.manual || items.pending_sri_autofill.isBatch);
+    // Auto-login habilitado si tenemos el RUC del cliente cargado
+    const autofillListo = !!(items.pending_sri_autofill && items.pending_sri_autofill.ruc);
 
     if (isLoginPage && !isAlreadyLoggedIn && autofillListo) {
         console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
@@ -199,7 +198,7 @@ SafeStorage.get(null).then(async (items) => {
                 });
 
                 await SafeStorage.set({
-                    pending_sri_autofill: { ...items.pending_sri_autofill, manual: false, loginAttempted: true }
+                    pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: true }
                 });
 
                 if (!targetPass) {
