@@ -321,10 +321,13 @@ async function cerrarSesionSRI(force = false) {
 
   // 3. El Cierre Atómico (Hard Reload + Canonic Logout)
   console.log("🚀 Redirigiendo a Endpoint Canónico de Cierre de Sesión...");
+  const targetLogout = window.location.href.includes('sri-declaraciones-web-internet')
+    ? SRI_SALIR_URL
+    : 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout?redirect_uri=' + encodeURIComponent('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT');
+
   setTimeout(() => {
-    window.location.href =
-      "https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/logout";
-  }, 1000);
+    window.location.href = targetLogout;
+  }, 800);
 }
 
 // ============================================================
@@ -1377,11 +1380,22 @@ async function handleBatchNextClient() {
     "flagged_errors",
     "sc_clients_cache",
   ]);
-  if (
-    !res.auto_batch_enabled ||
-    !Array.isArray(res.auto_batch_queue) ||
-    res.auto_batch_queue.length === 0
-  ) {
+  let queue = Array.isArray(res.auto_batch_queue) ? res.auto_batch_queue : [];
+  let currentIndex = res.auto_batch_index || 0;
+  let batchEnabled = !!res.auto_batch_enabled;
+
+  if (typeof SriLoop !== 'undefined') {
+    const loopData = await SriLoop.get();
+    if (loopData && loopData.estado === 'CORRIENDO' && Array.isArray(loopData.cola) && loopData.cola.length > 0) {
+      batchEnabled = true;
+      if (queue.length === 0) {
+        queue = loopData.cola;
+        currentIndex = loopData.indice || 0;
+      }
+    }
+  }
+
+  if (!batchEnabled || queue.length === 0) {
     console.log("🏁 [MODO AUTO BUCLE] No hay cola activa de lote.");
     return false;
   }
@@ -1391,7 +1405,6 @@ async function handleBatchNextClient() {
     ? res.sc_clients_cache
     : [];
 
-  let currentIndex = res.auto_batch_index || 0;
   let nextIndex = currentIndex + 1;
 
   const now = new Date();
@@ -1429,19 +1442,19 @@ async function handleBatchNextClient() {
   };
 
   while (
-    nextIndex < res.auto_batch_queue.length &&
-    isClientDoneOrError(res.auto_batch_queue[nextIndex].ruc)
+    nextIndex < queue.length &&
+    isClientDoneOrError(queue[nextIndex].ruc)
   ) {
     console.log(
-      `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado u omitido: ${res.auto_batch_queue[nextIndex].ruc}`,
+      `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado u omitido: ${queue[nextIndex].ruc}`,
     );
     nextIndex++;
   }
 
-  if (nextIndex < res.auto_batch_queue.length) {
-    const nextClient = res.auto_batch_queue[nextIndex];
+  if (nextIndex < queue.length) {
+    const nextClient = queue[nextIndex];
     console.log(
-      `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${res.auto_batch_queue.length}): ${nextClient.name} (${nextClient.ruc}) [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
+      `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
     );
 
     const pParts = targetPeriodStr.split("-");

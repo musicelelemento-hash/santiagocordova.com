@@ -1973,7 +1973,7 @@ class SriAssistantPanel {
             await SafeStorage.set({ flagged_errors: errs });
         }
 
-        await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'pending_sri_autofill']);
+        await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod']);
         await GhostMemory.clearCurrent();
 
         if (typeof handleBatchNextClient === 'function') {

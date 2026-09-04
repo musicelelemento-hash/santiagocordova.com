@@ -16,12 +16,19 @@ SafeStorage.get(null).then(async (items) => {
         );
     } catch (e) { /* no romper el arranque por un log */ }
 
+    if (window.location.href.includes('pagina-no-encontrada')) {
+        console.warn('⚠️ [404 SRI] Página no encontrada detectada en Angular. Redirigiendo limpiamente a inicio/NAT...');
+        window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
+        return;
+    }
+
     if (isLoginPage) {
         renderLoginCockpit(items);
         initLoginCockpitWatcher();
     }
 
-    if (items.sri_master_switch_on === false) {
+    const isAutoFlow = await SriLoop.puedeAvanzar();
+    if (items.sri_master_switch_on === false && !isAutoFlow) {
         const autofill = items.pending_sri_autofill;
         // Un cliente de LOTE nunca puede despertar la extensión por su cuenta:
         // para eso está el semáforo. Solo un login manual suelto (el botón del
@@ -272,8 +279,7 @@ SafeStorage.get(null).then(async (items) => {
 
     // Antes leía las banderas sueltas: bastaba con basura en storage de una
     // corrida vieja para que arrancara un lote fantasma sin sesión iniciada.
-    // (Ese era el "entra un segundo y sale" contra la pantalla de login.)
-    const isAutoFlow = await SriLoop.puedeAvanzar();
+    // isAutoFlow ya evaluado al inicio
     const hasActiveAction = !!(items.pendingAction && (!items.actionTimestamp || (Date.now() - items.actionTimestamp < 120000)));
     const isFreshLogin = !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
 
