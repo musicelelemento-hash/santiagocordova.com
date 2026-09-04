@@ -1450,9 +1450,16 @@ async function syncDeclarationToSupabase(
           (facturas.iva15?.baseImponible || 0) * 0.15,
 
         // Retenciones: Extraídas por el Extractor V1
-        retIva: retenciones.retIva || 0,
-        retRenta: retenciones.retRenta || 0,
-        retBaseTotal: retenciones.baseImponible || 0,
+        retIva: retenciones.ivaRetenido?.total ?? retenciones.retIva ?? 0,
+        retRenta: retenciones.rentaRetenida?.total ?? retenciones.retRenta ?? 0,
+        retBaseTotal: (retenciones.ivaRetenido?.baseTotal ?? 0)
+                    + (retenciones.rentaRetenida?.baseTotal ?? 0)
+                    || retenciones.baseImponible || 0,
+        // Base solo de renta: es la que sirve para proyectar el impuesto anual,
+        // separada de la de IVA. Ver OBJETIVO_BOVEDA_RENTA.md
+        retRentaBase: retenciones.rentaRetenida?.baseTotal ?? 0,
+        retIvaBase: retenciones.ivaRetenido?.baseTotal ?? 0,
+        retCantidad: retenciones.totalRetenciones ?? 0,
 
         // Notas de Crédito
         nc15: notasCredito.iva15?.baseImponible || 0,

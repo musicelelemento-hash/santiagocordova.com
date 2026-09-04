@@ -40,6 +40,7 @@ const SriLoopHUD = {
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
             '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
+            '<button id="slh-copiar" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(148,163,184,0.16);color:#cbd5e1;font-size:12px;cursor:pointer">📋</button>',
             '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
             '</div>',
             // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
@@ -87,6 +88,29 @@ const SriLoopHUD = {
             ev.stopPropagation();
             await this._declararEsteCliente();
             this.pintar();
+        });
+
+        el.querySelector('#slh-copiar').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const btn = ev.currentTarget;
+            const previo = btn.textContent;
+            try {
+                const txt = await Bitacora.texto();
+                await navigator.clipboard.writeText(txt);
+                btn.textContent = '✅';
+                console.log(txt);
+                this._aviso('📋 Bitácora copiada',
+                    'Ya está en el portapapeles: pegala donde la necesites. También quedó impresa acá abajo.', 5000);
+            } catch (e) {
+                // El portapapeles puede estar bloqueado si la pestaña no tiene el
+                // foco. La bitácora igual se imprime, que es lo que importa.
+                btn.textContent = '⚠️';
+                console.warn('No se pudo copiar al portapapeles:', e);
+                try { console.log(await Bitacora.texto()); } catch (e2) {}
+                this._aviso('📋 No pude copiar',
+                    'La bitácora quedó impresa en la consola de todas formas.', 6000);
+            }
+            setTimeout(() => { btn.textContent = previo; }, 2000);
         });
 
         el.querySelector('#slh-stop').addEventListener('click', async (ev) => {
