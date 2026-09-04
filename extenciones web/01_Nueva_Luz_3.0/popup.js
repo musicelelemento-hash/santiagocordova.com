@@ -84,15 +84,38 @@ function bindEvents() {
     document.getElementById('syncBtn')?.addEventListener('click', syncHandler);
 
     // Restaurar estado de Modo Auto Bucle
-    chrome.storage.local.get(['auto_batch_enabled'], (res) => {
+    chrome.storage.local.get(['auto_batch_enabled', 'sc_loop'], (res) => {
         const chk = document.getElementById('chkAutoBatch');
-        if (chk) chk.checked = !!res.auto_batch_enabled;
+        if (!chk) return;
+        const loop = res.sc_loop || {};
+        const hayLote = Array.isArray(loop.cola) && loop.cola.length > 0;
+        // Con un lote vivo manda el semáforo; sin lote, la preferencia guardada.
+        chk.checked = hayLote ? loop.estado === 'CORRIENDO' : !!res.auto_batch_enabled;
     });
 
     document.getElementById('chkAutoBatch')?.addEventListener('change', (e) => {
         const isChecked = e.target.checked;
-        chrome.storage.local.set({ auto_batch_enabled: isChecked });
-        showToast(isChecked ? '⚡ Modo Auto Bucle ACTIVADO' : '⏸️ Modo Auto Bucle DESACTIVADO');
+        chrome.storage.local.get(['sc_loop'], (r) => {
+            const loop = r.sc_loop || {};
+            const hayLote = Array.isArray(loop.cola) && loop.cola.length > 0;
+            const cambios = { auto_batch_enabled: isChecked };
+
+            if (hayLote) {
+                // Con un lote en marcha la casilla lo pausa o lo reanuda; antes
+                // solo tocaba una bandera vieja y el lote moría a mitad de camino
+                // sin preparar al siguiente cliente.
+                cambios.sc_loop = isChecked
+                    ? { ...loop, estado: 'CORRIENDO', latido: Date.now(), motivo: '' }
+                    : { ...loop, estado: 'PAUSANDO', motivo: 'Pausa desde el popup' };
+            }
+
+            chrome.storage.local.set(cambios);
+            showToast(
+                !hayLote ? (isChecked ? '⚡ Bucle ACTIVADO para el próximo lote' : '⏸️ Bucle DESACTIVADO')
+                : isChecked ? '▶️ Bucle REANUDADO'
+                : '⏸️ Pausa: termina el cliente actual y para ahí'
+            );
+        });
     });
 
     // Pestañas
@@ -525,6 +548,13 @@ async function iniciarCliente(ruc) {
             auto_batch_queue: isBatchActive ? queue : [],
             auto_batch_index: 0,
             auto_batch_period: { year: currentYear, monthIndex: currentMonth },
+            // 🚦 El semáforo es la autoridad del bucle. Sin esto el content
+            // script descarta el lote apenas carga la pantalla de login.
+            sc_loop: isBatchActive
+                ? { estado: 'CORRIENDO', cola: queue, indice: 0,
+                    periodo: { year: currentYear, monthIndex: currentMonth },
+                    latido: Date.now(), motivo: '' }
+                : { estado: 'DETENIDO', cola: [], indice: 0, motivo: 'Cliente suelto desde el popup' },
             pendingAction: 'verifyProfile',
             workflowPeriod: { year: currentYear, monthIndex: currentMonth },
             actionTimestamp: Date.now(),

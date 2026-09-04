@@ -312,8 +312,8 @@ class SriAssistantPanel {
                 // Cleanup ya realizado arriba por seguridad inmediata.
 
                 // Modo Auto Bucle Check (Poderes Auto Admin)
-                const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
-                if (autoRes.auto_batch_enabled || autoRes.sri_auto_mode) {
+                const sigueElLote = await loteDebeContinuar();
+                if (sigueElLote) {
                     console.log('🔄 [MODO AUTO BUCLE] Declaración exitosa. Avanzando al siguiente cliente en 3 segundos...');
                     setTimeout(async () => {
                         const batchNext = await handleBatchNextClient();
@@ -1578,8 +1578,8 @@ class SriAssistantPanel {
                 await GhostMemory.set('workflowState', totalValor > 0 ? 'STOPPED_BALANCE' : 'STOPPED_WARNING'); // Sincronía Popup
 
                 // MODO AUTO BUCLE CHECK: Si hay saldo a pagar pero estamos automático, SALTAMOS al siguiente
-                const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
-                if (autoRes.auto_batch_enabled || autoRes.sri_auto_mode) {
+                const sigueElLote = await loteDebeContinuar();
+                if (sigueElLote) {
                     this.log(`🔄 [MODO AUTO BUCLE] Cliente con saldo a pagar ($${totalValor}). Guardado en la nube. Avanzando al siguiente...`);
                     this.showEliteToast({ title: '⏩ Omitiendo (Por Pagar)', msg: 'Impuestos detectados. Cerrando sesión...', duration: 3500 });
                     
@@ -3574,8 +3574,7 @@ class SriAssistantPanel {
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'sriAutomationPaused', 'pending_sri_autofill']);
         await GhostMemory.clearCurrent();
 
-        const storage = await SafeStorage.get('auto_batch_enabled');
-        if (storage.auto_batch_enabled) {
+        if (await loteDebeContinuar()) {
             await sleep(2000);
             const batchNext = await handleBatchNextClient();
             if (!batchNext) {

@@ -573,6 +573,18 @@ if (typeof window !== 'undefined') {
 //   window.sriBitacoraTexto()   → la devuelve como texto para copiar
 //   window.sriBitacoraLimpiar() → empieza de cero
 // ═══════════════════════════════════════════════════════════════════════════
+/**
+ * ¿El lote debe continuar al siguiente cliente? La autoridad es el semáforo;
+ * las banderas viejas solo valen como respaldo para corridas ya empezadas.
+ */
+async function loteDebeContinuar() {
+    try {
+        if (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar()) return true;
+    } catch (e) { /* seguimos al respaldo */ }
+    const r = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
+    return !!(r.auto_batch_enabled || r.sri_auto_mode);
+}
+
 function anotarBitacora(evento, detalle = '') {
     try { return Bitacora.anotar(evento, detalle); } catch (e) { /* aún no existe */ }
 }

@@ -330,15 +330,54 @@ SafeStorage.get(null).then(async (items) => {
     const isFreshLogin = !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
 
     if (isAutoFlow && !isAlreadyLoggedIn) {
+        // 🚑 RESCATE: el lote está corriendo pero nadie dejó credenciales.
+        // Antes se quedaba acá para siempre ("Lote activo pero sin sesión") hasta
+        // que el watchdog lo mataba 15 minutos después. El semáforo sabe qué
+        // cliente toca: se las preparamos y que el auto-login siga solo.
+        if (!items.pending_sri_autofill) {
+            const sem = await SriLoop.get();
+            const cliente = (sem.cola || [])[sem.indice || 0];
+            if (cliente && cliente.password) {
+                // Tope de rescates por cliente: si reponer las credenciales no
+                // alcanza, algo las borra en cada vuelta y recargar sin límite
+                // sería un bucle cerrado. Al segundo intento se frena y avisa.
+                const rr = await SafeStorage.get(['sc_rescates']);
+                const cont = rr.sc_rescates || {};
+                const veces = (cont[cliente.ruc] || 0) + 1;
+
+                if (veces > 2) {
+                    console.error(`🚑 [RESCATE] ${cliente.name || cliente.ruc} ya se rescató 2 veces y sigue sin credenciales. Se detiene el lote.`);
+                    anotarBitacora('⛔ lote detenido', `rescate agotado en ${cliente.name || cliente.ruc}`);
+                    await SriLoop.detener('Rescate agotado: algo borra las credenciales en cada vuelta');
+                    return;
+                }
+
+                cont[cliente.ruc] = veces;
+                await SafeStorage.set({ sc_rescates: cont });
+
+                console.warn(`🚑 [RESCATE ${veces}/2] Lote sin credenciales en ${cliente.name || cliente.ruc}. Reponiéndolas desde el semáforo.`);
+                anotarBitacora('🚑 rescate', `${veces}/2 · credenciales repuestas: ${cliente.name || cliente.ruc}`);
+                await SriLoop.prepararCliente(cliente, sem.periodo || SriLoop.periodoPorDefecto());
+                await sleep(400);
+                window.location.reload();
+                return;
+            }
+            console.warn('🚑 [RESCATE] El semáforo no tiene un cliente con clave en esta posición. Deteniendo el lote.');
+            anotarBitacora('⛔ lote detenido', 'sin cliente con clave en el semáforo');
+            await SriLoop.detener('Sin credenciales para el cliente en curso');
+            return;
+        }
         console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
-        // Este es el punto donde el lote se queda plantado: anotamos SI había
-        // credenciales, que es lo que distingue "espera normal" de "se perdió
-        // el autofill y no va a entrar nunca".
-        anotarBitacora('esperando login',
-            items.pending_sri_autofill ? 'con credenciales' : '⚠️ SIN credenciales');
+        anotarBitacora('esperando login', 'con credenciales');
     } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
         if (typeof SriCredentialVault !== 'undefined' && items.pending_sri_autofill?.ruc) {
             await SriCredentialVault.recordSuccess(items.pending_sri_autofill.ruc, items.pending_sri_autofill.password);
+        }
+        // Entró: el rescate (si lo hubo) cumplió. Contador a cero.
+        if (items.pending_sri_autofill?.ruc && items.sc_rescates?.[items.pending_sri_autofill.ruc]) {
+            const cont = { ...items.sc_rescates };
+            delete cont[items.pending_sri_autofill.ruc];
+            await SafeStorage.set({ sc_rescates: cont });
         }
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
