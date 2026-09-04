@@ -48,32 +48,64 @@ SafeStorage.get(null).then(async (items) => {
     const camposLogin = encontrarCamposLogin();
     const isExplicitlyOutside = !!camposLogin;
 
-    const isAlreadyLoggedIn = !isExplicitlyOutside && !!(
-        document.getElementById('id_nombre_razon_social') || 
-        document.querySelector('.sri-icon-cerrar-sesion') || 
-        document.querySelector('.area-usuario') ||
-        document.querySelector('.nombre-contribuyente') ||
-        document.querySelector('.sri-icon-perfil')
+    const isAlreadyLoggedIn = !isExplicitlyOutside && (
+        !window.location.href.toLowerCase().includes('/auth/realms/') &&
+        (
+            document.getElementById('id_nombre_razon_social') || 
+            document.querySelector('.sri-icon-cerrar-sesion') || 
+            document.querySelector('.area-usuario') ||
+            document.querySelector('.nombre-contribuyente') ||
+            document.querySelector('.sri-icon-perfil') ||
+            window.location.href.includes('/perfil') ||
+            window.location.href.includes('/declaraciones') ||
+            window.location.href.includes('comprobantesRecibidos')
+        )
     );
 
-    const hasLoginError = isLoginPage && document.body.innerText.match(/usuario o contrase[ñn]a (inválid|invalid|incorrect)/i);
+    // ── Blindaje Anti-Bloqueo de Cuenta (Límite 5 Intentos del SRI) ─────────
+    // Si el SRI rechaza las credenciales, NUNCA se reintenta: se detiene al
+    // PRIMER intento fallido, se purga el storage, se marca en flagged_errors y el lote continúa.
+    const hasLoginError = isLoginPage && (
+        /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
+        /credencial(es)? (inv[aá]lid|incorrect)/i.test(document.body.innerText) ||
+        /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(document.body.innerText) ||
+        /n[uú]mero m[aá]ximo de intentos/i.test(document.body.innerText) ||
+        /superado el n[uú]mero de intentos/i.test(document.body.innerText) ||
+        /identificaci[oó]n no registrada/i.test(document.body.innerText) ||
+        !!document.querySelector('.alert-error, .alert-danger, .kc-feedback-text')
+    );
 
     if (hasLoginError) {
-        console.error('❌ [LOGIN] Credenciales inválidas detectadas por el SRI. Deteniendo Auto-Login para este cliente.');
-        if (items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch)) {
-            const clientRuc = items.pending_sri_autofill?.ruc;
-            if (clientRuc) {
-                chrome.storage.local.get(['flagged_errors'], (resErr) => {
-                    const errs = resErr.flagged_errors || {};
-                    errs[clientRuc] = true;
-                    chrome.storage.local.set({ flagged_errors: errs }, async () => {
-                        console.log('⏩ [AUTO BATCH] Cliente marcado con error por credenciales. Saltando...');
-                        if (typeof handleBatchNextClient === 'function') {
-                            await handleBatchNextClient();
-                        }
-                    });
-                });
-            }
+        console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o cuenta con alerta en el SRI. Deteniendo reintentos para evitar bloqueo (límite 5 intentos).');
+        const clientRuc = items.pending_sri_autofill?.ruc;
+        const clientName = items.pending_sri_autofill?.name || clientRuc || 'este cliente';
+
+        // 🛡️ PURGA INMEDIATA: Borrar credenciales de storage para que ninguna recarga vuelva a enviar la clave mala
+        await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+
+        if (clientRuc) {
+            const resErr = await SafeStorage.get(['flagged_errors']);
+            const errs = resErr.flagged_errors || {};
+            errs[clientRuc] = 'error_credenciales';
+            await SafeStorage.set({ flagged_errors: errs });
+        }
+
+        if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+            window.sriAssistant.showEliteToast({
+                title: '🔒 Clave SRI Incorrecta',
+                msg: `El SRI rechazó las credenciales de ${clientName}. Proceso detenido en el 1er intento para blindar la cuenta contra bloqueos.`,
+                duration: 9000
+            });
+        }
+
+        const isLoop = items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch) || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+        if (isLoop) {
+            console.log(`⏩ [AUTO BATCH] Cliente ${clientRuc || ''} omitido por error de clave. Avanzando al siguiente cliente en 3s...`);
+            setTimeout(async () => {
+                if (typeof handleBatchNextClient === 'function') {
+                    await handleBatchNextClient();
+                }
+            }, 3000);
         }
         return;
     }
@@ -269,13 +301,10 @@ SafeStorage.get(null).then(async (items) => {
     // corrida vieja para que arrancara un lote fantasma sin sesión iniciada.
     // (Ese era el "entra un segundo y sale" contra la pantalla de login.)
     const isAutoFlow = await SriLoop.puedeAvanzar();
-    // Sin sesión no tiene sentido apuntar a Comprobantes Recibidos: antes se
-    // marcaba turbo_step1_facturas estando todavía en el login, y dos líneas
-    // después el propio código frenaba con "Detectado Login. Esperando...".
     if (isAutoFlow && !isAlreadyLoggedIn) {
         console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
-    } else if (isAutoFlow && items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.loginAttempted)) {
-        console.log('🚀 Modo Bucle Activo: Dirigiendo a Comprobantes Electrónicos Recibidos...');
+    } else if (isAlreadyLoggedIn && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.loginAttempted || items.pending_sri_autofill.manual)))) {
+        console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
         let cMonth = now.getMonth() - 1;
@@ -291,14 +320,22 @@ SafeStorage.get(null).then(async (items) => {
             checkNC: true,
             workflowPeriod: items.workflowPeriod,
             actionTimestamp: items.actionTimestamp,
-            pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false },
+            pending_sri_autofill: { ...(items.pending_sri_autofill || {}), loginAttempted: false },
             sriAutomationPaused: false,
             ghost_manual_mode: false,
             sri_auto_mode: true,
-            autoDeclaration: true
+            autoDeclaration: true,
+            skipSafetyCheck: true
         });
+
+        // Si ya estamos adentro y no estamos en la página de comprobantes recibidos, redirigir de una vez
+        if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
+            console.log('✈️ [AUTO FLIGHT] Redirigiendo de inmediato a Comprobantes Recibidos (Paso 1)...');
+            window.location.href = SRI_RECIBIDOS_URL;
+            return;
+        }
     } else if (items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted) {
-        // En login manual: No secuestrar la navegación, dejar al usuario en la página que eligió
+        // En login manual suelto: Respetar navegación manual
         console.log('ℹ️ Login completado. Control manual respetado (sin auto-redirección).');
         await SafeStorage.set({
             pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
@@ -748,23 +785,24 @@ async function ejecutarAccionPendiente(items) {
         return;
     }
 
-    // CASO NUEVO: Auditoría Zero-Blind de Perfil de Contribuyente
+    // CASO REDIRIGIDO: Directo a Comprobantes Recibidos
     if (items.pendingAction === 'verifyProfile') {
         let targetPeriod = items.workflowPeriod;
-        console.log('🔄 Ejecutando: Auditoría de Perfil', targetPeriod);
-        
-        if (window.location.href.includes('/contribuyente/perfil')) {
-            if (window.__sriNavRunning) return;
-            window.__sriNavRunning = true;
-            if (typeof ejecutarAuditoriaPerfil === 'function') {
-                ejecutarAuditoriaPerfil(targetPeriod);
-            } else {
-                console.error('❌ CRÍTICO: ejecutarAuditoriaPerfil no está definida.');
-            }
-        } else {
-            console.log('Navegando a Perfil del Contribuyente...');
-            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil';
-        }
+        console.log('🔄 verifyProfile redirigiendo directamente a Comprobantes Recibidos (turbo_step1_facturas)...', targetPeriod);
+        await SafeStorage.set({
+            pendingAction: 'turbo_step1_facturas',
+            checkFacturas: true,
+            checkRetenciones: true,
+            checkNC: true,
+            workflowPeriod: targetPeriod,
+            autoDeclaration: true,
+            sri_auto_mode: true,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            actionTimestamp: Date.now(),
+            skipSafetyCheck: true
+        });
+        window.location.href = SRI_RECIBIDOS_URL;
         return;
     }
 
@@ -1263,6 +1301,12 @@ async function renderLoginCockpit(items) {
                 <span style="background: rgba(255,255,255,0.25); color: #ffffff; font-size: 10px; font-family: monospace; font-weight: 900; padding: 1px 6px; border-radius: 10px;">${pendientes.length}</span>
             </button>
 
+            <!-- Botón Omitir Cliente (Saltar cuenta) -->
+            <button id="sri-cockpit-btn-skip" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; border-radius: 20px; padding: 6px 11px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px; transition: 0.2s;" title="Omitir este cliente si la cuenta está bloqueada o tiene problemas de clave">
+                <span>⏭️</span>
+                <span>Omitir</span>
+            </button>
+
             <!-- Botón Solo Login (Secundario) -->
             <button id="sri-cockpit-btn-onlylogin" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); color: #cbd5e1; border-radius: 20px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px; transition: 0.2s;" title="Solo iniciar sesión en el SRI sin declarar automáticamente">
                 <span>🔑</span>
@@ -1370,6 +1414,41 @@ async function renderLoginCockpit(items) {
             alert('✅ Clave guardada localmente.');
         });
 
+        // ⏭️ OMITIR CLIENTE
+        island.querySelector('#sri-cockpit-btn-skip')?.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (!currentClient) return;
+            const rucToSkip = currentClient.ruc;
+            const nameToSkip = currentClient.name || rucToSkip;
+
+            if (confirm(`¿Omitir a ${nameToSkip} (${rucToSkip})?\nSe marcará para no procesarlo en este lote.`)) {
+                const resErr = await SafeStorage.get(['flagged_errors']);
+                const errs = resErr.flagged_errors || {};
+                errs[rucToSkip] = 'omitido_manual';
+                await SafeStorage.set({ flagged_errors: errs });
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+
+                // Recargar lista de pendientes
+                flaggedErrs[rucToSkip] = 'omitido_manual';
+                pendientes = validClients.filter(c => !isClientDone(c, targetYear, targetMonth) && !flaggedErrs[c.ruc]).sort(sortBy9th);
+                currentClient = pendientes.length > 0 ? pendientes[0] : null;
+                renderIslandInner();
+                if (currentClient) updateCredentialsInForm(currentClient.ruc);
+                else {
+                    if (rucInput) rucInput.value = '';
+                    if (passInput) passInput.value = '';
+                }
+
+                if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+                    window.sriAssistant.showEliteToast({
+                        title: '⏭️ Cliente Omitido',
+                        msg: `${nameToSkip} omitido. Cambiando al siguiente...`,
+                        duration: 4000
+                    });
+                }
+            }
+        });
+
         // Toggle Sidebar
         island.querySelector('#sri-island-toggle-sidebar')?.addEventListener('click', () => {
             let sb = document.getElementById('sri-anticipacion-sidebar');
@@ -1406,6 +1485,11 @@ async function renderLoginCockpit(items) {
 
             updateCredentialsInForm(first.ruc);
 
+            // Encendemos el semáforo y configuramos la cola
+            if (typeof SriLoop !== 'undefined' && typeof SriLoop.iniciar === 'function') {
+                await SriLoop.iniciar(queue, { year: targetYear, monthIndex: targetMonth });
+            }
+
             await SafeStorage.set({
                 sri_master_switch_on: true,
                 auto_batch_enabled: true,
@@ -1423,11 +1507,17 @@ async function renderLoginCockpit(items) {
                     isBatch: true,
                     loginAttempted: true
                 },
-                pendingAction: 'verifyProfile',
+                pendingAction: 'turbo_step1_facturas',
                 actionTimestamp: Date.now()
             });
 
-            setTimeout(() => loginBtn.click(), 300);
+            setTimeout(() => {
+                if (loginBtn) loginBtn.click();
+                else {
+                    const campos = encontrarCamposLogin();
+                    if (campos && campos.btn) campos.btn.click();
+                }
+            }, 300);
         });
 
         // 🔑 SOLO LOGIN

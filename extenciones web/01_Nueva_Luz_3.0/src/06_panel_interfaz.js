@@ -557,6 +557,7 @@ class SriAssistantPanel {
             message: `El formulario está listo pero <b>falta importar los datos</b> de ${periodText}.<br>¿Deseas ir a Comprobantes Recibidos para extraerlos?`,
             icon: '🦅',
             actionText: 'SÍ, EXTRAER FACTURAS',
+            timeout: null,
             onAction: () => {
                 this.runUnifiedWorkflow('EXTRACT_DATA', actionData);
             }
@@ -665,76 +666,15 @@ class SriAssistantPanel {
 
         // CAMBIO DE CONTEXTO ELITE (SMART CONFLICT RESOLUTION)
         if (stored.lastRuc && stored.lastRuc !== info.ruc) {
-            console.warn(`🚨 CAMBIO DE CONTEXTO: ${stored.lastRuc} -> ${info.ruc}`);
-
-            // Verificar si hay datos "vivos" del usuario anterior
-            const ghostData = await GhostMemory.getData();
-            const hasZombieData = ghostData && (ghostData.facturas || ghostData.retenciones);
-
-            if (hasZombieData) {
-                // Conflicto Real: Datos activos de otro usuario
-                await SafeStorage.set({ sriAutomationPaused: true }); // Pausar todo
-                
-                this.showContextCard({
-                    title: '🚨 ¡ALERTA DE SEGURIDAD!',
-                    subtitle: 'CAMBIO DE CLIENTE DETECTADO',
-                    message: `Has ingresado con <b>${info.name || info.ruc}</b>, pero tienes datos cargados de un cliente anterior.<br><br><b>¡PELIGRO DE INYECCIÓN CRUZADA!</b><br>La automatización ha sido pausada.`,
-                    icon: '🚨',
-                    actionText: '🚪 LIMPIAR Y CERRAR SESIÓN',
-                    onAction: async () => {
-                        await GhostMemory.clearCurrent();
-                        await SafeStorage.set({ lastRuc: info.ruc, sriAutomationPaused: false });
-                        this.updateSummary();
-                        this.showEliteToast({ title: '🧹 Limpio', msg: 'Memoria borrada. Cerrando sesión...' });
-                        
-                        const btnIcon = document.querySelector('.sri-icon-cerrar-sesion');
-                        if (btnIcon) {
-                            btnIcon.click();
-                            const parentA = btnIcon.closest('a');
-                            if (parentA) parentA.click();
-                        } else {
-                            const spanCerrar = Array.from(document.querySelectorAll('.topbar-item-name, span')).find(el => el.innerText.includes('Cerrar Sesión'));
-                            if (spanCerrar) {
-                                spanCerrar.click();
-                                const parentA = spanCerrar.closest('a');
-                                if (parentA) parentA.click();
-                            } else {
-                                window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/SriDeclaraciones/Publico/logout';
-                            }
-                        }
-                    },
-                    secondaryActions: [
-                        {
-                            text: '⚠️ SOLO LIMPIAR Y CONTINUAR AQUÍ',
-                            onAction: async () => {
-                                await GhostMemory.clearCurrent();
-                                await SafeStorage.set({ lastRuc: info.ruc, sriAutomationPaused: false });
-                                this.showEliteToast({ title: '✨ Limpieza Completa', msg: `Listo para trabajar con nuevo cliente.` });
-                                window.location.reload();
-                            }
-                        }
-                    ]
-                });
-            } else {
-                // Cambio limpio (sin datos activos): Solo notificar y actualizar contexto
-                
-                let novedadStr = "Sin novedades previas.";
-                if (info.ruc) {
-                    const historyKey = `history_elite_${info.ruc}`;
-                    const historyData = await SafeStorage.get([historyKey]) || {};
-                    const history = historyData[historyKey] || { records: [] };
-                    if (history.records && history.records.length > 0) {
-                        const lastRec = history.records[history.records.length - 1];
-                        novedadStr = `Última gestión: ${new Date(lastRec.date).toLocaleString()} - ${lastRec.status}`;
-                    }
-                }
-
-                this.showEliteToast({
-                    title: "👤 CLIENTE ACTIVADO",
-                    msg: `<b>${info.name || info.ruc}</b><br><span style="font-size:10px; color:#818cf8">${novedadStr}</span>`,
-                    duration: 5000
-                });
-            }
+            console.log(`👤 Cambio de contexto de cliente detectado: ${stored.lastRuc} -> ${info.ruc}. Limpiando memoria previa...`);
+            await GhostMemory.clearCurrent();
+            await SafeStorage.set({ lastRuc: info.ruc, sriAutomationPaused: false });
+            this.updateSummary();
+            this.showEliteToast({
+                title: "👤 CLIENTE ACTIVADO",
+                msg: `<b>${info.name || info.ruc}</b>`,
+                duration: 3500
+            });
         }
 
         // Actualizar siempre el RUC actual como el "activo"
@@ -1099,20 +1039,26 @@ class SriAssistantPanel {
                     console.log(`🎯 [ELITE SCANNER] Detectada: ${detectedMonth} ${detectedYear} (Vencido: ${isExpired})`);
 
                     // El temporizador automático solo puede arrancar si el
-                    // semáforo está en CORRIENDO. Antes bastaba con una bandera suelta.
+                    // semáforo está en CORRIENDO.
                     const isAuto = await SriLoop.puedeAvanzar();
 
-                    // TEMPORIZADOR AUTOMÁTICO (Cuenta Regresiva 4s)
+                    if (isAuto) {
+                        console.log('⚡ [ELITE SCANNER] Modo automático activo: iniciando TURBO_FULL de inmediato hacia Comprobantes Recibidos...');
+                        this.runUnifiedWorkflow('TURBO_FULL', { monthIndex, year: detectedYear });
+                        return;
+                    }
+
+                    // MODO MANUAL: Mostrar tarjeta interactiva
                     this.showContextCard({
                         title: `📅 Declaración ${isExpired ? '⚠️ VENCIDA' : 'Detectada'}`,
                         subtitle: `${detectedMonth} ${detectedYear} ${isExpired ? '(Con Multas)' : ''}`,
                         message: `
                             Se detectó la obligación <b>2011 (IVA)</b> de ${detectedMonth} ${detectedYear}.
-                            <br>Iniciando proceso automatizado Zero-Touch en <b id="elite-autotimer" style="color:#818cf8;">4s</b>...
+                            <br>Haz click para iniciar la declaración automatizada.
                         `,
                         icon: '🚀',
-                        actionText: isAuto ? '🪄 INICIAR AHORA (OMITIR ESPERA)' : '🪄 INICIAR MÁGIA (ELITE)',
-                        timeout: isAuto ? 3000 : 4000,
+                        actionText: '🪄 INICIAR MÁGIA (ELITE)',
+                        timeout: null,
                         magicMode: true,
                         onAction: () => {
                             this.runUnifiedWorkflow('TURBO_FULL', { monthIndex, year: detectedYear });
@@ -1546,7 +1492,11 @@ class SriAssistantPanel {
                         
                         setTimeout(async () => {
                             await GhostMemory.clearCurrent(); // Limpiar el fantasma
-                            if (autoRes.auto_batch_enabled && typeof handleBatchNextClient === 'function') {
+                            // autoRes estaba roto (referencia a una const del bloque else,
+                            // fuera de scope acá) que cortaba el avance con un ReferenceError.
+                            // Ya estamos en el camino de éxito con el semáforo CORRIENDO
+                            // (isAutoFlow arriba), así que el avance es legítimo.
+                            if (typeof handleBatchNextClient === 'function') {
                                 const batchNext = await handleBatchNextClient();
                                 if (!batchNext) {
                                     await SafeStorage.set({ sri_auto_mode: false, auto_batch_enabled: false, autoDeclaration: false, sri_master_switch_on: false });
@@ -1635,6 +1585,7 @@ class SriAssistantPanel {
                         <br><br><b>NUNCA intentamos pagar automáticamente.</b> <br>He guardado el borrador. Revisa y envía manualmente si es correcto.
                     `,
                     icon: '🛡️',
+                    timeout: null,
                     actionText: '🔄 REINTENTAR CIERRE',
                     onAction: () => this.ejecutarCierreMagico()
                 });
@@ -1965,6 +1916,7 @@ class SriAssistantPanel {
                 <div style="font-size: 16px;">💎</div>
                 <div style="font-size: 10px; font-weight: 700;">Panel ${escapeHtml(clientName)}</div>
                 <div id="btn-pill-stop" style="font-size: 10px; cursor: pointer; padding: 3px 8px; background: #dc2626; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; font-weight: 800; color: white; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);" title="Detener cualquier automatización">🛑 Detener</div>
+                <div id="btn-pill-skip" style="font-size: 10px; cursor: pointer; padding: 3px 8px; background: rgba(245, 158, 11, 0.25); border: 1px solid rgba(245, 158, 11, 0.5); border-radius: 6px; font-weight: 800; color: #fbbf24;" title="Omitir este cliente y pasar al siguiente">⏭️ Omitir</div>
                 <div id="btn-force-scan" style="font-size: 12px; cursor: pointer; padding: 2px 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-left: 2px;" title="Forzar Escaneo de Obligaciones">🔍</div>
                 <div id="btn-force-sync" style="font-size: 11px; cursor: pointer; padding: 2px 6px; background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); border-radius: 6px; margin-left: 2px; font-weight: 800; color: #10b981;" title="Sincronizar Manualmente (Si terminaste por fuera)">✨ Sync</div>
             </div>
@@ -1975,6 +1927,11 @@ class SriAssistantPanel {
             if (e.target.id === 'btn-pill-stop') {
                 e.stopPropagation();
                 this.stopAutomation(false);
+                return;
+            }
+            if (e.target.id === 'btn-pill-skip') {
+                e.stopPropagation();
+                this.omitirClienteActual();
                 return;
             }
             if (e.target.id === 'btn-force-scan') {
@@ -1991,6 +1948,42 @@ class SriAssistantPanel {
             }
             this.toggleMinimize(false);
         };
+    }
+
+    async omitirClienteActual() {
+        const info = this.extractClientInfo();
+        const ruc = info.ruc;
+        const name = info.name || ruc || 'este cliente';
+
+        if (!confirm(`¿Omitir a ${name}?\nSe guardará en la lista de omitidos y se avanzará al siguiente cliente.`)) {
+            return;
+        }
+
+        this.log(`⏭️ Omitiendo cliente ${name}...`);
+        this.showEliteToast({
+            title: '⏭️ Omitiendo Cliente',
+            msg: `Omitiendo a ${name}. Avanzando...`,
+            duration: 3000
+        });
+
+        if (ruc) {
+            const resErr = await SafeStorage.get(['flagged_errors']);
+            const errs = resErr.flagged_errors || {};
+            errs[ruc] = 'omitido_manual';
+            await SafeStorage.set({ flagged_errors: errs });
+        }
+
+        await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'pending_sri_autofill']);
+        await GhostMemory.clearCurrent();
+
+        if (typeof handleBatchNextClient === 'function') {
+            const hasNext = await handleBatchNextClient();
+            if (!hasNext) {
+                await cerrarSesionSRI();
+            }
+        } else {
+            await cerrarSesionSRI();
+        }
     }
 
     renderPanel() {
@@ -2010,7 +2003,6 @@ class SriAssistantPanel {
 
         if (isOutside) {
             // Ocultar el panel grande de la izquierda en el login para evitar ventanas flotantes duplicadas.
-            // El auto-ingreso y lote se manejan con el widget de anticipación (abajo derecha) o el popup.
             this.container.style.display = 'none';
             return;
         }
@@ -2028,7 +2020,8 @@ class SriAssistantPanel {
                             <div id="sri-client-ruc" style="font-size: 9px; opacity: 0.5; font-weight: 600; color: #818cf8;">RUC: ${escapeHtml(info.ruc || 'N/A')}</div>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div id="btn-force-skip-panel" style="font-size: 10px; cursor: pointer; padding: 4px 8px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; font-weight: 800;" title="Omitir este cliente y avanzar al siguiente">⏭️ Omitir</div>
                         <div id="btn-force-sync-panel" style="font-size: 10px; cursor: pointer; padding: 4px 8px; background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.4); border-radius: 6px; font-weight: 800;" title="Marcar como COMPLETADO en Supabase">✨ Sync</div>
                         <div id="btn-minimize-pill" style="cursor: pointer; opacity: 0.5; font-size: 20px; padding: 5px; line-height: 20px;">×</div>
                     </div>
@@ -2203,6 +2196,12 @@ class SriAssistantPanel {
                 this.ejecutarCierreMagico();
             };
         }
+        const skipPanelBtn = this.container.querySelector('#btn-force-skip-panel');
+        if (skipPanelBtn) {
+            skipPanelBtn.onclick = () => {
+                this.omitirClienteActual();
+            };
+        }
 
         this.bindEvents();
         this.updateSummary(); // Cargar datos inmediatamente
@@ -2324,7 +2323,14 @@ class SriAssistantPanel {
                 }
                 
                 const queue = pendientes.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
-                
+
+                // El piloto del panel escribía auto_batch_queue pero no encendía el semáforo:
+                // sin SriLoop.iniciar(), sc_loop quedaba en DETENIDO y puedeAvanzar() frenaba
+                // el lote. Mismo bug que el botón maestro del login (03).
+                if (typeof SriLoop !== 'undefined' && typeof SriLoop.iniciar === 'function') {
+                    await SriLoop.iniciar(queue, { year: this.currentYear, monthIndex: this.currentMonth });
+                }
+
                 await SafeStorage.set({ 
                     auto_batch_enabled: true, 
                     sri_auto_mode: true, 
@@ -2626,13 +2632,14 @@ class SriAssistantPanel {
         renderActiveList();
     }
 
-    iniciarClienteManual(client) {
+    async iniciarClienteManual(client) {
         if (!client.password) {
             this.showContextCard({
                 title: 'Falta Contraseña',
                 subtitle: 'Error de ingreso',
                 message: 'Este cliente no tiene clave SRI guardada. Edite la clave desde el popup de la extensión primero.',
                 icon: '🔑',
+                timeout: null,
                 actionText: 'ENTENDIDO'
             });
             return;
@@ -2643,7 +2650,11 @@ class SriAssistantPanel {
         let year = this.currentYear || now.getFullYear();
         if (month < 0) { month = 11; year--; }
 
-        SafeStorage.set({
+        if (typeof SriLoop !== 'undefined' && typeof SriLoop.iniciar === 'function') {
+            await SriLoop.iniciar([client], { year, monthIndex: month }, 0);
+        }
+
+        await SafeStorage.set({
             pending_sri_autofill: {
                 ruc: client.ruc,
                 password: client.password,
@@ -2661,9 +2672,9 @@ class SriAssistantPanel {
             sriAutomationPaused: false,
             sri_master_switch_on: true,
             autoDeclaration: true
-        }, () => {
-            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
         });
+
+        window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
     }
 
     showContextCard(data) {

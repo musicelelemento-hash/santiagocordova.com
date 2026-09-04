@@ -210,9 +210,11 @@ Botón **`Ingresar`** · enlace «Generar o recuperar clave».
 bien porque el campo es opcional. Pero es un tercer input en el formulario: si
 algún autorrelleno le mete un valor, el login falla.
 
-**Sin confirmar** los `id` reales de los tres inputs y del botón. El código
-apuesta a `#usuario`/`input[name="usuario"]`/`#username`, `#password` y
-`#kc-login`/`input[type=submit]`. **Falta la Opción A en esta pantalla.**
+**IDs y atributos confirmados en el DOM** (inspección 03-sep-2026):
+- Input RUC: `<input id="usuario" name="usuario" type="text" maxlength="13" placeholder="1700000000001" onpaste="return false">` ✅ **CONFIRMADO**.
+- Cuenta con protección nativa `oncopy="return false" onpaste="return false"`: la extensión la sortea con `escribirCampo()` asignando `.value` y disparando eventos `input` y `change`.
+- **Blindaje anti-bloqueo**: El SRI bloquea cuentas al 5to intento erróneo. La extensión detiene el reintento al **primer fallo** (`hasLoginError`) y marca `flagged_errors[ruc] = true` para saltar inmediatamente de cliente.
+
 
 ---
 

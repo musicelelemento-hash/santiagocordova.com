@@ -227,14 +227,12 @@ async function cerrarSesionSRI() {
   }
   await sleep(600);
 
-  // 3. El Cierre Atómico (Hard Reload + Cache Busting)
-  console.log("🚀 Forzando Hard Reload Atómico...");
+  // 3. El Cierre Atómico (Hard Reload + Canonic Logout)
+  console.log("🚀 Redirigiendo a Endpoint Canónico de Cierre de Sesión...");
   setTimeout(() => {
-    // En lugar del endpoint de logout antiguo, disparamos a la raíz con un timestamp
-    // para destruir el cache y obligar a recargar.
     window.location.href =
-      "https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT?t=" + Date.now();
-  }, 1500);
+      "https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/logout";
+  }, 1000);
 }
 
 // ============================================================

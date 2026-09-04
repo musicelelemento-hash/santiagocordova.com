@@ -269,9 +269,17 @@ const SriLoop = {
                 manual: true,
                 isBatch: true
             },
-            pendingAction: 'verifyProfile',
+            pendingAction: 'turbo_step1_facturas',
+            checkFacturas: true,
+            checkRetenciones: true,
+            checkNC: true,
             workflowPeriod: periodo,
+            autoDeclaration: true,
+            sri_auto_mode: true,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
             actionTimestamp: Date.now(),
+            skipSafetyCheck: true,
             ghost_manual_mode: false
         });
         await SafeStorage.remove(['declaration_synced_flag']);
@@ -292,7 +300,17 @@ const SriLoop = {
             return { ok: false, motivo: `Nada pendiente: ${yaHechos} ya declarados${sinClave ? `, ${sinClave} sin clave` : ''}.` };
         }
 
+        // Conecta el semáforo con el motor de avance N→N+1.
+        // handleBatchNextClient() (01) lee la cola desde auto_batch_queue/auto_batch_index,
+        // NO desde sc_loop. Antes arrancarLote solo escribía sc_loop, así que auto_batch_queue
+        // quedaba vacío y el lote moría en silencio después del primer cliente.
         await this.iniciar(cola, p);
+        await SafeStorage.set({
+            auto_batch_queue: cola,
+            auto_batch_index: 0,
+            auto_batch_enabled: true,
+            auto_batch_mode: 'turbo_step1_facturas'
+        });
         await this.prepararCliente(cola[0], p);
         return { ok: true, total: cola.length, primero: cola[0].name, sinClave };
     },
@@ -941,10 +959,17 @@ window.addEventListener('message', async (event) => {
 
         await SafeStorage.set({ 
             pending_sri_autofill: autofillObj,
-            pendingAction: 'verifyProfile',
+            pendingAction: 'turbo_step1_facturas',
+            checkFacturas: true,
+            checkRetenciones: true,
+            checkNC: true,
             workflowPeriod: { year: cYear, monthIndex: cMonth },
+            autoDeclaration: true,
+            sri_auto_mode: true,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
             actionTimestamp: Date.now(),
-            sri_master_switch_on: true
+            skipSafetyCheck: true
         });
 
         if (isSRILoginPage()) {
@@ -957,7 +982,7 @@ window.addEventListener('message', async (event) => {
     if (event.data.type === 'SRI_START_BATCH_DECLARATION' && event.data.data) {
         const d = event.data.data;
         const queue = (d.clients || []).map(c => ({ ruc: c.ruc, password: c.sriPassword || c.password, name: c.name }));
-        const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'verifyProfile';
+        const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'turbo_step1_facturas';
         await SafeStorage.set({
             auto_batch_enabled: true,
             auto_batch_queue: queue,
@@ -1004,15 +1029,28 @@ function initDeclarationSuccessWatcher() {
     window.__sriDeclarationSuccessWatcherActive = true;
 
     setInterval(async () => {
-        // ⚡ PERF: textContent en vez de innerText — innerText fuerza un reflow
-        // completo del documento en cada tick (2s) sobre tablas JSF pesadas.
+        // 🛑 Blindaje absoluto: Solo actuar si estamos dentro del wizard oficial de Formulario IVA
+        if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return;
+
+        // Si todavía estamos editando casilleros o en selección de periodo, no es pantalla de éxito
+        if (document.getElementById('concepto401') || document.getElementById('concepto500') || document.getElementById('frmFlujoDeclaracion:calPeriodo')) {
+            return;
+        }
+
+        // ⚡ PERF: textContent en vez de innerText
         const bodyText = (document.body?.textContent || '').toLowerCase();
-        const hasImprimirBtn = Array.from(document.querySelectorAll('span.ui-button-text')).some(span => (span.textContent || '').trim().toUpperCase() === 'IMPRIMIR');
-        const isSuccessPage = hasImprimirBtn ||
-                              bodyText.includes('declaración procesada') ||
-                              bodyText.includes('declaracion enviada con exito') ||
-                              bodyText.includes('comprobante de declaracion') ||
-                              bodyText.includes('imprimir comprobante');
+        const hasImprimirBtn = Array.from(document.querySelectorAll('span.ui-button-text, button')).some(span => {
+            const txt = (span.textContent || '').trim().toUpperCase();
+            return txt === 'IMPRIMIR' || txt.includes('IMPRIMIR COMPROBANTE');
+        });
+
+        const isSuccessPage = hasImprimirBtn && (
+            bodyText.includes('declaración procesada') ||
+            bodyText.includes('declaracion enviada con exito') ||
+            bodyText.includes('comprobante de declaracion') ||
+            bodyText.includes('imprimir comprobante') ||
+            bodyText.includes('declaración enviada')
+        );
 
         if (isSuccessPage) {
             const state = await SafeStorage.get(['declaration_synced_flag']);
@@ -1020,8 +1058,6 @@ function initDeclarationSuccessWatcher() {
                 await SafeStorage.set({ declaration_synced_flag: true });
                 console.log('🎉 [SRI WATCHER] ¡Pantalla de confirmación de declaración detectada!');
                 // Cierre POST-ENVÍO (la declaración ya fue aceptada por el SRI).
-                // NO usar ejecutarCierreMagico(), que es el cierre PRE-ENVÍO y
-                // volvería a pulsar Siguiente/Aceptar sobre una declaración enviada.
                 if (window.sriAssistant && typeof window.sriAssistant.finalizarPostEnvioSRI === 'function') {
                     await window.sriAssistant.finalizarPostEnvioSRI();
                 }
@@ -1033,6 +1069,9 @@ initDeclarationSuccessWatcher();
 
 // HELPER: ENCONTRAR BOTÓN ACEPTAR/ENVIAR PRINCIPAL EN EL RESUMEN (NO DIÁLOGOS OCULTOS)
 function findAceptarBtnOnSummary() {
+    // Solo relevante dentro del formulario IVA
+    if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return null;
+
     // 1. Buscar botón verde principal 'green-btn' en la página de resumen
     const greenBtn = document.getElementById('frmFlujoDeclaracion:btnAceptar') ||
                      document.getElementById('frmFlujoDeclaracion:btnEnviar') ||
@@ -1076,8 +1115,11 @@ function initSummaryPageWatcher() {
     window.__sriSummaryPageWatcherActive = true;
 
     setInterval(async () => {
+        // 🛑 Blindaje: Solo actuar dentro del wizard IVA
+        if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return;
+
         // 🛑 PROTECCIÓN DE NAVEGACIÓN: Si todavía estamos editando casilleros (concepto401 visible) o navegando en el wizard, NO actuar.
-        const casilleroForm = document.getElementById('concepto401') || document.getElementById('concepto500');
+        const casilleroForm = document.getElementById('concepto401') || document.getElementById('concepto500') || document.getElementById('frmFlujoDeclaracion:calPeriodo');
         if (casilleroForm && casilleroForm.offsetParent !== null) return;
 
         // ⚡ PERF: ver nota en initDeclarationSuccessWatcher.

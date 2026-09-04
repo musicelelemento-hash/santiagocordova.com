@@ -139,9 +139,19 @@ const SriLoopHUD = {
         this._aviso('🚀 Lote iniciado', `${r.total} clientes. Entrando con ${r.primero}…`, 4000);
         await sleep(900);
 
-        // Si hay una sesión abierta hay que cerrarla para entrar con el primer
-        // cliente; si no, vamos derecho al login y el auto-login hace el resto.
-        const haySesion = !!(document.body && /\b\d{13}\b/.test(document.body.textContent || '')) &&
+        // Si hay una sesión abierta del mismo cliente objetivo, ir directo a Comprobantes Recibidos
+        const state = await SriLoop.get();
+        const targetRuc = state.cola && state.cola[0] && state.cola[0].ruc;
+        const currentBodyText = document.body ? (document.body.textContent || '') : '';
+        const isCurrentTargetActive = targetRuc && currentBodyText.includes(targetRuc);
+
+        if (isCurrentTargetActive) {
+            console.log(`🎯 [BUCLE] Ya estamos dentro de la sesión de ${targetRuc}. Navegando directo a Comprobantes Recibidos...`);
+            window.location.href = SRI_RECIBIDOS_URL;
+            return;
+        }
+
+        const haySesion = !!(document.body && /\b\d{13}\b/.test(currentBodyText)) &&
                           !location.href.includes('/auth/realms/');
         if (haySesion && typeof cerrarSesionSRI === 'function') {
             console.log('🔒 [BUCLE] Cerrando la sesión actual para entrar con el primer cliente…');
@@ -751,6 +761,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     subtitle: `${targetMonthName} ${year}`,
                     message: `No pude seleccionar el periodo automáticamente.<br><br>Por favor:<br>1. Selecciona <b>${targetMonthName} ${year}</b> manualmente<br>2. Haz click en <b>"Siguiente"</b><br><br>El asistente continuará automáticamente.`,
                     icon: '👆',
+                    timeout: null,
                     actionText: '✅ ENTENDIDO',
                     onAction: () => { }
                 });
@@ -1844,15 +1855,40 @@ async function ejecutarAuditoriaPerfil(periodData) {
             window.location.href = SRI_RECIBIDOS_URL;
             return;
         } else {
-            console.warn(`⚠️ [REGLA SRI] La lista de obligaciones desplegada NO contiene 2011 DECLARACION DE IVA para ${targetMonthName} ${targetYearStr}.`);
-            await manejarClienteSinObligacionPendiente(targetMonthName, targetYearStr, periodData);
+            console.warn(`⚠️ [REGLA SRI] No se detectó lista de obligaciones en perfil. Procediendo directo a Comprobantes Recibidos...`);
+            await SafeStorage.set({
+                pendingAction: 'turbo_step1_facturas',
+                checkFacturas: true,
+                checkRetenciones: true,
+                checkNC: true,
+                workflowPeriod: { year: targetY, monthIndex: targetM },
+                autoDeclaration: true,
+                sri_auto_mode: true,
+                sri_master_switch_on: true,
+                sriAutomationPaused: false,
+                actionTimestamp: Date.now(),
+                skipSafetyCheck: true
+            });
+            window.location.href = SRI_RECIBIDOS_URL;
             return;
         }
 
     } catch (e) {
-        console.error('❌ Error en Verificación de Perfil:', e);
-        safeStatus('❌ Error verificando perfil');
-        await manejarClienteSinObligacionPendiente(targetMonthName, targetYearStr, periodData);
+        console.error('❌ Verificación de Perfil no concluyente. Procediendo directo a Comprobantes Recibidos:', e);
+        await SafeStorage.set({
+            pendingAction: 'turbo_step1_facturas',
+            checkFacturas: true,
+            checkRetenciones: true,
+            checkNC: true,
+            workflowPeriod: periodData,
+            autoDeclaration: true,
+            sri_auto_mode: true,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            actionTimestamp: Date.now(),
+            skipSafetyCheck: true
+        });
+        window.location.href = SRI_RECIBIDOS_URL;
     }
 }
 
