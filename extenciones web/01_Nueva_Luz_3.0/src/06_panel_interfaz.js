@@ -2195,8 +2195,8 @@ class SriAssistantPanel {
                         <div class="sc-rotulo" style="flex:1.5;align-self:center;text-align:center;opacity:.75">
                             Pausa y parada: en el HUD ↘
                         </div>
-                        <button id="btn-panel-force-next" style="flex: 0.8; background: #3b82f6; border: none; color: white; padding: 8px 4px; border-radius: 8px; font-size: 10px; cursor: pointer; font-weight: bold;" title="Forzar siguiente paso">⏭️ Next</button>
-                        <button id="btn-panel-refresh" style="flex: 0.8; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; padding: 8px 4px; border-radius: 8px; font-size: 10px; cursor: pointer;" title="Actualizar datos">🔄 Recargar</button>
+                        <button id="btn-panel-force-next" class="sc-btn " style="flex: 0.8">⏭️ Next</button>
+                        <button id="btn-panel-refresh" class="sc-btn sc-btn--fantasma" style="flex: 0.8">🔄 Recargar</button>
                     </div>
 
                     <!-- MICRO TERMINAL -->
