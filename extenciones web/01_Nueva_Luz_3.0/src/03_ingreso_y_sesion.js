@@ -702,6 +702,20 @@ async function ejecutarAccionPendiente(items) {
             const res = await extraerTodasLasFacturas();
             await GhostMemory.set('facturas', res);
 
+            try {
+                const informe = await auditarExtraccionConTxt(
+                    TIPO_COMPROBANTE.factura, res.totalFacturas || 0);
+                if (informe) {
+                    await GhostMemory.set('auditoriaFacturas', informe);
+                    // Los proveedores del período salen gratis acá: son el
+                    // insumo del laboratorio de clasificación.
+                    if (informe.proveedores.length) {
+                        await SafeStorage.set({ sc_proveedores_periodo: informe.proveedores });
+                        console.log(`🧪 [PROVEEDORES] ${informe.proveedores.length} emisores distintos en el período.`);
+                    }
+                }
+            } catch (e) { /* auditar nunca puede frenar la extracción */ }
+
             const nextAction = getNextTurboStep('turbo_step2_extraer_facturas', items);
             await SafeStorage.set({
                 pendingAction: nextAction,

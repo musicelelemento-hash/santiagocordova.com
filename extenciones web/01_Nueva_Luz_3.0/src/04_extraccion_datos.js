@@ -864,6 +864,150 @@ async function esperarTabla() {
 }
 
 
+const TIPO_COMPROBANTE = { factura: '1', notaCredito: '3', retencion: '6' };
+
+/**
+ * Descarga el listado TXT del período que esté cargado en pantalla.
+ * Reproduce el POST del enlace en vez de pulsarlo, así el archivo no baja al
+ * disco del usuario: se lee y se descarta.
+ *
+ * @returns {Promise<Array<Object>|null>} filas ya parseadas, o null si falló.
+ */
+async function descargarTxtRecibidos(tipo = TIPO_COMPROBANTE.factura) {
+    const val = (id) => {
+        const el = document.getElementById(id);
+        return el ? (el.value || '') : '';
+    };
+    const viewState = document.querySelector('input[name="javax.faces.ViewState"]');
+    if (!viewState) {
+        console.warn('📄 [TXT] No hay ViewState en la página: no se puede pedir el listado.');
+        return null;
+    }
+
+    const cuerpo = new URLSearchParams({
+        'frmPrincipal': 'frmPrincipal',
+        'frmPrincipal:opciones': 'ruc',
+        'frmPrincipal:ano': val('frmPrincipal:ano'),
+        'frmPrincipal:mes': val('frmPrincipal:mes'),
+        'frmPrincipal:dia': val('frmPrincipal:dia') || '0',
+        'frmPrincipal:cmbTipoComprobante': tipo,
+        'javax.faces.ViewState': viewState.value,
+        'frmPrincipal:lnkTxtlistado': 'frmPrincipal:lnkTxtlistado'
+    });
+
+    try {
+        const r = await fetch(window.location.href.split('#')[0], {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: cuerpo.toString()
+        });
+        if (!r.ok) { console.warn(`📄 [TXT] El portal devolvió HTTP ${r.status}.`); return null; }
+
+        const texto = await r.text();
+        // Si la sesión caducó, el portal devuelve HTML en vez del archivo.
+        if (!texto.startsWith('RUC_EMISOR')) {
+            console.warn('📄 [TXT] La respuesta no es el listado (¿sesión caducada?).');
+            return null;
+        }
+        return parsearTxtRecibidos(texto);
+    } catch (err) {
+        console.warn('📄 [TXT] Falló la descarga:', err.message);
+        return null;
+    }
+}
+
+/** Convierte el TXT separado por tabuladores en objetos. */
+function parsearTxtRecibidos(texto) {
+    const lineas = texto.split(/\r?\n/).filter((l) => l.trim());
+    if (lineas.length < 1) return [];
+    const cols = lineas[0].split('\t').map((c) => c.trim());
+
+    // Los importes vienen con punto decimal y a veces sin el cero de la
+    // izquierda (".3"). parseFloat lo resuelve; el vacío queda en null para
+    // poder distinguir "cero" de "el portal no lo informa".
+    const num = (v) => {
+        const t = String(v || '').trim();
+        if (!t) return null;
+        const n = parseFloat(t.replace(',', '.'));
+        return isNaN(n) ? null : n;
+    };
+
+    return lineas.slice(1).map((l) => {
+        const f = l.split('\t');
+        const o = {};
+        cols.forEach((c, i) => { o[c] = (f[i] || '').trim(); });
+        return {
+            rucEmisor: o.RUC_EMISOR || '',
+            razonSocial: o.RAZON_SOCIAL_EMISOR || '',
+            tipo: o.TIPO_COMPROBANTE || '',
+            serie: o.SERIE_COMPROBANTE || '',
+            claveAcceso: o.CLAVE_ACCESO || '',
+            fechaEmision: o.FECHA_EMISION || '',
+            sinImpuestos: num(o.VALOR_SIN_IMPUESTOS),
+            iva: num(o.IVA),
+            total: num(o.IMPORTE_TOTAL)
+        };
+    });
+}
+
+/**
+ * Compara lo que dice el portal con lo que leyó la extracción.
+ * Un desajuste normalmente significa que se perdió una página del paginador,
+ * que es el fallo más peligroso porque no da ningún error.
+ */
+async function auditarExtraccionConTxt(tipo, cantidadLeida, totalLeido = null) {
+    const filas = await descargarTxtRecibidos(tipo);
+    if (!filas) return null;
+
+    const suma = (k) => filas.reduce((a, f) => a + (f[k] || 0), 0);
+    const informe = {
+        segunPortal: filas.length,
+        segunExtraccion: cantidadLeida,
+        cuadra: filas.length === cantidadLeida,
+        baseTxt: Number(suma('sinImpuestos').toFixed(2)),
+        ivaTxt: Number(suma('iva').toFixed(2)),
+        totalTxt: Number(suma('total').toFixed(2)),
+        proveedores: [...new Map(filas.filter((f) => f.rucEmisor)
+            .map((f) => [f.rucEmisor, f.razonSocial])).entries()]
+            .map(([ruc, nombre]) => ({ ruc, nombre }))
+    };
+
+    if (informe.cuadra) {
+        console.log(`✅ [AUDITORÍA] ${filas.length} comprobantes según el portal y según la extracción. Cuadra.`);
+    } else {
+        console.error(`🚨 [AUDITORÍA] El portal informa ${filas.length} comprobantes y la extracción leyó ${cantidadLeida}. ` +
+                      'Falta o sobra algo: revisá la paginación antes de declarar.');
+        if (typeof anotarBitacora === 'function') {
+            await anotarBitacora('⚠️ auditoría no cuadra', `portal=${filas.length} · leídos=${cantidadLeida}`);
+        }
+    }
+
+    if (totalLeido !== null && informe.totalTxt) {
+        const dif = Math.abs(informe.totalTxt - totalLeido);
+        if (dif > 0.02) {
+            console.warn(`⚠️ [AUDITORÍA] Importe total: portal $${informe.totalTxt} vs extracción $${totalLeido} (difieren $${dif.toFixed(2)}).`);
+        }
+    }
+
+    return informe;
+}
+
+if (typeof window !== 'undefined') {
+    /** Uso a mano, estando en Comprobantes Recibidos con una consulta hecha. */
+    window.sriTxt = async (tipo) => {
+        const filas = await descargarTxtRecibidos(tipo || TIPO_COMPROBANTE.factura);
+        if (!filas) return null;
+        console.log(`📄 ${filas.length} comprobantes en el listado del portal.`);
+        console.table(filas.slice(0, 40).map((f) => ({
+            emisor: f.razonSocial.slice(0, 34), tipo: f.tipo, serie: f.serie,
+            base: f.sinImpuestos, iva: f.iva, total: f.total
+        })));
+        return filas;
+    };
+    window.sriAuditar = (tipo, n) => auditarExtraccionConTxt(tipo || TIPO_COMPROBANTE.factura, n);
+}
+
 function calcularResumen(facturas) {
     let periodo = "Desconocido";
     if (facturas.length > 0) {

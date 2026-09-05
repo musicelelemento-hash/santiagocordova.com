@@ -739,14 +739,57 @@ Campos que acompañan al POST: `frmPrincipal:ano`, `frmPrincipal:mes`,
 `frmPrincipal:dia`, `frmPrincipal:cmbTipoComprobante`, `frmPrincipal:opciones`.
 Es decir: **los mismos filtros que la consulta normal**.
 
-### Por qué importa
+### Formato: TSV con cabecera
 
-Hoy la extensión raspa la tabla y abre el modal de detalle de cada comprobante
-uno por uno para leer las retenciones. Con este enlace, los mismos datos vienen
-en una sola descarga: menos peticiones al portal, menos superficie de fallo y
-muchísimo más rápido.
+```
+RUC_EMISOR  RAZON_SOCIAL_EMISOR  TIPO_COMPROBANTE  SERIE_COMPROBANTE
+CLAVE_ACCESO  FECHA_AUTORIZACION  FECHA_EMISION  IDENTIFICACION_RECEPTOR
+VALOR_SIN_IMPUESTOS  IVA  IMPORTE_TOTAL  NUMERO_DOCUMENTO_MODIFICADO
+```
 
-**Pendiente de implementar.** Ver `INFORME_BURP_vs_EXTENSION.md`.
+El POST se puede reproducir con `fetch` y así el archivo no baja al disco:
+
+```
+frmPrincipal                    = frmPrincipal
+frmPrincipal:opciones           = ruc
+frmPrincipal:ano / :mes / :dia  = los de la pantalla
+frmPrincipal:cmbTipoComprobante = 1 factura · 3 nota de crédito · 6 retención
+javax.faces.ViewState           = el del DOM
+frmPrincipal:lnkTxtlistado      = frmPrincipal:lnkTxtlistado
+```
+
+Números: punto decimal, y a veces **sin el cero de la izquierda** (`.3`).
+
+### ⚠️ Lo que este TXT NO resuelve
+
+Medido sobre la traza real:
+
+| Tipo | Filas | ¿Trae importes? |
+| :--- | ---: | :--- |
+| Factura | 42 | ✅ las 42 |
+| Comprobante de Retención | 8 | ❌ columnas vacías |
+| Nota de Crédito | 11 | ❌ columnas vacías |
+
+**No reemplaza la extracción**, por dos motivos:
+
+1. En retenciones y notas de crédito los importes vienen vacíos. Los valores
+   retenidos siguen estando solo en el modal de detalle.
+2. Ni siquiera en las facturas separa **base 15% de base 0%**: da el total sin
+   impuestos y el IVA juntos. Se podría dividir suponiendo que todo el IVA es
+   al 15% (`base15 = IVA / 0.15`), pero eso es una suposición sobre la tarifa,
+   y los casilleros 500/507 no se llenan con suposiciones.
+
+### Para lo que SÍ sirve, y es mucho
+
+**Auditar la extracción.** El portal dice cuántos comprobantes hay y por
+cuánto. Si el raspado leyó otra cantidad, se perdió una página del paginador —
+un fallo que **no produce ningún error** y que ninguna otra comprobación ve.
+
+Y de paso entrega **la lista de proveedores del período** (RUC + razón social,
+sin repetir), que es el insumo del laboratorio de clasificación.
+
+Implementado en `04_extraccion_datos.js`: `descargarTxtRecibidos()`,
+`parsearTxtRecibidos()` y `auditarExtraccionConTxt()`. En consola: `sriTxt()`.
 
 ## 🚦 Errores y advertencias del formulario — señal ESTRUCTURAL
 
