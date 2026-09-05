@@ -347,21 +347,34 @@ const SriLoop = {
             if (!c || !c.ruc) continue;
             if (errs[c.ruc] === 'cuenta_bloqueada' || tried[c.ruc]?.status === 'locked') {
                 excluidosSeguridad++;
+                await Omitidos.anotar(c.ruc, 'cuenta_bloqueada', {
+                    nombre: c.name,
+                    detalle: tried[c.ruc]?.reason || 'Cuenta bloqueada en el portal del SRI',
+                    contar: false });
                 continue;
             }
 
             const clave = c.password || c.sri_password || c.sriPassword || '';
-            if (!clave) { sinClave++; await Omitidos.anotar(c.ruc, 'sin_clave', { nombre: c.name }); continue; }
+            if (!clave) { sinClave++; await Omitidos.anotar(c.ruc, 'sin_clave', { nombre: c.name, contar: false }); continue; }
 
             // 🛡️ Filtro de seguridad: si la clave falló y no ha cambiado, omitir de la cola
             if (typeof SriCredentialVault !== 'undefined') {
                 const check = await SriCredentialVault.canAttemptLogin(c.ruc, clave);
                 if (!check.allowed) {
                     excluidosSeguridad++;
+                    // Que quede en la lista de omitidos: si solo se lo cuenta,
+                    // el cliente al que hay que arreglarle la clave es
+                    // precisamente el que nadie vuelve a ver.
+                    const bloqueada = /bloquead|inactiv/i.test(check.reason || '');
+                    await Omitidos.anotar(c.ruc, bloqueada ? 'cuenta_bloqueada' : 'clave_incorrecta',
+                        { nombre: c.name, detalle: check.reason || 'La bóveda no permite reintentar',
+                          contar: false });
                     continue;
                 }
             } else if (errs[c.ruc] || tried[c.ruc]?.status === 'failed') {
                 excluidosSeguridad++;
+                await Omitidos.anotar(c.ruc, 'clave_incorrecta',
+                    { nombre: c.name, detalle: 'El SRI ya rechazó esta clave', contar: false });
                 continue;
             }
 
@@ -390,6 +403,9 @@ const SriLoop = {
         });
 
         console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
+        if (excluidosSeguridad || sinClave) {
+            console.log(`   Los ${excluidosSeguridad + sinClave} que quedaron fuera están en el botón ⚠ del HUD, con qué hacer en cada caso.`);
+        }
         if (sinPdf.length) {
             console.warn(`🧾 [BUCLE] ${sinPdf.length} declararon pero su comprobante NO quedó guardado: ` +
                          sinPdf.map((c) => c.name).join(', '));
@@ -682,21 +698,33 @@ const Omitidos = {
         ya_declarada:       'El periodo ya estaba declarado: el portal abrio una sustitutiva. Si hay que corregirla, hacela vos.'
     },
 
+    /**
+     * Anota que un cliente quedó fuera.
+     * @param {object} extra  nombre, detalle, periodo, y:
+     *   · contar=false  → no suma a `veces` ni repite el aviso. Para cuando se
+     *     re-anota algo ya sabido (armar la cola) sin haber intentado nada:
+     *     `veces` cuenta intentos fallidos, no veces que se miró la lista.
+     */
     async anotar(ruc, motivo, extra = {}) {
         if (!ruc) return;
+        const contar = extra.contar !== false;
         try {
             const r = await SafeStorage.get([this._KEY]);
             const lista = r[this._KEY] || {};
+            const previo = lista[ruc];
+            const repetido = !contar && previo && previo.motivo === motivo;
+
             lista[ruc] = {
                 ruc,
-                nombre: extra.nombre || lista[ruc]?.nombre || '',
+                nombre: extra.nombre || previo?.nombre || '',
                 motivo,
                 detalle: String(extra.detalle || '').slice(0, 200),
-                periodo: extra.periodo || '',
-                cuando: Date.now(),
-                veces: (lista[ruc]?.veces || 0) + 1
+                periodo: extra.periodo || previo?.periodo || '',
+                cuando: repetido ? previo.cuando : Date.now(),
+                veces: (previo?.veces || 0) + (contar ? 1 : 0)
             };
             await SafeStorage.set({ [this._KEY]: lista });
+            if (repetido) return;   // ya estaba dicho: no se repite el aviso
             console.log(`⏭️ [OMITIDO] ${extra.nombre || ruc}: ${motivo}`);
             anotarBitacora('omitido', `${extra.nombre || ruc} · ${motivo}`);
         } catch (e) { /* nunca romper el lote por registrar */ }
