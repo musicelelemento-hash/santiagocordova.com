@@ -881,9 +881,22 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
         return false;
     };
 
+    // El sugerido de un casillero está en SU fila, o no está. Buscar por
+    // coordenadas en todo el documento hacía que cualquier cosa a la misma
+    // altura —el HUD de la extensión incluido— pudiera terminar dentro de una
+    // declaración.
+    const ambito = inputElement.closest('tr') || inputElement.closest('table') ||
+                   inputElement.closest('form');
+    if (!ambito) {
+        console.log(`      [*] [${casillero}] El campo no está dentro de una fila del formulario. No busco por proximidad.`);
+        return { found: false, value: 0 };
+    }
+    // Y nunca leer de lo que dibuja la propia extensión.
+    const esNuestro = (el) => !!el.closest('#sri-loop-hud, #sri-assistant-panel-root, #sri-elite-panel, #sri-smart-hub, #sri-main-toast');
+
     try {
         // 1. ESCANEO POR CLASE DIRECTA (The Oracle's Shortcut)
-        const sugeridosInputs = Array.from(document.querySelectorAll('input.sugerido, .input-sugerido, input[id*="sugerido"]'))
+        const sugeridosInputs = Array.from(ambito.querySelectorAll('input.sugerido, .input-sugerido, input[id*="sugerido"]'))
             .filter(el => {
                 const r = el.getBoundingClientRect();
                 return Math.abs(r.top - inputRect.top) < 20;
@@ -899,8 +912,9 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
         }
 
         // 2. ESCANEO DE FILA FISICA
-        const rowElements = Array.from(document.querySelectorAll('span, b, label, td, input, div'))
+        const rowElements = Array.from(ambito.querySelectorAll('span, b, label, td, input, div'))
             .filter(el => {
+                if (esNuestro(el)) return false;
                 const r = el.getBoundingClientRect();
                 return Math.abs(r.top - inputRect.top) < 15;
             });

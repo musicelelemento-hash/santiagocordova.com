@@ -682,7 +682,12 @@ function procesarTablaRetencion(tabla) {
 
     const filas = tabla.querySelectorAll('tbody tr');
     filas.forEach(fila => {
-        const textoFila = fila.textContent.toLowerCase();
+        // Con separador entre celdas: textContent las pega sin nada en medio
+        // ("…a la renta" + "303" = "renta303") y entonces un límite de palabra
+        // nunca cierra. De eso depende distinguir «renta» de «RIVADENEIRA».
+        const textoFila = Array.from(fila.querySelectorAll('td, th'))
+            .map((c) => c.textContent).join(' ').toLowerCase() ||
+            fila.textContent.toLowerCase();
 
         // ELITE FIX: Si esta fila fue usada como header, saltarla para no procesarla como datos
         if (headerSource && fila === headerSource && indiceValorRetenido !== -1) return;
@@ -698,23 +703,29 @@ function procesarTablaRetencion(tabla) {
                 valBase = parseDecimal(celdas[indiceBaseImponible].textContent);
             }
 
-            // RENTA
-            if (textoFila.includes('renta')) {
-                // Validar que no sea una fecha (sanity check)
-                if (!textoCelda.includes('-') && !textoCelda.includes('/')) {
-                    rentaRetenida += val;
-                    baseImponibleRenta += valBase;
-                    console.log(`      ✅ RENTA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
-                }
-            }
+            // ¿Renta o IVA? Con límite de palabra, no por subcadena: "iva"
+            // está dentro de RIVADENEIRA, BOLIVAR, OLIVARES, OLIVA, VIVANCO…
+            // y el texto de la fila incluye el nombre del proveedor. Antes,
+            // con cualquiera de esos apellidos, una retención de RENTA se
+            // sumaba TAMBIÉN al IVA retenido —casillero 609, que es crédito—,
+            // y eso baja el impuesto a pagar.
+            const esRenta = /\brenta\b/.test(textoFila);
+            const esIva = /\biva\b/.test(textoFila);
+            const esFecha = textoCelda.includes('-') || textoCelda.includes('/');
 
-            // IVA
-            if (textoFila.includes('iva')) {
-                if (!textoCelda.includes('-') && !textoCelda.includes('/')) {
-                    ivaRetenido += val;
-                    baseImponibleIva += valBase;
-                    console.log(`      ✅ IVA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
-                }
+            if (esRenta && esIva) {
+                // Las dos a la vez no puede ser, y adivinar mueve plata.
+                console.warn(`      ⚠️ Fila de retención que dice renta E IVA a la vez ($${val}). ` +
+                             'No la sumo a ninguna: revisala a mano. ' +
+                             `"${textoFila.replace(/\s+/g, ' ').trim().slice(0, 100)}"`);
+            } else if (esRenta && !esFecha) {
+                rentaRetenida += val;
+                baseImponibleRenta += valBase;
+                console.log(`      ✅ RENTA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
+            } else if (esIva && !esFecha) {
+                ivaRetenido += val;
+                baseImponibleIva += valBase;
+                console.log(`      ✅ IVA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
             }
         }
         // FALLBACK ANTIGUO (Solo si falló detección de índice)
@@ -729,7 +740,7 @@ function procesarTablaRetencion(tabla) {
                 if (val > 0) {
                     if (texto.includes('%')) continue;
 
-                    if (textoFila.includes('renta')) {
+                    if (/\brenta\b/.test(textoFila)) {
                         rentaRetenida += val;
                         // En el fallback antiguo no tenemos el índice de base imponible fácilmente
                         // pero podríamos asumir que es i - 2 (si i es 4, base es 2)
@@ -737,7 +748,7 @@ function procesarTablaRetencion(tabla) {
 
                         console.log(`      ✅ RENTA (Fallback col ${i}): ${val}`);
                         break;
-                    } else if (textoFila.includes('iva')) {
+                    } else if (/\biva\b/.test(textoFila)) {
                         ivaRetenido += val;
                         if (celdas[i - 2]) baseImponibleIva += parseDecimal(celdas[i - 2].textContent);
                         console.log(`      ✅ IVA (Fallback col ${i}): ${val}`);
