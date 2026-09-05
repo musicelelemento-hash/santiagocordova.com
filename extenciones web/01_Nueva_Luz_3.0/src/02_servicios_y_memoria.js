@@ -752,28 +752,78 @@ if (typeof window !== 'undefined') {
 const SriApi = {
     BASE: 'https://srienlinea.sri.gob.ec',
 
-    /** Un JWT del portal guardado por la SPA. Devuelve null si no hay sesión. */
-    _token() {
-        const pinta = (v) => typeof v === 'string' && /^ey[A-Za-z0-9_-]{10,}\./.test(v);
-        for (const almacen of [sessionStorage, localStorage]) {
+    /** ¿Tiene pinta de JWT? Tres partes separadas por punto, la primera "ey…". */
+    _pareceJwt(v) {
+        return typeof v === 'string' && v.length > 40 &&
+               /^ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\./.test(v);
+    },
+
+    /** ¿Sigue vigente? Un token vencido es peor que ninguno: da 401 en silencio. */
+    _vigente(jwt) {
+        try {
+            const carga = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            if (!carga.exp) return true;               // sin caducidad declarada
+            return carga.exp * 1000 > Date.now() + 5000;
+        } catch (e) { return true; }                    // no se pudo leer: se prueba igual
+    },
+
+    /**
+     * Busca un JWT del portal en todo lo que el content script puede ver.
+     * @param {boolean} conDetalle si true, devuelve también DÓNDE lo encontró.
+     */
+    _buscarToken(conDetalle = false) {
+        const hallazgos = [];
+
+        // Recorre un objeto anidado buscando cadenas con pinta de JWT.
+        const MAX_PROF = 8;
+        const hurgar = (valor, ruta, prof = 0) => {
+            if (!valor) return;
+            if (typeof valor === 'string') {
+                // Una cadena SIEMPRE se evalúa: es la hoja, y es donde está el
+                // token. El tope solo limita cuánto se sigue descendiendo.
+                if (this._pareceJwt(valor)) { hallazgos.push({ ruta, jwt: valor }); return; }
+                if (prof < MAX_PROF && valor.length > 2 && (valor[0] === '{' || valor[0] === '[')) {
+                    try { hurgar(JSON.parse(valor), ruta, prof + 1); } catch (e) { /* no era JSON */ }
+                }
+                return;
+            }
+            if (typeof valor === 'object' && prof < MAX_PROF) {
+                for (const k of Object.keys(valor)) hurgar(valor[k], `${ruta}.${k}`, prof + 1);
+            }
+        };
+
+        for (const [nombre, almacen] of [['sessionStorage', sessionStorage], ['localStorage', localStorage]]) {
             try {
                 for (let i = 0; i < almacen.length; i++) {
-                    const bruto = almacen.getItem(almacen.key(i));
-                    if (!bruto) continue;
-                    if (pinta(bruto)) return bruto;
-                    // Keycloak suele guardarlo dentro de un JSON.
-                    if (bruto.startsWith('{')) {
-                        try {
-                            const o = JSON.parse(bruto);
-                            for (const k of ['access_token', 'accessToken', 'token', 'id_token']) {
-                                if (pinta(o[k])) return o[k];
-                            }
-                        } catch (e) { /* no era JSON */ }
-                    }
+                    const clave = almacen.key(i);
+                    hurgar(almacen.getItem(clave), `${nombre}[${clave}]`);
                 }
             } catch (e) { /* almacenamiento bloqueado */ }
         }
-        return null;
+
+        // Cookies legibles (las HttpOnly no se ven desde JS, y está bien así).
+        try {
+            for (const par of String(document.cookie || '').split(';')) {
+                const c = par.indexOf('=');
+                if (c < 0) continue;
+                const clave = par.slice(0, c).trim();
+                const val = decodeURIComponent(par.slice(c + 1).trim());
+                if (this._pareceJwt(val)) hallazgos.push({ ruta: `cookie[${clave}]`, jwt: val });
+            }
+        } catch (e) { /* sin cookies legibles */ }
+
+        // Primero los vigentes, y entre ellos el más largo (el access_token
+        // suele traer más claims que el id_token).
+        hallazgos.sort((a, b) => (this._vigente(b.jwt) - this._vigente(a.jwt)) || (b.jwt.length - a.jwt.length));
+
+        if (conDetalle) return hallazgos;
+        const bueno = hallazgos.find((h) => this._vigente(h.jwt));
+        return bueno ? bueno.jwt : null;
+    },
+
+    /** Un JWT del portal guardado por la SPA. Devuelve null si no hay sesión. */
+    _token() {
+        return this._buscarToken(false);
     },
 
     async _get(ruta) {
@@ -847,6 +897,31 @@ const SriApi = {
 };
 
 if (typeof window !== 'undefined') {
+    /**
+     * ¿Dónde guarda el portal su token? Imprime SOLO la ubicación y la
+     * caducidad; jamás el token, que es una credencial de sesión viva.
+     */
+    window.sriBuscarToken = () => {
+        const h = SriApi._buscarToken(true);
+        if (!h.length) {
+            console.warn('🔌 No hay ningún JWT visible para el content script.');
+            console.log('   Claves en sessionStorage:', Object.keys(sessionStorage));
+            console.log('   Claves en localStorage:  ', Object.keys(localStorage));
+            console.log('   Si están vacías, la SPA lo guarda solo en memoria y desde acá no se puede leer.');
+            return [];
+        }
+        console.table(h.map((x) => {
+            let exp = '?';
+            try {
+                const c = JSON.parse(atob(x.jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                exp = c.exp ? new Date(c.exp * 1000).toLocaleTimeString('es-EC') : 'sin caducidad';
+            } catch (e) {}
+            return { donde: x.ruta, largo: x.jwt.length, vence: exp, vigente: SriApi._vigente(x.jwt) ? 'sí' : 'NO' };
+        }));
+        console.log('(No se imprime el token: es una credencial de sesión.)');
+        return h.map((x) => x.ruta);
+    };
+
     window.sriApiPerfil = () => SriApi.perfil().then((r) => { console.log(r); return r; });
     window.sriApiPendiente = () => SriApi.ivaPendiente().then((r) => {
         if (!r) console.log('🔌 Sin IVA pendiente a la vista (o sin sesión).');
