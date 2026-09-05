@@ -648,9 +648,25 @@ async function llenarCampo(casillero, valor) {
 
         // Verificación y re-intento si es necesario
         await sleep(300);
-        if (parseDecimal(input.value) !== parseDecimal(valorFormateado)) {
+        const esperado = parseDecimal(valorFormateado);
+        if (parseDecimal(input.value) !== esperado) {
             input.value = valorFormateado;
             input.dispatchEvent(new Event('change', { bubbles: true }));
+            await sleep(150);
+        }
+
+        // Se comprueba el reintento. Antes no se comprobaba: la función decía
+        // ✅ y devolvía true aunque el casillero hubiera quedado vacío, y
+        // quien la llamó seguía adelante creyendo que estaba lleno. Con eso
+        // la declaración podía enviarse con un casillero sin llenar y sin
+        // nada raro en la consola.
+        const quedo = parseDecimal(input.value);
+        if (quedo !== esperado) {
+            console.error(`❌ ${casillero}: pedí ${valorFormateado} y quedó "${input.value}". El casillero NO se llenó.`);
+            if (typeof anotarBitacora === 'function') {
+                await anotarBitacora('casillero sin llenar', `${casillero} · esperaba ${valorFormateado}`);
+            }
+            return false;
         }
 
         console.log(`✅ ${casillero}: ${valorFormateado}`);
