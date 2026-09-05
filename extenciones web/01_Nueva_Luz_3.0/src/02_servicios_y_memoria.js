@@ -52,7 +52,10 @@ const SafeStorage = {
 
 const SriLoop = {
     _KEY: 'sc_loop',
-    _DEF: { estado: 'DETENIDO', cola: [], indice: 0, periodo: null, latido: 0, motivo: '' },
+    // paso: el lote frena solo al empezar cada fase, hasta que se pulse ▶.
+    // ultimaFase: contra qué se compara para saber que la fase cambió.
+    _DEF: { estado: 'DETENIDO', cola: [], indice: 0, periodo: null, latido: 0, motivo: '',
+            paso: false, ultimaFase: '' },
     TIMEOUT_LATIDO_MS: 15 * 60 * 1000,
 
     async get() {
@@ -112,10 +115,53 @@ const SriLoop = {
         await this._sincronizarLegado(true);
     },
 
-    async reanudar() {
+    /**
+     * @param {string} faseAhora fase en la que se reanuda. En modo paso hay que
+     *   guardarla: si no, el primer repintado ve «cambió» contra una fase vieja
+     *   y vuelve a frenar sin que el bot haya hecho nada.
+     */
+    async reanudar(faseAhora = null) {
         console.log('▶️ [BUCLE] Reanudando.');
-        await this._set({ estado: 'CORRIENDO', latido: Date.now(), motivo: '' });
+        const patch = { estado: 'CORRIENDO', latido: Date.now(), motivo: '' };
+        if (faseAhora) patch.ultimaFase = faseAhora;
+        await this._set(patch);
         await this._sincronizarLegado(true);
+    },
+
+    /** Enciende o apaga el modo paso a paso. Devuelve cómo quedó. */
+    async alternarPaso(faseAhora = null) {
+        const e = await this.get();
+        const paso = !e.paso;
+        const patch = { paso };
+        if (paso && faseAhora) patch.ultimaFase = faseAhora;
+        await this._set(patch);
+        console.log(paso
+            ? '👣 [BUCLE] Modo paso a paso: el lote frena al empezar cada fase.'
+            : '🏃 [BUCLE] Modo corrido: el lote avanza sin parar.');
+        anotarBitacora(paso ? 'modo paso a paso' : 'modo corrido', '');
+        return paso;
+    },
+
+    /**
+     * En modo paso, frena cuando la fase cambió.
+     *
+     * Frenar es siempre seguro: puedeAvanzar() es la única autoridad y con el
+     * semáforo en PAUSADO nada toca el portal. Lo peor que puede pasar es
+     * parar en un momento poco elegante, nunca en uno peligroso.
+     *
+     * @returns {Promise<string|null>} la fase en la que frenó, o null.
+     */
+    async frenarSiCambioLaFase(faseAhora) {
+        if (!faseAhora) return null;
+        const e = await this.get();
+        if (!e.paso || e.estado !== 'CORRIENDO') return null;
+        if (faseAhora === e.ultimaFase) return null;
+
+        await this._set({ estado: 'PAUSADO', ultimaFase: faseAhora,
+                          motivo: 'Modo paso a paso' });
+        await this._sincronizarLegado(false);
+        console.log(`👣 [PASO] Llegó a «${faseAhora}». Freno acá: pulsá ▶ para dar el paso.`);
+        return faseAhora;
     },
 
     /**

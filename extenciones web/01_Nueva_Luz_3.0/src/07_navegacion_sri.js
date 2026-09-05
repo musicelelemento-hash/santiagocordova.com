@@ -547,6 +547,7 @@ const SriLoopHUD = {
         el.innerHTML = [
             '<span id="slh-drag" title="Arrastrar" style="opacity:0.45;padding:0 2px;cursor:grab">⠿</span>',
             '<button id="slh-play" aria-label="Reanudar o pausar el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer">▶</button>',
+            '<button id="slh-paso" aria-label="Modo paso a paso: frenar al empezar cada fase" title="Modo paso a paso: el lote frena al empezar cada fase y ▶ da un paso" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">👣</button>',
             '<div style="display:flex;flex-direction:column;line-height:1.25;min-width:104px">',
             '  <span id="slh-estado" style="font-weight:800;font-size:11px">DETENIDO</span>',
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
@@ -626,8 +627,19 @@ const SriLoopHUD = {
             ev.stopPropagation();
             const e = await SriLoop.get();
             if (e.estado === 'CORRIENDO') await SriLoop.pausar();
-            else if (e.estado === 'PAUSADO' || e.estado === 'PAUSANDO') await SriLoop.reanudar();
+            else if (e.estado === 'PAUSADO' || e.estado === 'PAUSANDO') {
+                await SriLoop.reanudar(await this._faseActual());
+            }
             else await this._arrancarTodo();
+            this.pintar();
+        });
+
+        el.querySelector('#slh-paso').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const paso = await SriLoop.alternarPaso(await this._faseActual());
+            this._aviso(paso ? '👣 Paso a paso' : '🏃 De corrido',
+                paso ? 'El lote frena al empezar cada fase. ▶ da un paso.'
+                     : 'El lote vuelve a avanzar sin parar.', 4500);
             this.pintar();
         });
 
@@ -1589,7 +1601,31 @@ const SriLoopHUD = {
 
     async pintar() {
         if (!this._el) return;
+
+        // En modo paso, el freno vive acá: pintar() ya corre cada 2 s y en cada
+        // cambio del semáforo, así que es donde antes se nota que la fase cambió.
+        try {
+            const frenoEn = await SriLoop.frenarSiCambioLaFase(await this._faseActual());
+            if (frenoEn) {
+                const f = this.FASES.find((x) => x.id === frenoEn);
+                this._aviso('👣 Un paso por vez',
+                    f ? `Lo próximo: ${f.icono} ${f.txt}. Pulsá ▶ cuando quieras.`
+                      : 'Pulsá ▶ para seguir.', 6000);
+            }
+        } catch (err) { /* frenar nunca puede romper el pintado */ }
+
         const e = await SriLoop.get();
+        const paso = this._el.querySelector('#slh-paso');
+        if (paso) {
+            paso.style.background = e.paso ? 'rgba(167,139,250,0.22)' : 'rgba(148,163,184,0.16)';
+            paso.style.color = e.paso ? '#c4b5fd' : '#cbd5e1';
+            paso.textContent = e.paso ? '👣' : '🏃';
+            paso.setAttribute('aria-pressed', e.paso ? 'true' : 'false');
+            paso.title = e.paso
+                ? 'Paso a paso: el lote frena al empezar cada fase. Pulsá para volver a corrido.'
+                : 'De corrido: el lote avanza sin parar. Pulsá para ir paso a paso.';
+        }
+
         const play = this._el.querySelector('#slh-play');
         const est = this._el.querySelector('#slh-estado');
         const det = this._el.querySelector('#slh-detalle');
