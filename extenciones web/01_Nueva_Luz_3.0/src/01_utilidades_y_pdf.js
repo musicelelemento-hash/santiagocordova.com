@@ -1185,7 +1185,10 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
 
   anotarBitacora('PDF NO SUBIÓ', (r && r.error) || 'sin detalle');
   console.error("❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.");
-  if (r && r.error) console.error("   Motivo:", r.error);
+  // Un motivo por camino, para poder arreglarlo en vez de adivinar.
+  const motivos = (r && r.motivos) || (r && r.error ? [r.error] : []);
+  motivos.forEach((m) => console.error("   ·", m));
+  console.error("   Probá sriProbarSubida() en Chrome normal: por un proxy como Burp esto puede fallar por el TLS.");
   throw new Error("No se pudo subir a Cloudflare R2");
 }
 

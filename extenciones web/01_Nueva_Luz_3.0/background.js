@@ -96,6 +96,7 @@ async function diagnosticarSubida(config) {
 async function subirComprobante({ key, base64, contentType, config }) {
   const bytes = base64ABytes(base64);
   const cuerpo = new Blob([bytes], { type: contentType || "application/pdf" });
+  const motivos = [];
 
   // ── Tier 1: Worker relay ─────────────────────────────────────────────────
   if (config.R2_UPLOAD_ENDPOINT) {
@@ -113,10 +114,15 @@ async function subirComprobante({ key, base64, contentType, config }) {
         console.log("✅ [SW] Subido vía Worker:", fileUrl);
         return { ok: true, url: fileUrl, via: "worker" };
       }
-      console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, await res.text().catch(() => ""));
+      const cuerpo = await res.text().catch(() => "");
+      motivos.push(`worker: HTTP ${res.status}${cuerpo ? ' · ' + cuerpo.slice(0, 120) : ''}`);
+      console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, cuerpo);
     } catch (e) {
+      motivos.push(`worker: ${e.message}`);
       console.warn("⚠️ [SW] Worker no disponible:", e.message);
     }
+  } else {
+    motivos.push('worker: sin R2_UPLOAD_ENDPOINT configurado');
   }
 
   // ── Tier 2: S3 SigV4 directo a R2 ────────────────────────────────────────
@@ -175,13 +181,20 @@ async function subirComprobante({ key, base64, contentType, config }) {
         console.log("✅ [SW] Subido directo a R2:", fileUrl);
         return { ok: true, url: fileUrl, via: "r2-directo" };
       }
-      console.warn(`⚠️ [SW] R2 respondió ${res.status}:`, await res.text().catch(() => ""));
+      const cuerpoR2 = await res.text().catch(() => "");
+      motivos.push(`r2-directo: HTTP ${res.status}${cuerpoR2 ? ' · ' + cuerpoR2.slice(0, 160) : ''}`);
+      console.warn(`⚠️ [SW] R2 respondió ${res.status}:`, cuerpoR2);
     } catch (e) {
+      motivos.push(`r2-directo: ${e.message}`);
       console.warn("⚠️ [SW] Subida directa falló:", e.message);
     }
+  } else {
+    motivos.push('r2-directo: faltan credenciales de R2');
   }
 
-  return { ok: false, error: "Ningún camino de subida funcionó" };
+  // El motivo viaja de vuelta: sin esto, quien pregunta se queda con un
+  // "no funcionó" que no permite arreglar nada.
+  return { ok: false, error: motivos.join(' | '), motivos };
 }
 
 /** Petición genérica cross-origin por cuenta del content script. */
