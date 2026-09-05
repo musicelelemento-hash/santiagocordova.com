@@ -48,6 +48,200 @@ async function irARecuperarComprobante(ruc, periodo, nombre = '') {
  * Marcado confirmado en la traza flujo_de_consuta_de_declaraciones_iva_renta
  * (Burp, 04-sep-2026). Ver BIBLIA_PANTALLAS_SRI.md.
  */
+const MESES_SRI = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                   'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+/**
+ * Lee la tabla de declaraciones presentadas y devuelve una entrada por cada
+ * declaración de IVA, con su período y su número de comprobante.
+ */
+function listarDeclaracionesPresentadas() {
+    const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
+    if (!tabla) return [];
+
+    return Array.from(tabla.querySelectorAll('tbody tr[data-ri]')).map((tr) => {
+        const desc = tr.querySelector('[id*="txtDescripcionObligacion"]');
+        const texto = (desc && desc.textContent) || tr.textContent || '';
+        if (!/IVA/i.test(texto)) return null;
+
+        const celdas = Array.from(tr.querySelectorAll('td')).map((td) => (td.textContent || '').trim());
+        const perTxt = celdas.find((c) => /^[A-ZÁÉÍÓÚÑ]+\s+\d{4}$/i.test(c)) || '';
+        const partes = perTxt.toUpperCase().split(/\s+/);
+        const mi = MESES_SRI.indexOf(partes[0]);
+        const anio = parseInt(partes[1], 10);
+        if (mi < 0 || !anio) return null;
+
+        return {
+            periodo: { year: anio, monthIndex: mi },
+            per: `${anio}-${String(mi + 1).padStart(2, '0')}`,
+            periodoTexto: perTxt,
+            cep: celdas.find((c) => /^\d{10,}$/.test(c)) || '',
+            tipo: celdas.find((c) => /^(Original|Sustitutiva)/i.test(c)) || '',
+            estado: celdas.find((c) => /CUMPLIDA|PENDIENTE/i.test(c)) || '',
+            indiceFila: tr.getAttribute('data-ri')
+        };
+    }).filter(Boolean);
+}
+
+/** El botón «Comprobante de declaración» de una fila, nunca por su j_idt. */
+function botonComprobanteDeFila(tr) {
+    const botones = Array.from(tr.querySelectorAll('button, a'));
+    return botones.find((b) => /comprobante/i.test(b.getAttribute('title') || ''))
+        || botones.find((b) => b.querySelector('.ui-icon-file-download'))
+        || botones.find((b) => /comprobante/i.test(b.textContent || ''))
+        || null;
+}
+
+/**
+ * Baja TODOS los comprobantes que falten de quien está logueado.
+ * @param {{ruc, nombre, soloFaltantes}} opts
+ * @returns {Promise<{bajados:number, yaEstaban:number, fallaron:number, total:number}>}
+ */
+async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = true } = {}) {
+    const lista = listarDeclaracionesPresentadas();
+    const resumen = { bajados: 0, yaEstaban: 0, fallaron: 0, total: lista.length };
+
+    if (!lista.length) {
+        console.warn('🧾 [TODOS] La tabla de declaraciones presentadas está vacía o no cargó.');
+        return resumen;
+    }
+
+    console.log(`🧾 [TODOS] ${lista.length} declaraciones de IVA presentadas: ` +
+                lista.map((d) => d.periodoTexto).join(', '));
+    await anotarBitacora('comprobantes a bajar', `${lista.length} periodos de ${nombre || ruc}`);
+
+    for (const d of lista) {
+        // ¿Ya tenemos este? El registro local lo sabe.
+        if (soloFaltantes && typeof SriLoop !== 'undefined') {
+            const reg = await SriLoop.declaracionLocal(ruc, d.periodo);
+            if (reg && reg.pdfSubido) {
+                console.log(`   ✓ ${d.periodoTexto} ya está guardado.`);
+                resumen.yaEstaban++;
+                continue;
+            }
+        }
+
+        // La tabla se vuelve a renderizar con cada descarga: hay que buscar la
+        // fila de nuevo, por su período, no por una referencia vieja.
+        const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
+        const fila = tabla && Array.from(tabla.querySelectorAll('tbody tr[data-ri]'))
+            .find((tr) => (tr.textContent || '').toUpperCase().includes(d.periodoTexto.toUpperCase()));
+        if (!fila) {
+            console.warn(`   ✗ ${d.periodoTexto}: ya no encuentro su fila.`);
+            resumen.fallaron++;
+            continue;
+        }
+
+        const boton = botonComprobanteDeFila(fila);
+        if (!boton) {
+            console.warn(`   ✗ ${d.periodoTexto}: la fila no tiene botón de comprobante.`);
+            resumen.fallaron++;
+            continue;
+        }
+
+        console.log(`   ⬇️ ${d.periodoTexto}${d.cep ? ' · CEP ' + d.cep : ''}...`);
+        capturedPdfBase64 = null;
+        clickElement(boton, `Comprobante ${d.periodoTexto}`);
+
+        for (let i = 0; i < 25 && !capturedPdfBase64; i++) await sleep(700);
+
+        if (!capturedPdfBase64) {
+            console.warn(`   ✗ ${d.periodoTexto}: no llegó el PDF.`);
+            await anotarBitacora('comprobante sin bajar', `${d.periodoTexto} · ${nombre || ruc}`);
+            resumen.fallaron++;
+            continue;
+        }
+
+        // Constancia primero: si la subida falla, igual sabemos que existe.
+        if (typeof SriLoop !== 'undefined') {
+            await SriLoop.marcarDeclarado(ruc, d.periodo, { nombre, cep: d.cep });
+        }
+        await syncDeclarationToSupabase(ruc, d.per, null, nombre, null, 'completado');
+        await anotarBitacora('comprobante bajado', `${d.periodoTexto} · ${nombre || ruc}`);
+        resumen.bajados++;
+
+        // Aire para que el portal termine de re-renderizar la tabla.
+        await sleep(1500);
+    }
+
+    console.log(`🧾 [TODOS] ${resumen.bajados} bajados · ${resumen.yaEstaban} ya estaban · ${resumen.fallaron} fallaron.`);
+    await anotarBitacora('comprobantes: resumen',
+        `${resumen.bajados} bajados · ${resumen.yaEstaban} ya estaban · ${resumen.fallaron} fallaron`);
+    return resumen;
+}
+
+if (typeof window !== 'undefined') {
+    /** Baja todos los comprobantes del contribuyente logueado. */
+    window.sriTraerComprobantes = async (soloFaltantes = true) => {
+        const info = (window.sriAssistant && window.sriAssistant.extractClientInfo)
+            ? window.sriAssistant.extractClientInfo() : {};
+        const af = (await SafeStorage.get(['pending_sri_autofill'])).pending_sri_autofill || {};
+        const ruc = info.ruc || af.ruc;
+        if (!ruc) { console.error('🧾 No sé de quién es esta sesión.'); return null; }
+        if (!enConsultaDeclaraciones()) {
+            console.log('🧾 Primero hay que estar en Consulta de declaraciones. Yendo...');
+            await SafeStorage.set({ pendingAction: 'bajar_todos_comprobantes', actionTimestamp: Date.now(),
+                                    bajarTodos: { ruc, nombre: info.name || af.name || '', soloFaltantes } });
+            window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
+            return null;
+        }
+        return bajarTodosLosComprobantes({ ruc, nombre: info.name || af.name || '', soloFaltantes });
+    };
+}
+
+/**
+ * Deja la tabla de declaraciones presentadas a la vista.
+ * Es un asistente de tres pantallas sobre la MISMA URL, así que se mira qué
+ * hay delante y se da el paso que toca; cada carga avanza uno.
+ *
+ * @param {number} anio año fiscal a consultar.
+ * @returns {Promise<boolean>} true si la tabla ya está.
+ */
+async function prepararTablaDeclaraciones(anio) {
+    if (!enConsultaDeclaraciones()) return false;
+    if (document.getElementById('formPresentada:tblConsultaDeclaracion')) return true;
+
+    // ── Pantalla 1 · elegir el grupo de obligación ──
+    const tablaGrupo = document.getElementById('formPresentada:tblGrupoObligacionSeleccion');
+    const btnBuscar = document.getElementById('formPresentada:btnBuscarGrupoObligacion');
+    if (tablaGrupo && btnBuscar && esVisible(btnBuscar)) {
+        const filaIva = Array.from(tablaGrupo.querySelectorAll('tbody tr[data-rk]'))
+            .find((tr) => /\bIVA\b/i.test(tr.textContent || ''));
+        if (!filaIva) {
+            console.warn('🧾 No hay un grupo de obligación de IVA para este contribuyente.');
+            return false;
+        }
+        const casilla = filaIva.querySelector('.ui-chkbox-box');
+        if (casilla && !/ui-state-active/.test(casilla.className)) {
+            clickElement(casilla, 'Consulta · marcar obligación IVA');
+            await sleep(700);
+        }
+        clickElement(btnBuscar, 'Consulta · buscar grupo de obligación');
+        await sleep(2500);
+    }
+
+    // ── Pantalla 2 · período fiscal ──
+    // somAnioFiscal es un ui-selectonemenu: su <select> real viene vacío y se
+    // llena por JS, así que hay que abrir el panel y pulsar el <li>.
+    const btnAceptar = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion');
+    if (btnAceptar && esVisible(btnAceptar)) {
+        const anioTxt = String(anio || new Date().getFullYear());
+        const etiqueta = document.getElementById('formPresentada:somAnioFiscal_label');
+        if (etiqueta && !(etiqueta.textContent || '').includes(anioTxt)) {
+            const disparador = document.querySelector('#formPresentada\\:somAnioFiscal .ui-selectonemenu-trigger');
+            if (disparador) { clickElement(disparador, 'Consulta · abrir años'); await sleep(500); }
+            const item = Array.from(document.querySelectorAll('#formPresentada\\:somAnioFiscal_items li'))
+                .find((li) => (li.textContent || '').trim() === anioTxt);
+            if (item) { clickElement(item, `Consulta · año ${anioTxt}`); await sleep(700); }
+            else console.warn(`🧾 El año ${anioTxt} no está entre las opciones.`);
+        }
+        clickElement(btnAceptar, 'Consulta · aceptar período');
+        await sleep(3000);
+    }
+
+    return !!document.getElementById('formPresentada:tblConsultaDeclaracion');
+}
+
 async function ejecutarRecuperacionComprobante() {
     const st = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
     if (!st) { console.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
@@ -276,6 +470,7 @@ const SriLoopHUD = {
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
             '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
+            '<button id="slh-pdfs" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:6px 9px;background:rgba(74,222,128,0.16);color:#4ade80;font-weight:800;font-size:12px;cursor:pointer">🧾</button>',
             '<button id="slh-omitidos" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:6px 9px;background:rgba(245,158,11,0.18);color:#fbbf24;font-weight:800;font-size:11px;cursor:pointer">⚠️ 0</button>',
             '<button id="slh-copiar" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(148,163,184,0.16);color:#cbd5e1;font-size:12px;cursor:pointer">📋</button>',
             '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
@@ -339,6 +534,24 @@ const SriLoopHUD = {
             ev.stopPropagation();
             await this._declararEsteCliente();
             this.pintar();
+        });
+
+        el.querySelector('#slh-pdfs').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const btn = ev.currentTarget;
+            const previo = btn.textContent;
+            btn.textContent = '⏳';
+            try {
+                if (!enConsultaDeclaraciones()) {
+                    this._aviso('🧾 Voy por los comprobantes',
+                        'Abro Consulta de declaraciones y bajo todos los que falten.', 6000);
+                }
+                await window.sriTraerComprobantes(true);
+            } catch (e) {
+                console.error('🧾 No se pudieron traer los comprobantes:', e);
+                this._aviso('🧾 No pude', e.message, 7000);
+            }
+            btn.textContent = previo;
         });
 
         el.querySelector('#slh-omitidos').addEventListener('click', async (ev) => {
@@ -1050,6 +1263,13 @@ const SriLoopHUD = {
             const corriendo = e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO';
             aqui.style.display = corriendo ? 'none' : '';
         }
+        const pdfs = this._el.querySelector('#slh-pdfs');
+        if (pdfs) {
+            const info = (window.sriAssistant && window.sriAssistant.extractClientInfo)
+                ? window.sriAssistant.extractClientInfo() : {};
+            pdfs.style.display = (info && info.ruc) ? '' : 'none';
+        }
+
         const stop = this._el.querySelector('#slh-stop');
         if (!play || !est || !det) return;
 

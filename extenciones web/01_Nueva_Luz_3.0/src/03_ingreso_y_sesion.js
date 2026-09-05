@@ -1154,6 +1154,23 @@ async function ejecutarAccionPendiente(items) {
     // a declararla. Cruza a otra aplicación del portal, así que puede tardar
     // varias cargas: refrescamos el reloj para que no la mate la guarda de
     // acciones caducadas mientras el puente SSO hace lo suyo.
+    // 🧾 Traer TODOS los comprobantes: el objetivo general del proyecto.
+    if (items.pendingAction === 'bajar_todos_comprobantes' && items.bajarTodos) {
+        if (!enConsultaDeclaraciones()) {
+            console.log('🧾 [TODOS] Esperando llegar a Consulta de declaraciones...');
+            await SafeStorage.set({ actionTimestamp: Date.now() });
+            return;
+        }
+        // El asistente de tres pantallas es el mismo que el de una sola
+        // recuperación: se reutiliza para llegar a la tabla.
+        const listo = await prepararTablaDeclaraciones();
+        if (!listo) { await SafeStorage.set({ actionTimestamp: Date.now() }); return; }
+
+        await bajarTodosLosComprobantes(items.bajarTodos);
+        await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'bajarTodos']);
+        return;
+    }
+
     if (items.pendingAction === 'recuperar_comprobante') {
         const listo = await ejecutarRecuperacionComprobante();
         if (!listo) await SafeStorage.set({ actionTimestamp: Date.now() });

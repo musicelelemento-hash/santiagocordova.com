@@ -6,6 +6,25 @@ Cualquier IA operando en este entorno **DEBE** leer y respetar estas instruccion
 
 ---
 
+## 0. OBJETIVO GENERAL DEL PROYECTO
+
+> **Obtener TODOS los comprobantes de declaraciones a la fecha.**
+
+No es «declarar el mes en curso». Es que cada contribuyente tenga guardado el
+comprobante de **cada** declaración presentada. Declarar lo pendiente es una
+parte del trabajo; la otra —y la que quedaba sin hacer— es recuperar los
+comprobantes de lo que ya se declaró.
+
+De ahí que Consulta de declaraciones sea tan importante como el wizard de
+recepción: ahí está el histórico completo, una fila por período, cada una con
+su botón «Comprobante de declaración».
+
+`bajarTodosLosComprobantes()` recorre esa tabla entera y baja lo que falte,
+salteando lo que el registro local ya da por guardado. El botón 🧾 del HUD lo
+dispara a mano; `sriTraerComprobantes()` hace lo mismo desde la consola.
+
+---
+
 ## 1. Arquitectura de la Extensión (Nueva Luz 3.0)
 
 La extensión dejó de ser un solo archivo monolítico (`content.js`). Ahora utiliza **Vite** para concatenar ordenadamente múltiples archivos `.js` ubicados en `src/`.
