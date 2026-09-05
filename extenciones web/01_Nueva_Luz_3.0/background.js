@@ -208,8 +208,49 @@ async function peticion({ url, opciones }) {
   }
 }
 
+/**
+ * Limpia todas las cookies de sesión del SRI (incluyendo HttpOnly en sub-apps como
+ * /tuportal-internet, /comprobantes-electronicos-internet, /sri-declaraciones-web-internet).
+ */
+async function limpiarCookiesSri() {
+  if (!chrome.cookies) {
+    console.warn("⚠️ [SW] chrome.cookies no está disponible en este contexto.");
+    return { ok: false, error: "API chrome.cookies no disponible" };
+  }
+  try {
+    let eliminadas = 0;
+    const dominios = ["sri.gob.ec", ".sri.gob.ec", "srienlinea.sri.gob.ec"];
+    for (const domain of dominios) {
+      const cookies = await chrome.cookies.getAll({ domain }).catch(() => []);
+      for (const cookie of cookies) {
+        const protocol = cookie.secure ? "https:" : "http:";
+        const rawDomain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
+        const cookieUrl = `${protocol}//${rawDomain}${cookie.path}`;
+        await chrome.cookies.remove({
+          url: cookieUrl,
+          name: cookie.name,
+          storeId: cookie.storeId,
+        }).catch(() => {});
+        eliminadas++;
+      }
+    }
+    console.log(`🧹 [SW] Limpieza de sesión SRI: ${eliminadas} cookies eliminadas.`);
+    return { ok: true, eliminadas };
+  } catch (e) {
+    console.warn("⚠️ [SW] Error eliminando cookies SRI:", e);
+    return { ok: false, error: e.message };
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, responder) => {
   if (!msg || !msg.tipo) return;
+
+  if (msg.tipo === "SC_LIMPIAR_SESION_SRI") {
+    limpiarCookiesSri()
+      .then(responder)
+      .catch((e) => responder({ ok: false, error: e.message }));
+    return true; // respuesta asíncrona
+  }
 
   if (msg.tipo === "SC_SUBIR_COMPROBANTE") {
     subirComprobante(msg)

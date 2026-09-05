@@ -5,9 +5,11 @@
     "description": "Automatización inteligente de declaración de IVA, cálculo matemático Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
     "permissions": [
         "storage",
-        "activeTab"
+        "activeTab",
+        "cookies"
     ],
     "host_permissions": [
+        "https://*.sri.gob.ec/*",
         "https://srienlinea.sri.gob.ec/*",
         "https://*.supabase.co/*",
         "https://*.workers.dev/*",

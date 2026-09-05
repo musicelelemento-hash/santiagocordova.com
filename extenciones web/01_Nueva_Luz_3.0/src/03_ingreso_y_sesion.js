@@ -28,6 +28,23 @@ SafeStorage.get(null).then(async (items) => {
         return;
     }
 
+    if (window.location.href.includes('salirSSO.jsp')) {
+        console.log('🚪 [SALIR SSO] Redirección detectada en salirSSO.jsp. Continuando hacia el portal...');
+        setTimeout(() => {
+            const btnContinuar = document.querySelector('button[name="btnContinuar"]') ||
+                                 document.querySelector('.sri-boton-mediano-azul') ||
+                                 document.querySelector('button[onclick*="srienlinea"]') ||
+                                 document.querySelector('a.sri-boton-mediano-azul') ||
+                                 document.querySelector('input[type="submit"]');
+            if (btnContinuar) {
+                btnContinuar.click();
+            } else {
+                window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
+            }
+        }, 500);
+        return;
+    }
+
     if (isLoginPage) {
         renderLoginCockpit(items);
         initLoginCockpitWatcher();
@@ -654,10 +671,12 @@ async function ejecutarAccionPendiente(items) {
 
         // Prueba dura: el propio portal dice quién está adentro.
         let enPantalla = {};
+        let fuente = '';
         try {
             const p = await SriApi.perfil();
             if (p && p.identificacion) {
                 enPantalla = { ruc: String(p.identificacion), highConfidence: true };
+                fuente = 'la API del perfil';
                 if (enPantalla.ruc !== esperado) {
                     console.error(`🪪 [IDENTIDAD] El portal dice que la sesión es de ${enPantalla.ruc}, ` +
                                   `y el lote espera a ${esperado}.`);
@@ -667,18 +686,69 @@ async function ejecutarAccionPendiente(items) {
 
         if (!enPantalla.ruc && window.sriAssistant && window.sriAssistant.extractClientInfo) {
             enPantalla = window.sriAssistant.extractClientInfo() || {};
+            fuente = 'la cabecera de la página';
+        }
+
+        // ── El sello gana sobre la cabecera ──
+        // El SSO salta entre aplicaciones JSF distintas y cada una tiene su
+        // propia cabecera. La de comprobantesRecibidos.jsf llegaba servida del
+        // cliente ANTERIOR, y por creerle el lote entraba y salía sin fin.
+        // Si el SRI aceptó la clave de este RUC hace un momento, la sesión es
+        // suya: eso lo dijo el portal, no una cabecera cacheada.
+        const sello = (await SafeStorage.get(['sc_sesion_confirmada'])).sc_sesion_confirmada;
+        const selloFresco = !!(sello && sello.ruc === esperado &&
+                               (Date.now() - (sello.ts || 0)) < 360000);
+        const soloCabecera = fuente === 'la cabecera de la página';
+
+        if (selloFresco && soloCabecera && enPantalla.ruc && enPantalla.ruc !== esperado) {
+            console.warn(`🪪 [IDENTIDAD] La cabecera muestra a ${enPantalla.ruc}, pero el SRI aceptó la clave ` +
+                         `de ${esperado} hace ${Math.round((Date.now() - sello.ts) / 1000)}s. ` +
+                         'Es la cabecera vieja de otra pantalla: sigo con el cliente correcto.');
+            enPantalla = {};
         }
 
         if (enPantalla.ruc && enPantalla.highConfidence && enPantalla.ruc !== esperado) {
             console.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
-                          'No se toca nada: se cierra sesión para que entre el cliente correcto.');
+                          'No se toca nada: se purga la sesión y se avanza al siguiente cliente del lote.');
             anotarBitacora('⛔ identidad no coincide', `sesión=${enPantalla.ruc} · esperado=${esperado}`);
+
+            // Cada reintento es un login más. Dos alcanzan: al tercero se
+            // frena el lote entero antes de que el SRI bloquee la cuenta.
+            const kIntentos = 'sc_identidad_intentos';
+            const intentos = (await SafeStorage.get([kIntentos]))[kIntentos] || {};
+            intentos[esperado] = (intentos[esperado] || 0) + 1;
+            await SafeStorage.set({ [kIntentos]: intentos });
+            if (intentos[esperado] >= 3) {
+                console.error(`🛑 [IDENTIDAD] Tercer desencuentro seguido con ${esperado}. ` +
+                              'Freno el lote: seguir sería martillar el login del SRI y arriesgar el bloqueo de la cuenta.');
+                anotarBitacora('🛑 lote detenido', `identidad irresoluble en ${esperado}`);
+                if (typeof SriLoop !== 'undefined') await SriLoop.detener('identidad irresoluble');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+                if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
+                return;
+            }
             await Omitidos.anotar(esperado, 'identidad', {
-                nombre: items.pending_sri_autofill.name,
+                nombre: items.pending_sri_autofill?.name || 'Cliente',
                 detalle: `la sesión abierta era de ${enPantalla.ruc}` });
-            await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
-            if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+            if (typeof handleBatchNextClient === 'function') {
+                const batchNext = await handleBatchNextClient();
+                if (!batchNext && typeof cerrarSesionSRI === 'function') {
+                    await cerrarSesionSRI(true);
+                }
+            } else if (typeof cerrarSesionSRI === 'function') {
+                await cerrarSesionSRI(true);
+            }
             return;
+        }
+
+        // Identidad en orden: se borra el historial de tropiezos de este
+        // cliente para que un desencuentro viejo no lo condene mañana.
+        const kOk = 'sc_identidad_intentos';
+        const previos = (await SafeStorage.get([kOk]))[kOk] || {};
+        if (previos[esperado]) {
+            delete previos[esperado];
+            await SafeStorage.set({ [kOk]: previos });
         }
     }
 

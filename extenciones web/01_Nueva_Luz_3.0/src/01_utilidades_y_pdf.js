@@ -208,7 +208,13 @@ const SriCredentialVault = {
       signature: this.getSignature(password),
       reason: 'Acceso exitoso'
     };
-    await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
+    // 🪪 Sello de identidad. El SRI acaba de aceptar la clave de ESTE ruc: la
+    // sesion es suya, diga lo que diga la cabecera cacheada de otra app JSF.
+    await SafeStorage.set({
+      sri_tried_credentials: tried,
+      flagged_errors: flagged,
+      sc_sesion_confirmada: { ruc, ts: Date.now() }
+    });
     console.log(`✅ [VAULT] Acceso exitoso registrado para ${ruc}. Bóveda actualizada.`);
   },
 
@@ -536,15 +542,29 @@ async function cerrarSesionSRI(force = false) {
     console.warn("⚠️ No se pudo purgar el almacenamiento local:", e);
   }
 
-  // 2. Exterminio de Cookies (Cookie Bomb)
+  // 2. Exterminio de Cookies Total (SW Cookie Bomb + document.cookie)
   try {
     document.cookie =
       "JSESSIONID=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     document.cookie =
       "KEYCLOAK_IDENTITY=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    console.log("🍪 Cookies de sesión exterminadas.");
   } catch (e) {
-    console.warn("⚠️ No se pudieron limpiar las cookies:", e);
+    console.warn("⚠️ No se pudieron limpiar las cookies locales:", e);
+  }
+
+  // Purga profunda de cookies HttpOnly en todas las sub-apps del SRI vía Service Worker
+  try {
+    await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ tipo: "SC_LIMPIAR_SESION_SRI" }, (resp) => {
+        if (resp && resp.ok) {
+          console.log(`🍪 [LOGOUT SW] ${resp.eliminadas} cookies del SRI destruidas en el navegador.`);
+        }
+        resolve();
+      });
+      setTimeout(resolve, 800);
+    });
+  } catch (e) {
+    console.warn("⚠️ Error solicitando purga de cookies al Service Worker:", e);
   }
 
   const logoutIcon =
@@ -563,8 +583,10 @@ async function cerrarSesionSRI(force = false) {
       clickElement(logoutIcon, "Icono Cerrar Sesión SRI");
       const parentLink = logoutIcon.closest("a, button, li");
       if (parentLink) {
-        clickElement(parentLink, "Enlace Padre Cerrar Sesión");
-        parentLink.click();
+        const href = parentLink.getAttribute("href") || "";
+        if (!href.toLowerCase().startsWith("javascript:")) {
+          clickElement(parentLink, "Enlace Padre Cerrar Sesión");
+        }
       }
     } catch (e) {
       console.warn("Error al hacer clic en logoutIcon:", e);
