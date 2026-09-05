@@ -421,36 +421,36 @@ SafeStorage.get(null).then(async (items) => {
                                 `${wp.year}-${String(wp.monthIndex + 1).padStart(2, '0')}. ` +
                                 'No se concluye nada de ahí: sigue el flujo normal.');
                 } else if (!pend.pendiente) {
-                    // Esto es un freno, no un aviso. Antes se anotaba y se
-                    // seguía a comprobantes igual: se raspaba media hora para
-                    // terminar declarando algo que ya estaba presentado.
-                    console.log('✅ [SRI] El portal la da por PRESENTADA. No se extrae ni se declara nada.');
-                    await anotarBitacora('ya presentada', `${pend.periodoTexto} · ${pend.estado}`);
+                    // ⚠️ NO se salta al cliente por esto, y el motivo importa.
+                    //
+                    // El aviso de vencimiento cambia alrededor del cierre de
+                    // mes: la obligación puede dejar de figurar sin que la
+                    // declaración esté hecha. Saltarse a alguien por esa señal
+                    // sería dejarlo sin declarar, y eso termina en multa.
+                    //
+                    // Así que no se cree ni se descree: se va a COMPROBARLO a
+                    // Consulta de declaraciones, que es el registro oficial de
+                    // lo presentado. Y si efectivamente está, de paso se baja
+                    // su comprobante — que es lo que faltaba para cerrar el
+                    // objetivo. Si no aparece, se declara normalmente.
+                    console.log(`🔍 [SRI] El aviso dice "${pend.estado}" para ${pend.periodoTexto}. ` +
+                                'No alcanza para saltarlo: se comprueba en Consulta de declaraciones.');
+                    await anotarBitacora('a comprobar', `${pend.periodoTexto} · el aviso dice ${pend.estado}`);
 
                     const quien = items.pending_sri_autofill || {};
-                    if (quien.ruc) {
-                        // Queda en el registro para que el lote no vuelva, y con
-                        // el PDF pendiente: si falta, se recupera después sin
-                        // volver a declarar.
-                        await SriLoop.marcarDeclarado(quien.ruc, pend.periodo, { nombre: quien.name });
+                    if (quien.ruc && typeof irARecuperarComprobante === 'function') {
+                        if (window.sriAssistant?.showEliteToast) {
+                            window.sriAssistant.showEliteToast({
+                                title: '🔍 Comprobando',
+                                msg: `El portal marca ${pend.periodoTexto} como ${pend.estado}. ` +
+                                     'Voy a verificarlo y a traer el comprobante.',
+                                duration: 6000
+                            });
+                        }
+                        await irARecuperarComprobante(quien.ruc, pend.periodo, quien.name);
+                        return;
                     }
-
-                    if (window.sriAssistant?.showEliteToast) {
-                        window.sriAssistant.showEliteToast({
-                            title: '✅ Ya estaba declarada',
-                            msg: `${pend.periodoTexto} figura como ${pend.estado} en el portal. Se pasa al siguiente.`,
-                            duration: 6000
-                        });
-                    }
-
-                    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
-                    if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
-                        const hay = await handleBatchNextClient();
-                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
-                    } else if (typeof cerrarSesionSRI === 'function') {
-                        await cerrarSesionSRI();
-                    }
-                    return;
+                    // Sin RUC no hay nada que comprobar: sigue el flujo normal.
                 }
 
                 if (!items.workflowPeriod) {

@@ -72,6 +72,27 @@ El SRI inyecta "Valores Sugeridos" oficiales en ciertos casilleros (ej. **615** 
 
 ---
 
+## 3b. Nunca saltarse un contribuyente por un aviso
+
+El endpoint `alertas/vencimiento` dice si una obligación figura como
+presentada. **Esa señal NO alcanza para saltarse a un cliente.**
+
+El aviso cambia alrededor del cierre de mes: la obligación puede dejar de
+figurar sin que la declaración esté hecha. Saltar por ahí significa dejar a
+alguien sin declarar, y eso termina en multa con la firma del usuario.
+
+**Regla**: si el aviso dice que ya está presentada, el bot **va a comprobarlo**
+a Consulta de declaraciones, que es el registro oficial de lo presentado:
+
+- **Figura** → baja el comprobante y lo guarda. El cliente queda cerrado.
+- **No figura** → vuelve al flujo normal y la declara.
+
+Nunca se concluye «ya está hecha» sin haberla visto en la lista de
+presentadas. Y si el aviso habla de un período distinto al que está declarando
+el lote, de ahí no se deduce nada.
+
+---
+
 ## 4. El "Cierre Mágico" (Cúspide de la Automatización)
 
 La etapa final del llenado de una declaración automatizada involucra una secuencia delicada:

@@ -138,8 +138,42 @@ async function ejecutarRecuperacionComprobante() {
     });
 
     if (!candidatas.length) {
-        console.warn(`🧾 [RECUPERAR] No hay una declaración de IVA de ${mes} ${anio} en la tabla (${filas.length} filas).`);
-        await anotarBitacora('⚠️ sin declaración', `${st.nombre || st.ruc} · ${mes} ${anio}`);
+        if (!filas.length) {
+            // Tabla vacía: puede que todavía no haya terminado de cargar.
+            console.log('🧾 [RECUPERAR] La tabla está vacía todavía. Se reintenta en la próxima carga.');
+            return false;
+        }
+
+        // La tabla trae filas y ninguna es la nuestra: el portal está diciendo
+        // que ese período NO se presentó. Es una respuesta clara, y lo que
+        // corresponde es declararlo, no abandonar al cliente.
+        console.warn(`🧾 [COMPROBADO] ${mes} ${anio} NO figura entre las ${filas.length} declaraciones presentadas. ` +
+                     'Hay que declararla.');
+        await anotarBitacora('no estaba declarada', `${st.nombre || st.ruc} · ${mes} ${anio} · hay que hacerla`);
+
+        await SafeStorage.remove(['recuperarComprobante']);
+
+        if (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar()) {
+            // Volver al flujo normal: extraer y declarar, desde el principio.
+            await SafeStorage.set({
+                pendingAction: 'turbo_step1_facturas',
+                actionTimestamp: Date.now(),
+                workflowPeriod: st.periodo,
+                autoDeclaration: true,
+                checkFacturas: true, checkRetenciones: true, checkNC: true
+            });
+            if (window.sriAssistant?.showEliteToast) {
+                window.sriAssistant.showEliteToast({
+                    title: '📝 No estaba declarada',
+                    msg: `${mes} ${anio} no figura como presentada. Se declara ahora.`,
+                    duration: 6000
+                });
+            }
+            if (typeof navegarAComprobantes === 'function') await navegarAComprobantes();
+            else window.location.href = SRI_PUENTE_RECIBIDOS;
+        } else {
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+        }
         return false;
     }
 
