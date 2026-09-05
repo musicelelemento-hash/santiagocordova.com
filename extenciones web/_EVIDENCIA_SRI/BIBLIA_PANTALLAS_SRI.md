@@ -748,6 +748,57 @@ muchísimo más rápido.
 
 **Pendiente de implementar.** Ver `INFORME_BURP_vs_EXTENSION.md`.
 
+## 🚦 Errores y advertencias del formulario — señal ESTRUCTURAL
+
+Confirmado el 04-sep-2026 leyendo **el propio JavaScript del portal** en la
+traza `prueba_2_nueva_luz_ciclo_completo`. No es una suposición: es el código
+que el SRI ejecuta.
+
+```javascript
+var ID_DIV_MENSAJE_PRINCIPAL = "mensajePrincipal";
+
+mostrarErrores = function (a) {
+  document.getElementById("frmFlujoDeclaracion:erroresField").style.display = "none";
+  if (0 < a.length) {
+    mensajeGeneralError = "Usted tiene " + a.length +
+      " errores en su declaración. Verifique la sección de errores";
+    mostrarMensajesError(mensajeGeneralError);
+    document.getElementById("frmFlujoDeclaracion:erroresField").style.display = "block";
+    // items: <li class="estiloItemsMensajes">…</li>
+  }
+};
+
+mostrarAdvertencias = function (a) {
+  document.getElementById("frmFlujoDeclaracion:advertenciasField").style.display = "none";
+  if (0 < a.length) {
+    document.getElementById("frmFlujoDeclaracion:advertenciasField").style.display = "block";
+    // items: <li><span class="ui-messages-warn-summary">…</span></li>
+  }
+};
+```
+
+### Qué significa
+
+| Elemento | Estado | Lectura |
+| :--- | :--- | :--- |
+| `#frmFlujoDeclaracion:erroresField` | `display:none` | **No hay errores.** Prueba positiva, la escribe el portal |
+| `#frmFlujoDeclaracion:erroresField` | `display:block` | **Hay errores. NO se envía** |
+| `#mensajePrincipal` | contiene «errores en su declaración» | Hay errores |
+| `#frmFlujoDeclaracion:advertenciasField` | `display:block` | Solo advertencias — **no impiden declarar** |
+
+Esto **cierra el hueco** que figuraba como *«texto/clase exactos que muestra el
+SRI cuando SÍ hay inconsistencias — sin confirmar»*. Ya no hace falta adivinar
+por texto: hay un interruptor que el portal mismo enciende y apaga.
+
+### Otros datos del mismo JS
+
+- `PREFIJO_CONCEPTO = "concepto"` — confirma que los casilleros del DOM son
+  `concepto401`, `concepto500`, etc.
+- `llenarConValorCero()` rellena los vacíos con **`"$0.00"`**, con signo de
+  dólar. Cualquier lectura de importes tiene que tolerar el `$`.
+- `MAXIMO_TAMANIO_ARCHIVO = 4194304` (4 MB) para el anexo.
+- `CONCEPTOS_EXCEPCION_ICE = ["142", "146", "450"]`.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

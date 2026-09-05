@@ -3665,6 +3665,39 @@ class SriAssistantPanel {
      * 'desconocido' NO significa "todo bien": el llamador DEBE frenar.
      */
     analizarMensajesResumen() {
+        // ── Señal oficial del portal, la que manda ────────────────────────
+        // Ver el JS del SRI citado arriba de esta función en el commit.
+        const panelErrores = document.getElementById('frmFlujoDeclaracion:erroresField');
+        if (panelErrores) {
+            const visible = typeof esVisible === 'function'
+                ? esVisible(panelErrores)
+                : getComputedStyle(panelErrores).display !== 'none';
+            if (visible) {
+                const detalle = (panelErrores.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+                console.warn('🛑 [MENSAJES SRI] El portal muestra su panel de ERRORES:', detalle);
+                return 'con_inconsistencias';
+            }
+            // Oculto = el portal dice que no hay errores. Es prueba positiva,
+            // no ausencia de evidencia: la escribe su propio mostrarErrores().
+            const principal = document.getElementById('mensajePrincipal');
+            const txtPrincipal = principal ? (principal.innerText || '') : '';
+            if (/errores en su declaraci/i.test(txtPrincipal)) {
+                console.warn('🛑 [MENSAJES SRI] mensajePrincipal anuncia errores:', txtPrincipal.trim().slice(0, 160));
+                return 'con_inconsistencias';
+            }
+
+            const panelAdv = document.getElementById('frmFlujoDeclaracion:advertenciasField');
+            if (panelAdv && (typeof esVisible === 'function' ? esVisible(panelAdv) : getComputedStyle(panelAdv).display !== 'none')) {
+                // Las advertencias NO impiden declarar -el casillero 625 sale
+                // siempre-, pero quedan anotadas por si hay que revisarlas.
+                console.log('ℹ️ [MENSAJES SRI] Advertencias del portal:',
+                    (panelAdv.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200));
+            }
+            console.log('✅ [MENSAJES SRI] El portal tiene su panel de errores oculto: sin inconsistencias.');
+            return 'limpio';
+        }
+
+        // ── Sin el panel oficial, la red de texto de siempre ──────────────
         const nodos = Array.from(
             document.querySelectorAll('[class*="ui-messages"], [class*="Mensajes"], .ui-growl-item, li.estiloItemsMensajes')
         ).filter((el) => (typeof esVisible === 'function' ? esVisible(el) : el.offsetParent !== null));

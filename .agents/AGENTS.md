@@ -95,9 +95,13 @@ Cualquier otro resultado — incluido `'desconocido'` — guarda borrador y fren
 **Nunca trates la ausencia de mensajes como "todo bien"**: esa era justamente la
 regresión que permitía enviar a ciegas si el selector fallaba.
 
-Selectores pendientes de calibrar contra el portal real:
-- `frmFlujoDeclaracion:totalAPagar` (id del saldo) — sin confirmar, no está en la matriz tatuada.
-- Texto/clase exactos que muestra el SRI cuando SÍ hay inconsistencias.
+Ambos selectores ya están calibrados contra tráfico real (04-sep-2026):
+- `frmFlujoDeclaracion:totalAPagar` — confirmado, devuelve `USD 0.00`.
+- **Inconsistencias: no se detectan por texto.** El portal enciende y apaga
+  `#frmFlujoDeclaracion:erroresField` (`display:block` = hay errores,
+  `display:none` = no hay) desde su propio `mostrarErrores()`. Ver la Biblia,
+  sección «Errores y advertencias del formulario». `advertenciasField` es el
+  equivalente para advertencias, que **no** impiden declarar.
 
 Mientras no estén calibrados, `capturarDiagnosticoResumen()` guarda una
 radiografía del DOM en `SafeStorage.sri_diagnostico_resumen` cada vez que el
