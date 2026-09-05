@@ -401,6 +401,7 @@ const SriLoopHUD = {
     /** Las fases del ciclo, en orden, con la señal que las identifica. */
     FASES: [
         { id: 'login',     icono: '🔑', txt: 'Entrar al SRI' },
+        { id: 'comprobar', icono: '🔍', txt: '¿Le toca declarar?' },
         { id: 'extraer',   icono: '📥', txt: 'Traer comprobantes recibidos' },
         { id: 'formulario',icono: '📝', txt: 'Llenar el formulario' },
         { id: 'verificar', icono: '⚖️', txt: 'Verificar que el saldo sea $0' },
@@ -456,6 +457,10 @@ const SriLoopHUD = {
         if (st.declaration_synced_flag) return 'respaldo';
         if (typeof encontrarCamposLogin === 'function' && encontrarCamposLogin()) return 'login';
         if (u.includes('comprobantesRecibidos')) return 'extraer';
+        // Adentro pero todavía en el perfil: es cuando se le pregunta al portal
+        // qué le toca. Antes este momento no aparecía en el plan y el bot
+        // parecía saltar del login directo a comprobantes.
+        if (u.includes('contribuyente/perfil') || u.includes('inicio/NAT')) return 'comprobar';
         if (typeof estaEnFormularioIva === 'function' && estaEnFormularioIva()) {
             return document.getElementById('frmFlujoDeclaracion:totalAPagar') ? 'verificar' : 'formulario';
         }

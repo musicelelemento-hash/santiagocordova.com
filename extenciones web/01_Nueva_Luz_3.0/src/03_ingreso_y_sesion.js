@@ -412,9 +412,48 @@ SafeStorage.get(null).then(async (items) => {
                             `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);
                 await anotarBitacora('el SRI pide', `IVA ${pend.periodoTexto} · ${pend.estado}`);
 
-                if (!pend.pendiente) {
-                    console.log('✅ [SRI] El portal ya la da por presentada. No se declara de nuevo.');
-                } else if (!items.workflowPeriod) {
+                const wp = items.workflowPeriod;
+                const mismoPeriodo = !wp ||
+                    (wp.year === pend.periodo.year && wp.monthIndex === pend.periodo.monthIndex);
+
+                if (!mismoPeriodo) {
+                    console.log(`📋 [SRI] El portal habla de ${pend.periodoTexto}, pero el lote va por ` +
+                                `${wp.year}-${String(wp.monthIndex + 1).padStart(2, '0')}. ` +
+                                'No se concluye nada de ahí: sigue el flujo normal.');
+                } else if (!pend.pendiente) {
+                    // Esto es un freno, no un aviso. Antes se anotaba y se
+                    // seguía a comprobantes igual: se raspaba media hora para
+                    // terminar declarando algo que ya estaba presentado.
+                    console.log('✅ [SRI] El portal la da por PRESENTADA. No se extrae ni se declara nada.');
+                    await anotarBitacora('ya presentada', `${pend.periodoTexto} · ${pend.estado}`);
+
+                    const quien = items.pending_sri_autofill || {};
+                    if (quien.ruc) {
+                        // Queda en el registro para que el lote no vuelva, y con
+                        // el PDF pendiente: si falta, se recupera después sin
+                        // volver a declarar.
+                        await SriLoop.marcarDeclarado(quien.ruc, pend.periodo, { nombre: quien.name });
+                    }
+
+                    if (window.sriAssistant?.showEliteToast) {
+                        window.sriAssistant.showEliteToast({
+                            title: '✅ Ya estaba declarada',
+                            msg: `${pend.periodoTexto} figura como ${pend.estado} en el portal. Se pasa al siguiente.`,
+                            duration: 6000
+                        });
+                    }
+
+                    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+                    if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
+                        const hay = await handleBatchNextClient();
+                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+                    } else if (typeof cerrarSesionSRI === 'function') {
+                        await cerrarSesionSRI();
+                    }
+                    return;
+                }
+
+                if (!items.workflowPeriod) {
                     // Sin período fijado por el lote, el del portal es el bueno.
                     items.workflowPeriod = pend.periodo;
                     await SafeStorage.set({ workflowPeriod: pend.periodo });
