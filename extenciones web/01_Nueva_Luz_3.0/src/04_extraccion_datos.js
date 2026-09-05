@@ -323,6 +323,24 @@ function extraerFacturasPaginaActual() {
                 return;
             }
 
+            // ── Reconciliación: total = base + IVA ──────────────────────────
+            // Vale para las tres estrategias de arriba, porque las tres eligen
+            // celdas por índice y ninguna sabe si acertó. parseDecimal devuelve
+            // 0 tanto para «cero» como para «no pude leer», así que un IVA en 0
+            // puede ser una factura exenta o una columna mal leída; de ahí
+            // depende que la factura vaya al casillero de 15% o al de 0%.
+            //
+            // La resta no depende de ningún índice: es la identidad que el
+            // portal cumple siempre.
+            if (importeTotal > 0 && valorSinImpuestos > 0) {
+                const ivaSegunResta = redondear(importeTotal - valorSinImpuestos);
+                if (ivaSegunResta >= 0 && Math.abs(ivaSegunResta - iva) > 0.02) {
+                    console.warn(`   ⚠️ [Factura ${idx + 1}] La columna del IVA da $${iva} y total - base da $${ivaSegunResta}. ` +
+                                 `Mando la resta: de esto depende si va al 15% o al 0%.`);
+                    iva = ivaSegunResta;
+                }
+            }
+
             facturas.push({
                 numero: idx + 1,
                 rucRazon: celdas[1] ? celdas[1].textContent.trim() : 'S/N',
@@ -1029,7 +1047,9 @@ function calcularResumen(facturas) {
     };
 
     facturas.forEach(factura => {
-        if (factura.iva === 0 || factura.iva === 0.00) {
+        // Umbral en centavos, no === 0: la resta de la reconciliación puede
+        // dejar una cola binaria minúscula que no es IVA de verdad.
+        if (!(factura.iva > 0.005)) {
             resumen.iva0.cantidad++;
             resumen.iva0.total += factura.importeTotal;
             resumen.iva0.baseImponible += factura.valorSinImpuestos;
