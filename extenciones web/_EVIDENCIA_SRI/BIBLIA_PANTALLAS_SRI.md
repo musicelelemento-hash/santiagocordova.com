@@ -668,6 +668,86 @@ botón por su posición en la fila o por su texto, nunca por el `j_idt`.**
 También aparece `javax.faces.ClientWindow`, que es un token por ventana: hay
 que tomarlo del DOM en el momento, no fijarlo.
 
+### 🔬 Marcado real de la tabla, extraído de la traza (04-sep-2026)
+
+Confirmado leyendo el HTML que devolvió el portal, no supuesto.
+
+**Columnas de `formPresentada:tblConsultaDeclaracion`, en orden:**
+
+| # | Columna | Ejemplo | Para qué sirve |
+| :-: | :--- | :--- | :--- |
+| 1 | Formulario | `104` | Código de obligación |
+| 2 | Tipo de obligación | `2011 DECLARACION DE IVA` | **Tiene id propio: `…:N:txtDescripcionObligacion`** — así se separa IVA de Renta |
+| 3 | Período fiscal | `ENERO 2026` | Cómo localizar la fila. Mes en MAYÚSCULA + año |
+| 4 | Tipo | `Original` / `Sustitutiva` | Si hay varias, la última presentada es la que vale |
+| 5 | No. de serie | `872972259637` | **El CEP.** Es el nombre del PDF que se descarga |
+| 6 | Fecha de declaración | `06/02/2026` | |
+| 7 | Fecha de vencimiento | `20/02/2026` | |
+| 8 | Estado de pago | `SIN VALOR A PAGAR` | Confirma que no quedó saldo |
+| 9 | Estado de declaración | `CUMPLIDA` | |
+| 10 | Imprimir | 3 botones | Ver abajo |
+
+**⚠️ Cada fila tiene TRES botones, y solo uno sirve:**
+
+| Botón | `title` | Icono | Qué descarga |
+| :--- | :--- | :--- | :--- |
+| `j_idt62` | `Declaración completa` | `ui-icon-print` | `Declaracion_<CEP>.pdf` — el formulario entero |
+| `j_idt64` | `Declaración perfilada` | `ui-icon-note` | otra vista |
+| `j_idt66` | **`Comprobante de declaración`** | **`ui-icon-file-download`** | **`<CEP>.pdf` — el que queremos** |
+
+**Tomar el primer botón de la fila trae el PDF equivocado.** Se elige por
+`title` o por el icono `.ui-icon-file-download`; los `j_idt` cambian entre
+versiones del portal.
+
+### Las dos pantallas previas
+
+Es un asistente de tres pasos **sobre la misma URL**: no se puede seguir una
+secuencia fija, hay que mirar qué está en pantalla y dar el paso que toca.
+
+**1 · Grupo de obligación** — `formPresentada:tblGrupoObligacionSeleccion`
+es un datatable seleccionable de PrimeFaces. La casilla real está oculta
+(`ui-helper-hidden-accessible`): lo que responde al click es el
+`.ui-chkbox-box` de la fila. Después, `formPresentada:btnBuscarGrupoObligacion`.
+
+**2 · Período fiscal** — diálogo `formPresentada:dlgPeriodoSeleccion`.
+`formPresentada:somAnioFiscal` es un `ui-selectonemenu`: **el `<select>` real
+viene vacío en el HTML** y se llena por JS, así que no sirve asignarle `value`.
+Hay que abrir el panel (`.ui-selectonemenu-trigger`) y pulsar el `<li>` del año
+en `formPresentada:somAnioFiscal_items`. Después,
+`formPresentada:btnAceptarPeriodoSeleccion`.
+
+**3 · La tabla**, ya descrita. `formPresentada:btnGenerarNuevaConsulta` vuelve
+al principio.
+
+---
+
+## 📄 Descarga masiva de comprobantes recibidos en TXT
+
+Confirmado el 04-sep-2026 con la traza
+`flujo de reportes de documentos electronicos recibidos`.
+
+**En la misma pantalla de comprobantes recibidos hay un enlace que descarga
+TODO el listado en un TXT, en una sola petición:**
+
+```javascript
+document.getElementById('frmPrincipal:lnkTxtlistado')
+```
+
+Devuelve un archivo llamado `<RUC>_Recibidos.txt`.
+
+Campos que acompañan al POST: `frmPrincipal:ano`, `frmPrincipal:mes`,
+`frmPrincipal:dia`, `frmPrincipal:cmbTipoComprobante`, `frmPrincipal:opciones`.
+Es decir: **los mismos filtros que la consulta normal**.
+
+### Por qué importa
+
+Hoy la extensión raspa la tabla y abre el modal de detalle de cada comprobante
+uno por uno para leer las retenciones. Con este enlace, los mismos datos vienen
+en una sola descarga: menos peticiones al portal, menos superficie de fallo y
+muchísimo más rápido.
+
+**Pendiente de implementar.** Ver `INFORME_BURP_vs_EXTENSION.md`.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

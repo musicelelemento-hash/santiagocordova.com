@@ -40,79 +40,137 @@ async function irARecuperarComprobante(ruc, periodo, nombre = '') {
  * periodo pedido y pulsar su descarga. El PDF lo levanta el interceptor de
  * URL.createObjectURL que ya vive en el módulo 01.
  */
+/**
+ * Consulta de declaraciones es un asistente de tres pantallas sobre la MISMA
+ * URL, así que no se puede seguir una secuencia fija: se mira qué hay en
+ * pantalla y se da el paso que corresponda. Cada carga avanza un paso.
+ *
+ * Marcado confirmado en la traza flujo_de_consuta_de_declaraciones_iva_renta
+ * (Burp, 04-sep-2026). Ver BIBLIA_PANTALLAS_SRI.md.
+ */
 async function ejecutarRecuperacionComprobante() {
     const st = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
     if (!st) { console.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
 
-    // Tope duro: sin esto una pantalla que no carga se vuelve un bucle de
+    // Tope duro: una pantalla que no carga no puede volverse un bucle de
     // recargas contra el portal del SRI.
-    if ((st.intentos || 0) >= 3) {
-        console.error('🧾 [RECUPERAR] Tres intentos sin éxito. Se abandona.');
+    if ((st.intentos || 0) >= 6) {
+        console.error('🧾 [RECUPERAR] Demasiados intentos sin llegar al comprobante. Se abandona.');
         await anotarBitacora('⛔ recuperación fallida', `${st.nombre || st.ruc} · ${st.per}`);
+        await Omitidos.anotar(st.ruc, 'sin_datos', {
+            nombre: st.nombre, detalle: 'No se pudo recuperar el comprobante ya presentado' });
         await SafeStorage.remove(['recuperarComprobante', 'pendingAction', 'actionTimestamp']);
         return false;
     }
     await SafeStorage.set({ recuperarComprobante: { ...st, intentos: (st.intentos || 0) + 1 } });
 
     if (!enConsultaDeclaraciones()) {
-        console.log('🧾 [RECUPERAR] Todavía no llegamos a Consulta de declaraciones. Esperando el puente...');
+        console.log('🧾 [RECUPERAR] Todavía no llegamos a Consulta de declaraciones. Esperando el puente SSO...');
         return false;
     }
 
-    // 1 · Elegir el grupo de obligación (IVA) y aceptar el periodo. Los dos
-    // botones tienen id estable según la traza; si el portal los cambia,
-    // preferimos abandonar antes que pulsar algo a ciegas.
-    const buscar = document.getElementById('formPresentada:btnBuscarGrupoObligacion');
-    if (buscar && esVisible(buscar)) {
-        clickElement(buscar, 'Consulta · buscar grupo de obligación');
-        await sleep(2500);
-    }
-    const aceptar = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion');
-    if (aceptar && esVisible(aceptar)) {
-        clickElement(aceptar, 'Consulta · aceptar periodo');
-        await sleep(3000);
-    }
-
-    // 2 · La tabla de declaraciones presentadas.
-    const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
-    if (!tabla) {
-        console.warn('🧾 [RECUPERAR] La tabla de declaraciones todavía no está. Se reintenta al recargar.');
-        return false;
-    }
-
-    // 3 · La fila del periodo pedido. Se busca por el texto del periodo, no por
-    //     posición: el orden de la tabla no está garantizado.
     const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
                    'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
     const mes = MESES[st.periodo.monthIndex];
     const anio = String(st.periodo.year);
 
-    const filas = Array.from(tabla.querySelectorAll('tbody tr'));
-    const fila = filas.find((tr) => {
-        const t = (tr.textContent || '').toUpperCase();
-        return t.includes(anio) && (t.includes(mes) || t.includes(st.per));
+    // ── Pantalla 1 · Elegir el grupo de obligación ────────────────────────
+    // Es un datatable seleccionable de PrimeFaces: la casilla real está oculta
+    // y lo que responde al click es el .ui-chkbox-box de la fila.
+    const tablaGrupo = document.getElementById('formPresentada:tblGrupoObligacionSeleccion');
+    const btnBuscar = document.getElementById('formPresentada:btnBuscarGrupoObligacion');
+    if (tablaGrupo && btnBuscar && esVisible(btnBuscar)) {
+        const filasG = Array.from(tablaGrupo.querySelectorAll('tbody tr[data-rk]'));
+        const filaIva = filasG.find((tr) => /\bIVA\b/i.test(tr.textContent || ''));
+        if (!filaIva) {
+            console.warn(`🧾 [RECUPERAR] No hay un grupo de obligación de IVA (${filasG.length} opciones).`);
+            return false;
+        }
+        const casilla = filaIva.querySelector('.ui-chkbox-box');
+        if (casilla && !/ui-state-active/.test(casilla.className)) {
+            clickElement(casilla, 'Consulta · marcar obligación IVA');
+            await sleep(700);
+        }
+        console.log('🧾 [RECUPERAR] Obligación IVA marcada. Buscando...');
+        clickElement(btnBuscar, 'Consulta · buscar grupo de obligación');
+        await sleep(2500);
+    }
+
+    // ── Pantalla 2 · Período fiscal ──────────────────────────────────────
+    // somAnioFiscal es un ui-selectonemenu: el <select> real está vacío en el
+    // HTML y se llena por JS, así que hay que abrir el panel y pulsar el <li>.
+    const btnAceptar = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion');
+    if (btnAceptar && esVisible(btnAceptar)) {
+        const etiqueta = document.getElementById('formPresentada:somAnioFiscal_label');
+        if (etiqueta && !(etiqueta.textContent || '').includes(anio)) {
+            const disparador = document.querySelector('#formPresentada\\:somAnioFiscal .ui-selectonemenu-trigger');
+            if (disparador) { clickElement(disparador, 'Consulta · abrir años'); await sleep(500); }
+
+            const items = Array.from(document.querySelectorAll('#formPresentada\\:somAnioFiscal_items li'));
+            const item = items.find((li) => (li.textContent || '').trim() === anio);
+            if (item) {
+                clickElement(item, `Consulta · año ${anio}`);
+                await sleep(700);
+            } else {
+                console.warn(`🧾 [RECUPERAR] El año ${anio} no está entre las opciones (${items.length}).`);
+            }
+        }
+        console.log(`🧾 [RECUPERAR] Período fiscal ${anio}. Aceptando...`);
+        clickElement(btnAceptar, 'Consulta · aceptar período');
+        await sleep(3000);
+    }
+
+    // ── Pantalla 3 · La tabla de declaraciones presentadas ───────────────
+    const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
+    if (!tabla) {
+        console.log('🧾 [RECUPERAR] La tabla todavía no está. Se reintenta en la próxima carga.');
+        return false;
+    }
+
+    // La fila correcta: obligación de IVA (columna con id txtDescripcionObligacion)
+    // Y el período pedido, que el portal escribe como "ENERO 2026".
+    const filas = Array.from(tabla.querySelectorAll('tbody tr[data-ri]'));
+    const candidatas = filas.filter((tr) => {
+        const desc = tr.querySelector('[id*="txtDescripcionObligacion"]');
+        const esIva = /IVA/i.test((desc && desc.textContent) || tr.textContent || '');
+        const txt = (tr.textContent || '').toUpperCase();
+        return esIva && txt.includes(mes) && txt.includes(anio);
     });
 
-    if (!fila) {
-        console.warn(`🧾 [RECUPERAR] No encontré una declaración de ${mes} ${anio} en la tabla (${filas.length} filas).`);
+    if (!candidatas.length) {
+        console.warn(`🧾 [RECUPERAR] No hay una declaración de IVA de ${mes} ${anio} en la tabla (${filas.length} filas).`);
+        await anotarBitacora('⚠️ sin declaración', `${st.nombre || st.ruc} · ${mes} ${anio}`);
         return false;
     }
 
-    // 4 · El disparador de descarga de esa fila. NUNCA por j_idt: en la traza
-    //     era j_idt66 y ese número cambia entre versiones del portal.
-    const disparador = fila.querySelector('a[id*="tblConsultaDeclaracion"], button[id*="tblConsultaDeclaracion"]')
-                    || fila.querySelector('a.ui-commandlink, button.ui-button, a[onclick], button');
+    // Si hay sustitutivas, la última presentada es la que vale.
+    const fila = candidatas[candidatas.length - 1];
+    const celdas = Array.from(fila.querySelectorAll('td')).map((td) => (td.textContent || '').trim());
+    const cep = celdas.find((c) => /^\d{10,}$/.test(c)) || '';
+    const tipo = celdas.find((c) => /^(Original|Sustitutiva)/i.test(c)) || '';
+
+    // El botón correcto. La fila trae TRES: "Declaración completa" (imprime el
+    // formulario), "Declaración perfilada" y "Comprobante de declaración", que
+    // es el que queremos. Sus ids son j_idt62/64/66 y esos números cambian
+    // entre versiones del portal: se elige por título o por el icono, nunca
+    // por el id. Tomar el primero traía el PDF equivocado.
+    const botones = Array.from(fila.querySelectorAll('button, a'));
+    const disparador =
+        botones.find((b) => /comprobante/i.test(b.getAttribute('title') || '')) ||
+        botones.find((b) => b.querySelector('.ui-icon-file-download')) ||
+        botones.find((b) => /comprobante/i.test(b.textContent || ''));
+
     if (!disparador) {
-        console.warn('🧾 [RECUPERAR] La fila no tiene un control de descarga reconocible.');
+        console.warn(`🧾 [RECUPERAR] La fila no tiene el botón "Comprobante de declaración" (${botones.length} botones).`);
         return false;
     }
 
-    console.log(`🧾 [RECUPERAR] Descargando el comprobante de ${mes} ${anio}...`);
+    console.log(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
     capturedPdfBase64 = null;
-    clickElement(disparador, 'Consulta · descargar comprobante');
+    clickElement(disparador, 'Consulta · comprobante de declaración');
 
-    // 5 · Esperar a que el interceptor levante el PDF.
-    for (let i = 0; i < 20; i++) {
+    // El PDF lo levanta el interceptor de URL.createObjectURL del módulo 01.
+    for (let i = 0; i < 25; i++) {
         await sleep(700);
         if (capturedPdfBase64) break;
     }
@@ -123,7 +181,7 @@ async function ejecutarRecuperacionComprobante() {
     }
 
     console.log('🧾 [RECUPERAR] Comprobante capturado. Subiéndolo...');
-    await anotarBitacora('comprobante recuperado', `${st.nombre || st.ruc} · ${st.per}`);
+    await anotarBitacora('comprobante recuperado', `${st.nombre || st.ruc} · ${st.per}${cep ? ' · CEP ' + cep : ''}`);
 
     await syncDeclarationToSupabase(st.ruc, st.per, null, st.nombre, null, 'completado');
     await SafeStorage.remove(['recuperarComprobante', 'pendingAction', 'actionTimestamp']);
