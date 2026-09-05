@@ -1958,7 +1958,25 @@ class SriAssistantPanel {
         }
     }
 
+    /**
+     * El panel plegado ya no dibuja nada.
+     *
+     * Antes acá vivía una segunda barra flotante —la píldora— con sus propios
+     * botones. Eran dos superficies de control para la misma máquina, en dos
+     * estilos distintos, con acciones repartidas sin criterio; de ahí salió el
+     * lío de los dos 🛑 que no hacían lo mismo.
+     *
+     * Ahora la única barra es el HUD del bucle, y este panel se abre desde su
+     * botón 🗔. Sus tres acciones propias (omitir, escanear, cerrar) se
+     * mudaron al HUD.
+     */
     renderPill() {
+        if (!this.container) return;
+        this.container.innerHTML = '';
+        this.container.style.cssText = 'display:none';
+    }
+
+    renderPillLegacy() {
         if (!this.container) return; // ELITE FIX: Safety check
         const info = this.extractClientInfo();
         const clientName = info.name ? info.name.split(' ')[0] : 'SRI';

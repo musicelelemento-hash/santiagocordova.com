@@ -554,9 +554,17 @@ const SriLoopHUD = {
             '<button id="slh-aqui" aria-label="Declarar al contribuyente que está logueado ahora" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🎯</button>',
             '<button id="slh-pdfs" aria-label="Traer todos los comprobantes de este contribuyente" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(74,222,128,0.16);color:#4ade80">🧾</button>',
             '<button id="slh-omitidos" aria-label="Ver los clientes que quedaron sin declarar y por qué" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">⚠️ 0</button>',
+            // Omitir y cerrar vienen de la píldora que se retiró: son acciones
+            // del lote y su sitio es acá, junto al estado.
+            '<button id="slh-omitir" aria-label="Omitir este cliente y pasar al siguiente" title="Omitir este cliente y pasar al siguiente" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">⏭️</button>',
+            // Se llamaba «✨ Sync» y no sincroniza: valida el resumen y, si el
+            // saldo es $0 y no hay inconsistencias, ENVÍA. El rótulo lo dice.
+            '<button id="slh-cerrar" aria-label="Cerrar la declaración: valida y, si está limpia, la envía" title="Cerrar la declaración: valida el resumen y, si el saldo es $0 y no hay inconsistencias, la ENVÍA" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(16,185,129,0.18);color:#5eead4">🏁</button>',
+            '<span style="width:1px;align-self:stretch;background:rgba(255,255,255,0.12);margin:0 2px"></span>',
             '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-copiar" aria-label="Copiar la bitácora de la corrida" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📋</button>',
+            '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
             // Éste va rotulado: si es el que hay que apretar cuando algo va
@@ -661,6 +669,38 @@ const SriLoopHUD = {
                 .filter((id) => id !== cual && id !== 'slh-plan')
                 .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
         };
+
+        // Las tres que venían de la píldora delegan en el panel, que es quien
+        // sabe hacerlas. Acá solo viven los botones.
+        el.querySelector('#slh-omitir').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            if (window.sriAssistant && window.sriAssistant.omitirClienteActual) {
+                await window.sriAssistant.omitirClienteActual();
+            } else {
+                console.warn('⏭️ El panel todavía no está listo.');
+            }
+        });
+
+        el.querySelector('#slh-cerrar').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            if (!window.sriAssistant || !window.sriAssistant.ejecutarCierreMagico) {
+                console.warn('🏁 El panel todavía no está listo.');
+                return;
+            }
+            // Puede terminar enviando la declaración: se pregunta. Las cuatro
+            // comprobaciones del cierre siguen mandando; esto es solo para que
+            // nadie lo dispare creyendo que «sincroniza», como sugería el
+            // rótulo viejo.
+            if (!confirm('Cerrar la declaración.\n\nSe valida el resumen y, si el saldo es $0 y no hay inconsistencias, se ENVÍA al SRI.\n\n¿Seguimos?')) return;
+            await window.sriAssistant.ejecutarCierreMagico();
+        });
+
+        el.querySelector('#slh-panel').addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            if (window.sriAssistant && window.sriAssistant.toggleMinimize) {
+                window.sriAssistant.toggleMinimize(false);
+            }
+        });
 
         el.querySelector('#slh-registro').addEventListener('click', async (ev) => {
             ev.stopPropagation();
