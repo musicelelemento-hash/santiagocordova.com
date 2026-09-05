@@ -1020,6 +1020,32 @@ De la misma corrida, en la pantalla de pago:
 
 Son alternativas a `concepto2610`, y vienen con el prefijo `USD`.
 
+### Las obligaciones VIGENTES también están en el perfil
+
+Aparte del acordeón de próximas obligaciones, el perfil lista lo que el
+contribuyente debe declarar:
+
+```html
+<div _ngcontent-c9="" class="alinear-texto-izq ng-star-inserted"> 2011  DECLARACION DE IVA </div>
+```
+
+Es la versión renderizada de `/obligaciones/tributarias/vigentes`. Los códigos
+son de cuatro dígitos: `2011` IVA, `1021` Renta, `1011` retenciones.
+
+### Cruzar las dos señales da el veredicto
+
+| Obligación de IVA vigente | Panel de próximas | Conclusión |
+| :---: | :---: | :--- |
+| sí | muestra IVA | **hay que declarar** |
+| sí | vacío / ausente | **ya está declarada** → falta el comprobante |
+| no | — | **no declara IVA** → no es un olvido |
+| ninguna listada | — | el perfil no cargó: no se concluye nada |
+
+La segunda fila es el caso que cierra el objetivo: el contribuyente ya declaró
+y lo único que falta es bajar su comprobante desde Consulta de declaraciones.
+
+`SriLoopHUD.veredictoDelPerfil()` devuelve exactamente eso.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

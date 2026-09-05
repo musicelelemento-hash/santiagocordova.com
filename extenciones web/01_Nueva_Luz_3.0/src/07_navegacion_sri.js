@@ -485,6 +485,62 @@ const SriLoopHUD = {
         return items;
     },
 
+    /**
+     * Las obligaciones vigentes que lista el perfil.
+     * @returns {Array<{texto: string, esIva: boolean}>}
+     */
+    obligacionesVigentesDelPerfil() {
+        const nodos = Array.from(document.querySelectorAll('.alinear-texto-izq, [class*="alinear-texto"]'));
+        const vistas = new Map();
+        for (const el of nodos) {
+            const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            // Los códigos de obligación del SRI son de cuatro dígitos: 2011 IVA,
+            // 1011 retenciones, 1021 renta…
+            if (!/^\d{4}\s+[A-ZÁÉÍÓÚÑ]/i.test(t)) continue;
+            if (!vistas.has(t)) vistas.set(t, { texto: t, esIva: /\bIVA\b/i.test(t) });
+        }
+        return [...vistas.values()];
+    },
+
+    /**
+     * Qué corresponde hacer con quien está logueado, mirando solo el perfil.
+     * @returns {Promise<{veredicto: string, motivo: string, iva?: object}>}
+     *   'declarar'      → tiene IVA pendiente
+     *   'ya_declarada'  → tiene la obligación pero no figura pendiente
+     *   'no_declara_iva'→ no tiene obligación de IVA
+     *   'no_concluyo'   → el perfil no dio información suficiente
+     */
+    async veredictoDelPerfil() {
+        if (!location.href.includes('/contribuyente/perfil')) {
+            return { veredicto: 'no_concluyo', motivo: 'no estamos en el perfil' };
+        }
+
+        const pendiente = await this.ivaDelPerfil();
+        if (pendiente) {
+            return { veredicto: 'declarar', motivo: `el perfil pide ${pendiente.periodoTexto}`, iva: pendiente };
+        }
+
+        const vigentes = this.obligacionesVigentesDelPerfil();
+        if (!vigentes.length) {
+            // Ni pendientes ni lista de obligaciones: la pantalla no terminó de
+            // cargar, o este perfil no las muestra. No se concluye nada.
+            return { veredicto: 'no_concluyo', motivo: 'el perfil no lista obligaciones' };
+        }
+
+        const tieneIva = vigentes.some((o) => o.esIva);
+        if (!tieneIva) {
+            return {
+                veredicto: 'no_declara_iva',
+                motivo: `sus obligaciones son: ${vigentes.map((o) => o.texto).join(' · ')}`
+            };
+        }
+
+        return {
+            veredicto: 'ya_declarada',
+            motivo: 'tiene la obligación de IVA y no figura ninguna pendiente'
+        };
+    },
+
     /** La obligación de IVA del panel, traducida al periodo interno. */
     async ivaDelPerfil() {
         const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',

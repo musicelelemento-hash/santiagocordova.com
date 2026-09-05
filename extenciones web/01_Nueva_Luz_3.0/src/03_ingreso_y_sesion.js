@@ -499,21 +499,37 @@ SafeStorage.get(null).then(async (items) => {
                 }
                 await SafeStorage.set({ sri_obligacion_actual: pend });
                 if (selloEsperado) await SafeStorage.set({ sri_verificacion_sello: selloEsperado });
-            } else if (location.href.includes('/contribuyente/perfil')) {
-                // Estamos EN el perfil y no figura ninguna obligación de IVA.
-                // Eso es lo que el usuario describe: «si no sale nada de
-                // pendientes, entonces ya se la hizo». No se declara a ciegas:
-                // se comprueba en la lista de presentadas y de paso se trae el
-                // comprobante, que es lo que faltaba.
-                console.log('📋 [PERFIL] No figura ninguna obligación de IVA pendiente.');
-                await anotarBitacora('sin obligaciones', 'el perfil no muestra IVA pendiente');
+            } else if (typeof SriLoopHUD !== 'undefined') {
+                // Sin obligación pendiente a la vista, el perfil todavía tiene
+                // algo que decir: si este contribuyente declara IVA o no.
+                const v = await SriLoopHUD.veredictoDelPerfil();
+                console.log(`📋 [PERFIL] Veredicto: ${v.veredicto} — ${v.motivo}`);
+                await anotarBitacora('veredicto del perfil', `${v.veredicto} · ${v.motivo}`);
 
-                if (quienEntro.ruc && items.workflowPeriod && typeof irARecuperarComprobante === 'function') {
+                if (v.veredicto === 'no_declara_iva' && quienEntro.ruc) {
+                    // No es un error ni un olvido: este cliente no declara IVA.
+                    if (typeof Omitidos !== 'undefined') {
+                        await Omitidos.anotar(quienEntro.ruc, 'no_declara_iva',
+                            { nombre: quienEntro.name, detalle: v.motivo });
+                    }
+                    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+                    if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
+                        const hay = await handleBatchNextClient();
+                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+                    }
+                    return;
+                }
+
+                if (v.veredicto === 'ya_declarada' && quienEntro.ruc && items.workflowPeriod &&
+                    typeof irARecuperarComprobante === 'function') {
+                    // El caso que cierra el objetivo: ya declaró y le falta el
+                    // comprobante. No se declara a ciegas: se confirma en la
+                    // lista de presentadas y se baja el PDF.
                     if (window.sriAssistant?.showEliteToast) {
                         window.sriAssistant.showEliteToast({
-                            title: '✅ Sin pendientes',
-                            msg: `${quienEntro.name || quienEntro.ruc} no tiene IVA pendiente. ` +
-                                 'Voy a confirmarlo y a traer su comprobante.',
+                            title: '✅ Ya estaba declarada',
+                            msg: `${quienEntro.name || quienEntro.ruc} tiene la obligación de IVA y ` +
+                                 'no figura pendiente. Voy a confirmarlo y traer su comprobante.',
                             duration: 7000
                         });
                     }
@@ -521,8 +537,7 @@ SafeStorage.get(null).then(async (items) => {
                     await irARecuperarComprobante(quienEntro.ruc, items.workflowPeriod, quienEntro.name);
                     return;
                 }
-            } else {
-                console.log('📋 [SRI] Todavía no estamos en el perfil; no se concluye nada.');
+                // 'no_concluyo' → sigue el flujo normal, que tiene sus propios frenos.
             }
         } catch (e) { /* la consulta nunca puede frenar el flujo */ }
 

@@ -678,6 +678,7 @@ const Omitidos = {
         saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',
         identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
         sin_datos:          'No se pudieron extraer comprobantes.',
+        no_declara_iva:     'Este contribuyente no tiene obligacion de IVA. Revisar su regimen en la ficha.',
         ya_declarada:       'El periodo ya estaba declarado: el portal abrio una sustitutiva. Si hay que corregirla, hacela vos.'
     },
 
