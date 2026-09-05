@@ -428,8 +428,17 @@ async function procesarCampoConSugerido(casillero) {
     for (const id of possibleIds) {
         const input = document.getElementById(id);
         if (input) {
-            const rawVal = input.value || input.getAttribute('value') || input.innerText || '0';
-            const parsed = parseDecimal(rawVal);
+            // Sin `|| '0'`: una caja vacía tiene que poder distinguirse de un
+            // cero escrito por el SRI. parseImporteEstricto devuelve null.
+            const rawVal = input.value || input.getAttribute('value') || input.innerText || '';
+            const parsed = parseImporteEstricto(rawVal);
+
+            if (parsed === null) {
+                // La caja existe pero no dice nada. Eso NO es un sugerido: se
+                // deja pasar al Refuerzo Técnico en vez de fingir un 0 oficial.
+                console.log(`  [${casillero}] ⬜ El campo sugerido (${id}) está vacío. No hay sugerido del SRI.`);
+                continue;
+            }
             console.log(`  [${casillero}] 📍 SugeridoMap detectado por ID (${id}) = ${parsed} (raw: "${rawVal}")`);
 
             if (parsed > 0) {
@@ -462,12 +471,15 @@ async function procesarCampoConSugerido(casillero) {
         if (row) {
             const sugEl = row.querySelector('.sugerido, input[id*="sugerido"], span[id*="sugerido"]');
             if (sugEl) {
-                const rawVal = sugEl.value || sugEl.getAttribute('value') || sugEl.innerText || '0';
-                const parsed = parseDecimal(rawVal);
-                console.log(`  [${casillero}] 📍 Sugerido detectado por fila DOM (${sugEl.id || sugEl.className}) = ${parsed}`);
+                const rawVal = sugEl.value || sugEl.getAttribute('value') || sugEl.innerText || '';
+                const parsed = parseImporteEstricto(rawVal);
 
-                if (parsed > 0) {
-                    console.log(`  [${casillero}] ✏️ Aplicando sugerido de fila ${parsed}...`);
+                // null = la caja está ahí pero vacía. Eso no es un sugerido:
+                // se sigue buscando por las otras estrategias.
+                if (parsed === null) {
+                    console.log(`  [${casillero}] ⬜ El sugerido de la fila está vacío. No hay sugerido del SRI.`);
+                } else if (parsed > 0) {
+                    console.log(`  [${casillero}] 📍 Sugerido de fila (${sugEl.id || sugEl.className}) = ${parsed}. Aplicando...`);
                     const ok = await llenarCampo(casillero, parsed);
                     if (ok) return true;
                 } else {
@@ -497,7 +509,13 @@ async function procesarCampoConSugerido(casillero) {
                 'input.sugerido, input[id*="sugerido"][readonly], input[readonly][style*="0000FF"]'
             );
             if (sugeridoInput) {
-                const val = parseDecimal(sugeridoInput.value || '0');
+                // Sin `|| '0'`: vacío tiene que poder distinguirse de un cero
+                // escrito por el SRI. parseImporteEstricto devuelve null.
+                const val = parseImporteEstricto(sugeridoInput.value);
+                if (val === null) {
+                    console.log(`  [${casillero}] ⬜ El sugerido XPath (${sugeridoInput.id}) está vacío. No hay sugerido del SRI.`);
+                    continue;
+                }
                 console.log(`  [${casillero}] XPath sugerido: ${sugeridoInput.id} = ${val}`);
                 if (val > 0) {
                     const ok = await llenarCampo(casillero, val);
