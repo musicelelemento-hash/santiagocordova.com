@@ -2264,11 +2264,6 @@ function getNinthDigit(ruc) {
   return digit === 0 ? 10 : digit;
 }
 
-function getSriDueDateDay(digit) {
-  const map = { 1: 10, 2: 12, 3: 14, 4: 16, 5: 18, 6: 20, 7: 22, 8: 24, 9: 26, 0: 28, 10: 28 };
-  return map[digit] || 28;
-}
-
 const MONTH_NAMES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"

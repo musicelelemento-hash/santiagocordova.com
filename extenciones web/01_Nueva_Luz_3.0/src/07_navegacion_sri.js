@@ -185,8 +185,80 @@ if (typeof window !== 'undefined') {
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
             return null;
         }
-        return bajarTodosLosComprobantes({ ruc, nombre: info.name || af.name || '', soloFaltantes });
+        return barrerTodosLosAnios({ ruc, nombre: info.name || af.name || '', soloFaltantes });
     };
+}
+
+/** Años que el portal ofreció en el desplegable, del más nuevo al más viejo. */
+let ANIOS_OFRECIDOS = [];
+
+/** Nadie declara desde hace veinte años: un tope para que esto no se desboque. */
+const MAX_ANIOS_BARRIDO = 6;
+
+/**
+ * Baja los comprobantes de TODOS los años que el portal ofrece, no solo del
+ * actual. Ese —y no el mes en curso— es el objetivo del proyecto.
+ *
+ * @param {{ruc, nombre, soloFaltantes}} opts
+ * @returns {Promise<{bajados:number, yaEstaban:number, fallaron:number, total:number, anios:number[]}>}
+ */
+async function barrerTodosLosAnios({ ruc, nombre = '', soloFaltantes = true } = {}) {
+    const total = { bajados: 0, yaEstaban: 0, fallaron: 0, total: 0, anios: [] };
+
+    // El primer año ya está en pantalla: se barre y de paso queda anotada la
+    // lista de años que ofreció el desplegable.
+    const anioEnPantalla = anioDeLaConsultaEnPantalla();
+    let r = await bajarTodosLosComprobantes({ ruc, nombre, soloFaltantes });
+    sumarResumen(total, r, anioEnPantalla);
+
+    const pendientes = ANIOS_OFRECIDOS
+        .filter((a) => a !== anioEnPantalla)
+        .slice(0, MAX_ANIOS_BARRIDO - 1);
+
+    if (!pendientes.length) {
+        console.log('🧾 [AÑOS] El portal no ofrece más años que el que ya barrí.');
+        return total;
+    }
+    console.log(`🧾 [AÑOS] Faltan por revisar: ${pendientes.join(', ')}.`);
+
+    for (const anio of pendientes) {
+        const nueva = document.getElementById('formPresentada:btnGenerarNuevaConsulta');
+        if (!nueva) {
+            console.warn(`🧾 [AÑOS] No encuentro «Nueva consulta»: ${anio} y los anteriores quedan sin revisar.`);
+            break;
+        }
+        clickElement(nueva, `Consulta · volver para el año ${anio}`);
+        await sleep(2500);
+
+        const listo = await prepararTablaDeclaraciones(anio);
+        if (!listo) {
+            console.warn(`🧾 [AÑOS] ${anio}: no llegué a la tabla. Sigo con el resto.`);
+            continue;
+        }
+        console.log(`🧾 [AÑOS] ── ${anio} ──`);
+        r = await bajarTodosLosComprobantes({ ruc, nombre, soloFaltantes });
+        sumarResumen(total, r, anio);
+    }
+
+    console.log(`🧾 [AÑOS] Barrido completo (${total.anios.join(', ')}): ` +
+                `${total.bajados} bajados · ${total.yaEstaban} ya estaban · ${total.fallaron} fallaron.`);
+    await anotarBitacora('barrido de años',
+        `${total.anios.join(', ')} · ${total.bajados} bajados · ${total.fallaron} fallaron`);
+    return total;
+}
+
+function sumarResumen(acc, r, anio) {
+    if (!r) return;
+    acc.bajados += r.bajados; acc.yaEstaban += r.yaEstaban;
+    acc.fallaron += r.fallaron; acc.total += r.total;
+    if (anio && !acc.anios.includes(anio)) acc.anios.push(anio);
+}
+
+/** Qué año está mostrando la consulta ahora mismo. */
+function anioDeLaConsultaEnPantalla() {
+    const et = document.getElementById('formPresentada:somAnioFiscal_label');
+    const a = parseInt((et && et.textContent || '').trim(), 10);
+    return (a >= 2000 && a <= 2100) ? a : new Date().getFullYear();
 }
 
 /**
@@ -230,12 +302,19 @@ async function prepararTablaDeclaraciones(anio) {
         if (etiqueta && !(etiqueta.textContent || '').includes(anioTxt)) {
             const disparador = document.querySelector('#formPresentada\\:somAnioFiscal .ui-selectonemenu-trigger');
             if (disparador) { clickElement(disparador, 'Consulta · abrir años'); await sleep(500); }
-            const item = Array.from(document.querySelectorAll('#formPresentada\\:somAnioFiscal_items li'))
-                .find((li) => (li.textContent || '').trim() === anioTxt);
+            const opciones = Array.from(document.querySelectorAll('#formPresentada\\:somAnioFiscal_items li'));
+            // El portal solo lista los años en que ESTE contribuyente tuvo
+            // obligación: es la definición exacta de «a la fecha».
+            const ofrecidos = opciones.map((li) => parseInt((li.textContent || '').trim(), 10))
+                .filter((a) => a >= 2000 && a <= 2100);
+            if (ofrecidos.length) ANIOS_OFRECIDOS = Array.from(new Set(ofrecidos)).sort((a, b) => b - a);
+            const item = opciones.find((li) => (li.textContent || '').trim() === anioTxt);
             if (item) { clickElement(item, `Consulta · año ${anioTxt}`); await sleep(700); }
             else console.warn(`🧾 El año ${anioTxt} no está entre las opciones.`);
         }
-        clickElement(btnAceptar, 'Consulta · aceptar período');
+        // Elegir el año repinta el diálogo: el botón de recién ya no existe.
+        const aceptarVivo = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion') || btnAceptar;
+        clickElement(aceptarVivo, 'Consulta · aceptar período');
         await sleep(3000);
     }
 

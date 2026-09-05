@@ -1248,7 +1248,7 @@ async function ejecutarAccionPendiente(items) {
         const listo = await prepararTablaDeclaraciones();
         if (!listo) { await SafeStorage.set({ actionTimestamp: Date.now() }); return; }
 
-        await bajarTodosLosComprobantes(items.bajarTodos);
+        await barrerTodosLosAnios(items.bajarTodos);
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'bajarTodos']);
         return;
     }
