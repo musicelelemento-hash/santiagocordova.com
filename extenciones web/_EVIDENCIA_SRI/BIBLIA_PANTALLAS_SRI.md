@@ -1046,6 +1046,29 @@ y lo único que falta es bajar su comprobante desde Consulta de declaraciones.
 
 `SriLoopHUD.veredictoDelPerfil()` devuelve exactamente eso.
 
+## 🚪 La página `?token=` es un puente, no la página
+
+Medido en la traza `PRUEBA 8 DECLARACION` (04-sep-2026). El puente SSO a
+comprobantes recibidos aterriza en dos pasos:
+
+| # | Petición | Estado | Tamaño | ¿Trae el formulario? |
+| :-: | :--- | :---: | ---: | :--- |
+| 1 | `GET …/comprobantesRecibidos.jsf?token=…` | 200 | **940 B** | ❌ pide login |
+| 2 | `GET …/comprobantesRecibidos.jsf?&contextoMPT=…` | 200 | **85.966 B** | ✅ |
+
+La primera respuesta **no tiene `frmPrincipal:ano`**: solo empuja a la
+segunda. Un content script que se despierte ahí y busque el formulario no lo
+va a encontrar nunca, por mucho que espere.
+
+### Regla
+
+Antes de trabajar sobre una pantalla del portal, comprobar que sea la buena.
+Si la URL trae `token=` y no está el elemento que se espera, **no es un fallo:
+es una puerta**. Se deja pasar y se retoma en la carga siguiente.
+
+Vale también para `formPresentada:tblConsultaDeclaracion` en Consulta de
+declaraciones, que llega por el mismo tipo de puente.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

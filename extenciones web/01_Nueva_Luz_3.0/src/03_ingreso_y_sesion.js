@@ -606,6 +606,15 @@ SafeStorage.get(null).then(async (items) => {
 async function ejecutarAccionPendiente(items) {
     if (!items || !items.pendingAction) return;
 
+    // 🚪 Página puente del SSO: solo redirige. No hay nada que hacer acá.
+    if (location.search.includes('token=') &&
+        !document.getElementById('frmPrincipal:ano') &&
+        !document.getElementById('formPresentada:tblConsultaDeclaracion')) {
+        console.log('🚪 [PUENTE] Página de traspaso del SSO. Espero la redirección.');
+        await SafeStorage.set({ actionTimestamp: Date.now() });
+        return;
+    }
+
     // ELITE v10.5: TIMESTAMP CHECK (STALE ACTION PROTECTION)
     if (items.actionTimestamp) {
         const diff = Date.now() - items.actionTimestamp;
