@@ -1064,15 +1064,79 @@ const findByText = (text, tag = '*') => {
 
 // esVisible(el) está declarada como función global en 01_utilidades_y_pdf.js
 
+/** La versión del portal contra la que están calibrados los selectores. */
+const SRI_VERSION_CALIBRADA = '4.5.0-20200210';
+
+/**
+ * El canario de la Biblia: <body id="sribody" version="…">.
+ * Si el SRI cambia de versión, cada id fijo de la Matriz Tatuada pasa a ser
+ * una suposición. Mejor enterarse el primer día.
+ */
+async function revisarVersionDelPortal() {
+    const body = document.getElementById('sribody') || document.body;
+    const v = body && body.getAttribute && body.getAttribute('version');
+    if (!v || v === SRI_VERSION_CALIBRADA) return v || null;
+
+    console.warn(`🐤 [CANARIO] El portal del SRI cambió de versión: ${SRI_VERSION_CALIBRADA} → ${v}. ` +
+                 'Los selectores fijos están calibrados contra la anterior: revisá la Biblia antes de confiar en un lote largo.');
+    try {
+        const k = 'sc_version_portal_avisada';
+        const previo = (await SafeStorage.get([k]))[k];
+        if (previo !== v) {                       // una sola vez por versión
+            await SafeStorage.set({ [k]: v });
+            if (typeof anotarBitacora === 'function') {
+                await anotarBitacora('🐤 versión del portal cambió', `${SRI_VERSION_CALIBRADA} → ${v}`);
+            }
+        }
+    } catch (e) { /* avisar nunca puede frenar nada */ }
+    return v;
+}
+
+/**
+ * ¿Está arriba el velo que JSF/PrimeFaces levanta durante un AJAX?
+ * Mientras esté, cualquier clic se lo come él.
+ */
+function veloAjaxArriba() {
+    const velos = ['disablingDiv', 'noSoportado'];
+    for (const id of velos) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') return true;
+    }
+    return false;
+}
+
+/**
+ * Espera a que baje el velo de AJAX y recién entonces clickea.
+ * Para los pasos donde perder el clic cuesta una recarga entera.
+ *
+ * @returns {Promise<boolean>} false si el velo no bajó y no se clickeó.
+ */
+async function clickCuandoSePueda(el, name, esperaMs = 8000) {
+    const hasta = Date.now() + esperaMs;
+    while (veloAjaxArriba() && Date.now() < hasta) await sleep(250);
+    if (veloAjaxArriba()) {
+        console.warn(`⚠️ [AJAX] El velo siguió arriba ${Math.round(esperaMs / 1000)}s. No clickeo "${name}".`);
+        return false;
+    }
+    return clickElement(el, name);
+}
+
 const clickElement = (el, name) => {
     if (!el) {
         GhostBlackBox.add('CLICK_NULL', `Intento de clic fallido: ${name} (element null)`);
         console.warn(`❌ No se pudo clickear: ${name} (Elemento null)`);
         return false;
     }
-    const disabling = document.getElementById('disablingDiv');
-    if (disabling && disabling.style.display !== 'none' && getComputedStyle(disabling).display !== 'none') {
-        console.warn(`⚠️ [AJAX BLOQUEO] PrimeFaces #disablingDiv activo al intentar clic en: ${name}.`);
+    // El velo de AJAX se come el clic: pulsar debajo no hace nada. Antes se
+    // avisaba y se clickeaba igual, devolviendo true; quien llamaba seguía
+    // creyendo que el botón se pulsó. Ahora se dice que no se pudo.
+    if (veloAjaxArriba()) {
+        GhostBlackBox.add('CLICK_VELADO', `Clic no realizado por overlay AJAX: ${name}`);
+        console.warn(`⚠️ [AJAX] El velo de PrimeFaces está arriba: NO clickeo "${name}" porque el clic se perdería. ` +
+                     'Usá clickCuandoSePueda() si hay que esperarlo.');
+        return false;
     }
     GhostBlackBox.add('CLICK', `Clic en: ${name}`, { tag: el.tagName, id: el.id || 'sin-id', text: (el.innerText || '').trim().substring(0, 30) });
     console.log(`✅ Clickeando: ${name}`, el);

@@ -1432,10 +1432,19 @@ const SriLoopHUD = {
     }
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => SriLoopHUD.montar());
-} else {
+function arrancarEnLaPagina() {
     SriLoopHUD.montar();
+    // El canario de la Biblia: si el portal cambió de versión, avisarlo antes
+    // de que un selector fijo falle de un modo raro y cueste media hora.
+    if (typeof revisarVersionDelPortal === 'function') {
+        revisarVersionDelPortal().catch(() => {});
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arrancarEnLaPagina);
+} else {
+    arrancarEnLaPagina();
 }
 
 // ── Detección del wizard de recepción de declaraciones ───────────────────
@@ -1511,31 +1520,31 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
             // CASO A: Estamos en el índice de declaraciones (/SriDeclaraciones/Publico/declaraciones)
             if (window.location.href.includes('declaraciones')) {
-                console.log('📑 En índice de declaraciones. Buscando tarjeta o enlace a Formulario IVA...');
-                safeStatus('🎯 Accediendo a Formulario IVA...');
+                // El puente SSO está CONFIRMADO (AGENTS.md §6A, 03-sep-2026);
+                // el id de la tarjeta «Formulario IVA» NO lo está (Biblia,
+                // entrada 06). La regla §5b dice que lo confirmado manda, así
+                // que el puente va primero y la tarjeta queda de respaldo.
+                //
+                // Además el barrido viejo miraba '.card, a, button, span' de
+                // TODO el documento y elegía por texto: la misma clase de
+                // barrido amplio que hacía que el «ojo de halcón» leyera
+                // números del HUD de la propia extensión.
+                const enlaceDirecto = document.querySelector(
+                    'a[href*="redireccion=310"], a[href*="declaracionImpuesto"]');
 
-                // Esperar a que las tarjetas del dashboard Angular se rendericen
-                const cardIva = await waitFor(() => {
-                    const direct = document.querySelector('a[href*="declaracionImpuesto"], a[href*="redireccion=310"]');
-                    if (direct) return direct;
-
-                    const items = Array.from(document.querySelectorAll('.card, .ui-panel, .dashboard-item, mat-card, .p-card, a, button, div[role="button"], span'));
-                    return items.find(el => {
-                        const txt = (el.innerText || el.textContent || '').toUpperCase();
-                        const href = el.getAttribute('href') || '';
-                        return href.includes('redireccion=310') ||
-                               href.includes('declaracionImpuesto') ||
-                               (txt.includes('DECLARACIÓN DE IMPUESTOS') && !txt.includes('CONSULTA') && esVisible(el)) ||
-                               ((txt.includes('DECLARACIÓN') || txt.includes('FORMULARIO')) && txt.includes('IVA') && esVisible(el));
-                    });
-                }, 4000, 'Tarjeta IVA en Índice');
-
-                if (cardIva) {
-                    console.log('✅ Tarjeta/Enlace detectado en índice. Clickeando...', cardIva);
-                    clickElement(cardIva, 'Tarjeta Declaración IVA');
+                if (enlaceDirecto && esVisible(enlaceDirecto)) {
+                    console.log('📑 El índice ofrece el enlace directo al formulario IVA. Lo uso.');
+                    safeStatus('🎯 Accediendo a Formulario IVA...');
+                    if (!await clickCuandoSePueda(enlaceDirecto, 'Enlace Formulario IVA')) {
+                        console.warn('⚠️ El clic no se pudo dar. Voy por el puente SSO.');
+                        window.location.href = SRI_PUENTE_FORMULARIO_IVA;
+                        await sleep(4000);
+                        return;
+                    }
                     await sleep(2500);
                 } else {
-                    console.warn('⚠️ No se detectó tarjeta en índice. Forzando navegación vía puente SSO al formulario IVA...');
+                    console.log('📑 En índice de declaraciones. Voy por el puente SSO, que es el camino confirmado.');
+                    safeStatus('⚡ Accediendo a Formulario IVA...');
                     window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                     await sleep(4000);
                     return;
