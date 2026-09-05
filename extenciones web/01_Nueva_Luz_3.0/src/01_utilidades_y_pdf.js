@@ -236,6 +236,23 @@ if (typeof window !== 'undefined') {
  * ya está declarado.
  * @returns {{esSustitutiva: boolean, marca: string}}
  */
+/**
+ * ¿La pantalla actual es el resumen de pago del wizard?
+ * Se apoya en elementos que SOLO existen ahí.
+ */
+function estaEnResumenDeclaracion() {
+  const marcas = [
+    'frmFlujoDeclaracion:pagValoresRemision',
+    'frmFlujoDeclaracion:outTotalPagarSinRemision',
+    'frmFlujoDeclaracion:totalAPagar'
+  ];
+  for (const id of marcas) {
+    const el = document.getElementById(id);
+    if (el && esVisible(el)) return true;
+  }
+  return false;
+}
+
 function tipoDeDeclaracionEnPantalla() {
   const el = document.getElementById('frmFlujoDeclaracion:outMarcaDeclaracion')
           || document.querySelector('[id$="outMarcaDeclaracion"]');

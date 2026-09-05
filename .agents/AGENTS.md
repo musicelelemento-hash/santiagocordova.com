@@ -125,13 +125,24 @@ La etapa final del llenado de una declaración automatizada involucra una secuen
 | `finalizarPostEnvioSRI()` | **POST-envío** | Lo dispara `initDeclarationSuccessWatcher` al detectar la pantalla de confirmación. Solo respalda el comprobante, sincroniza y cierra sesión. No valida saldos porque ya es tarde. |
 
 ### Contrato de seguridad del envío (`ejecutarCierreMagico`)
-El bot **sólo envía** si puede CONFIRMAR las dos cosas a la vez:
-1. `detectBalance()` devuelve un número y ese número es `0`.
-2. `analizarMensajesResumen()` devuelve `'limpio'`.
+El bot **sólo envía** si puede CONFIRMAR las cuatro cosas a la vez:
 
-Cualquier otro resultado — incluido `'desconocido'` — guarda borrador y frena.
+1. **`estaEnResumenDeclaracion()`** — estamos de verdad en el resumen de pago,
+   no en el formulario.
+2. `detectarSaldo()` devuelve un número y ese número es `0`.
+3. `analizarMensajesResumen()` devuelve `'limpio'`.
+4. `frenarSiEsSustitutiva()` devuelve `false`.
+
+Cualquier otro resultado guarda borrador y frena.
 **Nunca trates la ausencia de mensajes como "todo bien"**: esa era justamente la
 regresión que permitía enviar a ciegas si el selector fallaba.
+
+El punto 1 se agregó el 04-sep-2026 por un caso real: el bot anunció «TODO
+PERFECTO. Saldo $0.00» leyendo el casillero TOTALES (`concepto2610`) **mientras
+seguía en el formulario**. El saldo del formulario no es el saldo a pagar: el
+resumen es donde el SRI lo dice, y en una sustitutiva incluye la imputación al
+pago. Se reconoce el resumen por `frmFlujoDeclaracion:pagValoresRemision`,
+`outTotalPagarSinRemision` o `totalAPagar`.
 
 Ambos selectores ya están calibrados contra tráfico real (04-sep-2026):
 - `frmFlujoDeclaracion:totalAPagar` — confirmado, devuelve `USD 0.00`.

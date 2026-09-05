@@ -1451,11 +1451,24 @@ class SriAssistantPanel {
             // sin tener que llegar hasta acá a mano.
             await this.capturarDiagnosticoResumen({ totalValor, saldoConocido, estadoMensajes });
 
-            // Para enviar hacen falta las dos cosas:
+            // Para enviar hacen falta TRES cosas:
+            //  · estar de verdad en el resumen de pago, no en el formulario
             //  · el saldo se LEYÓ (no se asumió) y vale exactamente 0
             //  · no hay ningún mensaje de inconsistencia
             // Si el saldo no se pudo leer, se frena: null nunca equivale a cero.
-            const puedeEnviar = saldoConocido && totalValor === 0 && estadoMensajes !== 'con_inconsistencias';
+            //
+            // Lo del resumen no es formalidad: el 04-sep el bot dijo "TODO
+            // PERFECTO" leyendo el casillero TOTALES del formulario mientras
+            // seguía en él. El saldo del formulario no es el saldo a pagar.
+            const enResumen = typeof estaEnResumenDeclaracion === 'function'
+                ? estaEnResumenDeclaracion() : true;
+            if (!enResumen) {
+                console.warn('🛑 [CIERRE] Todavía no estamos en el resumen de pago. No se concluye ningún saldo.');
+                await anotarBitacora('⛔ no se envió', 'no estábamos en el resumen de pago');
+            }
+
+            const puedeEnviar = enResumen && saldoConocido && totalValor === 0 &&
+                                estadoMensajes !== 'con_inconsistencias';
 
             // Última barrera: aunque todo lo demás dé bien, una sustitutiva no
             // se envía nunca. El rótulo puede aparecer recién en el resumen.
@@ -3627,6 +3640,24 @@ class SriAssistantPanel {
      * null NO es 0: de esa distinción depende que el bot envíe o frene.
      */
     detectarSaldo() {
+            // 0) Resumen de pago. IDs CONFIRMADOS en el diagnóstico del
+            //    04-sep-2026. Vienen como "USD 0.00" y son DOS columnas: sin
+            //    remisión y con remisión. Se toma la mayor, que es la lectura
+            //    prudente: si cualquiera de las dos tiene saldo, hay saldo.
+            const remision = ['frmFlujoDeclaracion:outTotalPagarSinRemision',
+                              'frmFlujoDeclaracion:outTotalPagarConRemision']
+                .map((id) => {
+                    const el = document.getElementById(id);
+                    return el ? parseImporteEstricto(el.innerText || el.textContent) : null;
+                })
+                .filter((v) => v !== null);
+
+            if (remision.length) {
+                const v = Math.max(...remision);
+                console.log(`💰 [SALDO] resumen de pago (${remision.join(' / ')}) → ${v}`);
+                return v;
+            }
+
             // 1) Resumen final. ID CONFIRMADO contra el portal real (03-sep-2026):
             //    <span id="frmFlujoDeclaracion:totalAPagar">USD 0.00</span>
             const spanResumen = document.getElementById('frmFlujoDeclaracion:totalAPagar');
