@@ -1751,64 +1751,14 @@ function findAceptarBtnOnSummary() {
     return null;
 }
 
-// WATCHER AUTOMÁTICO PARA LA PANTALLA DE RESUMEN/ACEPTAR/ENVIAR (POST SIGUIENTE)
-function initSummaryPageWatcher() {
-    if (window.__sriSummaryPageWatcherActive) return;
-    window.__sriSummaryPageWatcherActive = true;
-
-    setInterval(async () => {
-        // 🛑 Blindaje: Solo actuar dentro del wizard IVA
-        if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return;
-
-        // 🛑 PROTECCIÓN DE NAVEGACIÓN: Si todavía estamos editando casilleros (concepto401 visible) o navegando en el wizard, NO actuar.
-        const casilleroForm = document.getElementById('concepto401') || document.getElementById('concepto500') || document.getElementById('frmFlujoDeclaracion:calPeriodo');
-        if (casilleroForm && esVisible(casilleroForm)) return;
-
-        // ⚡ PERF: ver nota en initDeclarationSuccessWatcher.
-        const bodyText = (document.body?.textContent || '').toLowerCase();
-        const hasImprimirBtn = Array.from(document.querySelectorAll('span.ui-button-text')).some(span => (span.textContent || '').trim().toUpperCase() === 'IMPRIMIR');
-        const isSuccess = hasImprimirBtn || bodyText.includes('declaración procesada') || bodyText.includes('imprimir comprobante');
-        if (isSuccess) return;
-
-        const btnRaw = findAceptarBtnOnSummary();
-        // Antes: "... || items.sri_master_switch_on", o sea que el interruptor
-        // maestro ENCENDÍA la automatización en vez de frenarla. Ahora manda el semáforo.
-        const isAuto = await SriLoop.puedeAvanzar();
-
-        if (btnRaw && isAuto && esVisible(btnRaw)) {
-
-            const state = await SafeStorage.get(['summary_page_clicked']);
-            // Solo prevenir clics repetidos en los últimos 10 segundos
-            if (!state.summary_page_clicked || (Date.now() - state.summary_page_clicked > 10000)) {
-                await SafeStorage.set({ summary_page_clicked: Date.now() });
-                console.log('🚀 [SRI SUMMARY] Pantalla de resumen confirmada. Cuenta de 3s antes de confirmar envío...');
-                
-                if (window.sriAssistant) {
-                    window.sriAssistant.showEliteToast({ 
-                        title: '⚠️ Confirmación Final', 
-                        msg: 'Enviando declaración en 3s... (Presiona DETENER para revisar)', 
-                        duration: 3500 
-                    });
-                }
-
-                // 3 segundos con verificación en cada segundo
-                for (let c = 0; c < 3; c++) {
-                    await sleep(1000);
-                    const check = await SafeStorage.get(['sriAutomationPaused', 'sri_auto_mode', 'autoDeclaration']);
-                    if (check.sriAutomationPaused || (!check.sri_auto_mode && !check.autoDeclaration)) {
-                        console.log('🛑 [SRI SUMMARY] Envío final abortado por el usuario.');
-                        return;
-                    }
-                }
-
-                console.log('🚀 [SRI SUMMARY] Confirmando envío en el resumen final...');
-                const clickableTarget = btnRaw.closest('button, a, div[class*="button"]') || btnRaw;
-                if (typeof clickElement === 'function') clickElement(clickableTarget, 'Aceptar Formulario Resumen');
-                else clickableTarget.click();
-            }
-        }
-    }, 1500);
-}
+// El watcher automático del resumen se eliminó el 05-sep-2026.
+//
+// Era un setInterval que buscaba «Aceptar»/«Enviar» —incluso por texto— y
+// lo pulsaba tras 3 segundos, sin mirar saldo, mensajes, ni si la
+// declaración era SUSTITUTIVA. Nunca se llegó a llamar, pero el envío tiene
+// UN solo camino y es ejecutarCierreMagico(), que sí cumple el contrato de
+// la §4: resumen de verdad + saldo leído en cero + mensajes limpios + no
+// sustitutiva. Ver .agents/AGENTS.md.
 
 // AUTO-DESMISSER DE DIÁLOGOS DE ADVERTENCIA Y VALIDACIONES NORMALES DEL SRI (SOLO BAJO DEMANDA)
 async function autoDismissSriWarnings() {

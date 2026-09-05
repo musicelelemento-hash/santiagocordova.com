@@ -1467,8 +1467,11 @@ class SriAssistantPanel {
                 await anotarBitacora('⛔ no se envió', 'no estábamos en el resumen de pago');
             }
 
+            // En POSITIVO a propósito: solo 'limpio' abre. Preguntar
+            // «!== con_inconsistencias» dejaba pasar cualquier otro estado,
+            // 'desconocido' incluido, que es justo lo que NO se puede asumir.
             const puedeEnviar = enResumen && saldoConocido && totalValor === 0 &&
-                                estadoMensajes !== 'con_inconsistencias';
+                                estadoMensajes === 'limpio';
 
             // Última barrera: aunque todo lo demás dé bien, una sustitutiva no
             // se envía nunca. El rótulo puede aparecer recién en el resumen.
