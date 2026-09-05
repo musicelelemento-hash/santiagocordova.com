@@ -510,9 +510,25 @@ const SriLoopHUD = {
      *   'no_declara_iva'→ no tiene obligación de IVA
      *   'no_concluyo'   → el perfil no dio información suficiente
      */
-    async veredictoDelPerfil() {
+    async veredictoDelPerfil({ esperarMs = 12000 } = {}) {
         if (!location.href.includes('/contribuyente/perfil')) {
             return { veredicto: 'no_concluyo', motivo: 'no estamos en el perfil' };
+        }
+
+        // Angular pinta el perfil cuando vuelven sus llamadas REST. Se espera a
+        // que aparezca CUALQUIERA de las dos señales antes de concluir nada.
+        const inicio = Date.now();
+        let avisado = false;
+        while (Date.now() - inicio < esperarMs) {
+            if (this.obligacionesVigentesDelPerfil().length) break;
+            const acordeon = Array.from(document.querySelectorAll('mat-expansion-panel-header, .mat-expansion-panel-header'))
+                .some((h) => /obligacion/i.test(h.textContent || ''));
+            if (acordeon) break;
+            if (!avisado) {
+                console.log('⏳ [PERFIL] Esperando a que el portal pinte las obligaciones...');
+                avisado = true;
+            }
+            await sleep(500);
         }
 
         const pendiente = await this.ivaDelPerfil();
@@ -524,7 +540,10 @@ const SriLoopHUD = {
         if (!vigentes.length) {
             // Ni pendientes ni lista de obligaciones: la pantalla no terminó de
             // cargar, o este perfil no las muestra. No se concluye nada.
-            return { veredicto: 'no_concluyo', motivo: 'el perfil no lista obligaciones' };
+            return {
+                veredicto: 'no_concluyo',
+                motivo: `el perfil no listó obligaciones tras esperar ${Math.round(esperarMs / 1000)}s`
+            };
         }
 
         const tieneIva = vigentes.some((o) => o.esIva);
@@ -574,9 +593,13 @@ const SriLoopHUD = {
                 '@keyframes sc-halo{0%,100%{box-shadow:0 0 0 0 rgba(125,211,252,.35)}50%{box-shadow:0 0 0 12px rgba(125,211,252,0)}}',
                 '#sc-saludo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);',
                 '  z-index:2147483647;width:min(420px,86vw);max-height:86vh;overflow:auto;',
-                '  padding:22px 24px;animation:sc-sube .42s cubic-bezier(.22,1,.36,1) both}',
+                '  padding:22px 24px}',
+                '#sc-saludo.sc-entra{animation:sc-sube .42s cubic-bezier(.22,1,.36,1)}',
+                '#sc-saludo.sc-entra .sc-fila{animation:sc-fila .35s ease-out}',
+                // Con las animaciones reducidas, aparece sin más: nunca invisible.
+                '@media (prefers-reduced-motion:reduce){#sc-saludo.sc-entra,#sc-saludo.sc-entra .sc-fila{animation:none}}',
                 '#sc-saludo.sc-yendose{animation:sc-baja .3s ease-in forwards}',
-                '#sc-saludo .sc-fila{animation:sc-fila .35s ease-out both}',
+                '#sc-saludo .sc-fila{opacity:1}',
                 '#sc-saludo .sc-avatar{animation:sc-halo 2.4s ease-in-out infinite}'
             ].join('');
             document.head.appendChild(st);
@@ -618,6 +641,12 @@ const SriLoopHUD = {
           </div>`;
 
         document.body.appendChild(el);
+        // Solo se anima si hay alguien mirando. En una pestaña oculta el
+        // navegador congela la animación en su primer fotograma y la tarjeta
+        // quedaría invisible.
+        if (typeof document.visibilityState === 'undefined' || document.visibilityState === 'visible') {
+            el.classList.add('sc-entra');
+        }
 
         const cerrar = () => {
             el.classList.add('sc-yendose');

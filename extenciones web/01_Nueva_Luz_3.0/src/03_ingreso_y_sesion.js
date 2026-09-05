@@ -426,11 +426,14 @@ SafeStorage.get(null).then(async (items) => {
         try {
             let pend = await SriApi.ivaPendiente();
 
-            // Sin respuesta de la API -por ejemplo si el token todavía no está
-            // guardado-, se lee el panel desplegable del perfil, que es donde
-            // el SRI lo muestra al usuario.
+            // Sin respuesta de la API -hoy es lo normal: Keycloak guarda el
+            // token en memoria y desde el mundo aislado no se ve- se lee el
+            // perfil. veredictoDelPerfil() espera a que Angular lo pinte; sin
+            // esa espera devolvía "no lista obligaciones" y el bot se iba a
+            // declarar creyendo que no había información.
             if (!pend && typeof SriLoopHUD !== 'undefined' && location.href.includes('/contribuyente/perfil')) {
-                const delPanel = await SriLoopHUD.ivaDelPerfil();
+                const vPrevio = await SriLoopHUD.veredictoDelPerfil();
+                const delPanel = vPrevio.veredicto === 'declarar' ? vPrevio.iva : null;
                 if (delPanel) {
                     pend = {
                         periodo: delPanel.periodo,
@@ -1248,6 +1251,16 @@ async function autoLlenarBusqueda(data) {
             document.querySelector(`select[id$="${id.split(':').pop()}"]`);
     };
 
+    // El puente SSO aterriza primero en una URL con ?token= que enseguida
+    // redirige a la definitiva. En esa primera carga los selects todavía no
+    // existen y esto reventaba como promesa sin capturar. No era un fallo
+    // real: era llegar temprano.
+    for (let intento = 0; intento < 16; intento++) {
+        if (getSelect('frmPrincipal:ano') && getSelect('frmPrincipal:mes')) break;
+        if (intento === 0) console.log('⏳ Esperando a que cargue el formulario de búsqueda...');
+        await sleep(500);
+    }
+
     const selAnio = getSelect('frmPrincipal:ano') || document.querySelectorAll('select')[0];
     const selMes = getSelect('frmPrincipal:mes') || document.querySelectorAll('select')[1];
     const selDia = getSelect('frmPrincipal:dia') || document.querySelectorAll('select')[2];
@@ -1259,6 +1272,8 @@ async function autoLlenarBusqueda(data) {
                     document.querySelectorAll('select')[3];
 
     if (!selAnio || !selMes) {
+        console.warn(`⚠️ No aparecieron los selectores de Año/Mes en ${location.pathname.split('/').pop()}. ` +
+                     'Si el portal está redirigiendo, se resuelve en la próxima carga.');
         throw new Error('No se encontraron los selectores de Año/Mes. Verifica que la página cargó bien.');
     }
 
