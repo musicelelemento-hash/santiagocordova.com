@@ -1233,15 +1233,16 @@ async function probarSubida() {
 
   if (!r) { console.error('❌ El service worker no respondió nada.'); return null; }
 
+  const cfgInforme = r.configurado || {};
   console.log('── Configuración ──');
   console.table([{
-    'Worker relay': r.configurado.worker ? '✅ configurado' : '❌ falta',
-    'Claves S3': r.configurado.s3 ? '✅ presentes' : '❌ faltan',
-    'Bucket': r.configurado.bucket
+    'Worker relay': cfgInforme.worker ? '✅ configurado' : '❌ falta',
+    'Claves S3': cfgInforme.s3 ? '✅ presentes' : '❌ faltan',
+    'Bucket': cfgInforme.bucket || '(sin definir)'
   }]);
 
   console.log('── Qué pasó en cada intento ──');
-  console.table(r.intentos.map((i) => ({
+  console.table((r.intentos || []).map((i) => ({
     via: i.via,
     resultado: i.omitido ? '⏭️ ' + i.omitido
              : i.error ? '❌ ' + i.error

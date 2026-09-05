@@ -554,6 +554,8 @@ const SriLoopHUD = {
             '<button id="slh-aqui" aria-label="Declarar al contribuyente que está logueado ahora" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🎯</button>',
             '<button id="slh-pdfs" aria-label="Traer todos los comprobantes de este contribuyente" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(74,222,128,0.16);color:#4ade80">🧾</button>',
             '<button id="slh-omitidos" aria-label="Ver los clientes que quedaron sin declarar y por qué" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">⚠️ 0</button>',
+            '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
+            '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-copiar" aria-label="Copiar la bitácora de la corrida" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📋</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -566,7 +568,9 @@ const SriLoopHUD = {
             '  <div id="slh-barra-fill" style="position:relative;overflow:hidden;height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#7dd3fc);transition:width .7s cubic-bezier(.22,1,.36,1)"></div>',
             '</div>',
             '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
-            '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>'
+            '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
+            '<div id="slh-registro-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
+            '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -650,6 +654,34 @@ const SriLoopHUD = {
 
         // Delegación: los botones de cada fila se crean y se destruyen al
         // repintar, así que el listener vive en el contenedor, no en la fila.
+        // Un solo panel abierto a la vez: si no, el HUD crece hasta tapar la
+        // pantalla justo cuando hay que mirar el portal.
+        const soloUno = (cual) => {
+            ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel']
+                .filter((id) => id !== cual && id !== 'slh-plan')
+                .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
+        };
+
+        el.querySelector('#slh-registro').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-registro-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-registro-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Leyendo el registro…</div>';
+            panel.style.display = 'block';
+            await this.pintarRegistro();
+        });
+
+        el.querySelector('#slh-subida').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-subida-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-subida-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Probando la subida…</div>';
+            panel.style.display = 'block';
+            await this.pintarSubida();
+        });
+
         el.querySelector('#slh-omitidos-panel').addEventListener('click', async (ev) => {
             const btn = ev.target.closest('[data-reintentar]');
             if (!btn) return;
@@ -1333,6 +1365,80 @@ const SriLoopHUD = {
 
         panel.innerHTML =
             `<div style="font-size:10px;opacity:0.7;margin-bottom:4px">${lista.length} sin declarar</div>` + filas;
+    },
+
+    /**
+     * El registro local: qué se declaró y de cuáles el comprobante llegó de
+     * verdad a la nube. Es la respuesta a la pregunta del proyecto —«¿tengo
+     * todos los comprobantes?»— que hasta ahora había que sacar de un
+     * console.table.
+     */
+    async pintarRegistro() {
+        const panel = document.getElementById('slh-registro-panel');
+        if (!panel) return;
+        const filas = (typeof SriLoop !== 'undefined' && SriLoop.verDeclaraciones)
+            ? await SriLoop.verDeclaraciones() : [];
+
+        if (!filas.length) {
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Todavía no hay ninguna declaración registrada.</div>';
+            return;
+        }
+
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const conPdf = filas.filter((d) => d.pdfSubido).length;
+        const sinPdf = filas.length - conPdf;
+
+        const cuerpo = filas.slice(0, 40).map((d) => [
+            '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">',
+            `  <span style="flex:1;font-size:11px;font-weight:700">${esc(d.nombre || d.ruc)}</span>`,
+            `  <span style="font-size:10px;opacity:0.7;font-family:monospace">${esc(d.periodo)}</span>`,
+            d.pdfSubido
+                ? '  <span title="El comprobante está guardado" style="font-size:11px;color:#4ade80">✅</span>'
+                : '  <span title="Se declaró, pero el comprobante NO quedó guardado" style="font-size:11px;color:#fbbf24">⚠️</span>',
+            '</div>'
+        ].join('')).join('');
+
+        panel.innerHTML =
+            `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">` +
+            `<b style="color:#4ade80">${conPdf}</b> con comprobante guardado` +
+            (sinPdf ? ` · <b style="color:#fbbf24">${sinPdf}</b> sin guardar` : '') +
+            (filas.length > 40 ? ` · se muestran 40 de ${filas.length}` : '') +
+            '</div>' + cuerpo +
+            (sinPdf ? '<div style="font-size:10px;opacity:0.65;margin-top:6px">Los ⚠️ se declararon pero su PDF no llegó a la nube. El botón 🧾 los recupera desde Consulta de declaraciones.</div>' : '');
+    },
+
+    /**
+     * Prueba la subida y dice por qué falla cada camino. Antes esto solo se
+     * podía preguntar escribiendo sriProbarSubida() en la consola, y era la
+     * duda que bloqueaba saber si los comprobantes se estaban guardando.
+     */
+    async pintarSubida() {
+        const panel = document.getElementById('slh-subida-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        let r = null;
+        try {
+            if (typeof probarSubida === 'function') r = await probarSubida();
+        } catch (e) { /* abajo se informa */ }
+
+        if (!r) {
+            panel.innerHTML = '<div style="font-size:11px;color:#fca5a5;padding:4px 2px">No pude preguntarle al service worker. Recargá la extensión y probá de nuevo.</div>';
+            return;
+        }
+
+        if (r.ok) {
+            panel.innerHTML =
+                `<div style="font-size:11px;color:#4ade80;font-weight:800">✅ La subida funciona (vía ${esc(r.via || '?')})</div>` +
+                '<div style="font-size:10px;opacity:0.65;margin-top:4px">Los comprobantes se están guardando en la nube.</div>';
+            return;
+        }
+
+        const motivos = (r.motivos && r.motivos.length) ? r.motivos : (r.error ? [r.error] : []);
+        panel.innerHTML =
+            '<div style="font-size:11px;color:#fca5a5;font-weight:800">❌ Ningún camino de subida funcionó</div>' +
+            motivos.map((m) => `<div style="font-size:10px;opacity:0.8;margin-top:3px;font-family:monospace">· ${esc(m)}</div>`).join('') +
+            '<div style="font-size:10px;opacity:0.6;margin-top:6px">Si estás detrás de un proxy como Burp, esto puede fallar por el TLS aunque en Chrome normal funcione.</div>';
     },
 
     async pintar() {
