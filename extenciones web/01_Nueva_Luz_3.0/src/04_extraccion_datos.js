@@ -1338,19 +1338,64 @@ async function extraerNotasCreditoPaginaActualDeep() {
                 const cValIva = idxValIva !== -1 ? idxValIva : 7;
                 const cValTot = idxValTot !== -1 ? idxValTot : 8;
 
-                const valSin = parseDecimal(celdas[cValSin]?.textContent || '0');
-                const valIva = parseDecimal(celdas[cValIva]?.textContent || '0');
-                const valTot = parseDecimal(celdas[cValTot]?.textContent || '0');
+                // Estricto: null = «no pude leer», que NO es lo mismo que cero.
+                const leerCelda = (i) => parseImporteEstricto(celdas[i]?.textContent);
+                const sinLeido = leerCelda(cValSin);
+                const ivaLeido = leerCelda(cValIva);
+                const totLeido = leerCelda(cValTot);
+
+                const valSin = sinLeido === null ? 0 : sinLeido;
+                const valTot = totLeido === null ? 0 : totLeido;
+
+                // El portal cumple total = base + IVA. Si la columna del IVA no
+                // se pudo leer, se deduce de ahí: la resta no depende de que el
+                // índice de columna sea el correcto.
+                // total = base + IVA. Es una identidad, no una estimación: si
+                // se pueden leer base y total, la resta es la fuente confiable.
+                const deducido = (sinLeido !== null && totLeido !== null)
+                    ? redondear(totLeido - sinLeido) : null;
+
+                let valIva = ivaLeido;
+                let comoSeSupo = 'columna';
+                if (valIva === null && deducido !== null) {
+                    valIva = deducido;
+                    comoSeSupo = 'deducido de total - base';
+                } else if (valIva !== null && deducido !== null &&
+                           Math.abs(valIva - deducido) > 0.02) {
+                    // La columna dice una cosa y la aritmética otra. Pasa
+                    // cuando el índice apunta a una columna que no es el IVA
+                    // (una de tarifa, por ejemplo: «15%» se lee como 15).
+                    console.warn(`   ⚠️ [NC ${idx + 1}] La columna del IVA dice $${valIva} pero total - base da $${deducido}. ` +
+                                 'Mando la resta, que es la que no puede mentir.');
+                    valIva = deducido;
+                    comoSeSupo = 'deducido (la columna no coincidía)';
+                }
+
+                if (valIva === null) {
+                    // Ni leído ni deducible. Antes esto se declaraba como 0%
+                    // en silencio; ahora se avisa, porque de este corte
+                    // dependen los casilleros.
+                    console.error(`   🚨 [NC ${idx + 1}] No pude leer ni deducir el IVA de esta nota. Se declara como 0% pero HAY QUE REVISARLA A MANO: "${(fila.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)}"`);
+                    if (typeof anotarBitacora === 'function') {
+                        await anotarBitacora('⚠️ NC sin IVA legible', `nota ${idx + 1} · revisar a mano`);
+                    }
+                    valIva = 0;
+                    comoSeSupo = 'NO SE PUDO';
+                }
+
+                // Una nota con IVA es 15%; sin IVA, 0%. El umbral en centavos
+                // evita que un redondeo de la resta la mande al lado que no es.
+                const con15 = valIva > 0.005;
 
                 notas.push({
                     numero: idx + 1,
                     valorSinImpuestos: valSin,
                     iva: valIva,
                     importeTotal: valTot,
-                    iva0: valIva === 0 ? valSin : 0,
-                    iva15: valIva > 0 ? valSin : 0
+                    iva0: con15 ? 0 : valSin,
+                    iva15: con15 ? valSin : 0
                 });
-                console.log(`   🔸 Fallback NC [${idx + 1}]: Sin=$${valSin}, IVA=$${valIva}`);
+                console.log(`   🔸 Fallback NC [${idx + 1}]: Sin=$${valSin}, IVA=$${valIva} (${comoSeSupo}) → ${con15 ? '15%' : '0%'}`);
             }
 
             await cerrarModal();
