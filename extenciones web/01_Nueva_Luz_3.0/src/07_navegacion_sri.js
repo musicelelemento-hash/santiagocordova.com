@@ -533,6 +533,9 @@ const SriLoopHUD = {
         el.style.cssText = [
             'position:fixed', 'z-index:2147483646', 'right:18px', 'bottom:18px',
             'display:flex', 'align-items:center', 'gap:8px',
+            // Sin esto el HUD se salía de la pantalla en una ventana angosta,
+            // y con él se iban los botones que frenan el lote.
+            'flex-wrap:wrap', 'max-width:calc(100vw - 36px)',
             'padding:8px 10px', 'border-radius:14px',
             'background:rgba(5,20,36,0.94)', 'backdrop-filter:blur(14px)',
             'border:1px solid rgba(255,255,255,0.14)',
@@ -543,16 +546,20 @@ const SriLoopHUD = {
 
         el.innerHTML = [
             '<span id="slh-drag" title="Arrastrar" style="opacity:0.45;padding:0 2px;cursor:grab">⠿</span>',
-            '<button id="slh-play" style="border:none;border-radius:10px;padding:6px 11px;font-weight:800;font-size:12px;cursor:pointer">▶</button>',
+            '<button id="slh-play" aria-label="Reanudar o pausar el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer">▶</button>',
             '<div style="display:flex;flex-direction:column;line-height:1.25;min-width:104px">',
             '  <span id="slh-estado" style="font-weight:800;font-size:11px">DETENIDO</span>',
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
             '</div>',
-            '<button id="slh-aqui" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-weight:800;font-size:12px;cursor:pointer">🎯</button>',
-            '<button id="slh-pdfs" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:6px 9px;background:rgba(74,222,128,0.16);color:#4ade80;font-weight:800;font-size:12px;cursor:pointer">🧾</button>',
-            '<button id="slh-omitidos" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:6px 9px;background:rgba(245,158,11,0.18);color:#fbbf24;font-weight:800;font-size:11px;cursor:pointer">⚠️ 0</button>',
-            '<button id="slh-copiar" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(148,163,184,0.16);color:#cbd5e1;font-size:12px;cursor:pointer">📋</button>',
-            '<button id="slh-stop" title="Parada de emergencia" style="border:none;border-radius:10px;padding:6px 9px;background:rgba(239,68,68,0.16);color:#fca5a5;font-size:12px;cursor:pointer">🛑</button>',
+            '<button id="slh-aqui" aria-label="Declarar al contribuyente que está logueado ahora" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🎯</button>',
+            '<button id="slh-pdfs" aria-label="Traer todos los comprobantes de este contribuyente" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(74,222,128,0.16);color:#4ade80">🧾</button>',
+            '<button id="slh-omitidos" aria-label="Ver los clientes que quedaron sin declarar y por qué" title="Clientes que quedaron sin declarar y por qué" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">⚠️ 0</button>',
+            '<button id="slh-copiar" aria-label="Copiar la bitácora de la corrida" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📋</button>',
+            // El único botón que frena el semáforo de verdad. Antes había otro
+            // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
+            // Éste va rotulado: si es el que hay que apretar cuando algo va
+            // mal, tiene que decir lo que hace sin pasar el mouse por encima.
+            '<button id="slh-stop" aria-label="Parada de emergencia: detiene el lote" title="Parada de emergencia: detiene el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(239,68,68,0.2);color:#fca5a5;padding:8px 12px">🛑 Detener</button>',
             '</div>',
             // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
             '<div id="slh-barra" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(148,163,184,0.16);border-radius:0 0 14px 14px;overflow:hidden">',
