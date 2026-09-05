@@ -114,9 +114,9 @@ async function subirComprobante({ key, base64, contentType, config }) {
         console.log("✅ [SW] Subido vía Worker:", fileUrl);
         return { ok: true, url: fileUrl, via: "worker" };
       }
-      const cuerpo = await res.text().catch(() => "");
-      motivos.push(`worker: HTTP ${res.status}${cuerpo ? ' · ' + cuerpo.slice(0, 120) : ''}`);
-      console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, cuerpo);
+      const respuestaWorker = await res.text().catch(() => "");
+      motivos.push(`worker: HTTP ${res.status}${respuestaWorker ? ' · ' + respuestaWorker.slice(0, 120) : ''}`);
+      console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, respuestaWorker);
     } catch (e) {
       motivos.push(`worker: ${e.message}`);
       console.warn("⚠️ [SW] Worker no disponible:", e.message);

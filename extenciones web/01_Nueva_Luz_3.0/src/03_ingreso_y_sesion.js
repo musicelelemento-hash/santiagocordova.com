@@ -760,11 +760,14 @@ async function ejecutarAccionPendiente(items) {
     }
 
     // detector de pausa persistente
+    // El semáforo se consulta acá: isAutoFlow vive en el callback de arranque
+    // y desde esta función no se ve.
+    const enAutomatico = typeof SriLoop !== 'undefined' ? await SriLoop.puedeAvanzar() : false;
     const paused = await isPaused();
     if (paused) {
         // ELITE FIX: Si hay un flujo automático explícito activo ordenado recientemente (<120s),
         // despausar automáticamente para evitar quedar bloqueado por un estado pausado previo
-        if (isAutoFlow && items.actionTimestamp && (Date.now() - items.actionTimestamp < 120000)) {
+        if (enAutomatico && items.actionTimestamp && (Date.now() - items.actionTimestamp < 120000)) {
             console.log('🔓 [AUTORUN] Flujo automático activo detectado (<120s). Reactivando sistema previamente pausado...');
             await SafeStorage.set({ sriAutomationPaused: false, ghost_manual_mode: false });
             if (window.sriAssistant) {
