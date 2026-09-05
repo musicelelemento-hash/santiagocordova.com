@@ -563,7 +563,8 @@ const SriLoopHUD = {
             '<span style="width:1px;align-self:stretch;background:rgba(255,255,255,0.12);margin:0 2px"></span>',
             '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
-            '<button id="slh-copiar" aria-label="Copiar la bitácora de la corrida" title="Copiar la bitácora de la corrida al portapapeles" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📋</button>',
+            '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
+            '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -578,7 +579,9 @@ const SriLoopHUD = {
             '<div id="slh-plan" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
             '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-registro-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
-            '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>'
+            '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
+            '<div id="slh-cola-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
+            '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -665,7 +668,8 @@ const SriLoopHUD = {
         // Un solo panel abierto a la vez: si no, el HUD crece hasta tapar la
         // pantalla justo cuando hay que mirar el portal.
         const soloUno = (cual) => {
-            ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel']
+            ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
+             'slh-cola-panel', 'slh-bitacora-panel']
                 .filter((id) => id !== cual && id !== 'slh-plan')
                 .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
         };
@@ -702,6 +706,41 @@ const SriLoopHUD = {
             }
         });
 
+        el.querySelector('#slh-cola').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-cola-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-cola-panel');
+            panel.style.display = 'block';
+            await this.pintarCola();
+        });
+
+        el.querySelector('#slh-bitacora').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-bitacora-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-bitacora-panel');
+            panel.style.display = 'block';
+            await this.pintarBitacora();
+        });
+
+        // Copiar vive DENTRO del panel de la bitácora: primero se mira, después
+        // se copia si sirve. Antes era un botón suelto que copiaba a ciegas.
+        el.querySelector('#slh-bitacora-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('#slh-bitacora-copiar');
+            if (!btn) return;
+            ev.stopPropagation();
+            try {
+                const txt = await Bitacora.texto();
+                await navigator.clipboard.writeText(txt);
+                btn.textContent = '✅ copiada';
+                setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
+            } catch (e) {
+                console.log(await Bitacora.texto());
+                btn.textContent = '⚠️ mirá la consola';
+            }
+        });
+
         el.querySelector('#slh-registro').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             const panel = el.querySelector('#slh-registro-panel');
@@ -734,28 +773,8 @@ const SriLoopHUD = {
             this.pintar();
         });
 
-        el.querySelector('#slh-copiar').addEventListener('click', async (ev) => {
-            ev.stopPropagation();
-            const btn = ev.currentTarget;
-            const previo = btn.textContent;
-            try {
-                const txt = await Bitacora.texto();
-                await navigator.clipboard.writeText(txt);
-                btn.textContent = '✅';
-                console.log(txt);
-                this._aviso('📋 Bitácora copiada',
-                    'Ya está en el portapapeles: pegala donde la necesites. También quedó impresa acá abajo.', 5000);
-            } catch (e) {
-                // El portapapeles puede estar bloqueado si la pestaña no tiene el
-                // foco. La bitácora igual se imprime, que es lo que importa.
-                btn.textContent = '⚠️';
-                console.warn('No se pudo copiar al portapapeles:', e);
-                try { console.log(await Bitacora.texto()); } catch (e2) {}
-                this._aviso('📋 No pude copiar',
-                    'La bitácora quedó impresa en la consola de todas formas.', 6000);
-            }
-            setTimeout(() => { btn.textContent = previo; }, 2000);
-        });
+        // El 📋 suelto se retiró: copiar ahora vive dentro del panel de la
+        // bitácora, donde primero se lee y después se copia si sirve.
 
         el.querySelector('#slh-stop').addEventListener('click', async (ev) => {
             ev.stopPropagation();
@@ -1405,6 +1424,93 @@ const SriLoopHUD = {
 
         panel.innerHTML =
             `<div style="font-size:10px;opacity:0.7;margin-bottom:4px">${lista.length} sin declarar</div>` + filas;
+    },
+
+    /**
+     * La cola del lote, cruzada con lo que ya sabemos de cada cliente.
+     * «cliente 2 de 27» dice la posición pero no QUIÉNES: quién ya pasó, quién
+     * viene y quién quedó afuera vivía repartido en tres almacenes y solo se
+     * podía mirar de a uno por consola.
+     */
+    async pintarCola() {
+        const panel = document.getElementById('slh-cola-panel');
+        if (!panel) return;
+
+        const sem = await SriLoop.get();
+        const cola = Array.isArray(sem.cola) ? sem.cola : [];
+        if (!cola.length) {
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">No hay ningún lote armado. Pulsá ▶ para empezar uno.</div>';
+            return;
+        }
+
+        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod
+                        || SriLoop.periodoPorDefecto();
+        const omitidos = {};
+        try { (await Omitidos.lista()).forEach((o) => { omitidos[o.ruc] = o; }); } catch (e) {}
+
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const filas = [];
+        for (let i = 0; i < cola.length; i++) {
+            const c = cola[i];
+            let marca = '⬜', color = 'opacity:0.55', nota = 'en espera';
+
+            const om = omitidos[c.ruc];
+            const reg = await SriLoop.declaracionLocal(c.ruc, periodo);
+
+            if (reg && reg.pdfSubido)      { marca = '✅'; color = 'color:#4ade80'; nota = 'declarado y guardado'; }
+            else if (reg)                  { marca = '🧾'; color = 'color:#fbbf24'; nota = 'declarado · falta el comprobante'; }
+            else if (om)                   { marca = '⚠️'; color = 'color:#fbbf24'; nota = om.motivo.replace(/_/g, ' '); }
+            else if (i === (sem.indice || 0) && sem.estado === 'CORRIENDO') {
+                                             marca = '⏳'; color = 'color:#7dd3fc'; nota = 'en curso ahora'; }
+
+            filas.push(
+                '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
+                `<span style="width:16px;text-align:center">${marca}</span>` +
+                `<span style="flex:1;font-size:11px;font-weight:700;${color}">${esc(c.name || c.ruc)}</span>` +
+                `<span style="font-size:10px;opacity:0.6">${esc(nota)}</span>` +
+                '</div>');
+        }
+
+        const hechos = filas.filter((f) => f.includes('✅')).length;
+        panel.innerHTML =
+            `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">` +
+            `<b style="color:#4ade80">${hechos}</b> de ${cola.length} con su comprobante guardado</div>` +
+            filas.join('');
+    },
+
+    /**
+     * La bitácora, para leerla acá en vez de copiarla a ciegas.
+     */
+    async pintarBitacora() {
+        const panel = document.getElementById('slh-bitacora-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        let lista = [];
+        try { lista = (await SafeStorage.get(['sc_bitacora'])).sc_bitacora || []; } catch (e) {}
+
+        const copiar = '<button id="slh-bitacora-copiar" aria-label="Copiar la bitácora al portapapeles" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar</button>';
+
+        if (!lista.length) {
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">La bitácora está vacía.</div>';
+            return;
+        }
+
+        // Las últimas primero: cuando algo falla, lo que importa es el final.
+        const hora = (t) => new Date(t).toLocaleTimeString('es-EC', { hour12: false });
+        const cuerpo = lista.slice(-30).reverse().map((e) => [
+            '<div style="padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06)">',
+            `  <span style="font-family:monospace;font-size:10px;opacity:0.5">${hora(e.t)}</span>`,
+            `  <span style="font-size:11px;font-weight:700;margin-left:5px">${esc(e.evento)}</span>`,
+            e.detalle ? `  <div style="font-size:10px;opacity:0.7;margin-left:46px">${esc(e.detalle)}</div>` : '',
+            e.cliente ? `  <div style="font-size:10px;opacity:0.5;margin-left:46px">${esc(e.cliente)}${e.paso ? ' · ' + esc(e.paso) : ''}</div>` : '',
+            '</div>'
+        ].join('')).join('');
+
+        panel.innerHTML =
+            `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">` +
+            `<span style="font-size:10px;opacity:0.75;flex:1">últimos ${Math.min(30, lista.length)} de ${lista.length}</span>` +
+            copiar + '</div>' + cuerpo;
     },
 
     /**
