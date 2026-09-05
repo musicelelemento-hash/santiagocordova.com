@@ -1462,7 +1462,7 @@ async function autoLlenarBusqueda(data) {
     let btnConsultar = (directBtn && esVisible(directBtn)) ? directBtn : null;
 
     if (!btnConsultar) {
-        const botones = Array.from(document.querySelectorAll('button, input[type="submit"], span.ui-button-text'));
+        const botones = soloDelPortal(document.querySelectorAll('button, input[type="submit"], span.ui-button-text'));
         btnConsultar = botones.find(b => {
             const txt = (b.innerText || b.value || b.textContent || "").toUpperCase();
             return txt.includes('CONSULTAR') && esVisible(b);

@@ -1083,7 +1083,12 @@ const findByText = (text, tag = '*') => {
     for (let i = 0; i < result.snapshotLength; i++) {
         const el = result.snapshotItem(i);
         // Filtramos contenedores base y elementos invisibles
-        if (esVisible(el) && !['SCRIPT', 'STYLE', 'HTML', 'BODY', 'SRI-ROOT'].includes(el.tagName)) {
+        // El XPath excluye el panel, pero no alcanzaba: el HUD del bucle
+        // también dibuja texto («⏭️ Pasar al siguiente» del plan de vuelo) y
+        // el bot lo encontraba buscando el «Siguiente» del portal.
+        if (esVisible(el)
+            && !['SCRIPT', 'STYLE', 'HTML', 'BODY', 'SRI-ROOT'].includes(el.tagName)
+            && !esDeLaExtension(el)) {
             candidates.push(el);
         }
     }
@@ -1867,7 +1872,9 @@ function findAceptarBtnOnSummary() {
     }
 
     // 2. Búsqueda por texto "Aceptar" / "Enviar" en botones o spans, ignorando modales/diálogos ocultos
-    const elements = Array.from(document.querySelectorAll('button, a.ui-button, div.ui-button, span.ui-button-text, span[class*="ui-button"]'));
+    // soloDelPortal: si no, el «Aceptar» que encuentra puede ser un botón
+    // nuestro y el cierre se dispara contra la propia interfaz.
+    const elements = soloDelPortal(document.querySelectorAll('button, a.ui-button, div.ui-button, span.ui-button-text, span[class*="ui-button"]'));
     for (const el of elements) {
         if (!esVisible(el)) continue;
         const txtRaw = (el.innerText || el.textContent || '').trim().toLowerCase();

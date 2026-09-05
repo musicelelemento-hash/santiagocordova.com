@@ -316,6 +316,23 @@ async function frenarSiEsSustitutiva(donde = '') {
   return true;
 }
 
+/**
+ * ¿Este elemento lo dibujó la extensión?
+ *
+ * Todo lo que inyectamos lleva data-sc-ui. Las búsquedas dirigidas al portal
+ * —cerrar un modal, hallar «Siguiente», salir de la sesión— tienen que
+ * saltearlo: si no, el bot termina pulsándose a sí mismo.
+ */
+function esDeLaExtension(el) {
+  if (!el || !el.closest) return false;
+  return !!el.closest('[data-sc-ui], #sri-loop-hud, #sri-assistant-panel-root, #sri-elite-panel, #sri-smart-hub, #sri-main-toast');
+}
+
+/** Quita de una lista todo lo que sea nuestro. */
+function soloDelPortal(lista) {
+  return Array.from(lista || []).filter((el) => !esDeLaExtension(el));
+}
+
 function esVisible(el) {
   if (!el) return false;
   const cs = getComputedStyle(el);
@@ -567,16 +584,20 @@ async function cerrarSesionSRI(force = false) {
     console.warn("⚠️ Error solicitando purga de cookies al Service Worker:", e);
   }
 
-  const logoutIcon =
-    document.querySelector(
-      "span.topbar-icon.material-icons.sri-icon-cerrar-sesion",
-    ) ||
-    document.querySelector(".sri-icon-cerrar-sesion") ||
-    document.querySelector("span.sri-icon-cerrar-sesion") ||
-    document.querySelector("em.sri-icon-cerrar-sesion") ||
-    document.querySelector("i.sri-icon-cerrar-sesion") ||
-    document.querySelector('a[href*="logout"]') ||
-    document.querySelector('[title*="Cerrar"]');
+  // El último candidato, `[title*="Cerrar"]`, es peligrosamente amplio:
+  // encontraba nuestro propio botón «Cerrar la declaración» y lo pulsaba
+  // creyendo que era el icono de salir del portal. La sesión no se cerraba y
+  // encima se disparaba el cierre mágico. Ahora cada candidato pasa el filtro.
+  const logoutIcon = [
+    'span.topbar-icon.material-icons.sri-icon-cerrar-sesion',
+    '.sri-icon-cerrar-sesion',
+    'span.sri-icon-cerrar-sesion',
+    'em.sri-icon-cerrar-sesion',
+    'i.sri-icon-cerrar-sesion',
+    'a[href*="logout"]',
+    '[title*="Cerrar"]'
+  ].reduce((hallado, sel) =>
+    hallado || soloDelPortal(document.querySelectorAll(sel))[0] || null, null);
   if (logoutIcon) {
     try {
       console.log("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
@@ -799,7 +820,7 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
     // Si hay un botón visible de "Imprimir Comprobante" o "Descargar PDF"
     // ID confirmado DOM real (03-sep-2026): frmFlujoDeclaracion:btnDescargarComprobante
     const confirmedPrintBtn = document.getElementById('frmFlujoDeclaracion:btnDescargarComprobante');
-    const printBtns = Array.from(
+    const printBtns = soloDelPortal(
       document.querySelectorAll('button, a.ui-button, input[type="button"]'),
     ).filter((el) => {
       if (confirmedPrintBtn && el === confirmedPrintBtn) return true;

@@ -778,7 +778,10 @@ async function cerrarModal() {
         }
 
         // Prioridad 2: Buscar cualquier botón cerrar visible
-        const botonesCerrar = Array.from(document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick, button[aria-label*="Close" i], button[aria-label*="Cerrar" i]'));
+        // `aria-label*="Cerrar"` es amplísimo y se llevaba puesto nuestro
+        // botón «Cerrar la declaración», que abre un confirm(): de ahí salía
+        // el cuadro repetido que bloqueaba el lote entero.
+        const botonesCerrar = soloDelPortal(document.querySelectorAll('.ui-dialog-titlebar-close, .ui-dialog-close, [id*="close"], .ui-icon-closethick, button[aria-label*="Close" i], button[aria-label*="Cerrar" i]'));
         const botonVisible = botonesCerrar.find(btn => (typeof esVisible === 'function' ? esVisible(btn) : true));
         if (botonVisible) {
             if (typeof clickElement === 'function') clickElement(botonVisible, 'Cerrar Modal Retención');

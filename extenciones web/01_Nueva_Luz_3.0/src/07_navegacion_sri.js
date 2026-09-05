@@ -530,6 +530,9 @@ const SriLoopHUD = {
 
         const el = document.createElement('div');
         el.id = 'sri-loop-hud';
+        // La marca que usan esDeLaExtension() y soloDelPortal() para no
+        // confundir nuestros botones con los del portal.
+        el.setAttribute('data-sc-ui', 'hud');
         el.style.cssText = [
             'position:fixed', 'z-index:2147483646', 'right:18px', 'bottom:18px',
             'display:flex', 'align-items:center', 'gap:8px',
@@ -703,11 +706,16 @@ const SriLoopHUD = {
                 console.warn('🏁 El panel todavía no está listo.');
                 return;
             }
-            // Puede terminar enviando la declaración: se pregunta. Las cuatro
-            // comprobaciones del cierre siguen mandando; esto es solo para que
-            // nadie lo dispare creyendo que «sincroniza», como sugería el
-            // rótulo viejo.
-            if (!confirm('Cerrar la declaración.\n\nSe valida el resumen y, si el saldo es $0 y no hay inconsistencias, se ENVÍA al SRI.\n\n¿Seguimos?')) return;
+            // Sin confirm(). Un diálogo modal en medio de un lote desatendido
+            // lo frena hasta que alguien lo conteste, y el 05-sep pasó
+            // exactamente eso: algo pulsaba este botón solo y el cuadro
+            // aparecía una y otra vez, bloqueando la corrida.
+            //
+            // La protección real son las cuatro comprobaciones del cierre
+            // —resumen de verdad, saldo leído en cero, mensajes limpios, no
+            // sustitutiva—, no una pregunta que hay que contestar a mano.
+            this._aviso('🏁 Cerrando la declaración',
+                'Se valida el resumen y, si el saldo es $0 y no hay inconsistencias, se envía.', 5000);
             await window.sriAssistant.ejecutarCierreMagico();
         });
 
@@ -2273,7 +2281,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         const btnSiguiente = await waitFor(() => {
             const btn = document.getElementById('frmFlujoDeclaracion:btnObligacionSiguiente') ||
                         document.querySelector('button[id*="btnObligacionSiguiente"]') ||
-                        Array.from(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('SIGUIENTE'));
+                        soloDelPortal(document.querySelectorAll('button')).find(b => b.innerText.toUpperCase().includes('SIGUIENTE'));
             return (btn && !btn.disabled && esVisible(btn)) ? btn : null;
         }, 8000, 'Boton Siguiente Obligación');
 

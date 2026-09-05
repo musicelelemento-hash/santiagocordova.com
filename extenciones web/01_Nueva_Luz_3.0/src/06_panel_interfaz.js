@@ -1534,7 +1534,18 @@ class SriAssistantPanel {
                     // automático aunque el usuario lo hubiera puesto en REPOSO.
                     const isAutoFlow = await SriLoop.puedeAvanzar();
                     if (isAutoFlow) {
-                        this.log(`🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada con éxito. Comprobante guardado en R2.`);
+                        // Se pregunta al registro si el PDF llegó de verdad,
+                        // en vez de darlo por hecho.
+                        let respaldado = false;
+                        try {
+                            const guardadas = (await SafeStorage.get(['sc_declaraciones_locales']))
+                                .sc_declaraciones_locales || {};
+                            const reg = guardadas[`${info.ruc}|${targetPeriodStr}`];
+                            respaldado = !!(reg && reg.pdfSubido);
+                        } catch (e) { /* si no se puede saber, no se afirma */ }
+                        this.log(respaldado
+                            ? '🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada. Comprobante guardado en la nube.'
+                            : '🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada, pero el comprobante NO llegó a la nube. Queda pendiente de respaldo: mirá el botón 📊.');
                         this.showEliteToast({ title: '⏩ Misión Cumplida', msg: 'Declaración OK. Finalizando sesión...', duration: 3000 });
                         
                         setTimeout(async () => {
@@ -3284,7 +3295,7 @@ class SriAssistantPanel {
                              document.querySelector('button[id*="btnFormularioSiguiente"]') ||
                              document.querySelector('button[id*="btnSiguiente"]') ||
                              document.querySelector('button[id*="Siguiente"]') ||
-                             Array.from(document.querySelectorAll('button, a, span.ui-button-text')).find(el => (el.innerText || '').trim() === 'Siguiente')?.closest('button, a');
+                             soloDelPortal(document.querySelectorAll('button, a, span.ui-button-text')).find(el => (el.innerText || '').trim() === 'Siguiente')?.closest('button, a');
 
         if (btnSiguiente) {
             console.log('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
