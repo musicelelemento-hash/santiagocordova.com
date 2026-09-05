@@ -406,7 +406,27 @@ SafeStorage.get(null).then(async (items) => {
         // Antes se asumía "el mes pasado" y se esperaba a que el perfil dejara
         // de mostrar la obligación, que tarda ~20 min en actualizarse.
         try {
-            const pend = await SriApi.ivaPendiente();
+            let pend = await SriApi.ivaPendiente();
+
+            // Sin respuesta de la API -por ejemplo si el token todavía no está
+            // guardado-, se lee el panel desplegable del perfil, que es donde
+            // el SRI lo muestra al usuario.
+            if (!pend && typeof SriLoopHUD !== 'undefined' && location.href.includes('/contribuyente/perfil')) {
+                const delPanel = await SriLoopHUD.ivaDelPerfil();
+                if (delPanel) {
+                    pend = {
+                        periodo: delPanel.periodo,
+                        periodoTexto: delPanel.periodoTexto,
+                        vence: delPanel.vence,
+                        dias: undefined,
+                        estado: 'Por cumplir',
+                        urgencia: 'según el perfil',
+                        pendiente: true
+                    };
+                    console.log(`📋 [PERFIL] La API no contestó, pero el panel del perfil pide: ${delPanel.texto}`);
+                }
+            }
+
             if (pend) {
                 console.log(`📋 [SRI] IVA ${pend.periodoTexto} · vence ${pend.vence} ` +
                             `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);

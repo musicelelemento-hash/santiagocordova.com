@@ -915,6 +915,64 @@ ver su respuesta primero.**
 El token **nunca** se registra en consola, ni se guarda, ni sale del dominio del
 que salió. Solo viaja a `srienlinea.sri.gob.ec`.
 
+## 📌 Panel de próximas obligaciones (perfil) — está COLAPSADO
+
+En `https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil` hay un
+acordeón de Angular Material con las obligaciones que vienen. Cerrado muestra
+solo el resumen:
+
+```html
+<div _ngcontent-c10="" class="texto-movil">
+  Quedan 12 días y 3 horas para sus próximas obligaciones
+</div>
+```
+
+Y al desplegarlo aparece el detalle:
+
+```html
+<div class="mat-expansion-panel-body">
+  <ul _ngcontent-c10="" class="ng-star-inserted">
+    <li _ngcontent-c10=""> 2011  DECLARACION DE IVA - AGOSTO 2026 - 16/09/2026 </li>
+  </ul>
+</div>
+```
+
+### ⚠️ La trampa
+
+**Mientras el panel está cerrado, ese `<li>` NO EXISTE en el DOM.** Angular
+Material lo renderiza recién al abrirlo. Buscar «2011 DECLARACION DE IVA» en
+`document.body.textContent` sin desplegarlo antes **no encuentra nada**, y el
+bot pasa de largo sin enterarse de que hay una declaración pendiente.
+
+Es la misma familia de trampa que `offsetParent` con los modales: el elemento
+parece no estar cuando en realidad no se lo ha pedido bien.
+
+### Cómo leerlo
+
+1. Buscar la cabecera: `mat-expansion-panel-header` cuyo texto mencione
+   «obligaciones».
+2. Si `aria-expanded !== 'true'`, pulsarla y esperar (~700 ms).
+3. Leer los `<li>` de `.mat-expansion-panel-body`.
+4. Formato: `OBLIGACIÓN - PERÍODO - DD/MM/AAAA`, con el mes en mayúscula.
+
+Desplegar el panel es seguro: es informativo, no envía nada ni acepta nada.
+
+### Coincide con la API
+
+La misma sesión, por REST:
+
+```json
+{ "descripcionPeriodo": "AGOSTO 2026", "fechaVencimiento": "2026-09-16Z",
+  "dias": 12, "horas": 3, "estadoPresentacionDescripcion": "Por cumplir" }
+```
+
+«Quedan 12 días y 3 horas» ↔ `dias: 12, horas: 3`. Son la misma fuente. Por eso
+la extensión consulta las dos: la API necesita un token que puede no estar
+todavía; el panel está siempre que se esté en esa pantalla.
+
+Implementado en `07_navegacion_sri.js`: `leerObligacionesDelPerfil()` y
+`ivaDelPerfil()`.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

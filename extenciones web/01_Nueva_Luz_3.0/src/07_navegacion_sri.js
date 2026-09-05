@@ -452,6 +452,54 @@ const SriLoopHUD = {
      * decir nada: desde afuera parecía que se había ido por su cuenta.
      * Se muestra una sola vez por carga de página.
      */
+    /**
+     * Despliega el panel de próximas obligaciones y lee lo que dice.
+     * @returns {Promise<Array<{obligacion,periodo,vence,texto}>>}
+     */
+    async leerObligacionesDelPerfil() {
+        const cabecera = Array.from(document.querySelectorAll('mat-expansion-panel-header, .mat-expansion-panel-header'))
+            .find((h) => /obligacion/i.test(h.textContent || ''));
+
+        // Abrirlo si está cerrado. Es un panel informativo del propio
+        // contribuyente: desplegarlo no envía nada ni acepta nada.
+        if (cabecera && cabecera.getAttribute('aria-expanded') !== 'true') {
+            cabecera.click();
+            await sleep(700);
+        }
+
+        const cuerpos = Array.from(document.querySelectorAll('.mat-expansion-panel-body'));
+        const items = [];
+        for (const c of cuerpos) {
+            for (const li of Array.from(c.querySelectorAll('li'))) {
+                const t = (li.textContent || '').replace(/\s+/g, ' ').trim();
+                if (!t) continue;
+                // «2011  DECLARACION DE IVA - AGOSTO 2026 - 16/09/2026»
+                const m = t.match(/^(.+?)\s*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})\s*$/i);
+                if (m) {
+                    items.push({ obligacion: m[1].trim(), periodo: m[2].trim(), vence: m[3], texto: t });
+                } else {
+                    items.push({ obligacion: t, periodo: '', vence: '', texto: t });
+                }
+            }
+        }
+        return items;
+    },
+
+    /** La obligación de IVA del panel, traducida al periodo interno. */
+    async ivaDelPerfil() {
+        const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                       'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        for (const o of await this.leerObligacionesDelPerfil()) {
+            if (!/IVA/i.test(o.obligacion)) continue;
+            const p = o.periodo.toUpperCase().split(/\s+/);
+            const mi = MESES.indexOf(p[0]);
+            const anio = parseInt(p[1], 10);
+            if (mi < 0 || !anio) continue;
+            return { periodo: { year: anio, monthIndex: mi }, periodoTexto: o.periodo, vence: o.vence, texto: o.texto };
+        }
+        return null;
+    },
+
     async anunciarEnPerfil(e) {
         if (this._anunciado) return;
         if (e.estado !== 'CORRIENDO') return;
@@ -464,16 +512,29 @@ const SriLoopHUD = {
                        'agosto','septiembre','octubre','noviembre','diciembre'];
         const per = e.periodo ? `${MESES[e.periodo.monthIndex]} ${e.periodo.year}` : 'el periodo';
 
-        // Lo que el propio SRI muestra como pendiente en esta pantalla.
-        const txt = (document.body && document.body.textContent) || '';
-        const m = txt.match(/2011\s+DECLARACI[ÓO]N[^-]*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i);
+        // Del panel desplegable, que es donde el SRI lo dice de verdad.
+        const delPanel = await this.ivaDelPerfil();
 
         const quien = cliente.name ? String(cliente.name).split(' ').slice(0, 2).join(' ') : 'este contribuyente';
-        const detalle = m
-            ? `El SRI marca pendiente el IVA de ${m[1].toLowerCase()}, vence el ${m[2]}.`
+        const detalle = delPanel
+            ? `El SRI marca pendiente el IVA de ${delPanel.periodoTexto.toLowerCase()}, vence el ${delPanel.vence}.`
             : `Queda pendiente el IVA de ${per}.`;
 
         console.log(`📋 [PERFIL] ${detalle} Voy a declararlo para ${quien}.`);
+        if (delPanel) {
+            await anotarBitacora('el perfil pide', delPanel.texto);
+            // Que el plan de vuelo lo muestre aunque la API no haya contestado.
+            await SafeStorage.set({
+                sri_obligacion_actual: {
+                    periodo: delPanel.periodo,
+                    periodoTexto: delPanel.periodoTexto,
+                    vence: delPanel.vence,
+                    estado: 'Por cumplir',
+                    pendiente: true,
+                    origen: 'panel del perfil'
+                }
+            });
+        }
 
         if (window.sriAssistant && window.sriAssistant.showEliteToast) {
             window.sriAssistant.showEliteToast({
