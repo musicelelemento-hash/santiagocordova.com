@@ -231,6 +231,68 @@ if (typeof window !== 'undefined') {
  * ⚠️ NO usar `offsetParent !== null`: en Chrome todo elemento `position: fixed`
  * (modales PrimeFaces, Material, dialogs, toasts, pickers) tiene `offsetParent === null`.
  */
+/**
+ * ¿El wizard está armando una sustitutiva? Si lo dice el portal, ese período
+ * ya está declarado.
+ * @returns {{esSustitutiva: boolean, marca: string}}
+ */
+function tipoDeDeclaracionEnPantalla() {
+  const el = document.getElementById('frmFlujoDeclaracion:outMarcaDeclaracion')
+          || document.querySelector('[id$="outMarcaDeclaracion"]');
+  const marca = el ? (el.textContent || '').trim().toUpperCase() : '';
+  return { esSustitutiva: marca.includes('SUSTITUTIVA'), marca };
+}
+
+/**
+ * Corta el flujo si el portal marcó la declaración como sustitutiva.
+ * @returns {Promise<boolean>} true si hay que frenar.
+ */
+async function frenarSiEsSustitutiva(donde = '') {
+  const { esSustitutiva, marca } = tipoDeDeclaracionEnPantalla();
+  if (!esSustitutiva) return false;
+
+  console.error(`🛑 [SUSTITUTIVA] El portal marca esta declaración como "${marca}"${donde ? ' (' + donde + ')' : ''}. ` +
+                'Ese período YA fue declarado. El bot no presenta sustitutivas: se detiene.');
+
+  if (typeof anotarBitacora === 'function') {
+    await anotarBitacora('⛔ SUSTITUTIVA', `el portal marca "${marca}"${donde ? ' · ' + donde : ''}`);
+  }
+
+  try {
+    const af = (await SafeStorage.get(['pending_sri_autofill', 'workflowPeriod']));
+    const quien = af.pending_sri_autofill || {};
+    if (quien.ruc) {
+      if (typeof Omitidos !== 'undefined') {
+        await Omitidos.anotar(quien.ruc, 'ya_declarada', {
+          nombre: quien.name,
+          detalle: 'El portal abrió una SUSTITUTIVA: el período ya estaba declarado'
+        });
+      }
+      // Constancia local para que el lote no vuelva a intentarlo.
+      if (typeof SriLoop !== 'undefined' && af.workflowPeriod) {
+        await SriLoop.marcarDeclarado(quien.ruc, af.workflowPeriod, { nombre: quien.name });
+      }
+    }
+  } catch (e) { /* registrar nunca puede impedir el freno */ }
+
+  if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+    window.sriAssistant.showEliteToast({
+      title: '🛑 Ya estaba declarada',
+      msg: 'El portal abrió una <b>SUSTITUTIVA</b>: este período ya fue declarado. ' +
+           'No se toca nada. Una sustitutiva la decidís vos, no el bot.',
+      duration: 12000
+    });
+  }
+
+  // Se detiene el lote entero: si un cliente llegó hasta acá, algo falló antes
+  // y conviene mirarlo antes de seguir con los demás.
+  if (typeof SriLoop !== 'undefined') {
+    await SriLoop.detener('Se abrió una sustitutiva: el período ya estaba declarado');
+  }
+  await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+  return true;
+}
+
 function esVisible(el) {
   if (!el) return false;
   const cs = getComputedStyle(el);

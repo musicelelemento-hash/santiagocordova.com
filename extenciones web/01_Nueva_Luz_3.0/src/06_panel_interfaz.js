@@ -1457,6 +1457,13 @@ class SriAssistantPanel {
             // Si el saldo no se pudo leer, se frena: null nunca equivale a cero.
             const puedeEnviar = saldoConocido && totalValor === 0 && estadoMensajes !== 'con_inconsistencias';
 
+            // Última barrera: aunque todo lo demás dé bien, una sustitutiva no
+            // se envía nunca. El rótulo puede aparecer recién en el resumen.
+            if (typeof frenarSiEsSustitutiva === 'function' && await frenarSiEsSustitutiva('en el resumen')) {
+                this.log('🛑 Sustitutiva detectada en el resumen. NO se envía.');
+                return;
+            }
+
             if (puedeEnviar) {
                 this.log('💎 TODO PERFECTO. Saldo $0.00 y Sin Inconsistencias.');
                 this.setStatus('💎 Misión Cumplida - Enviando...');

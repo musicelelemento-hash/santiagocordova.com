@@ -215,7 +215,8 @@ const SriLoop = {
             'sri_auto_mode', 'autoDeclaration', 'sriAutomationPaused',
             'sri_master_switch_on', 'ghost_manual_mode', 'declaration_synced_flag',
             'summary_page_clicked', 'turboMode', 'checkFacturas', 'checkRetenciones',
-            'checkNC', 'skipSafetyCheck', 'sri_diagnostico_resumen'
+            'checkNC', 'skipSafetyCheck', 'sri_diagnostico_resumen',
+            'sri_verificacion_sello', 'sri_obligacion_actual'
         ];
         const antes = await SafeStorage.get(null);
         const habia = CLAVES.filter((k) => k in antes);
@@ -676,7 +677,8 @@ const Omitidos = {
         omitido_manual:     'Lo omitiste vos. Reintentá cuando quieras.',
         saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',
         identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
-        sin_datos:          'No se pudieron extraer comprobantes.'
+        sin_datos:          'No se pudieron extraer comprobantes.',
+        ya_declarada:       'El periodo ya estaba declarado: el portal abrio una sustitutiva. Si hay que corregirla, hacela vos.'
     },
 
     async anotar(ruc, motivo, extra = {}) {

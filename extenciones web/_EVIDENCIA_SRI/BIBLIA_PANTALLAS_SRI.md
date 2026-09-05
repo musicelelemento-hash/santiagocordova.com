@@ -973,6 +973,53 @@ todavía; el panel está siempre que se esté en esa pantalla.
 Implementado en `07_navegacion_sri.js`: `leerObligacionesDelPerfil()` y
 `ivaDelPerfil()`.
 
+## 🛑 Tipo de declaración — ORIGINAL vs SUSTITUTIVA
+
+Confirmado el 04-sep-2026 en una corrida real. La cabecera del wizard rotula
+qué está armando el portal:
+
+```html
+<div class="ui-g-12 ui-md-4 ui-lg-6 sinMargenIzquierdo borde-inferior">
+  <label id="frmFlujoDeclaracion:lblTipoDeclaracion" class="labelCabecera">Tipo declaración:</label>
+  <br><span id="frmFlujoDeclaracion:outMarcaDeclaracion" class="datoCabecera">SUSTITUTIVA</span>
+</div>
+```
+
+El mismo `outMarcaDeclaracion` aparece también en la pantalla de preguntas.
+
+### Por qué es la señal más importante del wizard
+
+**«SUSTITUTIVA» significa que ese período YA FUE DECLARADO** y el portal está
+preparando un reemplazo de la declaración existente.
+
+En la corrida que lo destapó, el bot llenó el formulario entero y llegó hasta
+«Confirmando envío en diálogo» sobre una sustitutiva. **Solo no se envió porque
+no encontró el botón.** El usuario tuvo que frenarlo a mano.
+
+### 🚫 Regla
+
+El bot **nunca** presenta una sustitutiva. Corrige una declaración que el SRI ya
+aceptó, puede cambiar valores presentados y es una decisión del contador.
+
+`frenarSiEsSustitutiva()` se consulta **antes de llenar** y **antes de enviar**.
+Al detectarla: no toca nada, deja constancia, marca el período como declarado
+para que el lote no vuelva, y **detiene el lote entero** — si un cliente llegó
+hasta ahí, algo falló antes y hay que mirarlo.
+
+---
+
+## 💰 Saldo del resumen — más IDs confirmados
+
+De la misma corrida, en la pantalla de pago:
+
+| ID | Contenido |
+| :--- | :--- |
+| `frmFlujoDeclaracion:pagValoresRemision` | La tabla entera de valores |
+| `frmFlujoDeclaracion:outTotalPagarSinRemision` | `USD 0.00` |
+| `frmFlujoDeclaracion:outTotalPagarConRemision` | `USD 0.00` |
+
+Son alternativas a `concepto2610`, y vienen con el prefijo `USD`.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

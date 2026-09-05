@@ -60,6 +60,9 @@ async function calculateEliteFinancials(targetField) {
 // ============================================
 
 async function autoLlenarFormulario(data) {
+    // Lo primero, antes de tocar un solo casillero.
+    if (typeof frenarSiEsSustitutiva === 'function' && await frenarSiEsSustitutiva('antes de llenar')) return;
+
     console.group('🔥 SRI Llenado Maestro v9.0 ELITE');
     let total = 0;
 

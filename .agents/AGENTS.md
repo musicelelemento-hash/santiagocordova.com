@@ -72,6 +72,23 @@ El SRI inyecta "Valores Sugeridos" oficiales en ciertos casilleros (ej. **615** 
 
 ---
 
+## 3a. El bot NUNCA presenta una sustitutiva
+
+La cabecera del wizard rotula el tipo en
+`#frmFlujoDeclaracion:outMarcaDeclaracion`. Si dice **SUSTITUTIVA**, ese
+período **ya fue declarado** y el portal está armando un reemplazo.
+
+Una sustitutiva corrige una declaración que el SRI ya aceptó: es una decisión
+del contador, no del software. `frenarSiEsSustitutiva()` se llama **antes de
+llenar** y **antes de enviar**; al detectarla no se toca nada y se detiene el
+lote entero.
+
+Pasó de verdad el 04-sep-2026: el bot llenó el formulario y llegó a
+«Confirmando envío en diálogo» sobre una sustitutiva. Solo no se envió porque
+no encontró el botón.
+
+---
+
 ## 3b. Nunca saltarse un contribuyente por un aviso
 
 El endpoint `alertas/vencimiento` dice si una obligación figura como

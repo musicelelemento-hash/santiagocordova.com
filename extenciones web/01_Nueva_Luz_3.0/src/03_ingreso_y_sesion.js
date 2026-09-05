@@ -394,6 +394,24 @@ SafeStorage.get(null).then(async (items) => {
             delete cont[items.pending_sri_autofill.ruc];
             await SafeStorage.set({ sc_rescates: cont });
         }
+        // 👋 Saludo y verificación: primero el perfil, siempre.
+        // Si todavía no comprobamos las obligaciones de este cliente, se pasa
+        // por el perfil antes que por ninguna otra cosa.
+        const quienEntro = items.pending_sri_autofill || {};
+        const selloEsperado = quienEntro.ruc && items.workflowPeriod
+            ? `${quienEntro.ruc}|${items.workflowPeriod.year}-${String(items.workflowPeriod.monthIndex + 1).padStart(2, '0')}`
+            : null;
+
+        if (selloEsperado &&
+            items.pendingAction !== 'recuperar_comprobante' &&
+            items.sri_verificacion_sello !== selloEsperado &&
+            !location.href.includes('/contribuyente/perfil')) {
+            console.log(`👋 [PERFIL] Antes de nada, verifico las obligaciones de ${quienEntro.name || quienEntro.ruc}.`);
+            await SafeStorage.set({ actionTimestamp: Date.now() });
+            window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil';
+            return;
+        }
+
         // 🧾 Este cliente solo necesita su comprobante: no se le declara nada.
         if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante) {
             console.log('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
@@ -480,8 +498,31 @@ SafeStorage.get(null).then(async (items) => {
                     console.log(`📋 [SRI] Período tomado del portal: ${pend.periodoTexto}.`);
                 }
                 await SafeStorage.set({ sri_obligacion_actual: pend });
+                if (selloEsperado) await SafeStorage.set({ sri_verificacion_sello: selloEsperado });
+            } else if (location.href.includes('/contribuyente/perfil')) {
+                // Estamos EN el perfil y no figura ninguna obligación de IVA.
+                // Eso es lo que el usuario describe: «si no sale nada de
+                // pendientes, entonces ya se la hizo». No se declara a ciegas:
+                // se comprueba en la lista de presentadas y de paso se trae el
+                // comprobante, que es lo que faltaba.
+                console.log('📋 [PERFIL] No figura ninguna obligación de IVA pendiente.');
+                await anotarBitacora('sin obligaciones', 'el perfil no muestra IVA pendiente');
+
+                if (quienEntro.ruc && items.workflowPeriod && typeof irARecuperarComprobante === 'function') {
+                    if (window.sriAssistant?.showEliteToast) {
+                        window.sriAssistant.showEliteToast({
+                            title: '✅ Sin pendientes',
+                            msg: `${quienEntro.name || quienEntro.ruc} no tiene IVA pendiente. ` +
+                                 'Voy a confirmarlo y a traer su comprobante.',
+                            duration: 7000
+                        });
+                    }
+                    if (selloEsperado) await SafeStorage.set({ sri_verificacion_sello: selloEsperado });
+                    await irARecuperarComprobante(quienEntro.ruc, items.workflowPeriod, quienEntro.name);
+                    return;
+                }
             } else {
-                console.log('📋 [SRI] El portal no muestra ninguna obligación de IVA a la vista.');
+                console.log('📋 [SRI] Todavía no estamos en el perfil; no se concluye nada.');
             }
         } catch (e) { /* la consulta nunca puede frenar el flujo */ }
 
