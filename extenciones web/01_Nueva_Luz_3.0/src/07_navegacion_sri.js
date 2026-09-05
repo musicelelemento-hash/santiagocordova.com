@@ -556,6 +556,81 @@ const SriLoopHUD = {
         return null;
     },
 
+    /**
+     * Tarjeta de saludo. Se cierra sola, o con un click, o con Escape.
+     * @param {{titulo,nombre,veredicto,detalle,pasos,paso,total,color}} d
+     */
+    mostrarSaludo(d) {
+        document.getElementById('sc-saludo')?.remove();
+        if (typeof instalarEstilosSC === 'function') instalarEstilosSC();
+
+        if (!document.getElementById('sc-saludo-anim')) {
+            const st = document.createElement('style');
+            st.id = 'sc-saludo-anim';
+            st.textContent = [
+                '@keyframes sc-sube{from{opacity:0;transform:translate(-50%,-42%) scale(.94)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}',
+                '@keyframes sc-baja{to{opacity:0;transform:translate(-50%,-56%) scale(.97)}}',
+                '@keyframes sc-fila{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}',
+                '@keyframes sc-halo{0%,100%{box-shadow:0 0 0 0 rgba(125,211,252,.35)}50%{box-shadow:0 0 0 12px rgba(125,211,252,0)}}',
+                '#sc-saludo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);',
+                '  z-index:2147483647;width:min(420px,86vw);max-height:86vh;overflow:auto;',
+                '  padding:22px 24px;animation:sc-sube .42s cubic-bezier(.22,1,.36,1) both}',
+                '#sc-saludo.sc-yendose{animation:sc-baja .3s ease-in forwards}',
+                '#sc-saludo .sc-fila{animation:sc-fila .35s ease-out both}',
+                '#sc-saludo .sc-avatar{animation:sc-halo 2.4s ease-in-out infinite}'
+            ].join('');
+            document.head.appendChild(st);
+        }
+
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const color = d.color || 'var(--sc-activo)';
+        const el = document.createElement('div');
+        el.id = 'sc-saludo';
+        el.className = 'sc-panel';
+
+        const pasos = (d.pasos || []).map((p, i) => `
+            <div class="sc-fila" style="display:flex;gap:9px;align-items:center;padding:3px 0;
+                 font-size:11.5px;color:var(--sc-suave);animation-delay:${0.35 + i * 0.09}s">
+              <span style="width:6px;height:6px;border-radius:50%;background:${color};flex:0 0 6px;opacity:.75"></span>
+              <span>${esc(p)}</span>
+            </div>`).join('');
+
+        const contador = (d.total > 1)
+            ? `<div style="font-size:10px;color:var(--sc-tenue);font-weight:800;letter-spacing:.08em">
+                 CLIENTE ${d.paso} DE ${d.total}</div>`
+            : '';
+
+        el.innerHTML = `
+          <div style="display:flex;gap:14px;align-items:flex-start">
+            <div class="sc-avatar" style="width:42px;height:42px;border-radius:50%;flex:0 0 42px;
+                 display:grid;place-items:center;font-size:20px;
+                 background:rgba(125,211,252,.14);border:1px solid ${color}">${d.titulo || '👋'}</div>
+            <div style="flex:1;min-width:0">
+              ${contador}
+              <div style="font-size:15px;font-weight:900;margin:2px 0 1px;line-height:1.25">${esc(d.nombre)}</div>
+              <div style="font-size:11.5px;color:${color};font-weight:800">${esc(d.veredicto)}</div>
+              ${d.detalle ? `<div style="font-size:11px;color:var(--sc-suave);margin-top:5px;line-height:1.45">${esc(d.detalle)}</div>` : ''}
+            </div>
+          </div>
+          ${pasos ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--sc-borde)">${pasos}</div>` : ''}
+          <div style="margin-top:12px;font-size:9.5px;color:var(--sc-tenue);text-align:right">
+            click para cerrar
+          </div>`;
+
+        document.body.appendChild(el);
+
+        const cerrar = () => {
+            el.classList.add('sc-yendose');
+            setTimeout(() => el.remove(), 320);
+            document.removeEventListener('keydown', porTecla);
+        };
+        const porTecla = (ev) => { if (ev.key === 'Escape') cerrar(); };
+        el.addEventListener('click', cerrar);
+        document.addEventListener('keydown', porTecla);
+        setTimeout(() => { if (document.body.contains(el)) cerrar(); }, d.duracion || 9000);
+        return el;
+    },
+
     async anunciarEnPerfil(e) {
         if (this._anunciado) return;
         if (e.estado !== 'CORRIENDO') return;
@@ -577,6 +652,46 @@ const SriLoopHUD = {
             : `Queda pendiente el IVA de ${per}.`;
 
         console.log(`📋 [PERFIL] ${detalle} Voy a declararlo para ${quien}.`);
+
+        const total = (e.cola || []).length;
+        const hora = new Date().getHours();
+        const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+        const v = await this.veredictoDelPerfil();
+
+        const guiones = {
+            declarar: {
+                titulo: '📋', color: 'var(--sc-activo)',
+                veredicto: delPanel ? `IVA de ${delPanel.periodoTexto.toLowerCase()} · vence el ${delPanel.vence}` : 'Tiene una declaración pendiente',
+                pasos: ['Traer los comprobantes recibidos', 'Llenar el formulario',
+                        'Verificar que el saldo sea $0', 'Enviar y guardar el comprobante']
+            },
+            ya_declarada: {
+                titulo: '✅', color: 'var(--sc-ok)',
+                veredicto: 'Ya declaró este período',
+                detalle: 'Tiene la obligación de IVA y no figura ninguna pendiente. No se declara de nuevo.',
+                pasos: ['Confirmar en Consulta de declaraciones', 'Bajar el comprobante', 'Guardarlo en la nube']
+            },
+            no_declara_iva: {
+                titulo: '🚫', color: 'var(--sc-alerta)',
+                veredicto: 'No declara IVA',
+                detalle: v.motivo, pasos: ['Queda en la lista de omitidos', 'Sigo con el próximo']
+            },
+            no_concluyo: {
+                titulo: '👋', color: 'var(--sc-suave)',
+                veredicto: 'Revisando sus obligaciones…',
+                pasos: ['Leer qué pide el SRI', 'Decidir qué corresponde']
+            }
+        };
+        const g = guiones[v.veredicto] || guiones.no_concluyo;
+
+        this.mostrarSaludo({
+            titulo: g.titulo, color: g.color,
+            nombre: `${saludo}, ${quien}`,
+            veredicto: g.veredicto,
+            detalle: g.detalle,
+            pasos: g.pasos,
+            paso: (e.indice || 0) + 1, total
+        });
         if (delPanel) {
             await anotarBitacora('el perfil pide', delPanel.texto);
             // Que el plan de vuelo lo muestre aunque la API no haya contestado.
@@ -592,13 +707,6 @@ const SriLoopHUD = {
             });
         }
 
-        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
-            window.sriAssistant.showEliteToast({
-                title: '📋 Declaración pendiente',
-                msg: `${detalle}<br><br>Voy a traer los comprobantes recibidos, llenar el formulario y verificar el saldo antes de enviar.`,
-                duration: 7000
-            });
-        }
     },
 
     /** ¿En qué fase estamos? Se deduce de la URL y del estado guardado. */
