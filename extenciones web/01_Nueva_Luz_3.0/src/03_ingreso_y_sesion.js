@@ -402,6 +402,30 @@ SafeStorage.get(null).then(async (items) => {
             return;
         }
 
+        // 📋 Qué pide el SRI para este contribuyente, dicho por el portal.
+        // Antes se asumía "el mes pasado" y se esperaba a que el perfil dejara
+        // de mostrar la obligación, que tarda ~20 min en actualizarse.
+        try {
+            const pend = await SriApi.ivaPendiente();
+            if (pend) {
+                console.log(`📋 [SRI] IVA ${pend.periodoTexto} · vence ${pend.vence} ` +
+                            `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);
+                await anotarBitacora('el SRI pide', `IVA ${pend.periodoTexto} · ${pend.estado}`);
+
+                if (!pend.pendiente) {
+                    console.log('✅ [SRI] El portal ya la da por presentada. No se declara de nuevo.');
+                } else if (!items.workflowPeriod) {
+                    // Sin período fijado por el lote, el del portal es el bueno.
+                    items.workflowPeriod = pend.periodo;
+                    await SafeStorage.set({ workflowPeriod: pend.periodo });
+                    console.log(`📋 [SRI] Período tomado del portal: ${pend.periodoTexto}.`);
+                }
+                await SafeStorage.set({ sri_obligacion_actual: pend });
+            } else {
+                console.log('📋 [SRI] El portal no muestra ninguna obligación de IVA a la vista.');
+            }
+        } catch (e) { /* la consulta nunca puede frenar el flujo */ }
+
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
@@ -499,9 +523,25 @@ async function ejecutarAccionPendiente(items) {
 
     // 🪪 La sesión abierta debe ser la del cliente que el lote está declarando.
     if (esDeLote && items.pending_sri_autofill?.ruc) {
-        const enPantalla = (window.sriAssistant && window.sriAssistant.extractClientInfo)
-            ? window.sriAssistant.extractClientInfo() : {};
         const esperado = items.pending_sri_autofill.ruc;
+
+        // Prueba dura: el propio portal dice quién está adentro.
+        let enPantalla = {};
+        try {
+            const p = await SriApi.perfil();
+            if (p && p.identificacion) {
+                enPantalla = { ruc: String(p.identificacion), highConfidence: true };
+                if (enPantalla.ruc !== esperado) {
+                    console.error(`🪪 [IDENTIDAD] El portal dice que la sesión es de ${enPantalla.ruc}, ` +
+                                  `y el lote espera a ${esperado}.`);
+                }
+            }
+        } catch (e) { /* sin API, seguimos con la cabecera */ }
+
+        if (!enPantalla.ruc && window.sriAssistant && window.sriAssistant.extractClientInfo) {
+            enPantalla = window.sriAssistant.extractClientInfo() || {};
+        }
+
         if (enPantalla.ruc && enPantalla.highConfidence && enPantalla.ruc !== esperado) {
             console.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
                           'No se toca nada: se cierra sesión para que entre el cliente correcto.');

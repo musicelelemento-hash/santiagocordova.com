@@ -506,11 +506,21 @@ const SriLoopHUD = {
                        'agosto','septiembre','octubre','noviembre','diciembre'];
         const per = e.periodo ? `${MESES[e.periodo.monthIndex]} ${e.periodo.year}` : '';
 
-        // Lo que pide el SRI: la obligación detectada en pantalla.
+        // Lo que pide el SRI. Primero lo que dijo su propia API; el texto de
+        // la pantalla queda como respaldo.
         let exige = '';
+        try {
+            const ob = (await SafeStorage.get(['sri_obligacion_actual'])).sri_obligacion_actual;
+            if (ob && ob.periodoTexto) {
+                exige = `IVA ${String(ob.periodoTexto).toLowerCase()} · vence ${ob.vence}` +
+                        (ob.dias !== undefined ? ` (${ob.dias} días)` : '');
+            }
+        } catch (e) { /* respaldo abajo */ }
         const txt = (document.body && document.body.textContent) || '';
-        const m = txt.match(/2011\s+DECLARACI[ÓO]N[^-]*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i);
-        if (m) exige = `IVA ${m[1].toLowerCase()} · vence ${m[2]}`;
+        if (!exige) {
+            const m = txt.match(/2011\s+DECLARACI[ÓO]N[^-]*-\s*([A-ZÁÉÍÓÚÑ]+\s+\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/i);
+            if (m) exige = `IVA ${m[1].toLowerCase()} · vence ${m[2]}`;
+        }
 
         const filas = this.FASES.map((f, k) => {
             const hecho = k < i, activo = k === i;

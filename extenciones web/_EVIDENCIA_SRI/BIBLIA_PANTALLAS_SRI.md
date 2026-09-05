@@ -799,6 +799,79 @@ por texto: hay un interruptor que el portal mismo enciende y apaga.
 - `MAXIMO_TAMANIO_ARCHIVO = 4194304` (4 MB) para el anexo.
 - `CONCEPTOS_EXCEPCION_ICE = ["142", "146", "450"]`.
 
+## 🔌 La API REST del portal — JSON en vez de raspar HTML
+
+Confirmada el 04-sep-2026 en las trazas `comparacion _3` y
+`prueba_2_nueva_luz_ciclo_completo`. El portal expone endpoints JSON que hasta
+ahora suplíamos leyendo el DOM.
+
+**Todos piden `Authorization: bearer <JWT>`** además de la cookie de sesión. El
+token lo guarda la SPA de Angular; el content script comparte el
+almacenamiento del origen, así que puede leerlo.
+
+### Los que sirven
+
+```
+GET /sri-catastro-sujeto-servicio-internet/rest/privado/contribuyente/perfil
+→ { codigo, mensaje, tipoContribuyente, identificacion, nombreCompleto, genero }
+```
+
+**`identificacion` es el RUC de quien está realmente en la sesión.** Es la
+prueba dura para la guarda de identidad: no depende de que la cabecera del
+portal mantenga su HTML.
+
+```
+GET /sri-obligacion-beneficio-servicio-internet/rest/privado/obligaciones/tributarias/vigentes
+→ [{ descripcionObligacion: "2011  DECLARACION DE IVA",
+     descripcionPeriodicidad: "MENSUAL",
+     fechaInicio: "2022-01-01Z" }]
+```
+
+Ojo: `descripcionObligacion` trae **dos espacios** entre el código y el texto.
+
+```
+GET /sri-obligacion-beneficio-servicio-internet/rest/privado/alertas/vencimiento
+→ { obligacionesVencidas: [],
+    obligacionesPorVencerDia: [],
+    obligacionesPorVencerQuincena: [{
+      descripcionObligacionTributaria: "2011  DECLARACION DE IVA",
+      descripcionPeriodo: "AGOSTO 2026",
+      fechaVencimiento: "2026-09-14Z",
+      dias: 10, horas: 16, minutos: 11,
+      estadoPresentacionDescripcion: "Por cumplir"
+    }],
+    obligacionesPorVencerMes: [] }
+```
+
+**Este es el importante.** Dice, sin ambigüedad:
+
+- **qué período toca** (`descripcionPeriodo`), en vez de suponer «el mes pasado»
+- **cuándo vence** y cuántos días faltan
+- **si ya se presentó** (`estadoPresentacionDescripcion`)
+
+Antes había que esperar los ~20 minutos que el portal tarda en quitar la
+obligación del perfil para saber si una declaración había entrado.
+
+### Otros vistos, sin explorar
+
+```
+/sri-claves-servicio-internet/rest/privado/Verificar/vigencia
+/sri-claves-servicio-internet/rest/privado/contingencia/verificarCambioClaveUsuario
+/sri-claves-servicio-internet/rest/privado/medioContacto/obtenerMediosContacto
+/sri-deudas-servicio-internet/rest/privado/consultaDeuda/existeDeudaFirme?identificacion=<RUC>
+/sri-buzon-servicio-internet/rest/privado/documentoBuzon/obtenerNumeroDeNotificaciones
+```
+
+`verificarCambioClaveUsuario` es candidato a reemplazar la detección por DOM de
+la pantalla de cambio de clave obligatorio. `existeDeudaFirme` podría avisar de
+deudas antes de declarar. **Ninguno está calibrado: no construir sobre ellos sin
+ver su respuesta primero.**
+
+### 🛑 Regla
+
+El token **nunca** se registra en consola, ni se guarda, ni sale del dominio del
+que salió. Solo viaja a `srienlinea.sri.gob.ec`.
+
 ---
 
 ## 🎯 Estado de Calibración: COMPLETO

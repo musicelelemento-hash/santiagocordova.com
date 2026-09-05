@@ -747,6 +747,112 @@ if (typeof window !== 'undefined') {
     window.sriOmitidosLimpiar = () => Omitidos.limpiar();
 }
 
+const SriApi = {
+    BASE: 'https://srienlinea.sri.gob.ec',
+
+    /** Un JWT del portal guardado por la SPA. Devuelve null si no hay sesión. */
+    _token() {
+        const pinta = (v) => typeof v === 'string' && /^ey[A-Za-z0-9_-]{10,}\./.test(v);
+        for (const almacen of [sessionStorage, localStorage]) {
+            try {
+                for (let i = 0; i < almacen.length; i++) {
+                    const bruto = almacen.getItem(almacen.key(i));
+                    if (!bruto) continue;
+                    if (pinta(bruto)) return bruto;
+                    // Keycloak suele guardarlo dentro de un JSON.
+                    if (bruto.startsWith('{')) {
+                        try {
+                            const o = JSON.parse(bruto);
+                            for (const k of ['access_token', 'accessToken', 'token', 'id_token']) {
+                                if (pinta(o[k])) return o[k];
+                            }
+                        } catch (e) { /* no era JSON */ }
+                    }
+                }
+            } catch (e) { /* almacenamiento bloqueado */ }
+        }
+        return null;
+    },
+
+    async _get(ruta) {
+        const token = this._token();
+        if (!token) { console.warn('🔌 [API SRI] No hay token de sesión todavía.'); return null; }
+        try {
+            const r = await fetch(this.BASE + ruta, {
+                credentials: 'include',
+                headers: { Accept: 'application/json', Authorization: 'bearer ' + token }
+            });
+            if (!r.ok) { console.warn(`🔌 [API SRI] ${ruta} devolvió HTTP ${r.status}.`); return null; }
+            return await r.json();
+        } catch (e) {
+            console.warn(`🔌 [API SRI] Falló ${ruta}:`, e.message);
+            return null;
+        }
+    },
+
+    /** Quién está realmente dentro de la sesión. Más fiable que leer la cabecera. */
+    async perfil() {
+        return this._get('/sri-catastro-sujeto-servicio-internet/rest/privado/contribuyente/perfil');
+    },
+
+    async obligacionesVigentes() {
+        return this._get('/sri-obligacion-beneficio-servicio-internet/rest/privado/obligaciones/tributarias/vigentes');
+    },
+
+    async alertas() {
+        return this._get('/sri-obligacion-beneficio-servicio-internet/rest/privado/alertas/vencimiento');
+    },
+
+    /**
+     * Qué declaración de IVA le toca a quien está logueado, según el propio
+     * portal: período, vencimiento y si ya la presentó. Reemplaza suponer
+     * "el mes pasado" y esperar a que el perfil deje de pedirla.
+     */
+    async ivaPendiente() {
+        const a = await this.alertas();
+        if (!a) return null;
+
+        const MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO',
+                       'AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        const grupos = [
+            ['vencida', a.obligacionesVencidas],
+            ['hoy', a.obligacionesPorVencerDia],
+            ['esta quincena', a.obligacionesPorVencerQuincena],
+            ['este mes', a.obligacionesPorVencerMes]
+        ];
+
+        for (const [urgencia, lista] of grupos) {
+            for (const o of (lista || [])) {
+                if (!/IVA/i.test(o.descripcionObligacionTributaria || '')) continue;
+                const partes = String(o.descripcionPeriodo || '').trim().toUpperCase().split(/\s+/);
+                const mi = MESES.indexOf(partes[0]);
+                const anio = parseInt(partes[1], 10);
+                if (mi < 0 || !anio) continue;
+                return {
+                    periodo: { year: anio, monthIndex: mi },
+                    periodoTexto: o.descripcionPeriodo,
+                    vence: (o.fechaVencimiento || '').slice(0, 10),
+                    dias: o.dias,
+                    estado: o.estadoPresentacionDescripcion || '',
+                    urgencia,
+                    // El portal dice "Por cumplir" mientras siga pendiente.
+                    pendiente: !/present|cumplid/i.test(o.estadoPresentacionDescripcion || '')
+                };
+            }
+        }
+        return null;   // nada de IVA a la vista
+    }
+};
+
+if (typeof window !== 'undefined') {
+    window.sriApiPerfil = () => SriApi.perfil().then((r) => { console.log(r); return r; });
+    window.sriApiPendiente = () => SriApi.ivaPendiente().then((r) => {
+        if (!r) console.log('🔌 Sin IVA pendiente a la vista (o sin sesión).');
+        else console.log(`🔌 IVA ${r.periodoTexto} · vence ${r.vence} (${r.dias} días) · ${r.estado}`);
+        return r;
+    });
+}
+
 function anotarBitacora(evento, detalle = '') {
     try { return Bitacora.anotar(evento, detalle); } catch (e) { /* aún no existe */ }
 }
