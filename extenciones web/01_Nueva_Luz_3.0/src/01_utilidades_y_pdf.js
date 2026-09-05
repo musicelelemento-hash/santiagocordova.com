@@ -1189,6 +1189,54 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
   throw new Error("No se pudo subir a Cloudflare R2");
 }
 
+/**
+ * ¿Sube el comprobante? Lo prueba con un archivo mínimo por el mismo camino.
+ * Uso: sriProbarSubida() en la consola de cualquier pestaña del SRI.
+ */
+async function probarSubida() {
+  const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
+  console.log('🧪 Probando la subida con un archivo mínimo...');
+
+  let r;
+  try {
+    r = await chrome.runtime.sendMessage({ tipo: 'SC_DIAGNOSTICO_SUBIDA', config: cfg });
+  } catch (e) {
+    console.error('❌ No se pudo hablar con el service worker:', e.message);
+    console.error('   Recargá la extensión en chrome://extensions y volvé a probar.');
+    return null;
+  }
+
+  if (!r) { console.error('❌ El service worker no respondió nada.'); return null; }
+
+  console.log('── Configuración ──');
+  console.table([{
+    'Worker relay': r.configurado.worker ? '✅ configurado' : '❌ falta',
+    'Claves S3': r.configurado.s3 ? '✅ presentes' : '❌ faltan',
+    'Bucket': r.configurado.bucket
+  }]);
+
+  console.log('── Qué pasó en cada intento ──');
+  console.table(r.intentos.map((i) => ({
+    via: i.via,
+    resultado: i.omitido ? '⏭️ ' + i.omitido
+             : i.error ? '❌ ' + i.error
+             : i.ok ? '✅ subió'
+             : `❌ HTTP ${i.estado}`,
+    detalle: (i.respuesta || '').slice(0, 80) || (i.url || '')
+  })));
+
+  if (r.ok) {
+    console.log(`✅ LA SUBIDA FUNCIONA (vía ${r.via}).`, r.url);
+    console.log('   El comprobante de una declaración va a llegar a la nube.');
+  } else {
+    console.error('❌ LA SUBIDA NO FUNCIONA por ningún camino.');
+    console.error('   Los comprobantes NO se están guardando en la nube.');
+  }
+  return r;
+}
+
+if (typeof window !== 'undefined') window.sriProbarSubida = () => probarSubida();
+
 // ── CONSULTAR SI EL PDF YA ESTÁ EN R2 O EN SUPABASE ─────────────────────────
 async function checkDeclarationPdfInDb(ruc, targetPeriodStr) {
   if (!ruc) return { exists: false, pdfUrl: null };

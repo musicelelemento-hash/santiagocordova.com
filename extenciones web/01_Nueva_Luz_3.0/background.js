@@ -27,6 +27,72 @@ function base64ABytes(base64) {
  * Orden deliberado: el Worker primero, porque no necesita credenciales en el
  * cliente. La subida S3 directa queda de respaldo.
  */
+/**
+ * Prueba la subida con un archivo mínimo y devuelve QUÉ pasó en cada intento.
+ * El detalle vuelve al que preguntó: los console.log del service worker viven
+ * en su propia consola y en la práctica nadie los mira.
+ *
+ * Nunca devuelve claves ni secretos, solo si están presentes.
+ */
+async function diagnosticarSubida(config) {
+  const informe = {
+    ok: false,
+    configurado: {
+      worker: !!config.R2_UPLOAD_ENDPOINT,
+      s3: !!(config.R2_ACCOUNT_ID && config.R2_ACCESS_KEY_ID && config.R2_SECRET_ACCESS_KEY && config.R2_BUCKET_NAME),
+      bucket: config.R2_BUCKET_NAME || '(sin definir)',
+      endpointWorker: config.R2_UPLOAD_ENDPOINT || '(sin definir)'
+    },
+    intentos: []
+  };
+
+  const key = `diagnostico/prueba-${Date.now()}.txt`;
+  const cuerpo = new Blob(['prueba de subida de Nueva Luz'], { type: 'text/plain' });
+
+  // ── Worker relay ──
+  if (config.R2_UPLOAD_ENDPOINT) {
+    const url = `${config.R2_UPLOAD_ENDPOINT}/upload/${key}`;
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: cuerpo });
+      const texto = await res.text().catch(() => '');
+      informe.intentos.push({
+        via: 'worker', url, estado: res.status, ok: res.ok,
+        respuesta: texto.slice(0, 200)
+      });
+      if (res.ok) {
+        informe.ok = true;
+        informe.via = 'worker';
+        try { informe.url = (JSON.parse(texto) || {}).url; } catch (e) {}
+        informe.url = informe.url || `${config.R2_UPLOAD_ENDPOINT}/files/${key}`;
+      }
+    } catch (e) {
+      informe.intentos.push({ via: 'worker', url, error: e.message });
+    }
+  } else {
+    informe.intentos.push({ via: 'worker', omitido: 'no hay R2_UPLOAD_ENDPOINT configurado' });
+  }
+
+  // ── S3 directo, solo si el Worker no funcionó ──
+  if (!informe.ok) {
+    if (informe.configurado.s3) {
+      try {
+        const r = await subirComprobante({
+          key, base64: 'data:text/plain;base64,' + btoa('prueba de subida de Nueva Luz'),
+          contentType: 'text/plain', config: { ...config, R2_UPLOAD_ENDPOINT: '' }
+        });
+        informe.intentos.push({ via: 's3', ok: !!(r && r.ok), url: r && r.url });
+        if (r && r.ok) { informe.ok = true; informe.via = 's3'; informe.url = r.url; }
+      } catch (e) {
+        informe.intentos.push({ via: 's3', error: e.message });
+      }
+    } else {
+      informe.intentos.push({ via: 's3', omitido: 'faltan credenciales de R2' });
+    }
+  }
+
+  return informe;
+}
+
 async function subirComprobante({ key, base64, contentType, config }) {
   const bytes = base64ABytes(base64);
   const cuerpo = new Blob([bytes], { type: contentType || "application/pdf" });
@@ -137,6 +203,13 @@ chrome.runtime.onMessage.addListener((msg, sender, responder) => {
       .then(responder)
       .catch((e) => responder({ ok: false, error: e.message }));
     return true; // respuesta asíncrona
+  }
+
+  if (msg.tipo === "SC_DIAGNOSTICO_SUBIDA") {
+    diagnosticarSubida(msg.config || {})
+      .then(responder)
+      .catch((e) => responder({ ok: false, error: e.message }));
+    return true;
   }
 
   if (msg.tipo === "SC_FETCH") {
