@@ -75,14 +75,48 @@
   push('crédito que habría inflado: 15% de 1000',
        +(r.iva15.baseImponible*0.15).toFixed(2), 0);
 
-  // ══ D · lo mezclado se cuenta, pero se marca ════════════════════════════
-  sec('D · las facturas sin tarifa reconocible');
-  r = calcularResumen([F(100,15), F(400,30)]);   // la segunda: 7.5%, mezclada
-  push('se anota como dudosa',                      r.ambiguas.length, 1);
-  push('con su base y su IVA a la vista',
-       [r.ambiguas[0].base, r.ambiguas[0].iva], [400,30]);
-  // No se descarta: si se cayera del resumen, la declaración saldría corta.
-  push('pero su plata NO se pierde del total',      r.iva15.baseImponible, 500);
+  // ══ D · las mezcladas: aritmética, no adivinanza ════════════════════════
+  // Números REALES de la corrida del 06-sep-2026. Son tickets de Supermaxi y
+  // Fybeca: parte al 15%, parte al 0%. De 42 facturas, 15 eran así — en el
+  // comercio minorista la mezclada NO es la excepción, es la regla.
+  sec('D · las facturas de tarifas mezcladas');
+
+  // base 61.00 con IVA 1.83 → 12.20 al 15% y 48.80 al 0%. Y 12.20 × 0.15 = 1.83.
+  let m = repartirMezclada(61, 1.83);
+  push('reparte el ticket de Supermaxi', [m.basePlena, m.base0], [12.2, 48.8]);
+  push('y el IVA cuadra con la parte gravada',
+       Math.abs(m.basePlena * 0.15 - 1.83) < 0.005, true);
+  push('las dos partes suman la factura entera',
+       redondear(m.basePlena + m.base0), 61);
+
+  // Otro real: base 84.99 con IVA 3.94.
+  m = repartirMezclada(84.99, 3.94);
+  push('otro ticket real se reparte igual',
+       redondear(m.basePlena + m.base0), 84.99);
+
+  // Y el de la farmacia, con casi todo al 0%: base 28.10 con IVA 0.05.
+  m = repartirMezclada(28.10, 0.05);
+  push('uno con casi todo exento también',  [m.basePlena, m.base0], [0.33, 27.77]);
+
+  // El límite: si la parte gravada NO cabe en la factura, hay una tercera
+  // tarifa de por medio y eso sí lo mira el contador.
+  push('un IVA mayor que el 15% del total no se reparte',
+       repartirMezclada(100, 20), null);
+  push('ni una factura sin base',           repartirMezclada(0, 5), null);
+
+  // En el resumen, la mezclada se declara en sus DOS casilleros.
+  r = calcularResumen([F(61, 1.83)]);
+  push('la parte gravada va al 500/510',    r.iva15.baseImponible, 12.2);
+  push('y la exenta al 507/517',            r.iva0.baseImponible, 48.8);
+  push('no queda como dudosa',              r.ambiguas.length, 0);
+  push('pero sí queda anotada como mezclada', r.mezcladas.length, 1);
+  // ANTES esto tiraba los $61 enteros al 15%, inflando el crédito tributario.
+  push('el IVA declarado es el que se pagó',  r.iva15.montoIva, 1.83);
+
+  // Lo que de verdad no se puede repartir sigue frenando.
+  r = calcularResumen([F(100, 20)]);
+  push('lo irrepartible sigue siendo dudoso', r.ambiguas.length, 1);
+  push('y su plata no se pierde del total',   r.iva15.baseImponible, 100);
 
   // ══ E · notas de crédito ════════════════════════════════════════════════
   sec('E · notas de crédito');
@@ -114,7 +148,9 @@
        await frenarSiHayIvaSinUbicar('prueba'), false);
 
   // Las dudosas del resumen también frenan, aunque no falte ningún casillero.
-  await anotarIvaSinUbicar([], calcularResumen([F(400,30)]).ambiguas);
+  // 400/30 ya no es dudosa: se reparte. La que frena es la que NO se puede
+  // repartir — un IVA mayor que el 15%% del total.
+  await anotarIvaSinUbicar([], calcularResumen([F(100,20)]).ambiguas);
   push('una factura dudosa alcanza para frenar',
        await frenarSiHayIvaSinUbicar('prueba'), true);
   await anotarIvaSinUbicar([], []);

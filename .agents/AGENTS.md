@@ -585,10 +585,34 @@ Devuelve **tres** respuestas, no dos, y la tercera es `null` = «no sé»:
 | ≈ 12/13/14/15% | tarifa plena | 500 / 510 |
 | cualquier otro | `null` | 500/510 **y anotada para frenar** |
 
-**El cociente no distingue una factura al 5% de una mezclada.** Una de $100 con
-un tercio al 15% y el resto al 0% da 4,95%, y el clasificador la lee como
-**5%** — no la marca como dudosa, la confunde. Está medido en el banco, no
-supuesto.
+#### Las mezcladas son la REGLA, no la excepción — corregido el 06-sep-2026
+
+Corrida real: de **42 facturas, 15 eran de tarifas mezcladas**, todas de
+Corporación Favorita (Supermaxi) y Farcomed (Fybeca). En un supermercado se
+compra comida (0%) y limpieza (15%) en el mismo ticket. **Tratarlas como «no
+sé» dejaba al bot sin poder declarar a nadie.**
+
+Y el reparto **no hay que adivinarlo: es aritmética.** Si la factura sólo tiene
+ítems al 15% y al 0%, el IVA cobrado sólo pudo salir de la parte gravada:
+
+```
+base al 15%  =  IVA / 0.15
+base al 0%   =  base total − base al 15%
+```
+
+`repartirMezclada(base, iva, plena)` lo calcula y **acepta el reparto sólo si
+cabe**: la parte gravada no puede ser negativa ni mayor que el total. Si no
+cabe, hay una tercera tarifa de por medio y ahí **sí** se frena.
+
+Ejemplo real: base $61,00 con IVA $1,83 → **$12,20 al 15% + $48,80 al 0%**.
+Antes se declaraban los $61 enteros al 15%, inflando el crédito tributario.
+
+`TARIFA_PLENA = 15` (desde abril de 2024). Para períodos anteriores hay que
+pasarle 12, 13 o 14: el reparto depende de ella.
+
+**El cociente sigue sin distinguir una factura al 5% de una mezclada.** Una de
+$100 con un tercio al 15% da 4,95% y se lee como **5%**. Está medido en el
+banco, no supuesto. Eso sólo lo resuelve el XML (§11).
 
 No es un bug que haya que «arreglar»: rechazar todo lo que caiga en 5% frenaría
 cada lote con compras legítimas al 5%. Es el límite del método, y la razón por
@@ -620,7 +644,9 @@ Se levanta cuando:
 2. Alguna factura o NC quedó sin tarifa reconocible.
 
 El cierre mágico no envía con la marca puesta: llena el formulario, lo deja en
-pantalla y avisa cuáles son. **Repartir una factura mezclada es criterio
+pantalla y avisa cuáles son. **Y pasa al siguiente cliente**, anotando a éste
+como `compras_sin_casillero`. Frenar el envío es lo correcto; frenar el lote
+entero no — un cliente trabado no puede detener a los otros 499. **Repartir una factura mezclada es criterio
 contable, no algo que el bot pueda deducir.** La marca se borra en los mismos
 seis puntos donde ya se borraba `declaration_synced_flag` (arranque de
 declaración, siguiente cliente, reset total) — si quedara pegada, el freno de

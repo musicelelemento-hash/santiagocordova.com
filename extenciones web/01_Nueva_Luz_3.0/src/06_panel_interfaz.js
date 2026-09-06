@@ -1485,7 +1485,25 @@ class SriAssistantPanel {
             // metida entera en un solo casillero, cambia el crédito tributario.
             // Repartirla es criterio contable, no algo que el bot pueda deducir.
             if (typeof frenarSiHayIvaSinUbicar === 'function' && await frenarSiHayIvaSinUbicar('en el resumen')) {
-                this.log('🛑 Hay compras sin casillero. NO se envía: se guarda borrador.');
+                this.log('🛑 Hay compras sin casillero. NO se envía: el formulario queda lleno.');
+
+                // Y el lote SIGUE. Un cliente trabado no puede detener a los
+                // otros 499: se anota por qué quedó afuera y se pasa al
+                // siguiente, igual que con la sustitutiva. Frenar el envío es
+                // lo correcto; frenar el lote entero no.
+                try {
+                    const quien = this.extractClientInfo ? this.extractClientInfo() : {};
+                    if (quien && quien.ruc && typeof Omitidos !== 'undefined') {
+                        await Omitidos.anotar(quien.ruc, 'compras_sin_casillero', {
+                            nombre: quien.name,
+                            detalle: 'El formulario quedó lleno en pantalla, sin enviar.'
+                        });
+                    }
+                    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+                    if (typeof handleBatchNextClient === 'function') await handleBatchNextClient();
+                } catch (e) {
+                    console.warn('⏭️ No se pudo pasar al siguiente cliente:', e.message);
+                }
                 return;
             }
 

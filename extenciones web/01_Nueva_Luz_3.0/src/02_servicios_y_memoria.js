@@ -739,6 +739,7 @@ const Omitidos = {
         cuenta_bloqueada:   'Cuenta bloqueada en el SRI. Hay que desbloquearla en el portal.',
         omitido_manual:     'Lo omitiste vos. Reintentá cuando quieras.',
         saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',
+        compras_sin_casillero: 'Quedaron compras sin casillero (5% sin 540, o facturas que no se pudieron repartir). El formulario quedó lleno y sin enviar.',
         identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
         sin_datos:          'No se pudieron extraer comprobantes.',
         no_declara_iva:     'Este contribuyente no tiene obligacion de IVA. Revisar su regimen en la ficha.',

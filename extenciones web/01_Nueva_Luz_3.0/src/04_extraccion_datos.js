@@ -1295,6 +1295,11 @@ if (typeof window !== 'undefined') {
 // una sola tarifa.
 const TARIFAS_IVA = [5, 12, 13, 14, 15];
 
+// La tarifa plena del período que se declara. 15% desde abril de 2024.
+// Para períodos anteriores hay que pasarle 12 (hasta marzo de 2024), 13 (ese
+// marzo) o 14 (2016-2017): el reparto de una factura mezclada depende de ella.
+const TARIFA_PLENA = 15;
+
 /**
  * Deduce la tarifa de una factura por el cociente IVA / base.
  *
@@ -1307,6 +1312,43 @@ const TARIFAS_IVA = [5, 12, 13, 14, 15];
  * @param {number} iva Monto de IVA (ya reconciliado contra total − base).
  * @returns {{tarifa: number|null, motivo: string}}
  */
+/**
+ * Reparte una factura de tarifas mezcladas entre la tarifa plena y el 0%.
+ *
+ * **Esto no es una estimación: es aritmética.** Si una factura sólo tiene ítems
+ * al 15% y al 0% —que es el caso normal en un supermercado o una farmacia—,
+ * entonces el IVA cobrado sólo pudo salir de la parte gravada:
+ *
+ *     base al 15%  =  IVA / 0.15
+ *     base al 0%   =  base total − base al 15%
+ *
+ * El reparto se acepta sólo si **cabe** en la factura: la parte gravada no
+ * puede ser negativa ni mayor que el total. Si no cabe, hay una tercera tarifa
+ * en el medio y eso sí hay que mirarlo.
+ *
+ * Medido contra una corrida real: de 42 facturas de Corporación Favorita y
+ * Farcomed, 15 eran mezcladas. **No es la excepción, es la regla** en el
+ * comercio minorista — y tratarlas como «no sé» dejaba al bot sin poder
+ * declarar a nadie.
+ *
+ * @param {number} base Valor sin impuestos de toda la factura.
+ * @param {number} iva IVA cobrado en toda la factura.
+ * @param {number} plena Tarifa plena del período (15 desde abril de 2024).
+ * @returns {{basePlena: number, base0: number}|null} null si no cabe.
+ */
+function repartirMezclada(base, iva, plena = TARIFA_PLENA) {
+    if (!(base > 0) || !(iva > 0) || !(plena > 0)) return null;
+
+    const basePlena = redondear(iva / (plena / 100));
+    const base0 = redondear(base - basePlena);
+
+    // Un centavo de holgura por el redondeo del portal. Si la parte gravada no
+    // entra en la factura, la mezcla incluye una tarifa que no es 0% ni plena.
+    if (basePlena < 0 || base0 < -0.01) return null;
+
+    return { basePlena, base0: Math.max(0, base0) };
+}
+
 function clasificarTarifaIva(base, iva) {
     if (!(base > 0.005)) return { tarifa: null, motivo: 'sin base imponible legible' };
     // Umbral en centavos, no === 0: la resta de la reconciliación puede dejar
@@ -1348,7 +1390,8 @@ function calcularResumen(facturas) {
         iva0: balde(),
         iva5: balde(),
         iva15: balde(),
-        ambiguas: [],   // sin tarifa reconocible: las reparte el contador
+        ambiguas: [],   // ni una tarifa sola ni un reparto posible: las mira el contador
+        mezcladas: [],  // repartidas por aritmética entre tarifa plena y 0%
         periodo: periodo
     };
 
@@ -1364,15 +1407,43 @@ function calcularResumen(facturas) {
         } else if (tarifa !== null) {
             destino = resumen.iva15;
         } else {
-            // Se cuenta en la tarifa plena para NO achicar el total declarado,
-            // pero queda anotada: el cierre mágico no envía con ambigüedades.
+            // No coincide con una tarifa sola: casi siempre es una factura de
+            // supermercado, con parte al 15% y parte al 0%. Eso NO se adivina,
+            // se calcula — y si el reparto cabe en la factura, se declara bien.
+            const partes = repartirMezclada(factura.valorSinImpuestos, factura.iva);
+            if (partes) {
+                resumen.iva15.cantidad++;
+                resumen.iva15.baseImponible += partes.basePlena;
+                resumen.iva15.montoIva += factura.iva;
+                resumen.iva15.total += partes.basePlena + factura.iva;
+
+                if (partes.base0 > 0.005) {
+                    resumen.iva0.cantidad++;
+                    resumen.iva0.baseImponible += partes.base0;
+                    resumen.iva0.total += partes.base0;
+                }
+                resumen.mezcladas.push({
+                    numero: factura.numero || i + 1,
+                    rucRazon: factura.rucRazon || 'S/N',
+                    base: redondear(factura.valorSinImpuestos),
+                    iva: redondear(factura.iva),
+                    basePlena: partes.basePlena,
+                    base0: partes.base0
+                });
+                console.log(`   🧾 [Factura ${factura.numero || i + 1}] Mezclada: ` +
+                            `$${partes.basePlena} al ${TARIFA_PLENA}% + $${partes.base0} al 0%.`);
+                return;   // ya quedó repartida; no cae en ningún balde único
+            }
+
+            // El reparto NO cabe en la factura: hay una tercera tarifa de por
+            // medio y eso sí lo tiene que mirar el contador.
             destino = resumen.iva15;
             resumen.ambiguas.push({
                 numero: factura.numero || i + 1,
                 rucRazon: factura.rucRazon || 'S/N',
                 base: redondear(factura.valorSinImpuestos),
                 iva: redondear(factura.iva),
-                motivo
+                motivo: motivo + ' — y el reparto entre tarifa plena y 0% no cierra'
             });
             console.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);
         }
@@ -1392,8 +1463,15 @@ function calcularResumen(facturas) {
     if (resumen.iva5.cantidad > 0) {
         console.log(`   🟡 ${resumen.iva5.cantidad} factura(s) al 5%: base $${resumen.iva5.baseImponible}. Casilleros 540 / 550.`);
     }
+    if (resumen.mezcladas.length > 0) {
+        const alPleno = redondear(resumen.mezcladas.reduce((a, m) => a + m.basePlena, 0));
+        const alCero = redondear(resumen.mezcladas.reduce((a, m) => a + m.base0, 0));
+        console.log(`   🧾 ${resumen.mezcladas.length} factura(s) de tarifas mezcladas, repartidas: ` +
+                    `$${alPleno} al ${TARIFA_PLENA}% y $${alCero} al 0%.`);
+    }
     if (resumen.ambiguas.length > 0) {
-        console.warn(`   ⚠️ ${resumen.ambiguas.length} factura(s) sin tarifa reconocible. No se envía hasta que las mires.`);
+        console.warn(`   ⚠️ ${resumen.ambiguas.length} factura(s) sin tarifa reconocible y sin reparto posible. ` +
+                     'No se envía hasta que las mires.');
     }
 
     return resumen;
