@@ -1985,20 +1985,24 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 if (isCalendarVisible()) return true;
 
                 for (let i = 0; i < 3; i++) {
-                    console.log(`🎯 Abriendo calendario (Intento ${i+1})...`);
+                    console.log(`🎯 Abriendo calendario (Intento ${i + 1})...`);
                     calendarInput.focus();
-                    await sleep(200);
-                    
-                    // Click coordinado
+                    await sleep(350);
+
+                    // En PrimeFaces el foco YA abre el panel. Si además se clickea, el
+                    // click cae sobre el panel abierto y lo cierra: por eso hacía falta
+                    // un segundo intento y parecía que «lo tocaba dos veces».
+                    // Solo se clickea si el foco no alcanzó.
+                    if (isCalendarVisible()) return true;
+
                     const rect = calendarInput.getBoundingClientRect();
-                    const clickEvent = new MouseEvent('mousedown', {
+                    calendarInput.dispatchEvent(new MouseEvent('mousedown', {
                         bubbles: true, cancelable: true, view: window,
                         clientX: rect.left + rect.width / 2,
                         clientY: rect.top + rect.height / 2
-                    });
-                    calendarInput.dispatchEvent(clickEvent);
+                    }));
                     calendarInput.click();
-                    
+
                     await sleep(1000); // Esperar animación de PrimeFaces
                     if (isCalendarVisible()) return true;
                 }

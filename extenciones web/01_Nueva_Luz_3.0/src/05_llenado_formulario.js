@@ -90,7 +90,13 @@ async function autoLlenarFormulario(data) {
         await sleep(600);
 
         // FASE 4: RESUMEN IMPOSITIVO (Sugeridos + Refuerzo Técnico)
-        const eliteFields = ['564', '565', '615', '617', '619'];
+        // Primero los de RESUMEN —la sección que llenarRetenciones() acaba de
+        // dejar abierta— y recién después los de COMPRAS. Al revés, como
+        // estaba, el formulario abría COMPRAS, saltaba a RESUMEN y volvía.
+        //
+        // Se vuelve a pasar por 564/565 a propósito: llenar el 609 puede
+        // cambiar el crédito que el SRI sugiere.
+        const eliteFields = ['615', '617', '619', '564', '565'];
         for (const f of eliteFields) {
             // Aseguramos sección abierta
             if (['615', '617', '619'].includes(f)) await toggleSriSection('RESUMEN', true);
