@@ -427,38 +427,12 @@
         <span id="popupFootVersion" style="font-size: 9px; color: #475569; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">v3.1.0</span>
     </div>
 
-    <!-- ── Claves ────────────────────────────────────────────────────────
-         Viven en chrome.storage.local, que no se versiona ni se distribuye.
-         Nunca en shared_config.js: ese archivo está en el repositorio. -->
+    <!-- Las claves viven en la página de Ajustes, no acá: es una pantalla
+         entera, se abre en su propia pestaña y es donde cualquiera las busca. -->
     <div style="padding: 0 18px 12px;">
-        <button id="btnAbrirClaves" style="width:100%; background:rgba(148,163,184,0.12); border:1px solid var(--border); color:var(--text-dim); padding:7px; border-radius:8px; font-size:10px; font-weight:700; cursor:pointer;">
-            🔑 Claves y servicios
+        <button id="btnAjustes" style="width:100%; background:rgba(148,163,184,0.12); border:1px solid var(--border); color:var(--text-dim); padding:7px; border-radius:8px; font-size:10px; font-weight:700; cursor:pointer;">
+            ⚙️ Ajustes y claves
         </button>
-        <div id="panelClaves" style="display:none; margin-top:8px; background:rgba(0,0,0,0.25); border:1px solid var(--border); border-radius:10px; padding:12px;">
-            <p style="font-size:9px; color:var(--text-dim); line-height:1.5; margin:0 0 10px;">
-                Se guardan en el almacén local de la extensión. <b>No se escriben en ningún
-                archivo del proyecto</b> ni salen en los respaldos de código.
-            </p>
-
-            <label style="font-size:10px; font-weight:700; display:block; margin-bottom:4px;">
-                Clave de IA <span style="color:var(--text-dim); font-weight:400;">(clasificar proveedores)</span>
-            </label>
-            <div id="estadoIa" style="font-size:9px; color:var(--text-dim); margin-bottom:4px;">—</div>
-            <input type="password" id="claveIa" placeholder="pegá la clave acá" autocomplete="off"
-                   style="width:100%; box-sizing:border-box; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#e2e8f0; padding:6px 8px; border-radius:6px; font-size:10px; font-family:'JetBrains Mono',monospace;">
-
-            <label style="font-size:10px; font-weight:700; display:block; margin:10px 0 4px;">
-                Clave secreta de R2 <span style="color:var(--text-dim); font-weight:400;">(subir comprobantes)</span>
-            </label>
-            <div id="estadoR2" style="font-size:9px; color:var(--text-dim); margin-bottom:4px;">—</div>
-            <input type="password" id="claveR2" placeholder="pegá la clave acá" autocomplete="off"
-                   style="width:100%; box-sizing:border-box; background:rgba(0,0,0,0.4); border:1px solid var(--border); color:#e2e8f0; padding:6px 8px; border-radius:6px; font-size:10px; font-family:'JetBrains Mono',monospace;">
-
-            <div style="display:flex; gap:6px; margin-top:10px;">
-                <button id="btnGuardarClaves" style="flex:1; background:#10b981; border:none; color:#04241a; padding:7px; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer;">Guardar</button>
-                <button id="btnBorrarClaves" style="background:rgba(239,68,68,0.16); border:none; color:#fca5a5; padding:7px 10px; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer;">Borrar</button>
-            </div>
-        </div>
     </div>
 
     <script src="shared_config.js"></script>

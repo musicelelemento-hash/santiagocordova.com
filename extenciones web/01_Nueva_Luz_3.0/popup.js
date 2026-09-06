@@ -584,74 +584,18 @@ function showToast(msg) {
 
 
 // ============================================================
-// CLAVES — fuera del código, siempre
+// AJUSTES
 // ============================================================
-// `shared_config.js` está en el repositorio: una clave ahí es una clave
-// publicada, y el historial de git no se deshace. Estas viven en
-// chrome.storage.local, que no se versiona ni se distribuye.
-//
-// La ventana NUNCA muestra el valor guardado. Solo dice si hay algo y cómo
-// termina, que alcanza para reconocer cuál está puesta sin exponerla.
+// Las claves no viven acá. El popup es chico y se cierra solo al perder el
+// foco: pegar una clave ahí es incómodo y fácil de perder. Van a options.html,
+// que es una pestaña entera y es donde cualquiera busca los ajustes de una
+// extensión (clic derecho en el ícono → Opciones).
 
-const CLAVE_IA = 'sc_ia_credenciales';
-const CLAVE_R2 = 'sc_r2_credenciales';
-
-/** «guardada · …KbAQ» o «no hay ninguna». Nunca el valor entero. */
-function comoTermina(valor) {
-    if (!valor) return 'no hay ninguna guardada';
-    const v = String(valor);
-    return `guardada · termina en …${v.slice(-6)} (${v.length} caracteres)`;
-}
-
-async function pintarEstadoClaves() {
-    const g = await chrome.storage.local.get([CLAVE_IA, CLAVE_R2]);
-    const ia = document.getElementById('estadoIa');
-    const r2 = document.getElementById('estadoR2');
-    if (ia) ia.textContent = comoTermina((g[CLAVE_IA] || {}).apiKey);
-    if (r2) r2.textContent = comoTermina((g[CLAVE_R2] || {}).R2_SECRET_ACCESS_KEY);
-}
-
-function inicializarClaves() {
-    const abrir = document.getElementById('btnAbrirClaves');
-    const panel = document.getElementById('panelClaves');
-    if (!abrir || !panel) return;
-
-    abrir.addEventListener('click', () => {
-        const abierto = panel.style.display === 'block';
-        panel.style.display = abierto ? 'none' : 'block';
-        if (!abierto) pintarEstadoClaves();
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btnAjustes');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+        if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+        else chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
     });
-
-    document.getElementById('btnGuardarClaves').addEventListener('click', async () => {
-        const campoIa = document.getElementById('claveIa');
-        const campoR2 = document.getElementById('claveR2');
-        const cambios = {};
-
-        // Un campo vacío significa «no la toques», no «borrala»: para borrar
-        // está el botón de al lado, que lo dice.
-        if (campoIa.value.trim()) cambios[CLAVE_IA] = { apiKey: campoIa.value.trim(), cuando: Date.now() };
-        if (campoR2.value.trim()) {
-            const previo = (await chrome.storage.local.get([CLAVE_R2]))[CLAVE_R2] || {};
-            cambios[CLAVE_R2] = { ...previo, R2_SECRET_ACCESS_KEY: campoR2.value.trim(), cuando: Date.now() };
-        }
-
-        if (!Object.keys(cambios).length) { showToast('No escribiste ninguna clave'); return; }
-
-        await chrome.storage.local.set(cambios);
-        // Que no quede en pantalla ni en el DOM más de lo necesario.
-        campoIa.value = '';
-        campoR2.value = '';
-        await pintarEstadoClaves();
-        showToast('🔑 Guardadas fuera del código');
-    });
-
-    document.getElementById('btnBorrarClaves').addEventListener('click', async () => {
-        await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2]);
-        document.getElementById('claveIa').value = '';
-        document.getElementById('claveR2').value = '';
-        await pintarEstadoClaves();
-        showToast('🗑️ Borradas del almacén');
-    });
-}
-
-document.addEventListener('DOMContentLoaded', inicializarClaves);
+});

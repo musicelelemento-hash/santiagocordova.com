@@ -644,7 +644,17 @@ está en el repositorio: una clave ahí es una clave publicada, y el historial d
 git no se deshace. La de R2 se coló así y hay que rotarla igual.
 
 Van en `chrome.storage.local`, que no se versiona ni se distribuye. Se cargan
-desde el popup, botón **🔑 Claves y servicios**:
+desde la **página de Ajustes** (`options.html`, declarada como `options_ui` en
+el manifest): clic derecho en el ícono → *Opciones*, desde `chrome://extensions`
+→ *Detalles*, o con el botón **⚙️ Ajustes y claves** del popup.
+
+No están en el popup a propósito: el popup es chico y se cierra solo al perder
+el foco. Pegar una clave ahí es incómodo y fácil de perder.
+
+La página tiene además un botón **🔌 Probar ahora** que corre el diagnóstico de
+subida y muestra por qué falla cada camino, sin subir ningún comprobante real.
+
+Llaves:
 
 | Llave | Qué guarda | Quién la lee |
 | :--- | :--- | :--- |

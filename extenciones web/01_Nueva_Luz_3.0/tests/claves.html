@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>Las claves, fuera del código</title>
+<!doctype html><meta charset="utf-8"><title>Ajustes: las claves, fuera del código</title>
 <body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
 <h3>Una clave en <code>shared_config.js</code> es una clave publicada</h3>
 <pre id="out">…</pre>
@@ -41,36 +41,47 @@
       (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
   };
 
-  // ── El markup de verdad, sacado del popup que se distribuye ─────────────
-  const html = await (await fetch('../popup.html')).text();
+  // ── El markup de verdad, sacado de la página que se distribuye ──────────
+  const html = await (await fetch('../options.html')).text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
-  const panel = doc.getElementById('panelClaves');
-  const boton = doc.getElementById('btnAbrirClaves');
+  const panel = doc.querySelector('.hoja');
 
-  sec('A · el panel existe en el popup real');
-  push('hay un botón para abrirlo',        !!boton, true);
-  push('y el panel con los dos campos',    !!panel, true);
+  sec('A · la página de Ajustes, tal como se distribuye');
+  push('tiene los dos campos',
+       [!!doc.getElementById('claveIa'), !!doc.getElementById('claveR2')], [true, true]);
   push('la clave de IA no se ve al teclear',
-       panel && panel.querySelector('#claveIa').type, 'password');
+       doc.getElementById('claveIa').type, 'password');
   push('la de R2 tampoco',
-       panel && panel.querySelector('#claveR2').type, 'password');
+       doc.getElementById('claveR2').type, 'password');
   push('ni las autocompleta el navegador',
-       panel && panel.querySelector('#claveIa').getAttribute('autocomplete'), 'off');
+       doc.getElementById('claveIa').getAttribute('autocomplete'), 'off');
+  push('ni el corrector se mete',
+       doc.getElementById('claveIa').getAttribute('spellcheck'), 'false');
+  push('guardar y borrar son botones distintos',
+       [!!doc.getElementById('btnGuardarClaves'), !!doc.getElementById('btnBorrarClaves')], [true, true]);
+  push('y el popup tiene por dónde llegar',
+       (await (await fetch('../popup.html')).text()).includes('btnAjustes'), true);
+  push('el manifest la declara como página de opciones',
+       !!(await (await fetch('../manifest.json')).json()).options_ui, true);
 
   // ── B · el código real, corriendo sobre ese markup ──────────────────────
-  document.getElementById('popup').append(boton.cloneNode(true), panel.cloneNode(true));
-  document.getElementById('panelClaves').style.display = 'block';
+  document.getElementById('popup').append(panel.cloneNode(true));
+  // El aviso flotante vive fuera de .hoja: se trae también, porque forma
+  // parte de la página real.
+  const flotante = doc.getElementById('aviso-flotante');
+  if (flotante) document.body.appendChild(flotante.cloneNode(true));
 
+  // options.js engancha todo en DOMContentLoaded, que acá ya pasó: se dispara
+  // a mano después de cargarlo, sobre el markup real recién insertado.
   await new Promise((r) => {
     const sc = document.createElement('script');
-    sc.src = '../popup.js';
+    sc.src = '../options.js';
     sc.onload = r; sc.onerror = r;
     document.body.appendChild(sc);
   });
-  // popup.js hace su propio arranque contra un DOM que acá no está entero; lo
-  // que importa es que la parte de las claves quede enganchada.
   window.__errors.length = 0;
-  inicializarClaves();
+  document.dispatchEvent(new Event('DOMContentLoaded'));
+  await new Promise(r => setTimeout(r, 60));
 
   sec('B · guardar');
   const SECRETO = 'AIza-de-mentira-1234-FINAL';
