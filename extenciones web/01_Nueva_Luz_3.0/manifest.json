@@ -39,7 +39,9 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "vendor/jspdf.umd.min.js"
+                "vendor/jspdf.umd.min.js",
+                "vendor/catastro_eloro.txt",
+                "vendor/ciiu.json"
             ],
             "matches": [
                 "https://srienlinea.sri.gob.ec/*"

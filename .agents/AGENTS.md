@@ -631,12 +631,21 @@ ZIP con CSV, una descarga por provincia. Trae RUC, razón social y actividad
 económica. Es la fuente de la base de proveedores de la §7. Viene con un
 **Diccionario RUC** que documenta las columnas: leerlo antes de parsear.
 
-**2 · Empresas fantasmas** — *lo más valioso que no estábamos mirando*
-El catastro incluye una clasificación de empresas fantasma. Si un cliente
-recibió una factura de una de ellas, esa compra no es deducible y el SRI la
-va a objetar. Un aviso **antes de declarar** —«esta factura es de una empresa
-marcada como fantasma»— protege la firma del contador. Encaja con el resto de
-frenos del proyecto: no impedir, avisar y dejar decidir.
+**2 · Empresas fantasmas** — *pendiente, y NO está en el archivo que tenemos*
+
+> ⚠️ **Corrección del 06-sep-2026.** Acá decía que el catastro provincial trae
+> la clasificación de empresas fantasma. **No la trae.** Las 21 columnas del
+> ZIP de El Oro están listadas abajo y ninguna es esa: la lista de fantasmas es
+> un dataset aparte en sri.gob.ec. Queda pendiente bajarlo.
+
+Cuando esté: si un cliente recibió una factura de una empresa marcada como
+fantasma, esa compra no es deducible y el SRI la va a objetar. Un aviso **antes
+de declarar** protege la firma del contador. Encaja con el resto de frenos del
+proyecto: no impedir, avisar y dejar decidir.
+
+Mientras tanto, el **estado del contribuyente** sí está y ya se usa: un
+proveedor SUSPENDIDO o PASIVO que sigue emitiendo es la misma señal, más
+débil pero real. Ver §10a.
 
 **3 · Agentes de retención**
 También en el catastro. Dice si un proveedor debía retener, lo que se cruza
@@ -649,6 +658,53 @@ Un proveedor dado de baja que sigue emitiendo es una señal de alerta.
 Datos agregados, no por RUC. No sirve para clasificar, pero sí para comparar:
 un cliente cuyas compras se desvían mucho del promedio de su actividad y
 provincia es un caso a revisar antes de presentar.
+
+### 10a. El catastro, adentro de la extensión — hecho el 06-sep-2026
+
+Las **21 columnas** del ZIP de El Oro:
+
+```
+NUMERO_RUC · RAZON_SOCIAL · CODIGO_JURISDICCION · ESTADO_CONTRIBUYENTE
+CLASE_CONTRIBUYENTE · FECHA_INICIO_ACTIVIDADES · FECHA_ACTUALIZACION
+FECHA_SUSPENSION_DEFINITIVA · FECHA_REINICIO_ACTIVIDADES · OBLIGADO
+TIPO_CONTRIBUYENTE · NUMERO_ESTABLECIMIENTO · NOMBRE_FANTASIA_COMERCIAL
+ESTADO_ESTABLECIMIENTO · DESCRIPCION_PROVINCIA_EST · DESCRIPCION_CANTON_EST
+DESCRIPCION_PARROQUIA_EST · CODIGO_CIIU · ACTIVIDAD_ECONOMICA
+AGENTE_RETENCION · ESPECIAL
+```
+
+`tools/construir_catastro.py` lo reduce a dos archivos en `vendor/`:
+
+| Archivo | Qué es | Peso |
+| :--- | :--- | ---: |
+| `catastro_eloro.txt` | 283.879 RUC, **ancho fijo y ordenado**: RUC(13) + CIIU(7) + estado(1) + agente(1) | 6,2 MB |
+| `ciiu.json` | los 1.302 códigos CIIU presentes → su descripción | 0,23 MB |
+
+**No se guarda la razón social**: ya la da el portal en cada factura, y
+duplicaría el archivo sin agregar nada. Una fila por RUC, la de la matriz
+(establecimiento `001`).
+
+`Catastro` en `02_servicios_y_memoria.js` lo trae **bajo demanda**, igual que
+jsPDF — 166 ms medidos. Y **no arma un Map de 283.000 entradas**: el archivo
+viene ordenado y de ancho fijo, así que busca por bisección sobre el texto,
+~18 comparaciones por consulta y sin inflar el heap del content script.
+
+`Proveedores.sugerirDesdeCatastro()` completa la **actividad** de cada
+proveedor pendiente, con `origen: 'catastro'`.
+
+> **Sólo la actividad.** El catastro dice a qué se dedica un RUC; **no** dice si
+> esa compra es deducible — eso depende del gasto y lo decide el contador.
+> Poner `deducible` desde acá sería inventar un dato. Y por la regla de la §7,
+> nada de esto pisa lo que el contador ya haya decidido.
+
+El **estado** sí se usa como aviso: un proveedor SUSPENDIDO o PASIVO que sigue
+emitiendo aparece con bandera roja en el panel 🏷️. No impide nada; avisa.
+
+Estados en El Oro: ACTIVO 161.808 · SUSPENDIDO 148.867 · PASIVO 31.343.
+
+Banco: `tests/catastro.html` (31 comprobaciones, verdes el 06-sep-2026). Usa
+RUC reales de los **bordes** de la lista, que es donde una bisección mal
+escrita se equivoca.
 
 ### Cómo se usa un archivo de un GB
 

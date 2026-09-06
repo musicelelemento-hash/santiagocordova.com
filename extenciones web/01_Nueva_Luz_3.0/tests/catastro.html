@@ -1,0 +1,123 @@
+<!doctype html><meta charset="utf-8"><title>El catastro sugiere, no decide</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>283.879 RUC del padrón público, buscados por bisección sobre el texto</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  // getURL apunta a la raíz de la extensión; el banco vive un nivel adentro.
+  window.chrome={runtime:{getURL:p=>'../'+p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  // RUC reales del archivo, elegidos en los bordes y en el medio: son justo
+  // donde una bisección mal escrita se equivoca.
+  const PRIMERO = '0100001163001';   // el primero de la lista · SUSPENDIDO
+  const MEDIO   = '0704690874001';   // el del medio · ACTIVO
+  const ULTIMO  = '3050785777001';   // el último de la lista · ACTIVO
+  const OTRO    = '0703251207001';   // uno cualquiera · ACTIVO
+
+  // ══ A · cargar ══════════════════════════════════════════════════════════
+  sec('A · el archivo se trae bajo demanda');
+  push('antes de cargar no hay nada',   Catastro.cuantos(), 0);
+  const t0 = performance.now();
+  push('carga',                          await Catastro.cargar(), true);
+  const ms = Math.round(performance.now() - t0);
+  push('y quedan los 283.879 RUC',       Catastro.cuantos(), 283879);
+  L.push(`   (tardó ${ms} ms en traer 6,2 MB)`);
+  push('cargar dos veces no vuelve a bajarlo', await Catastro.cargar(), true);
+
+  // ══ B · buscar ══════════════════════════════════════════════════════════
+  sec('B · la bisección, y sobre todo los bordes');
+  const m = Catastro.buscar(MEDIO);
+  push('encuentra uno del medio',        m && m.ruc, MEDIO);
+  push('con su código CIIU',             /^[A-Z]\d+$/.test(m.ciiu), true);
+  push('y la actividad en castellano',   m.actividad.length > 8, true);
+  push('dice si está activo',            m.activo, true);
+
+  // Los bordes: una bisección con el límite mal puesto los pierde.
+  push('encuentra el PRIMERO de la lista', (Catastro.buscar(PRIMERO)||{}).ruc, PRIMERO);
+  push('y el ÚLTIMO',                      (Catastro.buscar(ULTIMO)||{}).ruc, ULTIMO);
+
+  // El estado no es decoración: es el aviso que protege la firma.
+  push('el primero figura SUSPENDIDO',   Catastro.buscar(PRIMERO).estado, 'SUSPENDIDO');
+  push('y no activo',                    Catastro.buscar(PRIMERO).activo, false);
+
+  // Lo que no está, no está. No se devuelve el vecino más parecido.
+  push('un RUC que no está devuelve null', Catastro.buscar('9999999999999'), null);
+  push('un RUC corto tampoco inventa',     Catastro.buscar('123'), null);
+  push('ni una cadena vacía',              Catastro.buscar(''), null);
+  // Los guiones y espacios se limpian: el RUC viene como venga.
+  push('limpia lo que no son dígitos',
+       (Catastro.buscar(' ' + MEDIO.slice(0,3) + '-' + MEDIO.slice(3) + ' ')||{}).ruc, MEDIO);
+
+  // ══ C · sugerir, sin decidir ════════════════════════════════════════════
+  sec('C · el catastro sugiere; el contador decide');
+  await Proveedores.olvidarTodo();
+  await Proveedores.registrarLote([
+    { rucEmisor: MEDIO,   razonSocial: 'PROVEEDOR ACTIVO' },
+    { rucEmisor: PRIMERO, razonSocial: 'PROVEEDOR SUSPENDIDO' },
+    { rucEmisor: OTRO,    razonSocial: 'PROVEEDOR YA DECIDIDO' },
+    { rucEmisor: '9999999999999', razonSocial: 'NO ESTÁ EN EL PADRÓN' }
+  ], '0703891838001');
+
+  // Éste ya lo resolvió el contador: el catastro no lo puede tocar.
+  await Proveedores.clasificar(OTRO, { deducible: true, actividad: 'lo que dijo el contador', origen: 'usuario' });
+
+  const r = await Proveedores.sugerirDesdeCatastro();
+  push('miró los que no había decidido el contador', r.mirados, 3);
+  push('y sugirió actividad donde pudo',             r.sugeridos >= 2, true);
+  push('el que no está en el padrón queda sin datos', r.sinDatos, 1);
+
+  const pm = await Proveedores.saber(MEDIO);
+  push('le puso la actividad',        pm.actividad.length > 8, true);
+  push('marcada como sugerencia',     pm.origen, 'catastro');
+  // LO MÁS IMPORTANTE: el catastro dice a qué se dedica, NO si la compra es
+  // deducible. Eso depende del gasto y lo decide el contador.
+  push('y NO tocó si es deducible',   pm.deducible, null);
+
+  const po = await Proveedores.saber(OTRO);
+  push('no pisó lo que decidió el contador', po.origen, 'usuario');
+  push('ni su actividad',                    po.actividad, 'lo que dijo el contador');
+
+  // ══ D · la bandera que protege la firma ═════════════════════════════════
+  sec('D · el proveedor que no figura activo');
+  push('lo anota en el informe',      r.inactivos.length, 1);
+  push('y con qué estado',            r.inactivos[0].estado, 'SUSPENDIDO');
+  push('queda marcado en la base',    (await Proveedores.saber(PRIMERO)).estadoSri, 'SUSPENDIDO');
+  push('y el activo NO queda marcado', (await Proveedores.saber(MEDIO)).estadoSri, undefined);
+
+  // ══ E · el panel lo muestra ═════════════════════════════════════════════
+  sec('E · el panel 🏷️');
+  SriLoopHUD._enSri = () => true; SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+  await SriLoopHUD.pintarProveedores();
+  const panel = document.getElementById('slh-proveedores-panel');
+  push('ofrece el botón del catastro', !!panel.querySelector('#slh-prov-catastro'), true);
+  push('avisa del suspendido',         /NO figuran activos/.test(panel.innerHTML), true);
+  push('y muestra la actividad sugerida',
+       panel.innerHTML.includes(pm.actividad.slice(0, 20)), true);
+  document.getElementById('sri-loop-hud').remove();
+
+  await Proveedores.olvidarTodo();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

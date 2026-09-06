@@ -793,6 +793,20 @@ const SriLoopHUD = {
         el.querySelector('#slh-proveedores-panel').addEventListener('click', async (ev) => {
             ev.stopPropagation();
 
+            const cat = ev.target.closest('#slh-prov-catastro');
+            if (cat) {
+                const antes = cat.textContent;
+                cat.textContent = '⏳ leyendo…';
+                const r = await Proveedores.sugerirDesdeCatastro();
+                await this.pintarProveedores();
+                const nuevo = document.getElementById('slh-prov-catastro');
+                if (nuevo) {
+                    nuevo.textContent = r.sugeridos ? `✅ ${r.sugeridos}` : '🗂️ sin datos';
+                    setTimeout(() => { nuevo.textContent = antes; }, 3000);
+                }
+                return;
+            }
+
             const copiar = ev.target.closest('#slh-prov-copiar');
             if (copiar) {
                 const txt = await Proveedores.exportar();
@@ -1656,7 +1670,10 @@ const SriLoopHUD = {
         const cabecera =
             '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">' +
             `  <span style="font-size:11px;font-weight:800">🏷️ ${r.total} proveedores · ${r.comprobantes} comprobantes</span>` +
-            '  <button id="slh-prov-copiar" aria-label="Copiar la base de proveedores" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar la base</button>' +
+            '  <span style="display:flex;gap:6px">' +
+            '    <button id="slh-prov-catastro" aria-label="Sugerir la actividad de cada proveedor desde el catastro del SRI" title="Completa la actividad de cada RUC con el catastro del SRI. Sugiere, no decide." style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-size:11px;font-weight:800;cursor:pointer">🗂️ Catastro</button>' +
+            '    <button id="slh-prov-copiar" aria-label="Copiar la base de proveedores" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar</button>' +
+            '  </span>' +
             '</div>' +
             `<div style="font-size:10px;opacity:0.7;margin-bottom:8px">` +
             Object.keys(r.porOrigen).map((o) => `${esc(o)}: <b>${r.porOrigen[o]}</b>`).join(' · ') +
@@ -1669,17 +1686,32 @@ const SriLoopHUD = {
             return;
         }
 
+        // El aviso que protege la firma: un proveedor que figura suspendido o
+        // pasivo en el catastro y sigue emitiendo es una compra objetable.
+        const noActivos = faltan.filter((p) => p.estadoSri);
+        const alertaEstado = noActivos.length
+            ? '<div style="background:rgba(239,68,68,0.16);color:#fca5a5;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
+              `🚩 <b>${noActivos.length}</b> proveedor(es) NO figuran activos en el catastro del SRI. ` +
+              'Una compra a un RUC suspendido es la clase de cosa que el SRI objeta.</div>'
+            : '';
+
         const filas = faltan.map((p) => {
             const nombre = p.nombre || '(sin nombre)';
+            // La actividad que sugiere el catastro: no decide, pero ahorra el
+            // 90% del trabajo de clasificar a mano.
+            const act = p.actividad
+                ? `<span style="opacity:0.7"> · ${esc(String(p.actividad).slice(0, 58))}</span>` : '';
+            const bandera = p.estadoSri
+                ? `<span style="color:#fca5a5;font-weight:800"> · ${esc(p.estadoSri)}</span>` : '';
             return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
-                `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}">` +
-                `  <b>${esc(nombre)}</b><span style="opacity:0.55"> · ${p.veces} comp. · ${(p.vistoEn || []).length} cliente(s)</span></span>` +
+                `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}${p.actividad ? ' · ' + esc(p.actividad) : ''}">` +
+                `  <b>${esc(nombre)}</b>${bandera}<span style="opacity:0.55"> · ${p.veces} comp.</span>${act}</span>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
                 '</div>';
         }).join('');
 
-        panel.innerHTML = cabecera +
+        panel.innerHTML = cabecera + alertaEstado +
             `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">Faltan clasificar <b>${faltan.length}</b>, los más frecuentes primero:</div>` +
             filas +
             '<div style="font-size:10px;opacity:0.6;margin-top:8px;line-height:1.5">' +

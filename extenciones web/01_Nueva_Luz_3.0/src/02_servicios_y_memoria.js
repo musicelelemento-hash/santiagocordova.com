@@ -1027,6 +1027,99 @@ async function rucDelClienteActual() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// EL CATASTRO DEL SRI
+// ═══════════════════════════════════════════════════════════════════════════
+// El padrón público, reducido a lo único que hace falta para SUGERIR a qué se
+// dedica un proveedor: RUC, código CIIU, estado y si es agente de retención.
+//
+// Se trae bajo demanda, igual que jsPDF: son 6 MB y no tienen por qué estar en
+// cada página del SRI. Y no se arma un Map de 283.000 entradas — el archivo
+// viene ordenado y de ancho fijo, así que se busca por bisección sobre el
+// texto. Una consulta son ~18 comparaciones.
+//
+// **Acá no se decide nada.** Lo que sale entra a la base de proveedores con
+// origen 'catastro', y por la regla de la §7 una sugerencia jamás pisa una
+// decisión del contador.
+const Catastro = {
+    _ANCHO: 23,          // 13 RUC + 7 CIIU + 1 estado + 1 agente + salto
+    _texto: null,
+    _ciiu: null,
+    _cargando: null,
+
+    ESTADOS: { A: 'ACTIVO', S: 'SUSPENDIDO', P: 'PASIVO' },
+
+    /** Trae los dos archivos una sola vez. Devuelve false si no están. */
+    async cargar() {
+        if (this._texto) return true;
+        if (this._cargando) return this._cargando;
+
+        this._cargando = (async () => {
+            try {
+                const url = (p) => chrome.runtime.getURL(p);
+                const [t, c] = await Promise.all([
+                    fetch(url('vendor/catastro_eloro.txt')).then((r) => r.ok ? r.text() : null),
+                    fetch(url('vendor/ciiu.json')).then((r) => r.ok ? r.json() : null)
+                ]);
+                if (!t) {
+                    console.warn('🗂️ [CATASTRO] No está vendor/catastro_eloro.txt. ' +
+                                 'Se genera con el script del proyecto a partir del ZIP del SRI.');
+                    return false;
+                }
+                this._texto = t;
+                this._ciiu = c || {};
+                const n = Math.floor(this._texto.length / this._ANCHO);
+                console.log(`🗂️ [CATASTRO] ${n.toLocaleString('es-EC')} RUC cargados.`);
+                return true;
+            } catch (e) {
+                console.warn('🗂️ [CATASTRO] No se pudo cargar:', e.message);
+                return false;
+            } finally {
+                this._cargando = null;
+            }
+        })();
+        return this._cargando;
+    },
+
+    /**
+     * Busca un RUC por bisección sobre el texto de ancho fijo.
+     *
+     * @param {string} ruc
+     * @returns {{ruc, ciiu, actividad, estado, activo, agenteRetencion}|null}
+     */
+    buscar(ruc) {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13 || !this._texto) return null;
+
+        const A = this._ANCHO;
+        let lo = 0, hi = Math.floor(this._texto.length / A) - 1;
+        while (lo <= hi) {
+            const medio = (lo + hi) >> 1;
+            const p = medio * A;
+            const clave = this._texto.substr(p, 13);
+            if (clave === limpio) {
+                const ciiu = this._texto.substr(p + 13, 7).trim();
+                const est = this._texto.charAt(p + 20);
+                return {
+                    ruc: limpio,
+                    ciiu,
+                    actividad: (this._ciiu && this._ciiu[ciiu]) || '',
+                    estado: this.ESTADOS[est] || 'DESCONOCIDO',
+                    activo: est === 'A',
+                    agenteRetencion: this._texto.charAt(p + 21) === 'S'
+                };
+            }
+            if (clave < limpio) lo = medio + 1; else hi = medio - 1;
+        }
+        return null;
+    },
+
+    /** Cuántos RUC tiene cargados. 0 si no se cargó. */
+    cuantos() {
+        return this._texto ? Math.floor(this._texto.length / this._ANCHO) : 0;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LA BASE DE PROVEEDORES
 // ═══════════════════════════════════════════════════════════════════════════
 // El bot mete todas las compras en un solo bloque, pero la declaración separa
@@ -1236,6 +1329,62 @@ const Proveedores = {
 
     async olvidarTodo() {
         try { await SafeStorage.remove(this._KEY); return true; } catch (e) { return false; }
+    },
+
+    /**
+     * Completa la actividad de los proveedores con lo que dice el catastro.
+     *
+     * **Sólo la actividad.** El catastro dice a qué se dedica un RUC; NO dice
+     * si esa compra es deducible — eso depende del gasto y lo decide el
+     * contador. Poner `deducible` desde acá sería exactamente inventar un dato.
+     *
+     * Queda con `origen: 'catastro'`, así que se ve que es una sugerencia y no
+     * pisa nada que haya decidido el usuario.
+     *
+     * @returns {Promise<{mirados, sugeridos, sinDatos, inactivos: Array}>}
+     */
+    async sugerirDesdeCatastro() {
+        const informe = { mirados: 0, sugeridos: 0, sinDatos: 0, inactivos: [] };
+        if (typeof Catastro === 'undefined' || !(await Catastro.cargar())) return informe;
+
+        const base = await this._todos();
+        let toco = false;
+
+        for (const ruc of Object.keys(base)) {
+            const p = base[ruc];
+            // Lo que decidió el contador no se toca, ni para completarlo.
+            if (p.origen === 'usuario') continue;
+            informe.mirados++;
+
+            const c = Catastro.buscar(ruc);
+            if (!c) { informe.sinDatos++; continue; }
+
+            if (c.actividad && p.actividad !== c.actividad) {
+                p.actividad = c.actividad;
+                p.ciiu = c.ciiu;
+                p.origen = 'catastro';
+                p.clasificado = Date.now();
+                informe.sugeridos++;
+                toco = true;
+            }
+
+            // El aviso que protege la firma: un proveedor que figura suspendido
+            // o pasivo y sigue emitiendo es una compra que el SRI puede objetar.
+            if (!c.activo) {
+                p.estadoSri = c.estado;
+                toco = true;
+                informe.inactivos.push({ ruc, nombre: p.nombre, estado: c.estado, veces: p.veces });
+            } else if (p.estadoSri) {
+                delete p.estadoSri;
+                toco = true;
+            }
+        }
+
+        if (toco) { try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { /* nada */ } }
+
+        console.log(`🗂️ [CATASTRO] ${informe.sugeridos} actividad(es) sugerida(s) de ${informe.mirados} miradas · ` +
+                    `${informe.sinDatos} sin datos · ${informe.inactivos.length} no activo(s).`);
+        return informe;
     }
 };
 
