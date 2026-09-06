@@ -1,0 +1,163 @@
+<!doctype html><meta charset="utf-8"><title>Esperar al SRI en vez de contar</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Un <code>sleep(2500)</code> sobra cuando el portal va rápido y falta cuando va lento</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(60)+JSON.stringify(v)+(b?'':'  ESPERADO: '+(typeof e==='function'?'(condición)':JSON.stringify(e))));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const P=document.getElementById('portal');
+
+  // El velo de PrimeFaces, tal como lo mira veloAjaxArriba().
+  const ponerVelo = () => {
+    P.innerHTML = '<div id="disablingDiv" style="display:block">cargando…</div>';
+  };
+  const sacarVelo = () => {
+    const d = document.getElementById('disablingDiv');
+    if (d) d.style.display = 'none';
+  };
+  const pintarDespues = (ms, html) => setTimeout(() => {
+    sacarVelo();
+    P.insertAdjacentHTML('beforeend', html);
+  }, ms);
+  const limpiar = () => { P.innerHTML = ''; };
+
+  const cronometrar = async (fn) => {
+    const t0 = performance.now();
+    const r = await fn();
+    return { r, ms: Math.round(performance.now() - t0) };
+  };
+
+  // El número fijo que había antes en Consulta de declaraciones.
+  const VIEJO = 2500;
+
+  // La extensión arranca en pausa a propósito: no toca nada hasta que se le
+  // dice. waitFor() respeta esa pausa y esto lo hereda, así que para poder
+  // medir hay que soltarla. Se controla desde acá y no por el almacén: el
+  // arranque del bundle escribe la pausa cuando quiere y ganaba la carrera.
+  let enPausa = false;
+  window.isPaused = async () => enPausa;
+
+  // En una pestaña de fondo el navegador estira los temporizadores a ~1 s, así
+  // que medir en milisegundos absolutos no dice nada: la misma prueba pasaría
+  // o fallaría según si el banco está a la vista. Se mide cuánto cuesta de
+  // verdad UN sondeo y los límites se expresan en sondeos.
+  const GRANO = await (async () => {
+    const t0 = performance.now();
+    await new Promise(r => setTimeout(r, 50));
+    return Math.max(50, Math.round(performance.now() - t0));
+  })();
+  // 400 ms de arranque (el sondeo del velo) + n sondeos + holgura.
+  const sondeos = (n) => 400 + n * GRANO + 250;
+  L.push(`   (un sondeo cuesta ${GRANO} ms acá${document.hidden ? ', pestaña de fondo' : ''})`);
+
+  // ══ A · lo que se gana cuando el portal va rápido ═══════════════════════
+  sec('A · el portal contesta rápido');
+  limpiar();
+  ponerVelo();
+  pintarDespues(250, '<div id="listo">tabla</div>');
+  let t = await cronometrar(() =>
+    esperarAjaxSri(() => document.getElementById('listo'), 'la tabla'));
+  const rapido = t.ms;
+  push('vuelve en cuanto llegó',           t.r, true);
+  push('y tarda menos que el sleep viejo', t.ms < VIEJO, true);
+  push('no se queda dando vueltas de más', t.ms < sondeos(3), true);
+
+  // Sin velo tampoco se cuelga: se le dan 400 ms por si aparece y sigue.
+  limpiar();
+  P.innerHTML = '<div id="ya">ya estaba</div>';
+  t = await cronometrar(() => esperarAjaxSri(() => document.getElementById('ya'), 'lo que ya estaba'));
+  push('sin velo, no se queda esperando', t.ms < sondeos(3), true);
+
+  // ══ B · lo que se gana cuando el portal va LENTO ════════════════════════
+  // Éste es el caso que importa de verdad: antes el paso fallaba por
+  // impaciencia y el cliente quedaba sin declarar.
+  sec('B · el portal va lento (el día cargado)');
+  limpiar();
+  ponerVelo();
+  pintarDespues(VIEJO + 900, '<div id="tarde">tabla que tardó</div>');
+  t = await cronometrar(() =>
+    esperarAjaxSri(() => document.getElementById('tarde'), 'la tabla lenta'));
+  push('aguanta más de lo que aguantaba antes', t.r, true);
+  push('y espera de verdad lo que tardó',       t.ms > VIEJO, true);
+  // La comparación que resume todo: el mismo código, rápido cuando el portal
+  // responde y paciente cuando no. Un número fijo no puede ser las dos cosas.
+  push('el caso rápido es mucho más rápido que el lento', t.ms - rapido > VIEJO / 2, true);
+
+  // ══ C · cuando no llega, se rinde y lo dice ═════════════════════════════
+  sec('C · cuando no llega');
+  limpiar();
+  ponerVelo();
+  setTimeout(sacarVelo, 200);
+  t = await cronometrar(() =>
+    esperarAjaxSri(() => document.getElementById('que-no-existe'), 'algo que no va a venir', 1500));
+  push('devuelve false, no true',        t.r, false);
+  push('y respeta el techo que se le dio', t.ms < 1500 + sondeos(4), true);
+  push('deja dicho en el registro que no apareció',
+       window.__logs.some(l => /no apareció/.test(l)), true);
+
+  // ══ D · sin condición, solo el velo ═════════════════════════════════════
+  sec('D · sin condición');
+  limpiar();
+  ponerVelo();
+  setTimeout(sacarVelo, 300);
+  t = await cronometrar(() => esperarAjaxSri(null, 'solo el velo'));
+  push('espera al velo y devuelve true', t.r, true);
+  push('y no se pasa de largo',          t.ms < sondeos(3), true);
+
+  // Un velo que nunca baja no puede colgar el lote para siempre.
+  limpiar();
+  ponerVelo();
+  t = await cronometrar(() => esperarAjaxSri(null, 'velo pegado', 1200));
+  push('un velo pegado no cuelga el lote', t.ms < 1200 + sondeos(3), true);
+
+  // ══ E · las tres pantallas de Consulta ══════════════════════════════════
+  sec('E · los ids de las tres pantallas');
+  limpiar();
+  push('grupo de obligación',  typeof CONSULTA_PANTALLAS.grupoObligacion, 'function');
+  push('período fiscal',       typeof CONSULTA_PANTALLAS.periodoFiscal,   'function');
+  push('tabla de presentadas', typeof CONSULTA_PANTALLAS.tabla,           'function');
+  push('sin la pantalla delante, no la inventan',
+       [CONSULTA_PANTALLAS.tabla(), CONSULTA_PANTALLAS.periodoFiscal()], [null, null]);
+  P.innerHTML = '<div id="formPresentada:tblConsultaDeclaracion">presentadas</div>';
+  push('y con ella delante, la encuentran', !!CONSULTA_PANTALLAS.tabla(), true);
+  limpiar();
+
+  // ══ F · la pausa manda por encima de todo ═══════════════════════════════
+  // Si el contador aprieta pausa, esperar no puede seguir corriendo por su
+  // cuenta: waitFor() se queda quieto y esto lo hereda.
+  sec('F · con el lote en pausa');
+  limpiar();
+  P.innerHTML = '<div id="pausa-ok">está desde el principio</div>';
+  enPausa = true;
+  t = await cronometrar(() =>
+    esperarAjaxSri(() => document.getElementById('pausa-ok'), 'en pausa', 900));
+  push('en pausa no da por buena la condición', t.r, false);
+  enPausa = false;
+  t = await cronometrar(() =>
+    esperarAjaxSri(() => document.getElementById('pausa-ok'), 'sin pausa', 900));
+  push('y al soltar la pausa, sigue', t.r, true);
+  limpiar();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

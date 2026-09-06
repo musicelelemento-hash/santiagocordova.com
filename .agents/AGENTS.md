@@ -637,6 +637,51 @@ eso afuera. Descartada.
 
 ---
 
+## 10b. Esperar al portal, no contar hasta tres
+
+Un `sleep(2500)` es una apuesta a dos puntas: **sobra** cuando el SRI responde
+en 300 ms —y eso, multiplicado por 500 contribuyentes, son horas— y **falta** el
+día que el portal está cargado, y entonces el paso falla por impaciencia y el
+cliente queda sin declarar.
+
+`esperarAjaxSri(condicion, label, tope)` en `02_servicios_y_memoria.js` hace las
+dos cosas bien: sigue apenas la respuesta llega, y aguanta más que antes si
+tarda. Tres tramos:
+
+1. Se le da un momento (400 ms) al velo de PrimeFaces para aparecer. Que **no**
+   aparezca es normal — se sondea a mano, no con `waitFor()`, que dejaría un
+   aviso de timeout falso en cada llamada.
+2. Se espera a que el velo se vaya.
+3. Se espera a que esté en el DOM lo que se estaba esperando. Sin esto, «el velo
+   se fue» no quiere decir que lo nuevo ya se haya pintado.
+
+Hereda la pausa de `waitFor()`: si el contador aprieta ⏸, esperar se queda
+quieto. Probado.
+
+### Cuánto cuesta de verdad la espera fija
+
+Medido el 06-sep-2026, y no es lo que parecía a simple vista:
+
+| | sleeps | tiempo |
+| :--- | ---: | ---: |
+| Totales en `src/` | 135 | 128,2 s |
+| **Tras `location.href`** | 5 | 19,5 s — **no cuestan**: la página se va y el script muere |
+| **Cuestan de verdad** | 130 | **108,8 s** |
+
+Ya convertidos: las cinco de Consulta de declaraciones (el bucle que más
+vueltas da: una por período, por cliente) y las tres de paginación de tablas.
+
+Las tres de paginación eran tiempo muerto puro: `irSiguientePagina()` **ya
+espera** de forma reactiva a que la página cambie —número del paginador o
+contenido de la primera celda—, hasta 8 s. El `sleep` de después no agregaba
+ninguna garantía.
+
+> **Las del Cierre Mágico (`06_panel_interfaz.js` 1398, 1421, 1433, 1502) NO se
+> tocaron.** Son la secuencia de envío y la §4 pide probarlas rigurosamente.
+> Cambiarlas sin el portal delante es exactamente donde no hay que ahorrar.
+
+---
+
 ## 11. El XML del comprobante — la tarifa dicha, no deducida
 
 > **Estado**: parser y descarga construidos y probados (05-sep-2026).

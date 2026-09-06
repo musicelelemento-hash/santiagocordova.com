@@ -1407,6 +1407,47 @@ const waitFor = async (checkFn, timeoutMs = 8000, label = 'elemento') => {
 };
 
 /**
+ * Espera a que el SRI conteste un AJAX, en vez de contar hasta tres.
+ *
+ * Un `sleep(2500)` es una apuesta a dos puntas: sobra cuando el portal
+ * responde en 300 ms —y eso, por 500 contribuyentes, son horas— y falta el día
+ * que está cargado, y entonces el paso falla por impaciencia. Esto es al revés:
+ * sigue apenas la respuesta llega, y aguanta más que antes si tarda.
+ *
+ * Tres tramos, en orden:
+ *   1. Se le da un momento al velo de PrimeFaces para que aparezca. Si nunca
+ *      aparece, no se pierde nada: son 400 ms.
+ *   2. Se espera a que el velo se vaya.
+ *   3. Se espera a que esté en el DOM lo que se estaba esperando. Sin esto,
+ *      «el velo se fue» no quiere decir que lo nuevo ya se haya pintado.
+ *
+ * @param {Function} condicion Qué tiene que aparecer. Sin ella, solo el velo.
+ * @param {string} label Para el registro.
+ * @param {number} tope Techo total, en ms.
+ * @returns {Promise<boolean>} true si llegó lo esperado.
+ */
+async function esperarAjaxSri(condicion, label = 'la respuesta del SRI', tope = 9000) {
+    const t0 = Date.now();
+
+    // PrimeFaces levanta el velo en el mismo tick del click, pero no siempre.
+    // Que NO aparezca es normal, no un problema: se sondea a mano en vez de
+    // con waitFor(), que dejaría un aviso de timeout en cada llamada.
+    while (Date.now() - t0 < 400 && !veloAjaxArriba()) await sleep(50);
+    await waitFor(() => !veloAjaxArriba(), tope, 'que baje el velo');
+
+    let listo = true;
+    if (typeof condicion === 'function') {
+        const resta = Math.max(600, tope - (Date.now() - t0));
+        listo = !!(await waitFor(condicion, resta, label));
+    }
+
+    const ms = Date.now() - t0;
+    if (listo) console.log(`⏱️ [SRI] ${label}: ${ms} ms`);
+    else console.warn(`⏱️ [SRI] ${label}: no apareció en ${ms} ms.`);
+    return listo;
+}
+
+/**
  * ELITE HELPER: Cierra diálogos obstructores del SRI (ej. Mensajes Personalizados)
  */
 async function dismissSridialogs() {

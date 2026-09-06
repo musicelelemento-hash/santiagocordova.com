@@ -150,8 +150,9 @@ async function extraerTodasLasFacturas() {
         if (!hayMasPaginas) break;
 
         paginaActual++;
-        // Reducido delay para modo Turbo
-        await sleep(800);
+        // irSiguientePagina() ya esperó a que la página cambiara de verdad.
+        // Lo único que queda por vigilar es un segundo AJAX en curso.
+        await esperarAjaxSri(null, `página ${paginaActual} de facturas`);
     }
 
     console.log('Total: ' + todasLasFacturas.length + ' facturas');
@@ -456,7 +457,7 @@ async function extraerTodasLasRetenciones() {
         if (!hayMasPaginas) break;
 
         paginaActual++;
-        await sleep(2000);
+        await esperarAjaxSri(null, `página ${paginaActual} de retenciones`);
     }
 
     console.log(`✅ Total: ${todasLasRetenciones.length} retenciones`);
@@ -1495,7 +1496,7 @@ async function extraerTodasLasNotasCredito() {
         if (!hayMasPaginas) break;
 
         paginaActual++;
-        await sleep(1500);
+        await esperarAjaxSri(null, `página ${paginaActual} de notas de crédito`);
     }
 
     console.log('Total: ' + todasLasNC.length + ' notas de crédito');

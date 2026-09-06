@@ -11,6 +11,15 @@ const SRI_PUENTE_CONSULTA_DECLARACIONES =
 
 const SRI_CONSULTA_DECLARACIONES_PATH = 'sri-eyr-consulta-web-internet';
 
+// Las tres pantallas del asistente de Consulta de declaraciones, que viven
+// todas en la MISMA URL. Sirven para saber que un AJAX terminó de verdad, en
+// vez de contar segundos.
+const CONSULTA_PANTALLAS = {
+    grupoObligacion: () => document.getElementById('formPresentada:tblGrupoObligacionSeleccion'),
+    periodoFiscal: () => document.getElementById('formPresentada:btnAceptarPeriodoSeleccion'),
+    tabla: () => document.getElementById('formPresentada:tblConsultaDeclaracion')
+};
+
 /** ¿Estamos dentro de Consulta de declaraciones? */
 function enConsultaDeclaraciones() {
     return window.location.href.includes(SRI_CONSULTA_DECLARACIONES_PATH);
@@ -228,7 +237,8 @@ async function barrerTodosLosAnios({ ruc, nombre = '', soloFaltantes = true } = 
             break;
         }
         clickElement(nueva, `Consulta · volver para el año ${anio}`);
-        await sleep(2500);
+        await esperarAjaxSri(CONSULTA_PANTALLAS.grupoObligacion,
+                             `pantalla de obligaciones (${anio})`);
 
         const listo = await prepararTablaDeclaraciones(anio);
         if (!listo) {
@@ -289,7 +299,9 @@ async function prepararTablaDeclaraciones(anio) {
             await sleep(700);
         }
         clickElement(btnBuscar, 'Consulta · buscar grupo de obligación');
-        await sleep(2500);
+        // Puede saltar directo a la tabla si el período ya venía elegido.
+        await esperarAjaxSri(() => CONSULTA_PANTALLAS.periodoFiscal() || CONSULTA_PANTALLAS.tabla(),
+                             'pantalla de período fiscal');
     }
 
     // ── Pantalla 2 · período fiscal ──
@@ -315,7 +327,7 @@ async function prepararTablaDeclaraciones(anio) {
         // Elegir el año repinta el diálogo: el botón de recién ya no existe.
         const aceptarVivo = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion') || btnAceptar;
         clickElement(aceptarVivo, 'Consulta · aceptar período');
-        await sleep(3000);
+        await esperarAjaxSri(CONSULTA_PANTALLAS.tabla, 'tabla de declaraciones presentadas');
     }
 
     return !!document.getElementById('formPresentada:tblConsultaDeclaracion');
@@ -366,7 +378,8 @@ async function ejecutarRecuperacionComprobante() {
         }
         console.log('🧾 [RECUPERAR] Obligación IVA marcada. Buscando...');
         clickElement(btnBuscar, 'Consulta · buscar grupo de obligación');
-        await sleep(2500);
+        await esperarAjaxSri(() => CONSULTA_PANTALLAS.periodoFiscal() || CONSULTA_PANTALLAS.tabla(),
+                             'pantalla de período fiscal');
     }
 
     // ── Pantalla 2 · Período fiscal ──────────────────────────────────────
@@ -390,7 +403,7 @@ async function ejecutarRecuperacionComprobante() {
         }
         console.log(`🧾 [RECUPERAR] Período fiscal ${anio}. Aceptando...`);
         clickElement(btnAceptar, 'Consulta · aceptar período');
-        await sleep(3000);
+        await esperarAjaxSri(CONSULTA_PANTALLAS.tabla, 'tabla de declaraciones presentadas');
     }
 
     // ── Pantalla 3 · La tabla de declaraciones presentadas ───────────────
