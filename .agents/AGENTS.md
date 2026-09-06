@@ -272,6 +272,10 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 401 (Ventas 15%)** | `concepto401` | Input casillero 401 |
 | **Casillero 411 (Ventas Netas 15%)** | `concepto411` | Input casillero 411 |
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
+| **Casillero 502 (sin derecho a crédito)** | *sin confirmar* | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
+| **Casillero 512 (NC del 502)** | *sin confirmar* | Menos notas de crédito del 502 |
+| **Casillero 540 (compras 5%)** | *sin confirmar* | Adquisiciones locales gravadas 5% con crédito · ver §9 |
+| **Casillero 550 (NC del 540)** | *sin confirmar* | Menos notas de crédito del 540 |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |
 | **Casillero 601 (Impuesto Causado)** | `concepto601` | Lectura de impuesto causado |
 | **Casillero 609 (Retenciones IVA)** | `concepto609` | Input retenciones IVA del mes |
@@ -412,3 +416,118 @@ Hay una traza de Burp (`cambio_de_clave_obligatorio_ID`) y una extensión propia
 (`02_Cambio_Claves_SRI`). La regla acordada: **no aplastar por aplastar**. Vale
 lo mismo que en el importador de CSV de Chrome — proponer los cambios, mostrar
 a quién le pisa una clave que ya funcionaba, y aplicar solo lo confirmado.
+
+---
+
+## 9. Los casilleros de compras que faltan — y un hueco de tarifa
+
+### 9a. Lo que hoy se declara y lo que no
+
+La extensión solo conoce **dos tarifas**: 15% y 0%. Escribe en 500/510 y
+507/517 y nada más. Confirmado el 05-sep-2026: no existe una sola mención a
+`502`, `512`, `540` ni `550` en todo `src/`.
+
+| Casillero | Qué es | ¿Se llena hoy? |
+| :--- | :--- | :---: |
+| **500 / 510** | Compras 15% con derecho a crédito · menos NC | ✅ |
+| **507 / 517** | Compras 0% · menos NC | ✅ |
+| **502 / 512** | Otras adquisiciones y pagos gravados **tarifa distinta de cero, SIN derecho a crédito tributario** · menos NC | ❌ |
+| **540 / 550** | Adquisiciones locales (excluye activos fijos) gravadas con **tarifa 5%**, con derecho a crédito · menos NC | ❌ |
+
+**El 502 es el casillero que faltaba** para separar deducible de no deducible.
+Es el destino de las compras que la base de proveedores marque como sin
+derecho a crédito.
+
+**El 540 es un agujero distinto y más urgente.** Si un contribuyente tiene
+compras al 5%, hoy no se declaran en ningún lado: ni en 500 (que es 15%) ni en
+507 (que es 0%). No es una clasificación fina que falta — es un importe que se
+está perdiendo.
+
+> Ninguno de los cuatro tiene todavía entrada en la Biblia. Antes de escribir
+> en ellos hay que confirmar su `id` real en el DOM, igual que se hizo con
+> `concepto1270` (500) y `concepto1280` (510). La regla §5b vale acá: un
+> selector sin evidencia es una suposición.
+
+### 9b. Cómo decide qué va a cada uno
+
+Con la base de proveedores de la §7:
+
+    factura recibida
+        ├─ proveedor con derecho a crédito  → 500/510 (15%) · 540/550 (5%) · 507/517 (0%)
+        └─ proveedor sin derecho a crédito  → 502/512
+
+Y la misma regla de siempre: **si no se sabe, no se inventa.** Un proveedor sin
+clasificar va donde va hoy, queda en la lista de pendientes, y no se lo manda
+al 502 por las dudas — mandarlo ahí le quita al contribuyente un crédito que
+quizá le corresponde.
+
+---
+
+## 10. Los datasets del SRI — https://www.sri.gob.ec/datasets
+
+Consultada la página el 05-sep-2026. Hay más de lo que el proyecto está usando.
+
+### Lo que sirve, en orden
+
+**1 · Catastro RUC por provincia** — *ya se tiene el de El Oro*
+ZIP con CSV, una descarga por provincia. Trae RUC, razón social y actividad
+económica. Es la fuente de la base de proveedores de la §7. Viene con un
+**Diccionario RUC** que documenta las columnas: leerlo antes de parsear.
+
+**2 · Empresas fantasmas** — *lo más valioso que no estábamos mirando*
+El catastro incluye una clasificación de empresas fantasma. Si un cliente
+recibió una factura de una de ellas, esa compra no es deducible y el SRI la
+va a objetar. Un aviso **antes de declarar** —«esta factura es de una empresa
+marcada como fantasma»— protege la firma del contador. Encaja con el resto de
+frenos del proyecto: no impedir, avisar y dejar decidir.
+
+**3 · Agentes de retención**
+También en el catastro. Dice si un proveedor debía retener, lo que se cruza
+con las retenciones que efectivamente aparecen.
+
+**4 · Contribuyentes activos**
+Un proveedor dado de baja que sigue emitiendo es una señal de alerta.
+
+**5 · Ventas-compras (F104) por tarifa, provincia y actividad**
+Datos agregados, no por RUC. No sirve para clasificar, pero sí para comparar:
+un cliente cuyas compras se desvían mucho del promedio de su actividad y
+provincia es un caso a revisar antes de presentar.
+
+### Cómo se usa un archivo de un GB
+
+No entero. Para clasificar solo hacen falta **dos columnas**: RUC y actividad.
+
+    catastro provincial      ~1 GB   (todas las columnas)
+        ↓ reducir una vez, leyendo en streaming
+    RUC + código de actividad  ~7 MB
+        ↓ gzip
+                              ~1-2 MB
+
+Ese tamaño entra como recurso de la extensión cargado **bajo demanda**, el
+mismo patrón que ya usa `jsPDF` (355 KB en `vendor/`, fuera del bundle, traído
+por `ensureJsPdfLoaded()` solo cuando hace falta). Nunca dentro de
+`build/content.js`, que se inyecta en cada página del SRI.
+
+### Lo que el archivo no cubre
+
+Los contribuyentes **nuevos**, y los de **otras provincias**. Para esos queda
+el interruptor de la §7: preguntar, o seguir y dejarlos pendientes.
+
+El endpoint `movil-servicios/api/v1.0/contribuyente/{RUC}` podría cubrirlos,
+pero está detrás de un WAF: probado el 05-sep-2026 desde curl con cabeceras
+completas de Chrome y por `corsproxy.io`, las dos veces rechazado. Falta
+probarlo desde un content script en el portal, con la sesión del usuario —
+que es el único contexto donde tiene chance de pasar.
+
+> ⚠️ **`corsproxy.io` dejó de ser gratuito.** `fetchSRIPublicData()` en
+> `services/sri.ts` lo sigue usando y hoy devuelve HTTP 403
+> (`keyless_legacy_url`). Todo lo que dependa de esa función —autocompletar al
+> crear un cliente, validar un RUC— está fallando en producción.
+
+### Sobre extensiones de terceros
+
+Se evaluó una extensión de terceros que ofrece consultas gratis. Consulta
+contra el servidor de su autor, o sea que ese tercero vería los RUC de los
+proveedores de todos los clientes del estudio — con quién opera cada
+contribuyente. Teniendo el catastro en disco propio, no hay motivo para mandar
+eso afuera. Descartada.
