@@ -120,6 +120,48 @@
   push('sino que dice si el permiso está o no',
        /permiso/.test(delWorker.error || ''), true);
 
+  sec('E · el cortacircuitos del Worker');
+  // El Worker se intenta primero, y cuando está caído cada subida gasta un
+  // viaje y su timeout. En un lote de 500 contribuyentes son 500 esperas por
+  // nada. Salió del informe real del usuario: «worker: no llegué… s3: bien».
+  await chrome.storage.local.remove('sc_worker_caido');
+  push('al principio se lo intenta',      await WorkerCaido.saltear(), false);
+  await WorkerCaido.anotarFallo();
+  await WorkerCaido.anotarFallo();
+  push('dos fallos no alcanzan',          await WorkerCaido.saltear(), false);
+  await WorkerCaido.anotarFallo();
+  push('al tercero se lo saltea',         await WorkerCaido.saltear(), true);
+  // Pero no se lo condena para siempre: un éxito perdona toda la racha.
+  await WorkerCaido.anotarExito();
+  push('un solo éxito lo perdona',        await WorkerCaido.saltear(), false);
+
+  // Y la subida real lo dice en vez de callárselo.
+  await chrome.storage.local.set({ sc_worker_caido: { fallos: 5, desde: Date.now() } });
+  const conSalteo = await subirComprobante({
+    key: 'x.pdf', base64: 'data:application/pdf;base64,JVBERi0=', contentType: 'application/pdf',
+    config: { R2_UPLOAD_ENDPOINT: 'https://x.workers.dev' }
+  });
+  push('y el motivo dice que fue salteado',
+       (conSalteo.motivos || []).some(m => /salteado/.test(m)), true);
+  await chrome.storage.local.remove('sc_worker_caido');
+
+  sec('F · de dónde sale cada credencial');
+  // Después de rotar, ésta es la pregunta que no se puede contestar mirando:
+  // la subida puede estar funcionando con la clave vieja, la del repositorio.
+  let inf2 = await diagnosticarSubida({ R2_SECRET_ACCESS_KEY: 'la-del-codigo', R2_ACCESS_KEY_ID: 'id-viejo' });
+  push('sin nada guardado, dice que sale del CÓDIGO',
+       inf2.configurado.claveSecreta, 'del CÓDIGO');
+
+  await chrome.storage.local.set({ sc_r2_credenciales: {
+    R2_SECRET_ACCESS_KEY: 'la-rotada', R2_ACCESS_KEY_ID: 'id-nuevo' } });
+  inf2 = await diagnosticarSubida({ R2_SECRET_ACCESS_KEY: 'la-del-codigo', R2_ACCESS_KEY_ID: 'id-viejo' });
+  push('con la rotación hecha, del almacén',   inf2.configurado.claveSecreta, 'del almacén');
+  push('y el Access Key ID también',           inf2.configurado.accessKeyId, 'del almacén');
+  // Se dicen los NOMBRES de las fuentes, nunca los valores.
+  push('sin filtrar ningún valor',
+       JSON.stringify(inf2.configurado).includes('la-rotada'), false);
+  await chrome.storage.local.remove('sc_r2_credenciales');
+
   sec('D · el diagnóstico no filtra claves');
   await chrome.storage.local.set({ sc_r2_credenciales: { R2_SECRET_ACCESS_KEY: 'SECRETO-QUE-NO-DEBE-SALIR' } });
   const inf = await diagnosticarSubida({ R2_ACCOUNT_ID: 'cuenta', R2_BUCKET_NAME: 'balde' });

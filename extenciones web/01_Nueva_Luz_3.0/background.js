@@ -52,6 +52,52 @@ function porQueFalloElFetch(e, url) {
 }
 
 /**
+ * El cortacircuitos del Worker.
+ *
+ * El Worker se intenta primero porque no necesita credenciales en el cliente.
+ * Pero cuando está caído, cada subida gasta un viaje a la red y su timeout
+ * antes de caer al s3 — y en un lote de 500 contribuyentes eso son 500 esperas
+ * por nada.
+ *
+ * Tras tres fallos seguidos se lo saltea durante media hora. Un solo éxito
+ * vuelve a cero: no se lo condena para siempre por una racha mala.
+ */
+const WorkerCaido = {
+  _KEY: 'sc_worker_caido',
+  FALLOS_PARA_SALTEAR: 3,
+  DESCANSO_MS: 30 * 60 * 1000,
+
+  async estado() {
+    try { return (await chrome.storage.local.get([this._KEY]))[this._KEY] || { fallos: 0, desde: 0 }; }
+    catch (e) { return { fallos: 0, desde: 0 }; }
+  },
+
+  /** ¿Conviene ni intentarlo? */
+  async saltear() {
+    const e = await this.estado();
+    if (e.fallos < this.FALLOS_PARA_SALTEAR) return false;
+    if (Date.now() - (e.desde || 0) > this.DESCANSO_MS) return false;   // se le da otra chance
+    return true;
+  },
+
+  async anotarFallo() {
+    const e = await this.estado();
+    e.fallos = (e.fallos || 0) + 1;
+    if (e.fallos === this.FALLOS_PARA_SALTEAR) {
+      e.desde = Date.now();
+      console.warn(`⚠️ [SW] El Worker falló ${e.fallos} veces seguidas: se saltea por 30 min y se va derecho al s3.`);
+    }
+    try { await chrome.storage.local.set({ [this._KEY]: e }); } catch (err) { /* nada */ }
+  },
+
+  async anotarExito() {
+    const e = await this.estado();
+    if (!e.fallos) return;
+    try { await chrome.storage.local.remove(this._KEY); } catch (err) { /* nada */ }
+  }
+};
+
+/**
  * Las credenciales de R2, con `chrome.storage.local` por encima del código.
  *
  * `shared_config.js` viaja dentro de la extensión y está en el repositorio: una
@@ -93,13 +139,27 @@ function base64ABytes(base64) {
  */
 async function diagnosticarSubida(recibido) {
   const config = await credencialesR2(recibido);
+
+  // De dónde sale cada credencial. Con la rotación a medio camino, ésta es la
+  // pregunta que no se puede contestar mirando: la subida puede estar
+  // funcionando con la clave vieja, la que está en el repositorio.
+  let guardadas = {};
+  try {
+    guardadas = (await chrome.storage.local.get(['sc_r2_credenciales'])).sc_r2_credenciales || {};
+  } catch (e) { /* nada */ }
+  const deDonde = (campo) =>
+    guardadas[campo] ? 'del almacén' : ((recibido || {})[campo] ? 'del CÓDIGO' : 'no hay');
   const informe = {
     ok: false,
     configurado: {
       worker: !!config.R2_UPLOAD_ENDPOINT,
       s3: !!(config.R2_ACCOUNT_ID && config.R2_ACCESS_KEY_ID && config.R2_SECRET_ACCESS_KEY && config.R2_BUCKET_NAME),
       bucket: config.R2_BUCKET_NAME || '(sin definir)',
-      endpointWorker: config.R2_UPLOAD_ENDPOINT || '(sin definir)'
+      endpointWorker: config.R2_UPLOAD_ENDPOINT || '(sin definir)',
+      // Lo que de verdad hace falta saber después de rotar. Los NOMBRES de las
+      // fuentes, nunca los valores.
+      claveSecreta: deDonde('R2_SECRET_ACCESS_KEY'),
+      accessKeyId: deDonde('R2_ACCESS_KEY_ID')
     },
     intentos: []
   };
@@ -161,7 +221,9 @@ async function subirComprobante({ key, base64, contentType, config: recibido }) 
   const motivos = [];
 
   // ── Tier 1: Worker relay ─────────────────────────────────────────────────
-  if (config.R2_UPLOAD_ENDPOINT) {
+  if (config.R2_UPLOAD_ENDPOINT && await WorkerCaido.saltear()) {
+    motivos.push('worker: salteado — viene fallando y hay un camino que anda');
+  } else if (config.R2_UPLOAD_ENDPOINT) {
     try {
       const url = `${config.R2_UPLOAD_ENDPOINT}/upload/${key}`;
       console.log("🚀 [SW] Subiendo vía Worker:", url);
@@ -174,12 +236,15 @@ async function subirComprobante({ key, base64, contentType, config: recibido }) 
         const data = await res.json().catch(() => ({}));
         const fileUrl = data.url || `${config.R2_UPLOAD_ENDPOINT}/files/${key}`;
         console.log("✅ [SW] Subido vía Worker:", fileUrl);
+        await WorkerCaido.anotarExito();
         return { ok: true, url: fileUrl, via: "worker" };
       }
       const respuestaWorker = await res.text().catch(() => "");
+      await WorkerCaido.anotarFallo();
       motivos.push(`worker: HTTP ${res.status}${respuestaWorker ? ' · ' + respuestaWorker.slice(0, 120) : ''}`);
       console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, respuestaWorker);
     } catch (e) {
+      await WorkerCaido.anotarFallo();
       const porQue = porQueFalloElFetch(e, `${config.R2_UPLOAD_ENDPOINT}/upload/${key}`);
       motivos.push(`worker: ${porQue}`);
       console.warn("⚠️ [SW] Worker no disponible:", porQue);
