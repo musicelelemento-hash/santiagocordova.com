@@ -1,0 +1,121 @@
+<!doctype html><meta charset="utf-8"><title>Por qué no sube el comprobante</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>«Failed to fetch» son tres problemas distintos, y solo uno se arregla con el manifest</h3>
+<pre id="out">…</pre>
+<script>
+  // El service worker vive fuera del bundle: se carga solo, con su propio mock.
+  const store = {};
+  window.__errors = [];
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+
+  // Los host_permissions reales del manifest se cargan más abajo; acá queda el
+  // hueco para que background.js no reviente al declararse.
+  let MANIFEST = { host_permissions: [] };
+  window.chrome = {
+    runtime: {
+      getManifest: () => MANIFEST,
+      onMessage: { addListener() {} },
+      onInstalled: { addListener() {} },
+      onStartup: { addListener() {} },
+      id: 'test'
+    },
+    storage: {
+      local: {
+        get: (k) => Promise.resolve(
+          Array.isArray(k) ? Object.fromEntries(k.filter(x => x in store).map(x => [x, store[x]]))
+                           : (typeof k === 'string' ? (k in store ? { [k]: store[k] } : {}) : { ...store })),
+        set: (o) => { Object.assign(store, o); return Promise.resolve(); },
+        remove: (k) => { [].concat(k).forEach(x => delete store[x]); return Promise.resolve(); }
+      },
+      onChanged: { addListener() {} }
+    },
+    cookies: { getAll: () => Promise.resolve([]), remove: () => Promise.resolve() },
+    tabs: { create() {}, query: () => Promise.resolve([]) },
+    action: { onClicked: { addListener() {} } }
+  };
+</script>
+<script src="../background.js"></script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => {
+    const b = typeof e === 'function' ? e(v) : JSON.stringify(v) === JSON.stringify(e);
+    ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(62) + JSON.stringify(v) +
+           (b ? '' : '  ESPERADO: ' + JSON.stringify(e)));
+  };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+
+  // El manifest de verdad, no uno inventado: si mañana alguien saca un permiso,
+  // esta prueba se entera.
+  MANIFEST = await (await fetch('../manifest.json')).json();
+
+  // ══ A · el permiso que tenía rota la subida ═════════════════════════════
+  sec('A · los host_permissions que hacen falta');
+  const H = MANIFEST.host_permissions;
+  push('R2 directo está permitido',  H.includes('https://*.r2.cloudflarestorage.com/*'), true);
+  push('el Worker relay también',    H.includes('https://*.workers.dev/*'), true);
+  push('y Supabase',                 H.includes('https://*.supabase.co/*'), true);
+  push('el portal del SRI, claro',   H.includes('https://srienlinea.sri.gob.ec/*'), true);
+
+  // ══ B · «Failed to fetch» traducido a algo accionable ═══════════════════
+  sec('B · por qué falló, dicho en castellano');
+  const falla = new TypeError('Failed to fetch');
+
+  // ÉSTE era el bug: el host no estaba en el manifest y Chrome bloqueaba la
+  // petición. El mensaje culpaba a la red y no había forma de darse cuenta.
+  const sinPermiso = porQueFalloElFetch(falla, 'https://ejemplo-que-no-esta.com/upload/x');
+  push('un host sin permiso se nombra como tal', /NO está en host_permissions/.test(sinPermiso), true);
+  push('y se descarta la red y las credenciales',
+       /No es la red ni las credenciales/.test(sinPermiso), true);
+
+  // Con permiso, la culpa es de otra cosa — y Burp es la sospechosa habitual.
+  const conPermiso = porQueFalloElFetch(falla, 'https://algo.r2.cloudflarestorage.com/bucket/x');
+  push('con permiso, se apunta a la red o al TLS', /el permiso está/.test(conPermiso), true);
+  push('y se nombra a Burp, que es lo que suele ser', /Burp/.test(conPermiso), true);
+
+  // El comodín *.workers.dev tiene que cubrir un subdominio real.
+  push('el comodín cubre el subdominio del worker',
+       /el permiso está/.test(porQueFalloElFetch(falla, 'https://sc-r2-vault.workers.dev/upload/x')), true);
+  // …pero no un dominio que solo *termina* parecido.
+  push('y no cubre a un impostor',
+       /NO está en host_permissions/.test(porQueFalloElFetch(falla, 'https://malo-workers.dev/x')), true);
+
+  // Un error que no es de red se deja pasar tal cual: no hay que disfrazarlo.
+  push('un error que no es de red no se toca',
+       porQueFalloElFetch(new Error('El bucket no existe'), 'https://x.workers.dev/'),
+       'El bucket no existe');
+
+  // ══ C · las credenciales pueden vivir fuera del código ══════════════════
+  sec('C · credenciales fuera del repositorio');
+  // shared_config.js está versionado: una clave ahí es una clave publicada.
+  // Lo que esté en el almacén local gana, para poder rotar sin commitear.
+  const delCodigo = { R2_ACCOUNT_ID: 'viejo', R2_BUCKET_NAME: 'balde', R2_ACCESS_KEY_ID: 'ak-viejo' };
+  push('sin nada guardado, manda el código',
+       (await credencialesR2(delCodigo)).R2_ACCESS_KEY_ID, 'ak-viejo');
+
+  await chrome.storage.local.set({ sc_r2_credenciales: { R2_ACCESS_KEY_ID: 'ak-rotada' } });
+  const mezcla = await credencialesR2(delCodigo);
+  push('lo guardado pisa a lo del código',   mezcla.R2_ACCESS_KEY_ID, 'ak-rotada');
+  push('y lo que no se guardó se conserva',  mezcla.R2_BUCKET_NAME, 'balde');
+  await chrome.storage.local.remove('sc_r2_credenciales');
+
+  // ══ D · el informe nunca devuelve secretos ══════════════════════════════
+  sec('D · el diagnóstico no filtra claves');
+  await chrome.storage.local.set({ sc_r2_credenciales: { R2_SECRET_ACCESS_KEY: 'SECRETO-QUE-NO-DEBE-SALIR' } });
+  const inf = await diagnosticarSubida({ R2_ACCOUNT_ID: 'cuenta', R2_BUCKET_NAME: 'balde' });
+  push('el informe no trae el secreto',
+       JSON.stringify(inf).includes('SECRETO-QUE-NO-DEBE-SALIR'), false);
+  push('pero sí dice si está configurado', typeof inf.configurado, 'object');
+  await chrome.storage.local.remove('sc_r2_credenciales');
+
+  const fallos = ok.filter(x => !x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' +
+    (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+            : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+})();
+</script>

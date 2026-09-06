@@ -12,6 +12,63 @@
 // El content script captura el PDF y le pide a este worker que lo suba.
 // ============================================================
 
+/**
+ * Traduce un fallo de fetch a algo accionable.
+ *
+ * «TypeError: Failed to fetch» es el mensaje que Chrome da para tres cosas muy
+ * distintas: no hay permiso para ese host, no hay red, o el TLS no cerró. Sin
+ * distinguirlas no se arregla nada — y el caso del permiso es justo el que
+ * tuvo rota la subida a R2 todo este tiempo.
+ *
+ * @param {Error} e El error del fetch.
+ * @param {string} url A dónde se intentó ir.
+ * @returns {string} Una frase que dice qué hacer.
+ */
+function porQueFalloElFetch(e, url) {
+  const msg = e && e.message ? e.message : String(e);
+  if (!/failed to fetch|load failed|networkerror/i.test(msg)) return msg;
+
+  let host = '';
+  try { host = new URL(url).host; } catch (err) { /* url rara */ }
+
+  const permitidos = (chrome.runtime.getManifest().host_permissions || []);
+  const cubierto = permitidos.some((p) => {
+    const m = /^https?:\/\/([^/]+)/.exec(p);
+    if (!m) return false;
+    const patron = m[1];
+    if (patron.startsWith('*.')) {
+      const base = patron.slice(2);
+      return host === base || host.endsWith('.' + base);
+    }
+    return host === patron;
+  });
+
+  if (!cubierto) {
+    return `no llegué a ${host}: ese host NO está en host_permissions del manifest. ` +
+           'No es la red ni las credenciales — Chrome bloqueó la petición.';
+  }
+  return `no llegué a ${host}: el permiso está, así que es la red, el servidor caído, ` +
+         'o un proxy que rompe el TLS (Burp hace justo eso).';
+}
+
+/**
+ * Las credenciales de R2, con `chrome.storage.local` por encima del código.
+ *
+ * `shared_config.js` viaja dentro de la extensión y está en el repositorio: una
+ * clave ahí es una clave publicada. Lo correcto es guardarla en el almacén
+ * local de la extensión, que no se versiona ni se distribuye.
+ *
+ * Se lee así para poder rotar la clave sin volver a commitearla: lo que esté
+ * en `sc_r2_credenciales` gana sobre lo que venga en el código.
+ */
+async function credencialesR2(config) {
+  let guardadas = {};
+  try {
+    guardadas = (await chrome.storage.local.get(['sc_r2_credenciales'])).sc_r2_credenciales || {};
+  } catch (e) { /* sin almacén, queda lo del código */ }
+  return { ...(config || {}), ...guardadas };
+}
+
 /** base64 → Uint8Array, sin pasar por Blob (no existe atob-a-blob en SW). */
 function base64ABytes(base64) {
   const limpio = base64.includes("base64,") ? base64.split("base64,")[1] : base64;
@@ -34,7 +91,8 @@ function base64ABytes(base64) {
  *
  * Nunca devuelve claves ni secretos, solo si están presentes.
  */
-async function diagnosticarSubida(config) {
+async function diagnosticarSubida(recibido) {
+  const config = await credencialesR2(recibido);
   const informe = {
     ok: false,
     configurado: {
@@ -93,7 +151,8 @@ async function diagnosticarSubida(config) {
   return informe;
 }
 
-async function subirComprobante({ key, base64, contentType, config }) {
+async function subirComprobante({ key, base64, contentType, config: recibido }) {
+  const config = await credencialesR2(recibido);
   const bytes = base64ABytes(base64);
   const cuerpo = new Blob([bytes], { type: contentType || "application/pdf" });
   const motivos = [];
@@ -118,8 +177,9 @@ async function subirComprobante({ key, base64, contentType, config }) {
       motivos.push(`worker: HTTP ${res.status}${respuestaWorker ? ' · ' + respuestaWorker.slice(0, 120) : ''}`);
       console.warn(`⚠️ [SW] Worker respondió ${res.status}:`, respuestaWorker);
     } catch (e) {
-      motivos.push(`worker: ${e.message}`);
-      console.warn("⚠️ [SW] Worker no disponible:", e.message);
+      const porQue = porQueFalloElFetch(e, `${config.R2_UPLOAD_ENDPOINT}/upload/${key}`);
+      motivos.push(`worker: ${porQue}`);
+      console.warn("⚠️ [SW] Worker no disponible:", porQue);
     }
   } else {
     motivos.push('worker: sin R2_UPLOAD_ENDPOINT configurado');
@@ -185,7 +245,7 @@ async function subirComprobante({ key, base64, contentType, config }) {
       motivos.push(`r2-directo: HTTP ${res.status}${cuerpoR2 ? ' · ' + cuerpoR2.slice(0, 160) : ''}`);
       console.warn(`⚠️ [SW] R2 respondió ${res.status}:`, cuerpoR2);
     } catch (e) {
-      motivos.push(`r2-directo: ${e.message}`);
+      motivos.push(`r2-directo: ${porQueFalloElFetch(e, `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/`)}`);
       console.warn("⚠️ [SW] Subida directa falló:", e.message);
     }
   } else {

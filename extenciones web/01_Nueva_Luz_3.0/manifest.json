@@ -13,6 +13,7 @@
         "https://srienlinea.sri.gob.ec/*",
         "https://*.supabase.co/*",
         "https://*.workers.dev/*",
+        "https://*.r2.cloudflarestorage.com/*",
         "http://localhost/*",
         "http://127.0.0.1/*",
         "https://santiagocordova.com/*",
