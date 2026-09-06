@@ -322,6 +322,59 @@
   document.getElementById('portal').innerHTML = '';
   push('sin formulario devuelve lista vacía', sriMapaCasilleros().length, 0);
 
+  // ══ J · el HUD: que los botones estén y se vean ═════════════════════════
+  sec('J · los botones de la barra flotante');
+
+  // El HUD solo se monta dentro del portal; acá se le dice que sí.
+  SriLoopHUD._enSri = () => true;
+  await SriLoopHUD.montar();
+  const hud = document.getElementById('sri-loop-hud');
+  push('la barra se monta', !!hud, true);
+
+  const visible = (id) => {
+    const b = document.getElementById(id);
+    if (!b) return 'NO EXISTE';
+    return getComputedStyle(b).display !== 'none' ? 'visible' : 'oculto';
+  };
+
+  // Éste es el bug que pasó en pantalla: el botón existía y no se veía.
+  push('📐 casilleros está y se ve', visible('slh-casilleros'), 'visible');
+  push('🧭 ir a… está y se ve',      visible('slh-ir'),         'visible');
+
+  // Fuera del formulario también: esconderlo fue justo lo que falló.
+  push('la URL de la prueba no es el formulario',
+       typeof estaEnFormularioIva === 'function' && estaEnFormularioIva(), false);
+  await SriLoopHUD.pintar();
+  push('y aun así el 📐 sigue a la vista', visible('slh-casilleros'), 'visible');
+
+  // La brújula: los destinos son los puentes SSO de la Matriz Tatuada.
+  await SriLoopHUD.pintarIr();
+  const irs = [...document.querySelectorAll('#slh-ir-panel [data-sc-ir]')]
+                .map(b => b.getAttribute('data-sc-ir'));
+  push('ofrece cuatro destinos', irs.length, 4);
+  push('todos dentro del portal del SRI',
+       irs.every(u => u.startsWith('https://srienlinea.sri.gob.ec/')), true);
+  push('recibidos va por el puente SSO, no por la URL directa',
+       irs[0].includes('accederAplicacion.jspa'), true);
+  push('y el formulario también', irs[1].includes('accederAplicacion.jspa'), true);
+
+  // El panel de casilleros, sobre un formulario de mentira.
+  document.getElementById('portal').innerHTML = `<table><tbody>
+    ${CAS('500','Adquisiciones gravadas tarifa diferente de cero','concepto1270')}
+  </tbody></table>`;
+  SriLoopHUD.pintarCasilleros();
+  const pc = document.getElementById('slh-casilleros-panel');
+  push('el panel lista el casillero',   /concepto1270/.test(pc.innerHTML), true);
+  push('y avisa que no hay nada del 5%', /Ni rastro/.test(pc.innerHTML), true);
+
+  // Sin formulario, el panel dice qué hacer en vez de quedar vacío.
+  document.getElementById('portal').innerHTML = '';
+  SriLoopHUD.pintarCasilleros();
+  push('sin casilleros, explica dónde hay que estar',
+       /dentro del formulario/.test(pc.innerHTML), true);
+
+  hud.remove();
+
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =

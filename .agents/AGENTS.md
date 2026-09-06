@@ -515,14 +515,21 @@ un cliente bloquearía al próximo.
 
 #### Cómo se sale de la duda: el botón 📐
 
-En el HUD, **dentro del formulario** (aparece solo ahí). Abre un panel con
+En el HUD, entre 📜 y 🗔. **Siempre visible.** Abre un panel con
 **todos** los casilleros que el formulario tiene de verdad —número, `id` real,
 rótulo y si es editable—, resalta los del 5% y los del 502/512, y tiene un
 botón que copia la tabla en Markdown lista para pegar en la Biblia.
 
-Es un botón y no un comando de consola a propósito: **la consola del content
-script no siempre deja pegar**, y un dato que sólo se saca escribiendo es un
-dato que no se saca. Si el portapapeles tampoco responde, el panel muestra el
+Es un botón y no un comando de consola a propósito: **Chrome bloquea el pegado
+en la consola** (la protección contra self-XSS, que pide escribir `allow
+pasting`), y un dato que sólo se saca escribiendo es un dato que no se saca.
+
+> **No se esconde fuera del formulario.** Nació condicionado a
+> `estaEnFormularioIva()` y el día que hizo falta no apareció — la detección es
+> justo lo que puede fallar. Un botón que a veces no está es peor que uno que a
+> veces abre un panel diciendo que no hay nada que leer. Misma lección que el
+> `offsetParent` de los modales: no condicionar lo visible a una detección
+> frágil. Si el portapapeles tampoco responde, el panel muestra el
 texto ya seleccionado para un Ctrl+C.
 
 Desde la consola sigue estando como `sriMapaCasilleros({ desde, hasta })`.

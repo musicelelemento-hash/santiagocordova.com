@@ -569,7 +569,8 @@ const SriLoopHUD = {
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
-            '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
+            '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
+            '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -587,7 +588,8 @@ const SriLoopHUD = {
             '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-cola-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
-            '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
+            '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
+            '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -686,7 +688,8 @@ const SriLoopHUD = {
         // pantalla justo cuando hay que mirar el portal.
         const soloUno = (cual) => {
             ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
-             'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel']
+             'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
+             'slh-ir-panel']
                 .filter((id) => id !== cual && id !== 'slh-plan')
                 .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
         };
@@ -761,6 +764,34 @@ const SriLoopHUD = {
                 console.log(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
             }
+        });
+
+        // Discreto de verdad: medio transparente hasta que lo mirás.
+        const brujula = el.querySelector('#slh-ir');
+        brujula.addEventListener('mouseenter', () => { brujula.style.opacity = '1'; });
+        brujula.addEventListener('mouseleave', () => { brujula.style.opacity = '0.5'; });
+        brujula.addEventListener('focus', () => { brujula.style.opacity = '1'; });
+        brujula.addEventListener('blur', () => { brujula.style.opacity = '0.5'; });
+
+        brujula.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-ir-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-ir-panel');
+            panel.style.display = 'block';
+            await this.pintarIr();
+        });
+
+        el.querySelector('#slh-ir-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('[data-sc-ir]');
+            if (!btn) return;
+            ev.stopPropagation();
+            const destino = btn.getAttribute('data-sc-ir');
+            if (!destino || !destino.startsWith('https://srienlinea.sri.gob.ec/')) return;
+            // Queda constancia: si el lote estaba a mitad de camino, después se
+            // entiende por qué la página cambió sola.
+            if (typeof anotarBitacora === 'function') anotarBitacora('ir a', btn.textContent.trim());
+            window.location.href = destino;
         });
 
         el.querySelector('#slh-casilleros').addEventListener('click', async (ev) => {
@@ -1543,6 +1574,42 @@ const SriLoopHUD = {
      * La bitácora, para leerla acá en vez de copiarla a ciegas.
      */
     /**
+     * Los tres saltos que siempre se hacen a mano.
+     *
+     * Van por los puentes SSO de la Matriz Tatuada, no por la URL directa: el
+     * puente es el que transfiere la sesión de Angular a JSF. Entrar derecho a
+     * la URL final con la sesión en el lado equivocado devuelve un login.
+     */
+    async pintarIr() {
+        const panel = document.getElementById('slh-ir-panel');
+        if (!panel) return;
+
+        const destinos = [
+            ['📥', 'Comprobantes recibidos', SRI_PUENTE_RECIBIDOS],
+            ['📝', 'Formulario de IVA', SRI_PUENTE_FORMULARIO_IVA],
+            ['📋', 'Consulta de declaraciones', SRI_PUENTE_CONSULTA_DECLARACIONES],
+            ['👤', 'Perfil del contribuyente', 'https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil']
+        ];
+
+        let corriendo = false;
+        try { corriendo = (await SriLoop.get()).estado === 'CORRIENDO'; } catch (e) {}
+
+        const aviso = corriendo
+            ? '<div style="background:rgba(245,158,11,0.16);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px">' +
+              '⚠️ El lote está <b>corriendo</b>. Si te movés a mano, el bot pierde el hilo de dónde estaba.</div>'
+            : '';
+
+        panel.innerHTML = aviso +
+            '<div style="display:flex;flex-direction:column;gap:4px">' +
+            destinos.map(([ico, txt, url]) =>
+                `<button data-sc-ir="${url}" style="text-align:left;border:none;border-radius:8px;padding:8px 10px;min-height:34px;` +
+                'background:rgba(148,163,184,0.12);color:#cbd5e1;font-size:11px;font-weight:700;cursor:pointer">' +
+                `${ico}  ${txt}</button>`
+            ).join('') +
+            '</div>';
+    },
+
+    /**
      * Pinta los casilleros que el formulario tiene DE VERDAD.
      *
      * Existe porque el 540 y el 550 no aparecen en pantalla y no se sabe si es
@@ -1766,17 +1833,10 @@ const SriLoopHUD = {
             pdfs.style.display = (info && info.ruc) ? '' : 'none';
         }
 
-        // Solo tiene sentido dentro del formulario: en el resto de las
-        // pantallas no hay casilleros que leer.
-        const cas = this._el.querySelector('#slh-casilleros');
-        if (cas) {
-            const enForm = typeof estaEnFormularioIva === 'function' && estaEnFormularioIva();
-            cas.style.display = enForm ? '' : 'none';
-            if (!enForm) {
-                const p = this._el.querySelector('#slh-casilleros-panel');
-                if (p) p.style.display = 'none';
-            }
-        }
+        // El 📐 NO se esconde fuera del formulario. Se escondía, y el día que
+        // hacía falta no apareció: la detección de «estoy en el formulario» es
+        // justo lo que puede fallar. Un botón que a veces no está es peor que
+        // uno que a veces abre un panel diciendo que no hay nada que leer.
 
         const stop = this._el.querySelector('#slh-stop');
         if (!play || !est || !det) return;
