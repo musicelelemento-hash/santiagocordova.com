@@ -1,276 +1,322 @@
 # 🤝 Handoff — Nueva Luz 3.0
 
-Contexto para continuar el trabajo sobre la extensión de declaración automática
-de IVA del SRI (Ecuador). Escrito el **03-sep-2026**, build `3.1.0+20260903.1804`.
+Para quien siga el trabajo sobre la extensión de declaración automática de IVA
+del SRI (Ecuador). Escrito el **06-sep-2026**, manifest `3.1.0`, bundle 509 KB,
+`src/` 18.567 líneas.
 
-Leé también, en este orden: [`.agents/AGENTS.md`](../../.agents/AGENTS.md) (reglas
-arquitectónicas) y
-[`_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`](../_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md)
-(evidencia real del portal: URLs, IDs y flujos confirmados contra el DOM).
+**Leé primero, en este orden:**
 
----
-
-## 1. Qué es y dónde está
-
-`extenciones web/01_Nueva_Luz_3.0` es **la extensión de producción**. Automatiza
-el ciclo completo: entra al SRI con las credenciales de un cliente, extrae
-facturas/retenciones/notas de crédito, llena el formulario de IVA, lo envía si
-el saldo es cero, sube el comprobante a Cloudflare R2 + Supabase, cierra sesión
-y pasa al siguiente cliente.
-
-Las otras carpetas (`02_Cambio_Claves_SRI`, `03_Anexo_Gastos_Personales`,
-`04_Anulador_Comprobantes_SRI`, `_ARCHIVADAS_Y_LEGACY`,
-`_RESPALDO_EXTENSIONES_SEGURA`) son extensiones hermanas y código histórico.
-**Sirven como fuente de selectores del SRI** — la 02 fue la que aportó los del
-cambio de clave.
-
-### Arquitectura (no negociable)
-
-- 7 archivos en `src/` que **Vite concatena en orden 01→07** hacia
-  `build/content.js`. **No hay `import`/`export`**: todo es global compartido.
-- **Tras tocar `src/` hay que correr `npm run build`.** Si no, Chrome sigue con
-  el bundle viejo.
-- `vendor/jspdf.umd.min.js` (355 KB) **no se concatena**: se carga bajo demanda
-  con `ensureJsPdfLoaded()`. No lo devuelvas al bundle.
-- El bundle va a **353 KB**; `src/` son ~13.000 líneas.
+1. [`.agents/AGENTS.md`](../../.agents/AGENTS.md) — las reglas. Es largo y hay
+   que leerlo entero. Ahí está el objetivo, los frenos de seguridad, la Matriz
+   Tatuada de selectores y por qué cada decisión es como es.
+2. [`_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`](../_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md)
+   — evidencia real del portal. Un selector que no esté ahí **es una
+   suposición**.
+3. Este archivo — el mapa de qué hay hecho y qué falta.
 
 ---
 
-## 2. Cómo verificar (hacelo siempre)
-
-No hay type-check ni CI: `npm test` falla a propósito y `typescript` no está
-instalado. La verificación real es:
+## 0. Lo primero: cómo saber si algo se rompió
 
 ```bash
-cd "extenciones web/01_Nueva_Luz_3.0"
-for f in src/0[1-7]*.js; do node --check "$f"; done   # sintaxis por archivo
-cat src/0[1-7]*.js > /tmp/bc.js && node --check /tmp/bc.js   # la concatenación
+# desde la carpeta de la extensión
 npm run build
 ```
 
-### Banco de pruebas headless
+Y para las pruebas, **una sola página**:
 
-El bundle se puede cargar en una página normal con `chrome.*` simulado y
-ejercitar sus funciones. Es como se validó todo lo de esta sesión (~120
-aserciones). Patrón:
-
-```html
-<script>
-  const store = { /* estado inicial de chrome.storage.local */ };
-  window.chrome = { runtime:{getURL:p=>p, onMessage:{addListener(){}}, id:'s'},
-    storage:{ local:{ get:k=>Promise.resolve(/*…*/), set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()}, remove:k=>{/*…*/} },
-              onChanged:{addListener(){}} }, tabs:{create(){}} };
-</script>
-<script src="shared_config.js"></script>
-<script src="content.js"></script>
-<script>/* aserciones sobre las funciones globales */</script>
+```
+.claude/launch.json → configuración «bancos-extension» (localhost:8791)
+→ http://localhost:8791/tests/   →  botón «Correr todos»
 ```
 
-Servilo por HTTP (no `file://`) y abrilo en un navegador. Casi todas las
-funciones son globales y se pueden llamar directo: `encontrarCamposLogin()`,
-`SriLoop.get()`, `parseDecimal()`, `window.sriAssistant.detectarSaldo()`…
+**319 comprobaciones, todas verdes al 06-sep-2026**, en ~20 segundos. Cada
+banco carga el `build/content.js` de verdad, el mismo que se inyecta en el
+portal. **Si algo sale en rojo, la extensión tiene un problema real.**
+
+| Banco | Qué cuida | # |
+| :--- | :--- | ---: |
+| `iva5.html` | tarifas de IVA, el XML, la botonera | 104 |
+| `proveedores.html` | la base y la cascada de sugerencias | 43 |
+| `catastro.html` | la bisección sobre 283.879 RUC | 31 |
+| `chequeo.html` | el diagnóstico previo | 32 |
+| `subidas.html` | por qué falla la subida, el cortacircuitos | 27 |
+| `notasventa.html` | el 508 y el 117 con temporizador | 23 |
+| `esperas.html` | esperar al portal en vez de contar | 20 |
+| `clavevencida.html` | la clave que el SRI pide cambiar | 19 |
+| `claves.html` | las claves fuera del código | 20 |
+
+Los `file://` **no ejecutan scripts** en el panel: hace falta el servidor.
+
+Además, siempre: `node --check` sobre cada archivo de `src/`, más
+`background.js`, `popup.js` y `options.js`. **No hay type-check** — `typescript`
+no está instalado y `npm test` falla a propósito.
 
 ---
 
-## 3. Diagnóstico en vivo
+## 1. Arquitectura, no negociable
 
-Estas herramientas existen porque perseguir bugs a ciegas en este código cuesta
-carísimo. **Usalas antes de suponer nada.**
+- **7 archivos en `src/`**, que Vite concatena en orden estricto 01→07 hacia
+  `build/content.js`. **No hay `import`/`export`**: todo es global compartido.
+  Una función declarada en el 01 la ve el 07.
+- **Tras tocar `src/` hay que correr `npm run build`.** Si no, Chrome sigue con
+  el bundle viejo y vas a depurar un fantasma.
+- `vendor/` no se concatena y se carga bajo demanda:
+  - `jspdf.umd.min.js` (355 KB) → `ensureJsPdfLoaded()`
+  - `catastro_eloro.txt` (6,2 MB) + `ciiu.json` → `Catastro.cargar()`
+- El **service worker** (`background.js`) hace todo lo cross-origin. Un `fetch`
+  desde el content script está sujeto a CORS y `host_permissions` **no** lo
+  exime. Esto tuvo la subida rota durante meses.
+- La **página de Ajustes** (`options.html` / `options.js`) es donde viven las
+  claves. Se abre con clic derecho en el ícono → Opciones.
 
-| Qué | Para qué |
+### Los siete módulos
+
+| | Qué vive ahí |
 | :--- | :--- |
-| `👻 ... build 3.1.0+AAAAMMDD.HHMM` | Primera línea de consola. Dice **qué build cargó Chrome**. Si no coincide con el último `npm run build`, falta el ↻ en `chrome://extensions`. |
-| `🚦 [ESTADO] semáforo=… · cliente 3/41 · autofill=NOMBRE [manual,lote] · acción=… · login=sí` | Sale en cada carga. Estado completo de un vistazo. |
-| `🚦 [BUCLE] A → B · motivo [pila]` | Cada transición del semáforo, con quién la provocó. |
-| `window.sriEstado()` | El semáforo, a pedido. |
-| `window.sriLimpiarEstado()` | Purga el estado de automatización. **No toca clientes ni claves.** |
-| `window.sriBuild()` | El sello del build cargado. |
-| `window.sriDebug = true` | Reactiva los logs ruidosos de `findByText`. |
-| `window.sriAssistant.verDiagnosticoResumen()` | Radiografía del DOM de la pantalla de resumen (se guarda sola al llegar; RUCs enmascarados). |
+| `01_utilidades_y_pdf` | helpers, PDF, `esDeLaExtension()`, frenos de sustitutiva y de clave vencida |
+| `02_servicios_y_memoria` | `SafeStorage`, `SriLoop`, `SriApi`, `Omitidos`, **`Proveedores`**, **`Catastro`**, **`NotasDeVenta`**, **`Chequeo`**, `esperarAjaxSri` |
+| `03_ingreso_y_sesion` | login, sesión, identidad |
+| `04_extraccion_datos` | raspar tablas, `clasificarTarifaIva`, `parsearXmlComprobante` |
+| `05_llenado_formulario` | casilleros, `sriMapaCasilleros()` |
+| `06_panel_interfaz` | `SriAssistantPanel`, **el cierre mágico** |
+| `07_navegacion_sri` | wizards, el HUD flotante (`SriLoopHUD`) |
 
 ---
 
-## 4. Trampas de este código (todas costaron horas)
+## 2. Las reglas que no se rompen
 
-**`offsetParent` no sirve para modales.** En Chrome todo `position: fixed` tiene
-`offsetParent === null`. Por eso `dismissSridialogs()` **nunca cerró un solo
-modal**. Usar `esVisible(el)` (`getComputedStyle` + `getBoundingClientRect`).
-Quedan ~48 usos de `offsetParent` en el resto del código: para elementos en
-flujo normal está bien, para overlays no.
+Están todas en AGENTS.md, pero éstas son las que cuestan plata o la firma del
+contador si se rompen:
 
-**Métodos duplicados en `SriAssistantPanel`** (clase de ~3.500 líneas). Declarar
-uno dos veces **no da error**: el segundo pisa al primero en silencio. Así
-estuvo muerta toda la validación de saldo del cierre. Antes de agregar un
-método:
-```bash
-grep -oE '^    (async )?[a-zA-Z_$][A-Za-z0-9_$]*\(' src/06_panel_interfaz.js | sort | uniq -d
+1. **El bot nunca presenta una sustitutiva.** `frenarSiEsSustitutiva()`.
+2. **El bot nunca paga.** Si el saldo no es exactamente `0`, guarda borrador y
+   frena.
+3. **El bot nunca cambia contraseñas.** Detecta que el SRI las pide y **omite
+   al cliente**. `Verificar/persona` y `Verificar/modificar` no se nombran
+   siquiera — hay una prueba que lo verifica sobre el bundle compilado.
+4. **El bot nunca contesta la encuesta del SRI** ni pulsa un botón de modal por
+   su texto.
+5. **Nunca se escriben claves en el DOM del portal.** Sólo el RUC en el
+   elemento; la credencial se resuelve al hacer clic.
+6. **`null` no es cero.** Un «no sé» jamás se guarda como si fuera un dato.
+   Vale para el saldo (`parseImporteEstricto`), para las notas de venta, para
+   la tarifa de IVA y para las sugerencias de la IA.
+7. **Una sugerencia no pisa una decisión del contador.** El campo `origen`
+   (`usuario` / `catastro` / `ia`) es lo que lo hace cumplir.
+8. **Nunca se saltea un contribuyente por un aviso.** Se comprueba en Consulta
+   de declaraciones antes de dar nada por hecho.
+
+### El contrato de envío (`ejecutarCierreMagico`)
+
+Sólo envía si puede confirmar **las cinco** a la vez:
+
+1. `estaEnResumenDeclaracion()` — estamos en el resumen, no en el formulario
+2. `detectarSaldo()` devuelve un número **y es `0`**
+3. `analizarMensajesResumen()` devuelve `'limpio'`
+4. `frenarSiEsSustitutiva()` devuelve `false`
+5. `frenarSiHayIvaSinUbicar()` devuelve `false`
+
+Cualquier otro resultado guarda borrador y frena. **La ausencia de mensajes no
+es «todo bien»** — ésa fue una regresión real.
+
+---
+
+## 3. Lo que se construyó (y por qué)
+
+### El agujero del 5% — el que costaba plata
+
+El corte de tarifas era binario. Una compra al 5% caía en el casillero 500, que
+es el de 15%. Como el SRI calcula el 520 desde el 510, eso **inflaba el crédito
+tributario**: $1.000 al 5% daban $150 de crédito donde correspondían $50.
+
+`clasificarTarifaIva(base, iva)` deduce la tarifa por el cociente. Devuelve
+**tres** respuestas y la tercera es `null` = «no sé». El 8% de feriados queda
+fuera a propósito: cae en la misma zona que una factura mezclada.
+
+**Límite conocido y medido:** el cociente **no distingue** una factura al 5% de
+una mezclada — $100 con un tercio al 15% da 4,95% y se lee como 5%. Eso sólo lo
+resuelve el XML.
+
+### El XML del comprobante
+
+`parsearXmlComprobante()` da base e IVA **separados por tarifa**, dicho por
+quien emitió. `descargarXmlComprobante(N)` lo baja reproduciendo el POST de
+`lnkXml` — confirmado en traza. `traerXmlDeComprobantes()` pide de a una con
+700 ms de pausa y corta a las 40: **no hay «bajar todos»**, es una petición por
+comprobante.
+
+### La base de proveedores + el catastro + la IA
+
+La cascada, y el orden importa:
+
 ```
-Hoy da 0. Que siga así.
-
-**`parseDecimal()` nunca decide un envío.** Devuelve `0` tanto para "cero" como
-para "no pude leer". El SRI muestra el saldo como `USD 0.00`; antes las letras
-no se limpiaban y `parseFloat("USD45.30")` daba `NaN` → `0`. **Una declaración
-con saldo a pagar se leía como saldo cero.** Para decidir, usar
-`parseImporteEstricto()`, que devuelve `null` cuando no hay número.
-
-**Selectores adivinados.** El código estaba lleno de IDs que en el SRI no
-existen (`frmPrincipal:tipoComprobante`, `btnVerFormularioCompleto`, e `input
-[name="usuario"]` en **seis** lugares distintos). Antes de confiar en un
-selector, buscalo en la Biblia. Si no está, es una suposición.
-
-**Cuidado con `String.replace(a, b)` en scripts de parcheo.** Un `` $` `` en el
-texto de reemplazo inyecta todo el contenido previo del archivo dentro de sí
-mismo (me pasó, corrompí la Biblia). Usar siempre `replace(a, () => b)`.
-
-**Finales de línea mezclados**: `01` y `03` son LF; `02`, `04`, `05`, `06`, `07`
-son CRLF. Y varias líneas "en blanco" tienen espacios al final, así que los
-reemplazos textuales multilínea fallan. Cuando falle un ancla, reemplazá por
-rango de líneas.
-
----
-
-## 5. El semáforo: única autoridad del bucle
-
-Había **seis banderas** (`sri_master_switch_on`, `sriAutomationPaused`,
-`auto_batch_enabled`, `sri_auto_mode`, `autoDeclaration`, `ghost_manual_mode`)
-escritas 115 veces, y las compuertas se contradecían — una usaba el interruptor
-maestro con `||`, convirtiéndolo en un **encendedor**.
-
-Ahora manda `SriLoop` (en `02_servicios_y_memoria.js`), estado en
-`chrome.storage.local.sc_loop`:
-
-```
-DETENIDO ──▶(play)──▶ CORRIENDO ──(pausa)──▶ PAUSANDO ──(fin cliente)──▶ PAUSADO
-    ▲                     │                                                 │
-    └──────(🛑 / watchdog 15 min)◀───────────────────────────────────────────┘
+1. lo que decidió el contador   → MANDA      gratis, instantáneo
+2. el catastro del SRI (CIIU)   → sugiere    gratis, en disco
+3. la IA                        → sugiere    cuesta y sale de casa
 ```
 
-- **`SriLoop.puedeAvanzar()` es la ÚNICA autoridad.** Cualquier paso automático
-  la consulta. Las 6 banderas se siguen escribiendo por compatibilidad, pero
-  **ninguna compuerta decide por ellas**.
-- `PAUSANDO` = termina el cliente en curso y para (no salta al siguiente).
-- HUD flotante arrastrable: ▶ / ⏸ / 🛑, con contador `cliente 3/41`.
-- Desde DETENIDO, ▶ arma la cola de pendientes y arranca **previa confirmación**.
+**Qué sale de la máquina hacia la IA:** el nombre del proveedor y su actividad
+pública. **No** el RUC del proveedor, **no** el del cliente, **no** importes.
+Hay cuatro comprobaciones dedicadas a eso.
 
-> ⚠️ **Todo punto de entrada a un lote debe llamar a `SriLoop.iniciar()`.**
-> Escribir las banderas viejas a mano deja `sc_loop` en DETENIDO y el flujo
-> muere en silencio. Fue exactamente el bug de "1-Clic Declarar".
+La base sirve para **tres proyectos**: IVA, anexo de gastos personales y la
+futura **devolución de IVA de tercera edad**.
 
----
+### El HUD
 
-## 6. Contrato de seguridad del envío
+A la vista: `▶ 🏃 [estado] 🎯 ⚠️ ⏭️ 🏁 🧰 🛑 Detener`.
+En el cajón 🧰, con rótulo escrito: Comprobantes · Registro · La cola ·
+Bitácora · Proveedores · Notas de venta · Casilleros · Ir a… · **Chequeo** ·
+Probar subida · Panel. Escape cierra todo.
 
-**Nunca lo relajes.** El bot solo envía si CONFIRMA las dos cosas:
-
-1. `detectarSaldo()` devuelve un número y ese número es `0`.
-2. `analizarMensajesResumen()` no devuelve `'con_inconsistencias'`.
-
-`detectarSaldo()` devuelve `null` cuando no pudo leer, y **`null` nunca equivale
-a cero**: ante la duda guarda borrador y frena. Las advertencias del casillero
-625 son informativas y no bloquean.
-
-IDs confirmados: `frmFlujoDeclaracion:totalAPagar` (resumen, texto `USD 0.00`) y
-`concepto2610` (formulario, sección TOTALES).
-
-**Lo que el bot NO hace, por diseño:** pagar, cambiar contraseñas, responder la
-encuesta de satisfacción del SRI, ni pulsar un botón de modal por su texto.
-`cerrarModalesNoPrimeFaces()` solo usa controles de cierre explícitos.
+**🩺 Chequeo** contesta «¿está todo listo?» antes de arrancar: la subida, las
+claves y **de dónde salen**, el catastro, los proveedores, y la marca
+`iva_sin_ubicar` — que si quedó pegada de ayer hace que el cierre **no envíe
+nada** sin que sea obvio por qué.
 
 ---
 
-## 7. Estado actual
+## 4. 🔴 LO PENDIENTE, por orden de importancia
 
-### Funciona y está probado
-Login automático (detección estructural del formulario), semáforo y HUD, pausa
-que sobrevive al salto de cliente, parada de emergencia, watchdog, armado de
-cola desde la base de clientes, cierre de la encuesta del SRI, detección del
-cambio de clave obligatorio, freno de envío calibrado, jsPDF perezoso, subida
-del comprobante a R2 + Supabase.
+### 4.1 · Sacar el secreto de R2 de `shared_config.js` — SEGURIDAD
 
-### Última corrida real del usuario
-▶ arrancó bien: semáforo CORRIENDO, **41 clientes en cola**, credenciales
-cargadas. El primer cliente (`LABANDA ARMIJOS`) quedó bloqueado porque **el SRI
-le exige cambiar la clave** — ya se detecta, se marca y se salta.
+**Estado:** la subida ya funciona por el camino `s3`. Falta confirmar de dónde
+sale la clave.
 
-### 🔴 Lo que falta verificar contra el portal real
-1. **Que el bucle encadene de verdad.** Nunca se vio un `cliente N → N+1`
-   completo. Es lo primero a comprobar.
-2. **El salto a Comprobantes Recibidos después del login.** Esa pantalla vive en
-   otro subsistema y pide su propio token (`GeneraToken.jsp`). Si el salto va
-   demasiado pronto, Keycloak rebota al login. Si se ve entrar y salir en bucle:
-   o esperar a que la sesión se asiente, o navegar por el menú
-   (`FACTURACIÓN ELECTRÓNICA → Comprobantes electrónicos recibidos`, ver Biblia
-   entrada 10).
-3. **La pantalla de confirmación final** (botón IMPRIMIR): sin evidencia. Falta
-   para blindar `initDeclarationSuccessWatcher()` y la captura del comprobante.
-4. **Que `new Function` funcione** para cargar jsPDF dentro del mundo aislado en
-   el SRI. Si falla sale `⚠️ [jsPDF] No disponible` — no es fatal (hay un PDF de
-   respaldo simple), pero habría que pasarlo a service worker.
-5. **Wizard paso 2 "Preguntas"**: nunca se documentó.
+**Qué hacer:**
 
-### 🧹 Dónde buscar más basura
-- **Rutas que arrancan solas.** Se encontraron cuatro (lote fantasma por
-  banderas viejas, `ejecutarAccionPendiente` sin semáforo, la tarjeta "Tarea
-  Pendiente" que se auto-confirmaba a los 4 s, y la puerta trasera del Modo
-  Reposo). Puede quedar alguna: cualquier `SafeStorage.set` con `pendingAction`
-  es sospechoso.
-- **`showContextCard` auto-confirma a los 4 segundos** salvo que reciba
-  `timeout: null`. Toda tarjeta que *pregunte* algo debe pasarlo.
-- **`runUnifiedWorkflow('RECOVER_PDF_ONLY')`** no tiene rama: cae en el `else`.
-  Y `ejecutarRecuperacionPDF()` (07, ~250 líneas) **no la llama nadie**; su
-  `pendingAction: 'recoverPDF'` está desactivado a propósito por el usuario.
-- **La cola se arma en 6 lugares distintos.** Convendría uno solo
-  (`SriLoop.armarCola`).
-- **43 usos de `innerHTML`**; los de datos de cliente ya pasan por
-  `escapeHtml()`, pero conviene revisar los nuevos.
+1. Ajustes → 🔌 **Probar ahora**. Mirá `claveSecreta` y `accessKeyId`.
+2. Si **los dos** dicen `del almacén` → la rotación está completa. Entonces:
+   - En `shared_config.js`, dejar `R2_SECRET_ACCESS_KEY: ""` con un comentario
+     que diga que va en Ajustes.
+   - Correr `tests/subidas.html` y probar 🔌 otra vez.
+3. Si alguno dice `del CÓDIGO` → **no tocar nada**: está funcionando con la
+   clave vieja. Hay que terminar de pegar esa credencial en Ajustes primero.
+
+> La clave que está en `shared_config.js` está en el **historial de git**.
+> Sacarla del archivo no la des-compromete: **hay que rotarla en Cloudflare**
+> (R2 → *Manage R2 API Tokens*, no desde Mi Perfil → API Tokens, que da un
+> Bearer token inútil para firma S3). Y la rotación **termina al borrar el
+> token viejo**, no al crear el nuevo.
+
+### 4.2 · Los casilleros sin confirmar — PLATA
+
+`540` / `550` (compras al 5%), `502` / `512` (sin derecho a crédito), `508` /
+`117` (notas de venta). **Ninguno está en la Biblia.** El usuario miró el
+formulario y el 540/550 **no aparecen**.
+
+**Qué hacer:** estando en el formulario, HUD → 🧰 → **📐** → *Copiar la tabla*.
+Devuelve todos los casilleros con su `id` real, más una radiografía de lo que
+hay en pantalla. Con esa salida:
+
+- agregar la entrada a la Biblia,
+- cablear el `id` en el `fieldMap` de `05_llenado_formulario.js`.
+
+**Mientras tanto no se inventa nada:** si hay plata al 5% y no aparece el
+casillero, se anota en `iva_sin_ubicar` y **el cierre mágico no envía**.
+
+### 4.3 · El mapa CIIU → deducible — CRITERIO CONTABLE
+
+Es lo único que falta para que el 502/512 funcione. **No lo decide una IA ni
+un programador**: lo pone el contador. La base ya guarda `ciiu`, `actividad` y
+`categoria`; falta la tabla que traduce eso a «da crédito tributario / no da».
+
+### 4.4 · El endpoint del XML, conectado al flujo
+
+El parser y la descarga están; **falta usarlos automáticamente** para las
+facturas que quedaron ambiguas o leídas como 5%. Hoy hay que llamar
+`sriBajarXml(n)` a mano.
+
+### 4.5 · Los tipos de comprobante que faltan
+
+Nota de débito y liquidación de compra no se barren. **No inventar los
+códigos**: se leen del portal, estando en Comprobantes Recibidos:
+
+```js
+[...document.getElementById('frmPrincipal:cmbTipoComprobante').options]
+    .map(o => o.value + ' = ' + o.text).join('\n')
+```
+
+### 4.6 · Empresas fantasma
+
+**Corrección importante:** el catastro provincial **NO trae** esa marca — sus
+21 columnas están listadas en AGENTS.md §10 y ninguna es ésa. Es un dataset
+aparte en sri.gob.ec. Mientras tanto se usa el **estado del contribuyente**
+(suspendido/pasivo), que sí está y ya sale con bandera roja en el panel 🏷️.
+
+### 4.7 · Las esperas del cierre mágico
+
+Quedan cuatro `sleep()` fijos en `06_panel_interfaz.js` (líneas ~1398, 1421,
+1433, 1502). **No se tocaron a propósito**: son la secuencia de envío y AGENTS
+§4 pide probarlas rigurosamente. Sin el portal delante, ahí no se ahorra.
+
+### 4.8 · El Worker de R2
+
+`santiagocordova-r2-vault.workers.dev` no responde. **No es urgente**: el `s3`
+directo cubre todo, y ahora hay un cortacircuitos que lo saltea tras tres
+fallos. Si se quiere de vuelta, hay que redesplegarlo en Cloudflare Workers.
+
+### 4.9 · `fetchSRIPublicData` en la app web
+
+En `santiagocordova-main/services/sri.ts`. Sigue rota: `corsproxy.io` devuelve
+403. Ahora hay una alternativa mejor — el **catastro local** de la extensión.
+
+### 4.10 · Unificar las extensiones
+
+Evaluado: **sí conviene, pero extrayendo un núcleo, no fusionando**. Nueva Luz
+son 18.567 líneas contra 6.900 de las otras tres juntas, y tiene 319 pruebas
+mientras las otras no tienen ninguna. El orden: sacar `core/` de Nueva Luz,
+portar la más chica (`02_Cambio_Claves`, 600 líneas) como prueba, y recién ahí
+seguir. **`02_Cambio_Claves` conviene dejarla separada**: mete código que
+cambia contraseñas en la misma extensión que el bot de IVA.
 
 ---
 
-## 8. Seguridad — leer antes de tocar nada
+## 5. ⚠️ Trampas que ya costaron tiempo
 
-- **Las claves del SRI nunca van al DOM del portal** (ni `data-*` ni handlers
-  inline). Se resuelven al hacer click contra `sc_clients_cache`.
-- Todo dato de cliente que entre a `innerHTML` pasa por `escapeHtml()`.
-- En la raíz del workspace hay `Contraseñas de Chrome.csv` (export en texto
-  plano) y `cert-*.p12` (firma electrónica). **Nunca leerlos, commitearlos ni
-  citarlos.** Están en `.gitignore`, verificado.
-- `.gitignore` excluye `*.pdf` de todo el repo: las carpetas de respaldo tienen
-  facturas, retenciones y un poder notarial de contribuyentes reales.
-- Las capturas de `_EVIDENCIA_SRI/capturas/` llevan RUC, nombre, email y
-  teléfono. Solo se versiona el índice `.md`.
-- La `SUPABASE_ANON_KEY` de `shared_config.js` es pública por diseño (RLS
-  endurecido). No es un hallazgo.
-
----
-
-## 9. Git
-
-Rama `extension/nueva-luz-control-bucle`, sin remoto. Historia limpia, un
-commit por tema, working tree limpio.
-
-`santiagocordova-main/` es un repo propio y está ignorado desde afuera.
+| Trampa | Qué pasa |
+| :--- | :--- |
+| **Finales de línea** | `src/02`, `04` y `05` están en **CRLF** en el índice de git; los demás en LF. Un script de Python que escriba con `newline='\n'` produce un diff de 2.000 líneas. Escribir con `newline=''` y, si hace falta, `git -c core.autocrlf=false add`. |
+| **Heredocs de bash** | Mastican los backslashes: `'\\b'` se convierte en un backspace. Escribir los scripts con un archivo, no con heredoc. |
+| **Envolver funciones en `window.<mismo nombre>`** | El bundle no tiene IIFE: toda función de nivel superior **ya es** `window.<nombre>`. `window.f = () => f()` es recursión infinita. Un alias sólo vale con nombre distinto. |
+| **`offsetParent` en modales** | Siempre `null` en `position: fixed`. Usar `esVisible()`. |
+| **El bot leyéndose a sí mismo** | Pulsaba sus propios botones y leía sus propios textos. `esDeLaExtension()` / `soloDelPortal()`. La detección de clave vencida cayó en esto. |
+| **Métodos duplicados en una clase** | No dan error: el segundo pisa al primero en silencio. `grep -n "async nombre(" src/06_panel_interfaz.js` antes de agregar. |
+| **`parseDecimal` devuelve `0`** | Tanto para «cero» como para «no pude leer». Para decidir plata: `parseImporteEstricto`, que devuelve `null`. |
+| **Medir milisegundos en una prueba** | El navegador frena los temporizadores en pestañas de fondo y todavía más dentro de un iframe. `esperas.html` se recalibra en cada tramo por eso. |
+| **Scripts de Python que escriben al final** | Si revientan a mitad, se pierde todo. Escribir sólo cuando todos los reemplazos salieron. |
 
 ---
 
-## 10. Prompt sugerido para continuar
+## 6. Dónde está cada cosa
 
-> Trabajo en `extenciones web/01_Nueva_Luz_3.0`, la extensión de Chrome que
-> automatiza la declaración de IVA del SRI (Ecuador). Leé primero
-> `HANDOFF.md`, `.agents/AGENTS.md` y
-> `_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`.
->
-> Reglas: los 7 archivos de `src/` se concatenan (sin imports) y **hay que
-> correr `npm run build` tras cada cambio**; verificá con `node --check` por
-> archivo y sobre la concatenación. No hay type-check ni CI.
->
-> Antes de confiar en cualquier selector del SRI, buscalo en la Biblia: si no
-> está, es una suposición. Ojo con `offsetParent` (null en `position:fixed`),
-> con los métodos duplicados en `SriAssistantPanel`, y con `parseDecimal()`,
-> que devuelve 0 tanto para "cero" como para "no pude leer".
->
-> El bucle lo manda `SriLoop.puedeAvanzar()` — cualquier arranque de lote debe
-> pasar por `SriLoop.iniciar()`. El bot **no paga, no cambia contraseñas y no
-> envía si no confirma que el saldo es 0**.
->
-> Lo que sigue: [tu tarea]. Si necesitás IDs del portal, pedímelos y te paso
-> capturas con DevTools abierto o la salida del snippet de consola de la Biblia.
+```
+extenciones web/01_Nueva_Luz_3.0/
+├── manifest.json          host_permissions: SRI, R2, workers.dev, Supabase,
+│                          generativelanguage (IA)
+├── background.js          service worker: subidas, IA, cookies, cortacircuitos
+├── options.html/.js       ⚙️ Ajustes — las claves viven acá
+├── popup.js               la cola de clientes
+├── shared_config.js       ⚠️ tiene el secreto de R2 — ver §4.1
+├── src/01..07             el content script
+├── vendor/                jspdf · catastro_eloro.txt · ciiu.json
+├── tools/
+│   └── construir_catastro.py   ZIP del SRI → los dos archivos de vendor/
+└── tests/index.html       🧪 correr todos los bancos
+```
+
+---
+
+## 7. Cómo trabajar acá
+
+1. **Nunca inventes un selector.** Si no está en la Biblia, es una suposición.
+   Buscá por número de casillero y, si no aparece, **anotá y frená**.
+2. **Todo cambio va con banco de prueba.** Tres bugs de esta sesión los cazó el
+   banco y no la lectura del código.
+3. **Medí antes de afirmar.** «138 esperas, 128 s» salió de contarlas; la
+   primera vez que di el número estaba mal.
+4. **Si algo es criterio contable, no lo decidas.** Guardalo, marcalo con su
+   `origen`, y que lo confirme el contador.
+5. **Los comentarios explican el porqué, no el qué.** Casi todos los de este
+   código cuentan un bug real que pasó.
