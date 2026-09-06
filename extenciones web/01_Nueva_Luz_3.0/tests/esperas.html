@@ -57,17 +57,24 @@
   // que medir en milisegundos absolutos no dice nada: la misma prueba pasaría
   // o fallaría según si el banco está a la vista. Se mide cuánto cuesta de
   // verdad UN sondeo y los límites se expresan en sondeos.
-  const GRANO = await (async () => {
+  // Y se vuelve a medir antes de cada tramo: el freno del navegador aprieta
+  // más a medida que la pestaña lleva rato de fondo, y todavía más dentro de un
+  // iframe. Una sola medición al arrancar dejaba de valer a los diez segundos.
+  // Se guarda el PEOR valor visto, que es la cota conservadora.
+  let GRANO = 50;
+  const recalibrar = async () => {
     const t0 = performance.now();
     await new Promise(r => setTimeout(r, 50));
-    return Math.max(50, Math.round(performance.now() - t0));
-  })();
+    GRANO = Math.max(GRANO, Math.round(performance.now() - t0));
+    return GRANO;
+  };
+  await recalibrar();
   // 400 ms de arranque (el sondeo del velo) + n sondeos + holgura.
   const sondeos = (n) => 400 + n * GRANO + 250;
-  L.push(`   (un sondeo cuesta ${GRANO} ms acá${document.hidden ? ', pestaña de fondo' : ''})`);
 
   // ══ A · lo que se gana cuando el portal va rápido ═══════════════════════
   sec('A · el portal contesta rápido');
+  await recalibrar();
   limpiar();
   ponerVelo();
   pintarDespues(250, '<div id="listo">tabla</div>');
@@ -88,6 +95,7 @@
   // Éste es el caso que importa de verdad: antes el paso fallaba por
   // impaciencia y el cliente quedaba sin declarar.
   sec('B · el portal va lento (el día cargado)');
+  await recalibrar();
   limpiar();
   ponerVelo();
   pintarDespues(VIEJO + 900, '<div id="tarde">tabla que tardó</div>');
@@ -101,6 +109,7 @@
 
   // ══ C · cuando no llega, se rinde y lo dice ═════════════════════════════
   sec('C · cuando no llega');
+  await recalibrar();
   limpiar();
   ponerVelo();
   setTimeout(sacarVelo, 200);
@@ -113,6 +122,7 @@
 
   // ══ D · sin condición, solo el velo ═════════════════════════════════════
   sec('D · sin condición');
+  await recalibrar();
   limpiar();
   ponerVelo();
   setTimeout(sacarVelo, 300);
@@ -142,6 +152,7 @@
   // Si el contador aprieta pausa, esperar no puede seguir corriendo por su
   // cuenta: waitFor() se queda quieto y esto lo hereda.
   sec('F · con el lote en pausa');
+  await recalibrar();
   limpiar();
   P.innerHTML = '<div id="pausa-ok">está desde el principio</div>';
   enPausa = true;
@@ -153,6 +164,9 @@
     esperarAjaxSri(() => document.getElementById('pausa-ok'), 'sin pausa', 900));
   push('y al soltar la pausa, sigue', t.r, true);
   limpiar();
+
+  L.push(`
+   (el peor sondeo costó ${GRANO} ms${document.hidden ? ', pestaña de fondo' : ''})`);
 
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =

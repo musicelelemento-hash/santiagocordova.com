@@ -2574,33 +2574,6 @@ window.addEventListener('message', async (event) => {
     }
 });
 
-// WATCHER RECURRENTE INFALIBLE PARA PÁGINAS DE LOGIN SRI
-function initAnticipationWidgetWatcher() {
-    let attempts = 0;
-    const watcher = setInterval(async () => {
-        attempts++;
-        if (isSRILoginPage()) {
-            if (!document.getElementById('sri-anticipacion-sidebar')) {
-                const items = await SafeStorage.get(null);
-                await renderAnticipationWidget(items);
-            }
-        }
-        if (attempts > 30) clearInterval(watcher);
-    }, 500);
-
-    try {
-        const observer = new MutationObserver(async () => {
-            if (isSRILoginPage() && !document.getElementById('sri-anticipacion-sidebar')) {
-                const items = await SafeStorage.get(null);
-                await renderAnticipationWidget(items);
-            }
-        });
-        if (document.body) {
-            observer.observe(document.body, { childList: true, subtree: true });
-        }
-    } catch(e) {}
-}
-
 // WATCHER DE ÉXITO DE DECLARACIÓN (CAPTURA DE COMPROBANTE OFICIAL)
 function initDeclarationSuccessWatcher() {
     if (window.__sriDeclarationSuccessWatcherActive) return;

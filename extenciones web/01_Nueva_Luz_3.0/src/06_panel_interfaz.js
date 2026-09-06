@@ -2519,13 +2519,6 @@ class SriAssistantPanel {
             }
         } catch (e) { console.error(e); }
 
-        const getNinthDigit = (ruc) => {
-            if (!ruc || ruc.length < 9) return 99;
-            const digit = parseInt(ruc.charAt(8), 10);
-            if (isNaN(digit)) return 99;
-            return digit === 0 ? 10 : digit;
-        };
-
         const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
         const hasPdfForPeriod = (client, year, monthIndex) => {

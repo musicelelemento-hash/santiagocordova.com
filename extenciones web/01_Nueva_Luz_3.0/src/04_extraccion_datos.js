@@ -620,39 +620,6 @@ async function extraerRetencionesPaginaActual() {
     return retenciones;
 }
 
-async function extraerDatosModalRetencion() {
-    console.log('      🔍 Buscando modal (Estrategia Headers de Tabla)...');
-
-    // 1. Buscar dentro de Dialogs visibles (Prioridad)
-    const dialogs = Array.from(document.querySelectorAll('.ui-dialog, .rf-pp-cntr')).filter(d => (typeof esVisible === 'function' ? esVisible(d) : true));
-
-    // Iterar en reverso (último abierto)
-    for (let i = dialogs.length - 1; i >= 0; i--) {
-        const d = dialogs[i];
-        const tablas = d.querySelectorAll('table');
-        for (const t of tablas) {
-            const headers = t.textContent.toLowerCase();
-            if (headers.includes('base imponible') && headers.includes('valor retenido')) {
-                console.log(`      ✅ Tabla encontrada en Dialog #${i} (por headers)`);
-                return procesarTablaRetencion(t);
-            }
-        }
-    }
-
-    // 2. Fallback: Buscar cualquier tabla en el DOM con esos headers
-    const todasLasTablas = document.querySelectorAll('table');
-    for (const t of todasLasTablas) {
-        const headers = t.textContent.toLowerCase();
-        if (headers.includes('base imponible') && headers.includes('valor retenido')) {
-            console.log('      ✅ Tabla "suelta" encontrada en DOM (por headers exactos)');
-            return procesarTablaRetencion(t);
-        }
-    }
-
-    console.warn('      ❌ Falló estrategia headers. No se encontraron datos.');
-    return null;
-}
-
 function procesarTablaRetencion(tabla) {
     console.log(`      📊 Procesando tabla específica...`);
 
