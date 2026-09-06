@@ -44,6 +44,13 @@ respaldos_locales/
 extenciones web/_EVIDENCIA_SRI/*
 !extenciones web/_EVIDENCIA_SRI/*.md
 !extenciones web/_EVIDENCIA_SRI/*.js
+# Los diccionarios de variables del SRI: documentacion publica de las columnas
+# del catastro, sin un solo RUC. Se nombran uno por uno a proposito — un
+# `*.xlsx` suelto dejaria pasar cualquier planilla con datos de contribuyentes
+# que alguien deje caer en esta carpeta.
+!extenciones web/_EVIDENCIA_SRI/SRI_Diccionario_Catastro.xlsx
+!extenciones web/_EVIDENCIA_SRI/SRI_RUC_DD.xlsx
+!extenciones web/_EVIDENCIA_SRI/SRI_Agregadorespago_DD.xlsx
 extenciones web/_EVIDENCIA_SRI/**/*.xml
 extenciones web/_EVIDENCIA_SRI/**/*.txt
 extenciones web/_EVIDENCIA_SRI/prueba*
