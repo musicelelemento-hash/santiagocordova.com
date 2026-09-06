@@ -23,6 +23,15 @@ su botón «Comprobante de declaración».
 salteando lo que el registro local ya da por guardado. El botón 🧾 del HUD lo
 dispara a mano; `sriTraerComprobantes()` hace lo mismo desde la consola.
 
+### Y que cada compra vaya donde corresponde
+
+Tener el comprobante no alcanza si la declaración lo mete en el casillero
+equivocado. La declaración separa lo deducible de lo no deducible según la
+actividad del proveedor, y hoy el bot mete todas las facturas en un solo
+bloque. La base de proveedores de la §7 es lo que falta para cerrar eso — y de
+paso resuelve el anexo de gastos personales y la devolución de IVA de tercera
+edad, que preguntan lo mismo sobre el mismo RUC.
+
 ---
 
 ## 1. Arquitectura de la Extensión (Nueva Luz 3.0)
@@ -280,3 +289,126 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 > para decidir un envío: devuelve `0` tanto para "cero" como para "no pude leer".
 > Para eso está `parseImporteEstricto()`, que devuelve `null` cuando no hay número.
 
+
+---
+
+## 7. La base de proveedores — la pieza que falta
+
+> **Estado**: diseñada, no construida. Es parte del objetivo, no un extra.
+
+### El problema, dicho una vez
+
+Hoy el bot toma **todas** las facturas de compras recibidas y las mete al
+formulario como un solo bloque. Pero la declaración no las trata igual: separa
+lo deducible de lo no deducible según **la actividad del proveedor**. Esa
+distinción hoy no se hace, y el bot no tiene con qué hacerla.
+
+Lo que falta no es lógica: es **saber a qué se dedica cada RUC**.
+
+### La misma pregunta, tres veces
+
+El dato es uno solo y hoy cada extensión lo resuelve por su cuenta:
+
+| Quién pregunta | Qué necesita saber del RUC |
+| :--- | :--- |
+| **Nueva Luz** (IVA) | ¿la compra es deducible o no? |
+| **Anexo de Gastos Personales** | ¿vivienda, salud, educación, alimentación, vestimenta o turismo? |
+| **Devolución de IVA · tercera edad** | ¿esta compra califica? |
+
+`03_Anexo_Gastos_Personales/content.js` ya tiene las seis categorías del SRI
+(`vivienda`, `salud`, `educacionArteCultura`, `alimentacion`, `vestimenta`,
+`turismo`). Lo que no tiene —ni él ni Nueva Luz— es memoria: cada corrida
+vuelve a empezar de cero.
+
+### Cómo debería funcionar
+
+**Se aprende una vez y sirve para siempre.** Cada RUC que aparece en una
+factura se guarda con su nombre. La primera vez que se lo ve, se pregunta a qué
+se dedica. Desde ahí, todas las extensiones lo saben.
+
+    proveedores: {
+      "0990123456001": {
+        nombre: "COMERCIAL XYZ S.A.",
+        actividad: "alimentacion",      // categoría del anexo
+        deducible: true,                // para el IVA
+        vistoEn: ["0703891838001", …],  // qué clientes le compran
+        cuando: 1788646356641,
+        origen: "usuario" | "sugerido"  // quién lo decidió
+      }
+    }
+
+**El `origen` no es decoración.** Es la misma regla que ya rige todo el
+proyecto: nunca presentar como dato lo que es una suposición. Una clasificación
+`sugerido` —adivinada por el nombre, por ejemplo «FARMACIA» → salud— se muestra
+distinta de una que confirmó el contador, y nunca decide sola sobre plata.
+
+**Los que no se conocen**: un interruptor decide qué pasa.
+
+- **Preguntar** — el lote frena y muestra los RUC nuevos para clasificar.
+- **Seguir** — se declaran como hasta ahora y quedan en una lista de pendientes
+  para revisar después.
+
+Lo segundo es el modo por defecto: un lote de 27 clientes no puede quedarse
+esperando a que alguien conteste. Vale la misma lección del `confirm()` que
+bloqueaba la automatización.
+
+### Por qué vale la pena
+
+Un proveedor clasificado una vez sirve para **todos** los clientes que le
+compren. Un estudio con 27 contribuyentes comparte buena parte de sus
+proveedores: la base se llena sola en los primeros meses y después casi no hay
+que tocarla.
+
+### Pendiente de tu lado
+
+- El **número de casillero** donde van las compras no deducibles.
+- El **casillero de cantidad** de comprobantes de esa categoría.
+
+Sin esos dos, la clasificación se puede guardar pero no se puede declarar.
+
+---
+
+## 8. Pendientes anotados
+
+### 8a. Los tipos de comprobante que faltan
+
+`frmPrincipal:cmbTipoComprobante` solo tiene tres valores confirmados en la
+Biblia: `1` (Factura), `3` (Nota de Crédito), `6` (Retención). Faltan **nota de
+débito** y **liquidación de compra**, entre otros.
+
+**No inventar los códigos.** Se leen del portal, estando en Comprobantes
+Recibidos:
+
+```js
+[...document.getElementById('frmPrincipal:cmbTipoComprobante').options]
+    .map(o => o.value + ' = ' + o.text).join('\n')
+```
+
+Con esa salida se agregan al barrido: el extractor de facturas ya sirve para
+todos los tipos, solo hay que decirle cuáles pedir.
+
+### 8b. Notas de venta — casilleros 508 y 117
+
+Son comprobantes **físicos**: nunca aparecen en «comprobantes electrónicos
+recibidos» y el bot no tiene de dónde sacarlos. El dato solo lo tiene el
+contador.
+
+| Casillero | Qué es |
+| :--- | :--- |
+| **508** | Adquisiciones a contribuyentes RISE (hasta dic-2021) / NEGOCIOS POPULARES (desde ene-2022) |
+| **117** | Total de notas de venta recibidas (cantidad) |
+
+**Diseño acordado**: un interruptor en la barra flotante. Cuando está
+encendido, se piden los dos números antes de empezar —o al llegar al
+formulario— con un temporizador: si nadie contesta en N segundos, el lote sigue
+sin tocar esos casilleros.
+
+Si no hay dato, **no se escribe nada** en 508 ni en 117. Un cero inventado ahí
+es una declaración mal hecha, igual que las estimaciones de la ficha web.
+
+### 8c. Cambio de clave por lote
+
+Hay una traza de Burp (`cambio_de_clave_obligatorio_ID`) y una extensión propia
+(`02_Cambio_Claves_SRI`). La regla acordada: **no aplastar por aplastar**. Vale
+lo mismo que en el importador de CSV de Chrome — proponer los cambios, mostrar
+a quién le pisa una clave que ya funcionaba, y aplicar solo lo confirmado.
