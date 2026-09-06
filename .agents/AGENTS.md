@@ -458,13 +458,31 @@ contador.
 | **508** | Adquisiciones a contribuyentes RISE (hasta dic-2021) / NEGOCIOS POPULARES (desde ene-2022) |
 | **117** | Total de notas de venta recibidas (cantidad) |
 
-**Diseño acordado**: un interruptor en la barra flotante. Cuando está
-encendido, se piden los dos números antes de empezar —o al llegar al
-formulario— con un temporizador: si nadie contesta en N segundos, el lote sigue
-sin tocar esos casilleros.
+**Construido el 06-sep-2026.** `NotasDeVenta` en `02_servicios_y_memoria.js`,
+interruptor **📒** en la barra flotante — **apagado por defecto**.
 
-Si no hay dato, **no se escribe nada** en 508 ni en 117. Un cero inventado ahí
-es una declaración mal hecha, igual que las estimaciones de la ficha web.
+Cuando está encendido, el paso 3.5 de `llenarCompras()` pide los dos números en
+un panel del HUD, con temporizador visible. Si nadie contesta, la promesa se
+resuelve sola con `null` y el lote sigue.
+
+> **`null` no es cero.** Un silencio significa «no sé» y **no se escribe nada**
+> en el 508 ni en el 117. Un cero inventado ahí es una declaración mal hecha.
+> El botón «No tiene» sí es una respuesta: se guarda como 0/0.
+
+Nunca un `confirm()`: un diálogo del navegador congela la página y el lote
+entero se queda ahí. Vale la misma lección del cuadro que bloqueaba la
+automatización.
+
+**Tres períodos seguidos en cero y se deja de preguntarle a ese cliente**
+(`noUsa`). Con 500 contribuyentes, seguir preguntándole al que nunca usa notas
+de venta es justo lo que haría inservible el interruptor. Un período con datos
+lo despierta solo, y `volverAPreguntar(ruc)` lo despierta a mano.
+
+Los `id` del 508 y el 117 **no están confirmados**: se buscan por número de
+casillero. Si hay dato y el casillero no aparece, la plata **no** se manda a
+otro lado — se anota en `iva_sin_ubicar` y el cierre mágico frena (§9a).
+
+Banco: `tests/notasventa.html` (23 comprobaciones, verdes el 06-sep-2026).
 
 ### 8c. Cambio de clave por lote
 

@@ -582,6 +582,7 @@ const SriLoopHUD = {
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
+            '<button id="slh-notas" aria-label="Notas de venta: preguntar el 508 y el 117 en cada cliente" title="Notas de venta (comprobantes físicos). Con esto encendido, el lote pregunta el importe y la cantidad antes de llenar." style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1" aria-pressed="false">📒</button>',
             '<button id="slh-proveedores" aria-label="Ver la base de proveedores" title="La base de proveedores: qué se aprendió y qué falta clasificar" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:rgba(192,132,252,0.16);color:#d8b4fe">🏷️</button>',
             '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
             '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
@@ -604,7 +605,8 @@ const SriLoopHUD = {
             '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
             '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
-            '<div id="slh-proveedores-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
+            '<div id="slh-proveedores-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
+            '<div id="slh-notas-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -701,13 +703,7 @@ const SriLoopHUD = {
         // repintar, así que el listener vive en el contenedor, no en la fila.
         // Un solo panel abierto a la vez: si no, el HUD crece hasta tapar la
         // pantalla justo cuando hay que mirar el portal.
-        const soloUno = (cual) => {
-            ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
-             'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
-             'slh-ir-panel', 'slh-proveedores-panel']
-                .filter((id) => id !== cual && id !== 'slh-plan')
-                .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
-        };
+        const soloUno = (cual) => this.soloUnPanel(cual);
 
         // Las tres que venían de la píldora delegan en el panel, que es quien
         // sabe hacerlas. Acá solo viven los botones.
@@ -779,6 +775,19 @@ const SriLoopHUD = {
                 console.log(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
             }
+        });
+
+        el.querySelector('#slh-notas').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            // Si hay una pregunta en curso, el botón no la alterna: la muestra.
+            if (this._notasPendiente) {
+                const p = el.querySelector('#slh-notas-panel');
+                soloUno('slh-notas-panel');
+                p.style.display = 'block';
+                return;
+            }
+            await NotasDeVenta.alternar();
+            await this.pintarInterruptorNotas();
         });
 
         el.querySelector('#slh-proveedores').addEventListener('click', async (ev) => {
@@ -964,6 +973,7 @@ const SriLoopHUD = {
                 window.location.reload();
             });
         } catch (e) { /* sin listener */ }
+        this.pintarInterruptorNotas().catch(() => {});
         setInterval(() => this.pintar(), 2000);
         setInterval(() => this.refrescarContadorOmitidos(), 5000);
         this.refrescarContadorOmitidos();
@@ -1637,6 +1647,121 @@ const SriLoopHUD = {
     /**
      * La bitácora, para leerla acá en vez de copiarla a ciegas.
      */
+    /**
+     * Deja abierto un solo panel del HUD.
+     *
+     * Es un método y no un ayudante suelto de montar() porque los paneles que
+     * se abren solos —la pregunta de las notas de venta, por ejemplo— viven en
+     * métodos y no veían al local. Una sola lista, en un solo lugar.
+     */
+    soloUnPanel(cual) {
+        if (!this._el) return;
+        ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
+         'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
+         'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel']
+            .filter((id) => id !== cual && id !== 'slh-plan')
+            .forEach((id) => {
+                const p = this._el.querySelector('#' + id);
+                if (p) p.style.display = 'none';
+            });
+    },
+
+    /** El 📒 dice de un vistazo si el lote va a preguntar o no. */
+    async pintarInterruptorNotas() {
+        const b = this._el && this._el.querySelector('#slh-notas');
+        if (!b || typeof NotasDeVenta === 'undefined') return;
+        const on = await NotasDeVenta.estaEncendido();
+        b.style.background = on ? 'rgba(192,132,252,0.22)' : 'rgba(148,163,184,0.16)';
+        b.style.color = on ? '#d8b4fe' : '#cbd5e1';
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.title = on
+            ? 'Notas de venta ENCENDIDO: el lote pregunta el 508 y el 117 antes de llenar. Pulsá para apagar.'
+            : 'Notas de venta apagado: no se toca el 508 ni el 117. Pulsá para que pregunte.';
+    },
+
+    /**
+     * Pregunta el importe y la cantidad de notas de venta, con temporizador.
+     *
+     * Devuelve `null` si nadie contestó a tiempo — y ese null significa «no
+     * sé», no «cero»: quien lo recibe no escribe nada en el formulario.
+     *
+     * El lote NO se detiene: la promesa se resuelve sola al vencer el reloj.
+     *
+     * @returns {Promise<{monto: number, cantidad: number}|null>}
+     */
+    preguntarNotasDeVenta({ ruc, nombre, periodo, segundos }) {
+        const panel = this._el && this._el.querySelector('#slh-notas-panel');
+        if (!panel) return Promise.resolve(null);
+
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        // En el DOM del portal va sólo lo que hace falta ver. Nunca una clave.
+        panel.innerHTML =
+            '<div style="font-size:11px;font-weight:800;margin-bottom:2px">📒 Notas de venta</div>' +
+            `<div style="font-size:11px;opacity:0.8;margin-bottom:8px">${esc(nombre || ruc)} · ${esc(periodo)}</div>` +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+            '  <label style="font-size:10px;opacity:0.75">508 · importe' +
+            '    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" style="display:block;width:110px;margin-top:2px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;border-radius:7px;padding:6px 8px;font-family:monospace;font-size:12px"></label>' +
+            '  <label style="font-size:10px;opacity:0.75">117 · cantidad' +
+            '    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" style="display:block;width:82px;margin-top:2px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;border-radius:7px;padding:6px 8px;font-family:monospace;font-size:12px"></label>' +
+            '  <button id="slh-nv-ok" style="border:none;border-radius:8px;padding:8px 12px;min-height:34px;background:rgba(16,185,129,0.22);color:#5eead4;font-size:11px;font-weight:800;cursor:pointer">Guardar</button>' +
+            '  <button id="slh-nv-no" style="border:none;border-radius:8px;padding:8px 12px;min-height:34px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">No tiene</button>' +
+            '</div>' +
+            '<div id="slh-nv-reloj" style="font-size:10px;opacity:0.7;margin-top:8px"></div>';
+
+        this.soloUnPanel('slh-notas-panel');
+        panel.style.display = 'block';
+        this._notasPendiente = true;
+        const reloj = panel.querySelector('#slh-nv-reloj');
+        const campoMonto = panel.querySelector('#slh-nv-monto');
+        setTimeout(() => { try { campoMonto.focus(); } catch (e) { /* nada */ } }, 60);
+
+        return new Promise((resolve) => {
+            let quedan = segundos;
+            let terminado = false;
+
+            const cerrar = (valor) => {
+                if (terminado) return;
+                terminado = true;
+                clearInterval(tic);
+                this._notasPendiente = false;
+                panel.style.display = 'none';
+                panel.innerHTML = '';
+                resolve(valor);
+            };
+
+            const tic = setInterval(() => {
+                quedan--;
+                if (quedan <= 0) {
+                    // Se acabó el tiempo: null, que NO es cero. El lote sigue.
+                    cerrar(null);
+                    return;
+                }
+                reloj.textContent = `Sin respuesta en ${quedan}s el lote sigue y no se toca ni el 508 ni el 117.`;
+            }, 1000);
+            reloj.textContent = `Sin respuesta en ${quedan}s el lote sigue y no se toca ni el 508 ni el 117.`;
+
+            panel.querySelector('#slh-nv-ok').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                cerrar({
+                    monto: parseFloat(campoMonto.value) || 0,
+                    cantidad: parseInt(panel.querySelector('#slh-nv-cant').value, 10) || 0
+                });
+            });
+            // «No tiene» es una respuesta, no un silencio: cuenta para dejar de
+            // preguntarle a este cliente en los próximos períodos.
+            panel.querySelector('#slh-nv-no').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                cerrar({ monto: 0, cantidad: 0 });
+            });
+            // Enter en cualquiera de los dos campos guarda.
+            panel.querySelectorAll('input').forEach((i) => {
+                i.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter') panel.querySelector('#slh-nv-ok').click();
+                });
+            });
+        });
+    },
+
     /**
      * La base de proveedores: qué se aprendió y qué falta.
      *

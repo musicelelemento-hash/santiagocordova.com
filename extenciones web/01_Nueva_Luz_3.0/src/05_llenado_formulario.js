@@ -340,6 +340,53 @@ async function llenarCompras(data) {
         console.log('  ℹ️ Sin compras ni NC tarifa 0%.');
     }
 
+    // ─── PASO 3.5: Notas de venta (casilleros 508 y 117) ─────────────────────
+    // Son comprobantes FÍSICOS: no están en «comprobantes electrónicos
+    // recibidos» y el bot no tiene de dónde sacarlos. El dato lo tiene el
+    // contador. Si no lo da, NO se escribe nada: un cero inventado acá es una
+    // declaración mal hecha.
+    if (typeof NotasDeVenta !== 'undefined') {
+        try {
+            const rucNv = typeof rucDelClienteActual === 'function' ? await rucDelClienteActual() : '';
+            const st = await SafeStorage.get(['workflowPeriod', 'pending_sri_autofill']);
+            const wp = st.workflowPeriod;
+            const periodoNv = wp
+                ? `${wp.year}-${String((wp.monthIndex || 0) + 1).padStart(2, '0')}`
+                : '';
+
+            if (rucNv && periodoNv) {
+                let nv = await NotasDeVenta.saber(rucNv, periodoNv);
+                if (!nv && await NotasDeVenta.debePreguntar(rucNv)) {
+                    // Con temporizador: si nadie contesta, el lote sigue.
+                    nv = await NotasDeVenta.preguntar(
+                        rucNv, (st.pending_sri_autofill || {}).name, periodoNv);
+                }
+
+                if (nv && (nv.monto > 0 || nv.cantidad > 0)) {
+                    console.log(`\n📒 Paso 3.5: Notas de venta · $${nv.monto.toFixed(2)} en ${nv.cantidad} comprobante(s)...`);
+                    // Los id del 508 y el 117 no están en la Matriz Tatuada: se
+                    // buscan por número. Si no aparecen, la plata NO se manda a
+                    // otro casillero — se anota y el cierre mágico frena.
+                    if (nv.monto > 0) {
+                        if (await llenarCampo('508', nv.monto)) { camposLlenados++; await sleep(900); }
+                        else sinUbicar.push(`no se encontró el casillero 508: $${nv.monto.toFixed(2)} de notas de venta quedaron sin declarar`);
+                    }
+                    if (nv.cantidad > 0) {
+                        if (await llenarCampo('117', nv.cantidad)) { camposLlenados++; await sleep(600); }
+                        else sinUbicar.push(`no se encontró el casillero 117: la cantidad de notas de venta quedó sin declarar`);
+                    }
+                } else if (nv) {
+                    console.log('📒 Paso 3.5: el contador dijo que este período no tiene notas de venta. No se toca el 508 ni el 117.');
+                } else {
+                    console.log('📒 Paso 3.5: sin dato de notas de venta. No se escribe nada — un cero inventado sería una declaración mal hecha.');
+                }
+            }
+        } catch (e) {
+            // Preguntar por las notas de venta nunca puede tumbar el llenado.
+            console.warn('📒 [NOTAS DE VENTA] No se pudo preguntar:', e.message);
+        }
+    }
+
     // ─── PASO 4: Valores Sugeridos (564 y 565) ───────────────────────────────
     console.log('\n🔍 Paso 4: Valores sugeridos (564 y 565)...');
     try {

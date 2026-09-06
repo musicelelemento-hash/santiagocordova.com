@@ -1027,6 +1027,154 @@ async function rucDelClienteActual() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// NOTAS DE VENTA — casilleros 508 y 117
+// ═══════════════════════════════════════════════════════════════════════════
+// Son comprobantes FÍSICOS: nunca aparecen en «comprobantes electrónicos
+// recibidos» y el bot no tiene de dónde sacarlos. El dato lo tiene el contador
+// y nadie más.
+//
+//   508 · Adquisiciones a contribuyentes RISE (hasta dic-2021) /
+//         NEGOCIOS POPULARES (desde ene-2022) — el importe
+//   117 · Total de notas de venta recibidas — la cantidad
+//
+// **Si no hay dato, no se escribe nada.** Un cero inventado ahí es una
+// declaración mal hecha, igual que una estimación presentada como dato.
+//
+// Y el lote NUNCA se queda esperando: la pregunta tiene temporizador. Vale la
+// misma lección del `confirm()` que bloqueaba la automatización — un lote de
+// 27 clientes no puede frenarse porque nadie está mirando la pantalla.
+const NotasDeVenta = {
+    _KEY: 'sc_notas_venta',
+    SEGUNDOS_POR_DEFECTO: 40,
+    // Tres períodos seguidos en cero y se deja de preguntar por ese cliente.
+    // Con 500 contribuyentes, preguntar por los que nunca usan notas de venta
+    // es lo que haría inservible al interruptor.
+    CEROS_PARA_DEJAR_DE_PREGUNTAR: 3,
+
+    async _estado() {
+        try {
+            return (await SafeStorage.get([this._KEY]))[this._KEY] ||
+                   { encendido: false, segundos: this.SEGUNDOS_POR_DEFECTO, porCliente: {} };
+        } catch (e) {
+            return { encendido: false, segundos: this.SEGUNDOS_POR_DEFECTO, porCliente: {} };
+        }
+    },
+
+    async _guardar(e) {
+        try { await SafeStorage.set({ [this._KEY]: e }); return true; } catch (err) { return false; }
+    },
+
+    async estaEncendido() { return !!(await this._estado()).encendido; },
+
+    async alternar() {
+        const e = await this._estado();
+        e.encendido = !e.encendido;
+        await this._guardar(e);
+        console.log(`📒 [NOTAS DE VENTA] Interruptor ${e.encendido ? 'ENCENDIDO' : 'apagado'}.`);
+        return e.encendido;
+    },
+
+    /**
+     * ¿Hay que preguntarle a este cliente?
+     *
+     * No, si el interruptor está apagado o si este contribuyente ya demostró
+     * que no usa notas de venta.
+     */
+    async debePreguntar(ruc) {
+        const e = await this._estado();
+        if (!e.encendido) return false;
+        const c = e.porCliente[String(ruc || '')];
+        return !(c && c.noUsa);
+    },
+
+    /** Lo que se cargó para este cliente y período, o null. */
+    async saber(ruc, periodo) {
+        const e = await this._estado();
+        const c = e.porCliente[String(ruc || '')];
+        return (c && c.periodos && c.periodos[periodo]) || null;
+    },
+
+    /**
+     * Guarda lo que dijo el contador para un período.
+     *
+     * Dos ceros seguidos no dicen nada; tres sí: este contribuyente no usa
+     * notas de venta y no hace falta seguir preguntándole.
+     *
+     * @param {string} ruc
+     * @param {string} periodo 'YYYY-MM'
+     * @param {{monto: number, cantidad: number}} datos
+     */
+    async guardar(ruc, periodo, datos) {
+        const r = String(ruc || '');
+        if (!r || !periodo) return false;
+
+        const e = await this._estado();
+        const c = e.porCliente[r] || { noUsa: false, ceros: 0, periodos: {} };
+
+        const monto = Number(datos && datos.monto) || 0;
+        const cantidad = Math.round(Number(datos && datos.cantidad) || 0);
+        c.periodos[periodo] = { monto, cantidad, cuando: Date.now() };
+
+        if (monto === 0 && cantidad === 0) {
+            c.ceros = (c.ceros || 0) + 1;
+            if (c.ceros >= this.CEROS_PARA_DEJAR_DE_PREGUNTAR) {
+                c.noUsa = true;
+                console.log(`📒 [NOTAS DE VENTA] ${r}: ${c.ceros} períodos en cero. Dejo de preguntarle.`);
+            }
+        } else {
+            c.ceros = 0;
+            c.noUsa = false;
+        }
+
+        e.porCliente[r] = c;
+        return this._guardar(e);
+    },
+
+    /** Vuelve a preguntarle a un cliente que se había marcado como que no usa. */
+    async volverAPreguntar(ruc) {
+        const e = await this._estado();
+        const c = e.porCliente[String(ruc || '')];
+        if (!c) return false;
+        c.noUsa = false;
+        c.ceros = 0;
+        return this._guardar(e);
+    },
+
+    /**
+     * Le pregunta al contador, con temporizador.
+     *
+     * Devuelve lo que haya cargado, o **null si nadie contestó**. Un null acá
+     * significa «no sé», no «cero»: quien lo reciba no escribe nada.
+     *
+     * La pregunta se dibuja en el HUD, no con un `confirm()`: un diálogo del
+     * navegador congela la página y el lote entero se queda ahí.
+     *
+     * @param {string} ruc
+     * @param {string} nombre
+     * @param {string} periodo
+     * @returns {Promise<{monto, cantidad}|null>}
+     */
+    async preguntar(ruc, nombre, periodo) {
+        const e = await this._estado();
+        const segundos = Math.max(10, Number(e.segundos) || this.SEGUNDOS_POR_DEFECTO);
+
+        if (typeof SriLoopHUD === 'undefined' || !SriLoopHUD.preguntarNotasDeVenta) {
+            console.warn('📒 [NOTAS DE VENTA] No hay dónde preguntar: sigo sin tocar el 508 ni el 117.');
+            return null;
+        }
+
+        const r = await SriLoopHUD.preguntarNotasDeVenta({ ruc, nombre, periodo, segundos });
+        if (!r) {
+            console.log(`📒 [NOTAS DE VENTA] Nadie contestó en ${segundos}s. ` +
+                        'El 508 y el 117 quedan sin tocar, que es lo correcto: no se inventa un cero.');
+            return null;
+        }
+        await this.guardar(ruc, periodo, r);
+        return r;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL CATASTRO DEL SRI
 // ═══════════════════════════════════════════════════════════════════════════
 // El padrón público, reducido a lo único que hace falta para SUGERIR a qué se

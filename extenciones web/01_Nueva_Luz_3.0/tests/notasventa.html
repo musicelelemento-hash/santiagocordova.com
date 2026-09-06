@@ -1,0 +1,124 @@
+<!doctype html><meta charset="utf-8"><title>Notas de venta: 508 y 117</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Si nadie contesta, el lote sigue — y no se inventa un cero</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>'../'+p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const RUC = '0703891838001';
+
+  SriLoopHUD._enSri = () => true; SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+
+  // ══ A · el interruptor ══════════════════════════════════════════════════
+  sec('A · apagado por defecto');
+  push('nace apagado',                  await NotasDeVenta.estaEncendido(), false);
+  push('y apagado no se pregunta nada', await NotasDeVenta.debePreguntar(RUC), false);
+  push('se enciende',                   await NotasDeVenta.alternar(), true);
+  push('y ahora sí pregunta',           await NotasDeVenta.debePreguntar(RUC), true);
+
+  await SriLoopHUD.pintarInterruptorNotas();
+  push('el botón lo dice',
+       document.getElementById('slh-notas').getAttribute('aria-pressed'), 'true');
+
+  // ══ B · el temporizador: el lote NUNCA se queda esperando ═══════════════
+  sec('B · nadie contesta');
+  const t0 = performance.now();
+  const nada = await SriLoopHUD.preguntarNotasDeVenta(
+    { ruc: RUC, nombre: 'CLIENTE DE PRUEBA', periodo: '2026-08', segundos: 2 });
+  const ms = Math.round(performance.now() - t0);
+  push('devuelve null, que NO es cero',  nada, null);
+  push('y se resuelve solo al vencer',   ms >= 1500 && ms < 6000, true);
+  push('el panel se cierra',
+       document.getElementById('slh-notas-panel').style.display, 'none');
+  // Y lo importante: un silencio no queda guardado como si fuera un dato.
+  push('un silencio no se guarda como dato',
+       await NotasDeVenta.saber(RUC, '2026-08'), null);
+
+  // ══ C · el contador contesta ════════════════════════════════════════════
+  sec('C · alguien contesta');
+  const p = SriLoopHUD.preguntarNotasDeVenta(
+    { ruc: RUC, nombre: 'CLIENTE DE PRUEBA', periodo: '2026-08', segundos: 30 });
+  await new Promise(r => setTimeout(r, 120));
+  push('el panel se abre',
+       document.getElementById('slh-notas-panel').style.display, 'block');
+  document.getElementById('slh-nv-monto').value = '340.50';
+  document.getElementById('slh-nv-cant').value = '7';
+  document.getElementById('slh-nv-ok').click();
+  const dato = await p;
+  push('devuelve lo que se cargó',       dato, { monto: 340.5, cantidad: 7 });
+
+  await NotasDeVenta.guardar(RUC, '2026-08', dato);
+  push('y queda guardado para ese período',
+       (await NotasDeVenta.saber(RUC, '2026-08')).monto, 340.5);
+  push('sin mezclarse con otro período',
+       await NotasDeVenta.saber(RUC, '2026-09'), null);
+
+  // ══ D · «No tiene» es una respuesta, no un silencio ═════════════════════
+  sec('D · tres ceros y se deja de preguntar');
+  const OTRO = '0912345678001';
+  push('al principio se le pregunta',   await NotasDeVenta.debePreguntar(OTRO), true);
+
+  await NotasDeVenta.guardar(OTRO, '2026-06', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-07', { monto: 0, cantidad: 0 });
+  push('dos ceros todavía no dicen nada', await NotasDeVenta.debePreguntar(OTRO), true);
+
+  await NotasDeVenta.guardar(OTRO, '2026-08', { monto: 0, cantidad: 0 });
+  // Con 500 contribuyentes, seguir preguntándole al que nunca usa notas de
+  // venta es lo que haría inservible al interruptor.
+  push('al tercero se deja de preguntarle', await NotasDeVenta.debePreguntar(OTRO), false);
+
+  // Un período con datos lo despierta: dejó de ser «no usa».
+  await NotasDeVenta.guardar(OTRO, '2026-09', { monto: 120, cantidad: 2 });
+  push('si aparece un dato, vuelve a preguntarse', await NotasDeVenta.debePreguntar(OTRO), true);
+
+  // Y siempre se puede reactivar a mano.
+  await NotasDeVenta.guardar(OTRO, '2026-10', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-11', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-12', { monto: 0, cantidad: 0 });
+  push('vuelve a quedar callado',       await NotasDeVenta.debePreguntar(OTRO), false);
+  await NotasDeVenta.volverAPreguntar(OTRO);
+  push('y se lo puede despertar a mano', await NotasDeVenta.debePreguntar(OTRO), true);
+
+  // ══ E · el botón «No tiene» ═════════════════════════════════════════════
+  sec('E · el botón «No tiene»');
+  const p2 = SriLoopHUD.preguntarNotasDeVenta(
+    { ruc: RUC, nombre: 'CLIENTE', periodo: '2026-09', segundos: 30 });
+  await new Promise(r => setTimeout(r, 120));
+  document.getElementById('slh-nv-no').click();
+  push('devuelve ceros explícitos, no null', await p2, { monto: 0, cantidad: 0 });
+
+  // ══ F · apagar el interruptor lo apaga de verdad ════════════════════════
+  sec('F · apagar');
+  await NotasDeVenta.alternar();
+  push('queda apagado',                  await NotasDeVenta.estaEncendido(), false);
+  push('y no se le pregunta a nadie',    await NotasDeVenta.debePreguntar(RUC), false);
+  // Pero lo ya cargado no se pierde: apagar no borra.
+  push('lo cargado sigue estando',
+       (await NotasDeVenta.saber(RUC, '2026-08')).cantidad, 7);
+
+  document.getElementById('sri-loop-hud').remove();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>
