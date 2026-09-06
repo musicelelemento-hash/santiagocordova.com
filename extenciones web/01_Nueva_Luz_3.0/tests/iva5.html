@@ -235,9 +235,13 @@
   push('y el período que está en pantalla',
        [ultimo.params.get('frmPrincipal:ano'), ultimo.params.get('frmPrincipal:mes')], ['2026','8']);
   push('lleva la sesión del portal',      ultimo.op.credentials, 'include');
-  // Si mandara la clave de acceso o el RUC en la URL, quedaría en los logs del
-  // servidor. Va todo en el cuerpo del POST.
-  push('nada de datos en la URL',         /[?&]/.test(ultimo.url), false);
+  // Lo que importa no es que la URL esté limpia —el POST va a la página donde
+  // ya estamos, con la query que el portal le puso— sino que NOSOTROS no
+  // agreguemos datos ahí: en la URL quedan los logs del servidor.
+  push('la petición va a la página donde estamos',
+       ultimo.url.startsWith(location.href.split('#')[0].split('?')[0]), true);
+  push('y no le agregamos el índice de la fila',
+       /lnkXml|tablaComp/.test(ultimo.url), false);
 
   // La fila 1 tiene su propio índice: no se puede pedir siempre la 0.
   await descargarXmlComprobante(1);
@@ -364,6 +368,47 @@
 
   document.getElementById('portal').innerHTML = '';
   push('sin formulario devuelve lista vacía', sriMapaCasilleros().length, 0);
+
+  // ══ J2 · la botonera ordenada ═══════════════════════════════════════════
+  sec('J2 · el cajón de herramientas');
+  SriLoopHUD._enSri = () => true; SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+  const hud2 = document.getElementById('sri-loop-hud');
+  const barra = [...hud2.children].filter(c => c.tagName === 'BUTTON').map(b => b.id);
+
+  // Lo que se ve sin abrir nada: los controles del lote y nada más.
+  push('en la barra quedan los del lote',
+       barra, ['slh-play','slh-paso','slh-aqui','slh-omitidos','slh-omitir',
+               'slh-cerrar','slh-cajon-btn','slh-stop']);
+  push('el 🛑 sigue a la vista, que es el que importa',
+       barra.includes('slh-stop'), true);
+
+  const cajon = document.getElementById('slh-cajon');
+  push('el cajón nace cerrado', cajon.style.display, 'none');
+  push('y adentro están las diez herramientas',
+       cajon.querySelectorAll('[data-celda]').length, 10);
+  // Un ícono suelto no dice nada: cada uno lleva su rótulo escrito.
+  push('cada una con su rótulo',
+       [...cajon.querySelectorAll('[data-celda]')].every(c => c.textContent.trim().length > 3), true);
+  push('los botones se movieron, no se duplicaron',
+       document.querySelectorAll('#slh-proveedores').length, 1);
+
+  document.getElementById('slh-cajon-btn').click();
+  push('el botón lo abre', cajon.style.display, 'flex');
+  push('y lo dice para quien no ve',
+       document.getElementById('slh-cajon-btn').getAttribute('aria-expanded'), 'true');
+  document.getElementById('slh-cajon-btn').click();
+  push('y lo vuelve a cerrar', cajon.style.display, 'none');
+
+  // Los handlers siguen enganchados después de la mudanza.
+  document.getElementById('slh-cajon-btn').click();
+  document.getElementById('slh-proveedores').click();
+  await new Promise(r => setTimeout(r, 150));
+  push('y los botones mudados siguen funcionando',
+       document.getElementById('slh-proveedores-panel').style.display, 'block');
+  // Sin soltar la referencia, el montar() de la seccion siguiente sale por la
+  // guarda de arriba y se queda sin barra.
+  hud2.remove(); SriLoopHUD._el = null;
 
   // ══ J · el HUD: que los botones estén y se vean ═════════════════════════
   sec('J · los botones de la barra flotante');

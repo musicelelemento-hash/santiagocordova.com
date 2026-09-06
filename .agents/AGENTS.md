@@ -344,6 +344,25 @@ estudio tampoco salen en la exportación: es con quién opera cada uno.
 
 Banco: `tests/proveedores.html` (31 comprobaciones, verdes el 06-sep-2026).
 
+### La base es de tres proyectos, no de uno
+
+> **Anotado el 06-sep-2026 a pedido del usuario.** La base de proveedores y el
+> catastro **se guardan también para un proyecto aparte: la selección de IVA
+> por tipo para la devolución de tercera edad.**
+
+Es la misma pregunta hecha tres veces, y el dato es uno solo:
+
+| Quién pregunta | Qué necesita saber del RUC |
+| :--- | :--- |
+| **Nueva Luz** (IVA) | ¿la compra es deducible o no? → 500/510 vs 502/512 |
+| **Anexo de Gastos Personales** | ¿vivienda, salud, educación, alimentación, vestimenta o turismo? |
+| **Devolución de IVA · tercera edad** | ¿esta compra califica para la devolución? |
+
+Por eso `Proveedores` guarda `actividad` y `ciiu` **además** de `deducible`, y
+por eso `exportar()` los saca en TSV: la base no es de la extensión de IVA, es
+del estudio. Cuando se arme el proyecto de tercera edad, la parte cara —saber a
+qué se dedica cada RUC— ya va a estar hecha y confirmada por el contador.
+
 ### Lo que falta
 
 - El **mapa CIIU → deducible**: criterio contable, lo pone el contador.
@@ -762,6 +781,30 @@ contra el servidor de su autor, o sea que ese tercero vería los RUC de los
 proveedores de todos los clientes del estudio — con quién opera cada
 contribuyente. Teniendo el catastro en disco propio, no hay motivo para mandar
 eso afuera. Descartada.
+
+---
+
+## 9c. La barra flotante: qué se ve y qué no
+
+Llegó a **diecisiete controles**. Diecisiete íconos sueltos encima del portal
+no se leen: se tropiezan, y el que hay que apretar cuando algo va mal queda
+perdido entre los demás.
+
+**A la vista quedan los del lote** — arrancar/pausar (▶), paso a paso (🏃), el
+estado, declarar al que está logueado (🎯), omitidos (⚠️), saltar (⏭️), cerrar
+(🏁), el cajón (🧰) y **🛑 Detener**, que es el único rotulado con palabras.
+
+**El resto vive en el cajón 🧰**, en su propia línea y **con el rótulo escrito
+debajo** de cada ícono: Comprobantes · Registro · La cola · Bitácora ·
+Proveedores · Notas de venta · Casilleros · Ir a… · Probar subida · Panel.
+
+Los botones **no se recrean: se mueven** con `appendChild` después de armar el
+`innerHTML`. Así los handlers, que se enganchan buscando por id, siguen
+funcionando sin tocarlos — y no hay dos copias del mismo botón dando vueltas.
+
+`pintar()` esconde la **celda** entera cuando una herramienta no corresponde
+(🧾 sin nadie logueado), no sólo el botón: si no, quedaba el rótulo huérfano
+flotando debajo de nada.
 
 ---
 

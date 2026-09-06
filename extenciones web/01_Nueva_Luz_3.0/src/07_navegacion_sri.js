@@ -578,6 +578,7 @@ const SriLoopHUD = {
             // saldo es $0 y no hay inconsistencias, ENVÍA. El rótulo lo dice.
             '<button id="slh-cerrar" aria-label="Cerrar la declaración: valida y, si está limpia, la envía" title="Cerrar la declaración: valida el resumen y, si el saldo es $0 y no hay inconsistencias, la ENVÍA" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(16,185,129,0.18);color:#5eead4">🏁</button>',
             '<span style="width:1px;align-self:stretch;background:rgba(255,255,255,0.12);margin:0 2px"></span>',
+            '<button id="slh-cajon-btn" aria-label="Herramientas" aria-expanded="false" title="Herramientas: comprobantes, registro, cola, bitácora, proveedores, casilleros…" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🧰</button>',
             '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
@@ -593,6 +594,9 @@ const SriLoopHUD = {
             // mal, tiene que decir lo que hace sin pasar el mouse por encima.
             '<button id="slh-stop" aria-label="Parada de emergencia: detiene el lote" title="Parada de emergencia: detiene el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(239,68,68,0.2);color:#fca5a5;padding:8px 12px">🛑 Detener</button>',
             '</div>',
+            // El cajón de herramientas: en su propia línea, para no empujar la
+            // botonera del lote fuera de la pantalla.
+            '<div id="slh-cajon" style="display:none;flex-basis:100%;flex-wrap:wrap;gap:6px;padding-top:8px;margin-top:2px;border-top:1px solid rgba(255,255,255,0.10)"></div>',
             // Plan de vuelo: qué pide el SRI y en qué paso va el bot.
             '<div id="slh-barra" style="display:none;position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(148,163,184,0.16);border-radius:0 0 14px 14px;overflow:hidden">',
             '  <div id="slh-barra-fill" style="position:relative;overflow:hidden;height:100%;width:0%;background:linear-gradient(90deg,#22c55e,#7dd3fc);transition:width .7s cubic-bezier(.22,1,.36,1)"></div>',
@@ -945,6 +949,49 @@ const SriLoopHUD = {
             ev.stopPropagation();
             await SriLoop.emergencia();
             this.pintar();
+        });
+
+        // ── La botonera, ordenada ───────────────────────────────────────
+        // Los botones no se recrean: se MUEVEN al cajón. Así los handlers, que
+        // se enganchan más abajo buscando por id, siguen encontrándolos.
+        const HERRAMIENTAS = [
+            ['slh-pdfs',        'Comprobantes'],
+            ['slh-registro',    'Registro'],
+            ['slh-cola',        'La cola'],
+            ['slh-bitacora',    'Bitácora'],
+            ['slh-proveedores', 'Proveedores'],
+            ['slh-notas',       'Notas de venta'],
+            ['slh-casilleros',  'Casilleros'],
+            ['slh-ir',          'Ir a…'],
+            ['slh-subida',      'Probar subida'],
+            ['slh-panel',       'Panel']
+        ];
+        const cajon = el.querySelector('#slh-cajon');
+        HERRAMIENTAS.forEach(([id, rotulo]) => {
+            const b = el.querySelector('#' + id);
+            if (!b || !cajon) return;
+            const celda = document.createElement('div');
+            celda.setAttribute('data-celda', id);
+            celda.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;width:70px';
+            // Dentro del cajón todos se ven; quien decide si una herramienta
+            // corresponde es pintar(), y lo hace sobre la celda entera para no
+            // dejar un rótulo huérfano.
+            b.style.display = 'inline-flex';
+            celda.appendChild(b);
+            const t = document.createElement('span');
+            t.textContent = rotulo;
+            t.style.cssText = 'font-size:9px;opacity:0.7;text-align:center;line-height:1.2';
+            celda.appendChild(t);
+            cajon.appendChild(celda);
+        });
+
+        el.querySelector('#slh-cajon-btn').addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            const abierto = cajon.style.display === 'flex';
+            cajon.style.display = abierto ? 'none' : 'flex';
+            ev.currentTarget.setAttribute('aria-expanded', abierto ? 'false' : 'true');
+            ev.currentTarget.style.background = abierto ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.30)';
+            if (abierto) this.soloUnPanel(null);   // al cerrar, no queda nada abierto
         });
 
         this._hacerArrastrable(el);
@@ -1659,7 +1706,7 @@ const SriLoopHUD = {
         ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
          'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
          'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel']
-            .filter((id) => id !== cual && id !== 'slh-plan')
+            .filter((id) => id !== cual && id !== 'slh-plan')   // null cierra todos
             .forEach((id) => {
                 const p = this._el.querySelector('#' + id);
                 if (p) p.style.display = 'none';
@@ -2118,11 +2165,17 @@ const SriLoopHUD = {
             const corriendo = e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO';
             aqui.style.display = corriendo ? 'none' : '';
         }
+        // Traer comprobantes solo tiene sentido con alguien logueado. Se
+        // esconde la CELDA del cajón, no el botón: si no, quedaba el rótulo
+        // solo, flotando debajo de nada.
+        const celdaPdfs = this._el.querySelector('[data-celda="slh-pdfs"]');
         const pdfs = this._el.querySelector('#slh-pdfs');
         if (pdfs) {
             const info = (window.sriAssistant && window.sriAssistant.extractClientInfo)
                 ? window.sriAssistant.extractClientInfo() : {};
-            pdfs.style.display = (info && info.ruc) ? '' : 'none';
+            const hay = !!(info && info.ruc);
+            if (celdaPdfs) celdaPdfs.style.display = hay ? 'flex' : 'none';
+            else pdfs.style.display = hay ? '' : 'none';
         }
 
         // El 📐 NO se esconde fuera del formulario. Se escondía, y el día que
