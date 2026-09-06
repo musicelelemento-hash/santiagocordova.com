@@ -919,6 +919,27 @@ Reglas de la ventana, probadas en `tests/claves.html`:
 > Una clave pegada en un chat, un correo o un ticket ya está comprometida:
 > hay que anularla y generar otra, aunque nunca se haya escrito en un archivo.
 
+### Rotar la de R2 — el camino, que no es el obvio
+
+Los tokens de R2 **no** se crean desde *Mi Perfil → API Tokens*. Esa pantalla
+genera un **Bearer token** de la API de Cloudflare, y la subida usa **firma
+S3**, que necesita otra cosa: un par *Access Key ID + Secret Access Key*.
+
+El único lugar que devuelve credenciales S3 es
+**R2 Object Storage → Manage R2 API Tokens → Create API Token**, con permiso
+*Object Read & Write* y alcance limitado al bucket.
+
+**Al rotar cambian los DOS.** Guardar sólo el secreto deja el Access Key ID
+viejo en `shared_config.js` y la firma falla igual — por eso Ajustes tiene los
+dos campos y el 🩺 avisa cuando quedó a medias.
+
+Y la rotación **no termina al crear el token nuevo**: termina al **borrar el
+viejo**. Mientras siga vivo, la clave del historial de git sigue sirviendo.
+
+> **Pendiente**: cuando la subida funcione con la clave del almacén, sacar el
+> valor de `R2_SECRET_ACCESS_KEY` de `shared_config.js`. Hoy sigue ahí porque
+> es el único respaldo mientras la rotación no esté hecha.
+
 ---
 
 ## 10b. Esperar al portal, no contar hasta tres

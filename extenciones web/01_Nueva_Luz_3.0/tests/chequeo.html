@@ -18,7 +18,11 @@
     sendMessage:(m)=>Promise.resolve(m && m.tipo==='SC_DIAGNOSTICO_SUBIDA' ? window.__subida : {}),id:'s'},
    storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
 </script>
-<script src="../shared_config.js"></script>
+<script>
+  // La clave «del código»: se simula para poder probar los tres finales sin
+  // depender de lo que hoy tenga shared_config.js.
+  window.SC_CONFIG = { R2_SECRET_ACCESS_KEY: 'la-que-esta-en-el-repositorio' };
+</script>
 <script src="../build/content.js"></script>
 <script>
 (async()=>{
@@ -33,7 +37,7 @@
   let f = await Chequeo.correr({ incluirSubida: false });
   const claves = f.map(x => x.clave);
   push('mira el lote, las marcas y las claves',
-       ['cola','sinUbicar','omitidos','claves','catastro'].every(c => claves.includes(c)), true);
+       ['cola','sinUbicar','omitidos','clavesR2','claveIa','catastro'].every(c => claves.includes(c)), true);
   push('y dice la versión de la extensión', de(f,'version').detalle.includes('3.1.0'), true);
   push('sin pedirla, no prueba la subida',  claves.includes('subida'), false);
 
@@ -54,19 +58,37 @@
   push('y dice cómo se limpia',              de(f,'sinUbicar').queHacer.length > 20, true);
   await anotarIvaSinUbicar([], []);
 
-  // ══ C · las claves, sin mostrarlas ══════════════════════════════════════
-  sec('C · las claves');
+  // ══ C · las claves: no alcanza con que HAYA una ═════════════════════════
+  // Importa de dónde sale. La que está en shared_config.js viaja en el
+  // repositorio: que la subida funcione con ella no es una buena noticia.
+  sec('C · de dónde sale la clave de R2');
+
   f = await Chequeo.correr({ incluirSubida: false });
-  push('sin claves avisa',              de(f,'claves').estado, 'aviso');
-  push('y manda a Ajustes',             /Ajustes/.test(de(f,'claves').queHacer), true);
+  push('usar la del código es un PROBLEMA',  de(f,'clavesR2').estado, 'problema');
+  push('y se dice por qué',                  /historial de git/.test(de(f,'clavesR2').queHacer), true);
+  push('con el camino para arreglarlo',      /Manage R2 API Tokens/.test(de(f,'clavesR2').queHacer), true);
 
   const SECRETO = 'clave-de-mentira-NOSALE';
+  // Al rotar el token de Cloudflare cambian LOS DOS. Guardar sólo el secreto
+  // deja la mitad vieja en el código y la firma falla igual.
   await chrome.storage.local.set({ sc_r2_credenciales: { R2_SECRET_ACCESS_KEY: SECRETO } });
   f = await Chequeo.correr({ incluirSubida: false });
-  push('con la de R2 puesta pasa a verde', de(f,'claves').estado, 'ok');
+  push('media rotación todavía avisa',       de(f,'clavesR2').estado, 'aviso');
+  push('y dice que falta el Access Key ID',  /Access Key ID/.test(de(f,'clavesR2').detalle), true);
+
+  await chrome.storage.local.set({ sc_r2_credenciales: {
+    R2_SECRET_ACCESS_KEY: SECRETO, R2_ACCESS_KEY_ID: 'id-nuevo' } });
+  f = await Chequeo.correr({ incluirSubida: false });
+  push('con las dos guardadas, verde',       de(f,'clavesR2').estado, 'ok');
+  push('y dice que salen del almacén',       /almacén/.test(de(f,'clavesR2').detalle), true);
+
   // Un diagnóstico no es lugar para que se escape una clave.
-  push('y NUNCA muestra la clave',
-       JSON.stringify(f).includes(SECRETO), false);
+  push('y NUNCA muestra la clave',           JSON.stringify(f).includes(SECRETO), false);
+
+  // La de IA es opcional y se dice así, no como si faltara algo roto.
+  push('sin clave de IA sólo avisa',         de(f,'claveIa').estado, 'aviso');
+  push('y aclara que es opcional',           /opcional/.test(de(f,'claveIa').queHacer), true);
+
   await chrome.storage.local.remove('sc_r2_credenciales');
 
   // ══ D · la subida, que es el objetivo §0 ════════════════════════════════

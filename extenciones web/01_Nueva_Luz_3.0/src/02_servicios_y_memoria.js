@@ -1099,14 +1099,43 @@ const Chequeo = {
                 om ? 'Abrí ⚠️ en la barra para ver por qué quedó cada uno.' : '');
         } catch (e) { /* nada */ }
 
-        // ── Las claves, sin mostrarlas ──────────────────────────────────
+        // ── Las claves: no alcanza con que HAYA una, importa DE DÓNDE sale ──
+        // La que está en `shared_config.js` viaja en el repositorio y en la
+        // extensión: es una clave publicada. Que la subida funcione con ella no
+        // es una buena noticia — es la señal de que todavía no se rotó.
         try {
             const g = await SafeStorage.get(['sc_r2_credenciales', 'sc_ia_credenciales']);
-            const r2 = !!(g.sc_r2_credenciales && g.sc_r2_credenciales.R2_SECRET_ACCESS_KEY);
+            const guardadas = g.sc_r2_credenciales || {};
+            const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
+
+            const secretoGuardado = !!guardadas.R2_SECRET_ACCESS_KEY;
+            const idGuardado = !!guardadas.R2_ACCESS_KEY_ID;
+            const secretoEnCodigo = !!cfg.R2_SECRET_ACCESS_KEY;
+
+            if (secretoGuardado && idGuardado) {
+                anotar('clavesR2', 'Clave de R2', 'ok',
+                    'Las dos vienen del almacén de la extensión, no del código.');
+            } else if (secretoGuardado) {
+                // Al rotar el token de Cloudflare cambian LOS DOS. Guardar sólo
+                // el secreto deja la mitad vieja en el código y la firma falla.
+                anotar('clavesR2', 'Clave de R2', 'aviso',
+                    'Está el secreto pero falta el Access Key ID: se sigue usando el del código.',
+                    'Al rotar el token cambian los dos. Cargá también el Access Key ID en Ajustes.');
+            } else if (secretoEnCodigo) {
+                anotar('clavesR2', 'Clave de R2', 'problema',
+                    'Se está usando la clave que está escrita en shared_config.js.',
+                    'Esa clave está en el historial de git: cualquiera con el repositorio la tiene. ' +
+                    'Rotala en Cloudflare (R2 → Manage R2 API Tokens) y cargá la nueva en Ajustes.');
+            } else {
+                anotar('clavesR2', 'Clave de R2', 'aviso', 'No hay ninguna.',
+                    'Cargala en Ajustes: clic derecho en el ícono de la extensión → Opciones.');
+            }
+
             const ia = !!(g.sc_ia_credenciales && g.sc_ia_credenciales.apiKey);
-            anotar('claves', 'Claves guardadas', r2 ? 'ok' : 'aviso',
-                `R2: ${r2 ? 'sí' : 'no'} · IA: ${ia ? 'sí' : 'no'}`,
-                r2 ? '' : 'Cargalas en Ajustes (clic derecho en el ícono → Opciones). Nunca en un archivo del proyecto.');
+            anotar('claveIa', 'Clave de IA', ia ? 'ok' : 'aviso',
+                ia ? 'Guardada. El 🤖 del panel de proveedores puede trabajar.'
+                   : 'No hay. El 🤖 no va a poder sugerir categorías.',
+                ia ? '' : 'Es opcional: sin ella la cascada llega hasta el catastro y ahí para.');
         } catch (e) { /* nada */ }
 
         // ── El catastro ─────────────────────────────────────────────────
