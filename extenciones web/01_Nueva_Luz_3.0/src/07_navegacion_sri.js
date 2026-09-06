@@ -1760,7 +1760,7 @@ function estaEnFormularioIva(url = window.location.href) {
 
 async function ejecutarNavegacionDeclaracion(periodData) {
     if (typeof SafeStorage !== 'undefined' && SafeStorage.remove) {
-        await SafeStorage.remove(['declaration_synced_flag']);
+        await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
     }
     const progress = (p) => { if (window.sriAssistant?.updateProgress) window.sriAssistant.updateProgress(p); };
 

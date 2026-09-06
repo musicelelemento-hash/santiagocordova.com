@@ -1480,6 +1480,15 @@ class SriAssistantPanel {
                 return;
             }
 
+            // Y tampoco se envía si quedó plata de compras sin casillero: una
+            // factura al 5% declarada como 15%, o una de tarifas mezcladas
+            // metida entera en un solo casillero, cambia el crédito tributario.
+            // Repartirla es criterio contable, no algo que el bot pueda deducir.
+            if (typeof frenarSiHayIvaSinUbicar === 'function' && await frenarSiHayIvaSinUbicar('en el resumen')) {
+                this.log('🛑 Hay compras sin casillero. NO se envía: se guarda borrador.');
+                return;
+            }
+
             if (puedeEnviar) {
                 this.log('💎 TODO PERFECTO. Saldo $0.00 y Sin Inconsistencias.');
                 this.setStatus('💎 Misión Cumplida - Enviando...');
@@ -2423,7 +2432,7 @@ class SriAssistantPanel {
                     auto_batch_index: 0,
                     auto_batch_period: { year: this.currentYear, monthIndex: this.currentMonth }
                 });
-                await SafeStorage.remove(['declaration_synced_flag']);
+                await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
                 this.manualMode = false;
                 this.isPaused = false;
                 

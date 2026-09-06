@@ -1040,6 +1040,49 @@ if (typeof window !== 'undefined') {
     window.sriAuditar = (tipo, n) => auditarExtraccionConTxt(tipo || TIPO_COMPROBANTE.factura, n);
 }
 
+// ── Tarifas de IVA y el corte por cociente ────────────────────────────────
+// Tarifas realmente vigentes en algún período declarable: 12% hasta marzo de
+// 2024, 13% ese marzo, 15% desde abril, y el 5% de las adquisiciones locales
+// que va a sus propios casilleros (540 / 550).
+//
+// El 8% de feriados queda AFUERA a propósito. No es que no exista: es que cae
+// justo en la zona donde una factura mezclada (parte al 15%, parte al 0%)
+// produce ese mismo cociente. Prefiero que una factura al 8% caiga en «no sé»
+// y la mire el contador, antes que una mezclada se declare como si fuera de
+// una sola tarifa.
+const TARIFAS_IVA = [5, 12, 13, 14, 15];
+
+/**
+ * Deduce la tarifa de una factura por el cociente IVA / base.
+ *
+ * Funciona cuando la factura es de una sola tarifa, que es la mayoría. Cuando
+ * trae líneas mezcladas el cociente no dice nada útil: $100 con un tercio al
+ * 15% da 4,95% y se parece a una del 5%. Por eso hay tres respuestas y la
+ * tercera es «no sé» — nunca se adivina.
+ *
+ * @param {number} base Valor sin impuestos.
+ * @param {number} iva Monto de IVA (ya reconciliado contra total − base).
+ * @returns {{tarifa: number|null, motivo: string}}
+ */
+function clasificarTarifaIva(base, iva) {
+    if (!(base > 0.005)) return { tarifa: null, motivo: 'sin base imponible legible' };
+    // Umbral en centavos, no === 0: la resta de la reconciliación puede dejar
+    // una cola binaria minúscula que no es IVA de verdad.
+    if (!(iva > 0.005)) return { tarifa: 0, motivo: 'sin IVA' };
+
+    // El portal redondea por línea, así que una factura de muchas líneas se
+    // aparta unos centavos del producto exacto. La holgura es en plata, no en
+    // puntos porcentuales: en una factura de $5 un centavo son 0,2 puntos.
+    const holgura = Math.max(0.02, base * 0.001);
+
+    for (const t of TARIFAS_IVA) {
+        if (Math.abs(iva - base * t / 100) <= holgura) return { tarifa: t, motivo: 'cociente' };
+    }
+
+    const pct = (100 * iva / base).toFixed(2);
+    return { tarifa: null, motivo: `el IVA es el ${pct}% de la base y no coincide con ninguna tarifa (¿factura de tarifas mezcladas?)` };
+}
+
 function calcularResumen(facturas) {
     let periodo = "Desconocido";
     if (facturas.length > 0) {
@@ -1053,36 +1096,62 @@ function calcularResumen(facturas) {
         periodo = `${meses[mesAnterior.getMonth()]} ${mesAnterior.getFullYear()}`;
     }
 
+    // `iva15` junta todas las tarifas plenas (12, 13, 14, 15): todas van a los
+    // mismos casilleros 500 / 510. El 5% tiene los suyos (540 / 550), y por eso
+    // necesita balde propio.
+    const balde = () => ({ cantidad: 0, total: 0, baseImponible: 0, montoIva: 0 });
     const resumen = {
         totalFacturas: facturas.length,
-        iva0: { cantidad: 0, total: 0, baseImponible: 0, montoIva: 0 },
-        iva15: { cantidad: 0, total: 0, baseImponible: 0, montoIva: 0 },
+        iva0: balde(),
+        iva5: balde(),
+        iva15: balde(),
+        ambiguas: [],   // sin tarifa reconocible: las reparte el contador
         periodo: periodo
     };
 
-    facturas.forEach(factura => {
-        // Umbral en centavos, no === 0: la resta de la reconciliación puede
-        // dejar una cola binaria minúscula que no es IVA de verdad.
-        if (!(factura.iva > 0.005)) {
-            resumen.iva0.cantidad++;
-            resumen.iva0.total += factura.importeTotal;
-            resumen.iva0.baseImponible += factura.valorSinImpuestos;
-            resumen.iva0.montoIva += factura.iva;
+    facturas.forEach((factura, i) => {
+        const { tarifa, motivo } = clasificarTarifaIva(factura.valorSinImpuestos, factura.iva);
+
+        let destino;
+        if (tarifa === 0) {
+            destino = resumen.iva0;
+        } else if (tarifa === 5) {
+            destino = resumen.iva5;
+            console.log(`   🟡 [Factura ${factura.numero || i + 1}] Leída al 5%: base $${factura.valorSinImpuestos}, IVA $${factura.iva}. Va al 540/550, no al 500.`);
+        } else if (tarifa !== null) {
+            destino = resumen.iva15;
         } else {
-            resumen.iva15.cantidad++;
-            resumen.iva15.total += factura.importeTotal;
-            resumen.iva15.baseImponible += factura.valorSinImpuestos;
-            resumen.iva15.montoIva += factura.iva;
+            // Se cuenta en la tarifa plena para NO achicar el total declarado,
+            // pero queda anotada: el cierre mágico no envía con ambigüedades.
+            destino = resumen.iva15;
+            resumen.ambiguas.push({
+                numero: factura.numero || i + 1,
+                rucRazon: factura.rucRazon || 'S/N',
+                base: redondear(factura.valorSinImpuestos),
+                iva: redondear(factura.iva),
+                motivo
+            });
+            console.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);
         }
+
+        destino.cantidad++;
+        destino.total += factura.importeTotal;
+        destino.baseImponible += factura.valorSinImpuestos;
+        destino.montoIva += factura.iva;
     });
 
-    resumen.iva0.total = redondear(resumen.iva0.total);
-    resumen.iva0.baseImponible = redondear(resumen.iva0.baseImponible);
-    resumen.iva0.montoIva = redondear(resumen.iva0.montoIva); // Should be 0
+    [resumen.iva0, resumen.iva5, resumen.iva15].forEach((b) => {
+        b.total = redondear(b.total);
+        b.baseImponible = redondear(b.baseImponible);
+        b.montoIva = redondear(b.montoIva);
+    });
 
-    resumen.iva15.total = redondear(resumen.iva15.total);
-    resumen.iva15.baseImponible = redondear(resumen.iva15.baseImponible);
-    resumen.iva15.montoIva = redondear(resumen.iva15.montoIva);
+    if (resumen.iva5.cantidad > 0) {
+        console.log(`   🟡 ${resumen.iva5.cantidad} factura(s) al 5%: base $${resumen.iva5.baseImponible}. Casilleros 540 / 550.`);
+    }
+    if (resumen.ambiguas.length > 0) {
+        console.warn(`   ⚠️ ${resumen.ambiguas.length} factura(s) sin tarifa reconocible. No se envía hasta que las mires.`);
+    }
 
     return resumen;
 }
@@ -1475,6 +1544,7 @@ async function extraerDatosModalNC() {
 
         console.log(`      ✅ Tabla NC hallada con ${filasTotales.length} filas de impuestos.`);
         let iva0 = 0;
+        let iva5 = 0;
         let iva15 = 0;
         let valorIva = 0;
 
@@ -1487,9 +1557,16 @@ async function extraerDatosModalNC() {
                 const valor = celdas[4] ? parseDecimal(celdas[4].textContent) : 0;
 
                 if (impuesto.includes('iva')) {
-                    // CÓDIGOS SRI: 0=0%, 2=12%, 3=14%, 4 o 10=15%
-                    if (codigo === '0.0' || codigo === '0') {
+                    // codigoPorcentaje del SRI. Acá no se deduce nada: es la
+                    // tarifa que declaró quien emitió el comprobante.
+                    //   0 = 0%   ·  2 = 12%  ·  3 = 14%  ·  4 y 10 = 15%
+                    //   5 = 5%   ·  6 = no objeto  ·  7 = exento
+                    const cod = codigo.replace(/\.0+$/, '');
+                    if (cod === '0' || cod === '6' || cod === '7') {
                         iva0 += base;
+                    } else if (cod === '5') {
+                        iva5 += base;
+                        valorIva += valor;
                     } else {
                         iva15 += base;
                         valorIva += valor;
@@ -1499,7 +1576,7 @@ async function extraerDatosModalNC() {
         });
 
         // Solo retornamos si al menos capturamos algo o confirmamos que procesamos filas
-        return { iva0, iva15, valorIva, processed: true };
+        return { iva0, iva5, iva15, valorIva, processed: true };
 
     } catch (e) {
         console.error('❌ Error parseando modal NC:', e);
@@ -1514,28 +1591,48 @@ function calcularResumenNotasCredito(notas) {
         iva: { total: 0 },
         totalGeneral: 0,
         iva0: { baseImponible: 0, total: 0 },
-        iva15: { baseImponible: 0, total: 0 }
+        iva5: { baseImponible: 0, total: 0 },
+        iva15: { baseImponible: 0, total: 0 },
+        ambiguas: []
     };
 
-    notas.forEach(nc => {
+    notas.forEach((nc, i) => {
         resumen.valorSinImpuestos += (nc.valorSinImpuestos || 0);
         resumen.iva.total += (nc.iva || 0);
         resumen.totalGeneral += (nc.importeTotal || 0);
 
-        // Si tenemos datos del deep extraction (iva0, iva15 específicos), los usamos
+        // Si tenemos datos del deep extraction (el modal trae el código de
+        // porcentaje del SRI), los usamos: son la tarifa exacta, no deducida.
         if (typeof nc.iva0 === 'number' && typeof nc.iva15 === 'number') {
             resumen.iva0.baseImponible += nc.iva0;
             resumen.iva0.total += nc.iva0; // Reflejar en el total de esa base
+            resumen.iva5.baseImponible += (nc.iva5 || 0);
+            resumen.iva5.total += (nc.iva5 || 0);
             resumen.iva15.baseImponible += nc.iva15;
             resumen.iva15.total += nc.iva15 + (nc.iva || 0);
         } else {
-            // Fallback anterior
-            if (nc.iva === 0 || nc.iva === 0.00) {
+            // Sin modal hay que deducir la tarifa como en las facturas. Una NC
+            // al 5% que se reste del 510 en vez del 550 deja los dos casilleros
+            // mal, así que tampoco acá se parte en dos baldes nomás.
+            const { tarifa, motivo } = clasificarTarifaIva(nc.valorSinImpuestos, nc.iva || 0);
+            if (tarifa === 5) {
+                resumen.iva5.baseImponible += nc.valorSinImpuestos;
+                resumen.iva5.total += nc.importeTotal;
+            } else if (tarifa === 0) {
                 resumen.iva0.baseImponible += nc.valorSinImpuestos;
                 resumen.iva0.total += nc.importeTotal;
             } else {
                 resumen.iva15.baseImponible += nc.valorSinImpuestos;
                 resumen.iva15.total += nc.importeTotal;
+                if (tarifa === null) {
+                    resumen.ambiguas.push({
+                        numero: nc.numero || i + 1,
+                        rucRazon: 'nota de crédito ' + (nc.comprobanteNo || nc.rucRazon || 'S/N'),
+                        base: redondear(nc.valorSinImpuestos),
+                        iva: redondear(nc.iva || 0),
+                        motivo
+                    });
+                }
             }
         }
     });
@@ -1543,10 +1640,10 @@ function calcularResumenNotasCredito(notas) {
     resumen.valorSinImpuestos = redondear(resumen.valorSinImpuestos);
     resumen.iva.total = redondear(resumen.iva.total);
     resumen.totalGeneral = redondear(resumen.totalGeneral);
-    resumen.iva0.baseImponible = redondear(resumen.iva0.baseImponible);
-    resumen.iva0.total = redondear(resumen.iva0.total);
-    resumen.iva15.baseImponible = redondear(resumen.iva15.baseImponible);
-    resumen.iva15.total = redondear(resumen.iva15.total);
+    [resumen.iva0, resumen.iva5, resumen.iva15].forEach((b) => {
+        b.baseImponible = redondear(b.baseImponible);
+        b.total = redondear(b.total);
+    });
 
     return resumen;
 }
@@ -1554,4 +1651,4 @@ function calcularResumenNotasCredito(notas) {
 /**
  * Motor de Cálculo Técnico Elite (Reinforcement Engine)
  * Calcula 615 y 617 siguiendo las reglas técnicas del SRI cuando el sugerido no es detectable.
- */
+ */

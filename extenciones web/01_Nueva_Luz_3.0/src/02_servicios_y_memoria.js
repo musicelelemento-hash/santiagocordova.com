@@ -260,6 +260,7 @@ const SriLoop = {
             'auto_batch_index', 'auto_batch_period', 'auto_batch_mode',
             'sri_auto_mode', 'autoDeclaration', 'sriAutomationPaused',
             'sri_master_switch_on', 'ghost_manual_mode', 'declaration_synced_flag',
+            'iva_sin_ubicar',
             'summary_page_clicked', 'turboMode', 'checkFacturas', 'checkRetenciones',
             'checkNC', 'skipSafetyCheck', 'sri_diagnostico_resumen',
             'sri_verificacion_sello', 'sri_obligacion_actual'
@@ -487,7 +488,7 @@ const SriLoop = {
                 sriAutomationPaused: false,
                 ghost_manual_mode: false
             });
-            await SafeStorage.remove(['declaration_synced_flag']);
+            await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
             return;
         }
         await SafeStorage.set({
@@ -512,7 +513,7 @@ const SriLoop = {
             skipSafetyCheck: true,
             ghost_manual_mode: false
         });
-        await SafeStorage.remove(['declaration_synced_flag']);
+        await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
     },
 
     /**
@@ -1003,6 +1004,85 @@ if (typeof window !== 'undefined') {
         else console.log(`🔌 IVA ${r.periodoTexto} · vence ${r.vence} (${r.dias} días) · ${r.estado}`);
         return r;
     });
+}
+
+/**
+ * Deja constancia de compras cuya tarifa no se pudo llevar a un casillero.
+ *
+ * Dos casos distintos caen acá:
+ *  - Plata al 5% que no encontró el 540 o el 550 en el DOM.
+ *  - Facturas cuyo cociente IVA/base no coincide con ninguna tarifa: casi
+ *    siempre son de tarifa mezclada, y desde la tabla de recibidos no hay
+ *    forma de partirlas. Eso lo decide el contador, no el bot.
+ *
+ * Se guarda en `iva_sin_ubicar` para que el cierre mágico lo lea antes de
+ * enviar. Sin motivos, la llave se borra: una corrida limpia no puede quedar
+ * frenada por la anterior.
+ *
+ * @param {string[]} problemas Casilleros que no aparecieron, ya redactados.
+ * @param {Array<Object>} ambiguas Facturas sin tarifa reconocible.
+ */
+async function anotarIvaSinUbicar(problemas = [], ambiguas = []) {
+    const motivos = [].concat(problemas || []).filter(Boolean);
+
+    (ambiguas || []).forEach((f) => {
+        motivos.push(`factura ${f.numero} (${f.rucRazon}): base $${f.base} con IVA $${f.iva} — ${f.motivo}`);
+    });
+
+    if (motivos.length === 0) {
+        try { await SafeStorage.remove('iva_sin_ubicar'); } catch (e) { /* nada que borrar */ }
+        return false;
+    }
+
+    console.error('🛑 [IVA SIN UBICAR] Hay compras que no se pudieron declarar en su casillero:');
+    motivos.forEach((m) => console.error('   · ' + m));
+
+    try {
+        await SafeStorage.set({
+            iva_sin_ubicar: { motivos, cuando: new Date().toISOString() }
+        });
+    } catch (e) { /* si no se puede guardar, igual quedó el error en consola */ }
+
+    if (typeof anotarBitacora === 'function') {
+        anotarBitacora('⚠ IVA sin ubicar', motivos.length + ' caso(s)');
+    }
+    return true;
+}
+
+/**
+ * Corta el envío si quedó plata sin casillero. Mismo criterio que la
+ * sustitutiva: ante la duda no se manda, se guarda borrador y decide el
+ * contador. Una declaración mal repartida entre casilleros de IVA cambia el
+ * crédito tributario, así que el silencio acá cuesta plata.
+ *
+ * @returns {Promise<boolean>} true si hay que frenar.
+ */
+async function frenarSiHayIvaSinUbicar(donde = '') {
+    let pendiente = null;
+    try {
+        pendiente = (await SafeStorage.get(['iva_sin_ubicar'])).iva_sin_ubicar;
+    } catch (e) { return false; }
+
+    if (!pendiente || !Array.isArray(pendiente.motivos) || pendiente.motivos.length === 0) return false;
+
+    console.error(`🛑 [IVA SIN UBICAR] No se envía${donde ? ' (' + donde + ')' : ''}: ` +
+                  `${pendiente.motivos.length} caso(s) de compras sin casillero.`);
+    pendiente.motivos.forEach((m) => console.error('   · ' + m));
+
+    if (typeof anotarBitacora === 'function') {
+        anotarBitacora('⛔ no se envió', 'compras sin casillero (IVA sin ubicar)');
+    }
+
+    if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+        window.sriAssistant.showEliteToast({
+            title: '🛑 Compras sin casillero',
+            msg: 'Hay compras cuya tarifa de IVA no se pudo ubicar:<br>· ' +
+                 pendiente.motivos.map((m) => escapeHtml(String(m))).join('<br>· ') +
+                 '<br><br>El formulario queda lleno y sin enviar. Repartirlas es decisión tuya.',
+            duration: 20000
+        });
+    }
+    return true;
 }
 
 function anotarBitacora(evento, detalle = '') {
@@ -1977,4 +2057,4 @@ async function autoDismissSriWarnings() {
     }
 }
 
-// AL CARGAR EL SCRIPT (RECARGA DE PAGINA)
+// AL CARGAR EL SCRIPT (RECARGA DE PAGINA)

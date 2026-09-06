@@ -1,0 +1,129 @@
+<!doctype html><meta charset="utf-8"><title>El corte de tarifas: 0 / 5 / plena</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Las compras al 5% van al 540/550, no al 500 junto con el 15%</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(64)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  // Una factura tal como la deja extraerFacturasPaginaActual
+  const F=(sin,iva,ruc)=>({numero:1,rucRazon:ruc||'099 PROVEEDOR',
+    valorSinImpuestos:sin,iva:iva,importeTotal:+(sin+iva).toFixed(2),tieneIva:iva>0});
+
+  // ══ A · clasificarTarifaIva: qué dice y qué NO dice el cociente ══════════
+  sec('A · el cociente IVA / base');
+  const T=(b,i)=>clasificarTarifaIva(b,i).tarifa;
+
+  push('base 100 con IVA 15 es 15%',            T(100,15),   15);
+  push('base 100 con IVA 5 es 5%',              T(100,5),     5);
+  push('base 100 sin IVA es 0%',                T(100,0),     0);
+  push('base 100 con IVA 12 es 12% (histórico)',T(100,12),   12);
+  push('base 100 con IVA 13 es 13% (marzo 2024)',T(100,13),  13);
+
+  // El 8% de feriados queda fuera a propósito: cae en la misma zona que una
+  // factura mezclada, y adivinar ahí es peor que decir «no sé».
+  push('base 100 con IVA 8 NO se adivina',      T(100,8),  null);
+
+  // ESTE es el caso que hacía falta separar: una factura mezclada (un tercio
+  // al 15%, el resto al 0%) da un cociente parecido al del 5%.
+  push('base 100 con IVA 7.50 (mezclada) no se adivina', T(100,7.5), null);
+
+  // Redondeo por línea: el portal redondea cada línea, así que una factura
+  // grande se aparta unos centavos del producto exacto.
+  push('base 1234.56 con IVA 185.18 sigue siendo 15%', T(1234.56,185.18), 15);
+  push('base 3.00 con IVA 0.45 es 15% aunque sea chica', T(3,0.45), 15);
+  push('base 3.00 con IVA 0.15 es 5% aunque sea chica',  T(3,0.15),  5);
+
+  // Colas binarias de la reconciliación: medio centavo no es IVA.
+  push('una cola de 0.004 no convierte una exenta en gravada', T(100,0.004), 0);
+  push('sin base no se inventa tarifa', T(0,0), null);
+
+  // ══ B · calcularResumen: dónde termina la plata ══════════════════════════
+  sec('B · el reparto de las facturas');
+  let r = calcularResumen([F(100,15), F(200,10), F(300,0)]);
+
+  push('la del 5% NO va al balde de tarifa plena', r.iva15.baseImponible, 100);
+  push('la del 5% va a su propio balde',           r.iva5.baseImponible,  200);
+  push('la exenta al de 0%',                        r.iva0.baseImponible, 300);
+  push('y las cuentas cierran: 100+200+300',
+       r.iva15.baseImponible+r.iva5.baseImponible+r.iva0.baseImponible, 600);
+  push('nada quedó marcado como dudoso',            r.ambiguas.length,      0);
+
+  // ══ C · LA REGRESIÓN: antes esto se declaraba como 15% ═══════════════════
+  sec('C · el agujero que se está tapando');
+  r = calcularResumen([F(1000,50)]);
+  push('$1000 al 5% NO caen en el 500 (base 15%)', r.iva15.baseImponible, 0);
+  push('caen en el 540 (base 5%)',                  r.iva5.baseImponible, 1000);
+  // El SRI calcula el 520 desde el 510. Declarar 5% como 15% le daba al
+  // contribuyente $150 de crédito donde le correspondían $50.
+  push('crédito que habría inflado: 15% de 1000',
+       +(r.iva15.baseImponible*0.15).toFixed(2), 0);
+
+  // ══ D · lo mezclado se cuenta, pero se marca ════════════════════════════
+  sec('D · las facturas sin tarifa reconocible');
+  r = calcularResumen([F(100,15), F(400,30)]);   // la segunda: 7.5%, mezclada
+  push('se anota como dudosa',                      r.ambiguas.length, 1);
+  push('con su base y su IVA a la vista',
+       [r.ambiguas[0].base, r.ambiguas[0].iva], [400,30]);
+  // No se descarta: si se cayera del resumen, la declaración saldría corta.
+  push('pero su plata NO se pierde del total',      r.iva15.baseImponible, 500);
+
+  // ══ E · notas de crédito ════════════════════════════════════════════════
+  sec('E · notas de crédito');
+  // Con modal (el SRI da el codigoPorcentaje: es la tarifa exacta, no deducida)
+  let nc = calcularResumenNotasCredito([{iva0:0,iva5:200,iva15:0,iva:10,
+       valorSinImpuestos:200,importeTotal:210}]);
+  push('la NC al 5% resta del 550, no del 510',
+       [nc.iva5.baseImponible, nc.iva15.baseImponible], [200,0]);
+
+  // Sin modal hay que deducir, igual que en las facturas
+  nc = calcularResumenNotasCredito([
+       {valorSinImpuestos:200,iva:10,importeTotal:210,comprobanteNo:'001-001-1'},
+       {valorSinImpuestos:100,iva:15,importeTotal:115,comprobanteNo:'001-001-2'}]);
+  push('sin modal, la del 5% también va a su balde', nc.iva5.baseImponible, 200);
+  push('y la del 15% al suyo',                        nc.iva15.baseImponible, 100);
+
+  // ══ F · el freno: no se envía con plata sin casillero ═══════════════════
+  sec('F · el freno del cierre mágico');
+  push('sin motivos no frena nada',
+       await frenarSiHayIvaSinUbicar('prueba'), false);
+
+  await anotarIvaSinUbicar(['no se encontró el casillero 540: $1000.00 sin declarar'], []);
+  push('anotado un problema, el cierre frena',
+       await frenarSiHayIvaSinUbicar('prueba'), true);
+
+  // Una corrida limpia tiene que poder borrar el freno de la anterior.
+  await anotarIvaSinUbicar([], []);
+  push('una corrida limpia lo levanta',
+       await frenarSiHayIvaSinUbicar('prueba'), false);
+
+  // Las dudosas del resumen también frenan, aunque no falte ningún casillero.
+  await anotarIvaSinUbicar([], calcularResumen([F(400,30)]).ambiguas);
+  push('una factura dudosa alcanza para frenar',
+       await frenarSiHayIvaSinUbicar('prueba'), true);
+  await anotarIvaSinUbicar([], []);
+
+  // ══════════════════════════════════════════════════════════════════════
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

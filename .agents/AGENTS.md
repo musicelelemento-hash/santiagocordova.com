@@ -160,6 +160,8 @@ El bot **sólo envía** si puede CONFIRMAR las cuatro cosas a la vez:
 2. `detectarSaldo()` devuelve un número y ese número es `0`.
 3. `analizarMensajesResumen()` devuelve `'limpio'`.
 4. `frenarSiEsSustitutiva()` devuelve `false`.
+5. **`frenarSiHayIvaSinUbicar()` devuelve `false`** — no quedó plata de
+   compras sin casillero (ver §9a).
 
 Cualquier otro resultado guarda borrador y frena.
 **Nunca trates la ausencia de mensajes como "todo bien"**: esa era justamente la
@@ -421,32 +423,90 @@ a quién le pisa una clave que ya funcionaba, y aplicar solo lo confirmado.
 
 ## 9. Los casilleros de compras que faltan — y un hueco de tarifa
 
-### 9a. Lo que hoy se declara y lo que no
+### 9a. Lo que se declara y lo que no
 
-La extensión solo conoce **dos tarifas**: 15% y 0%. Escribe en 500/510 y
-507/517 y nada más. Confirmado el 05-sep-2026: no existe una sola mención a
-`502`, `512`, `540` ni `550` en todo `src/`.
-
-| Casillero | Qué es | ¿Se llena hoy? |
+| Casillero | Qué es | ¿Se llena? |
 | :--- | :--- | :---: |
 | **500 / 510** | Compras 15% con derecho a crédito · menos NC | ✅ |
 | **507 / 517** | Compras 0% · menos NC | ✅ |
+| **540 / 550** | Adquisiciones locales (excluye activos fijos) gravadas con **tarifa 5%**, con derecho a crédito · menos NC | ✅ desde 05-sep-2026 |
 | **502 / 512** | Otras adquisiciones y pagos gravados **tarifa distinta de cero, SIN derecho a crédito tributario** · menos NC | ❌ |
-| **540 / 550** | Adquisiciones locales (excluye activos fijos) gravadas con **tarifa 5%**, con derecho a crédito · menos NC | ❌ |
 
 **El 502 es el casillero que faltaba** para separar deducible de no deducible.
 Es el destino de las compras que la base de proveedores marque como sin
 derecho a crédito.
 
-**El 540 es un agujero distinto y más urgente.** Si un contribuyente tiene
-compras al 5%, hoy no se declaran en ningún lado: ni en 500 (que es 15%) ni en
-507 (que es 0%). No es una clasificación fina que falta — es un importe que se
-está perdiendo.
+#### El agujero del 5%, y por qué costaba plata
 
-> Ninguno de los cuatro tiene todavía entrada en la Biblia. Antes de escribir
-> en ellos hay que confirmar su `id` real en el DOM, igual que se hizo con
-> `concepto1270` (500) y `concepto1280` (510). La regla §5b vale acá: un
-> selector sin evidencia es una suposición.
+Hasta el 05-sep-2026 el corte de tarifas era **binario**: «tiene IVA» → 15%,
+«no tiene» → 0%. Una compra al 5% caía entera en el 500.
+
+No era solo un casillero mal puesto. El SRI calcula el **520** (impuesto
+generado en compras) a partir del **510**, y de ahí sale el crédito
+tributario: $1.000 al 5% declarados como 15% le daban al contribuyente $150 de
+crédito donde le correspondían $50. **Pagaba de menos, con la firma del
+contador.**
+
+#### Cómo se resuelve — y qué NO resuelve
+
+`clasificarTarifaIva(base, iva)` en `04_extraccion_datos.js` deduce la tarifa
+por el cociente **IVA / base**. Tarifas reconocidas: `[5, 12, 13, 14, 15]`
+(12% hasta marzo de 2024, 13% ese marzo, 15% desde abril).
+
+Devuelve **tres** respuestas, no dos, y la tercera es `null` = «no sé»:
+
+| Cociente | Resultado | Destino |
+| :--- | :--- | :--- |
+| ≈ 0 | tarifa `0` | 507 / 517 |
+| ≈ 5% | tarifa `5` | **540 / 550** |
+| ≈ 12/13/14/15% | tarifa plena | 500 / 510 |
+| cualquier otro | `null` | 500/510 **y anotada para frenar** |
+
+**El cociente no distingue una factura al 5% de una mezclada.** Una de $100 con
+un tercio al 15% y el resto al 0% da 4,95%: idéntica a una del 5%. Eso solo lo
+resuelve el detalle por línea del XML del comprobante, que se baja por su clave de acceso — pendiente de confirmar el endpoint contra una traza real. Por eso:
+
+- **El 8% de feriados queda AFUERA de la lista a propósito.** Existe, pero cae
+  justo en la zona donde una mezclada produce ese cociente. Preferimos que una
+  factura al 8% caiga en «no sé» y la mire el contador, antes que una mezclada
+  se declare como si fuera de una sola tarifa.
+- La holgura es en **plata**, no en puntos porcentuales:
+  `max($0.02, base × 0.001)`. En una factura de $5 un centavo son 0,2 puntos.
+
+Las notas de crédito son el caso fácil: el modal trae el `codigoPorcentaje`
+del SRI, que es la tarifa **declarada por quien emitió**, no deducida
+(`0`=0%, `2`=12%, `3`=14%, `4` y `10`=15%, **`5`=5%**, `6`=no objeto,
+`7`=exento). Ahí no se adivina nada. Solo se deduce cuando el modal no abrió.
+
+#### El freno
+
+`anotarIvaSinUbicar()` / `frenarSiHayIvaSinUbicar()` en
+`02_servicios_y_memoria.js`, con la marca `iva_sin_ubicar` en `SafeStorage`.
+Se levanta cuando:
+
+1. Hay plata al 5% y **no apareció el 540 o el 550** en el DOM, o
+2. Alguna factura o NC quedó sin tarifa reconocible.
+
+El cierre mágico no envía con la marca puesta: llena el formulario, lo deja en
+pantalla y avisa cuáles son. **Repartir una factura mezclada es criterio
+contable, no algo que el bot pueda deducir.** La marca se borra en los mismos
+seis puntos donde ya se borraba `declaration_synced_flag` (arranque de
+declaración, siguiente cliente, reset total) — si quedara pegada, el freno de
+un cliente bloquearía al próximo.
+
+> **Los `id` del 540 y el 550 NO están confirmados en la Biblia.** No se
+> cablearon en el `fieldMap`: se buscan por número de casillero con el XPath
+> que ya usa el resto del formulario. Si no aparecen, la plata **no** se manda
+> al 500 por las dudas — se anota y se frena. Cuando llegue la evidencia,
+> agregá la entrada a la Biblia y el `id` al `fieldMap` de
+> `05_llenado_formulario.js`. Lo mismo vale para el 502 y el 512.
+
+Banco de pruebas: `extenciones web/01_Nueva_Luz_3.0/tests/iva5.html`
+(30 comprobaciones, todas en verde el 05-sep-2026). Se sirve con la
+configuración `bancos-extension` de `.claude/launch.json`, que levanta la
+carpeta de la extensión en `localhost:8791`; el banco queda en
+`/tests/iva5.html`. Hace falta el servidor: los `file://` no ejecutan
+scripts en el panel del navegador.
 
 ### 9b. Cómo decide qué va a cada uno
 

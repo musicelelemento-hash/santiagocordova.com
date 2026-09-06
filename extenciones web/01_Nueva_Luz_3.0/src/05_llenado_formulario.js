@@ -225,7 +225,8 @@ async function llenarCompras(data) {
     }
 
     console.log('📊 Datos de facturas detectados:');
-    console.log('  - IVA 15%:', facturas.iva15);
+    console.log('  - Tarifa plena (12/13/14/15%):', facturas.iva15);
+    console.log('  - IVA 5%:', facturas.iva5);
     console.log('  - IVA 0%:', facturas.iva0);
     if (notasCredito) {
         console.log('📄 Notas de Crédito:');
@@ -279,6 +280,38 @@ async function llenarCompras(data) {
         console.log('  ℹ️ Sin compras ni NC con IVA (15%).');
     }
 
+    // ─── PASO 2.5: Compras al 5% (casilleros 540 y 550) ──────────────────────
+    // El 5% tiene derecho a crédito tributario, pero en SUS casilleros. Hasta
+    // acá caía en el 500 junto con el 15%, y como el SRI calcula el 520
+    // (impuesto generado en compras) a partir del 510, eso inflaba el crédito:
+    // el contribuyente terminaba pagando de menos con la firma del contador.
+    const base5 = parseDecimal(facturas.iva5?.baseImponible || 0);
+    const nc5 = parseDecimal(notasCredito?.iva5?.baseImponible || 0);
+    const sinUbicar = [];
+
+    if (base5 > 0 || nc5 > 0) {
+        console.log(`\n🔍 Paso 2.5: Compras al 5%... Base $${base5.toFixed(2)} | NC $${nc5.toFixed(2)}`);
+
+        // Los ids reales del 540 y el 550 no están en la Matriz Tatuada: se
+        // buscan por el número de casillero, que es el camino que ya usa el
+        // resto del formulario. Si no aparecen NO se inventa un destino ni se
+        // los manda al 500: se anota y el cierre mágico frena el envío.
+        console.log('  📝 Casillero 540 (Compras 5% - Bruto)...');
+        if (await llenarCampo('540', base5)) {
+            camposLlenados++;
+            console.log('  ⏳ Pausa para recálculo SRI tras 540...');
+            await sleep(1500);
+
+            const valor550 = Math.max(0, base5 - nc5);
+            console.log(`  📝 Casillero 550 = $${base5.toFixed(2)} - $${nc5.toFixed(2)} (NC) = $${valor550.toFixed(2)}`);
+            if (await llenarCampo('550', valor550)) camposLlenados++;
+            else sinUbicar.push(`no se encontró el casillero 550 (neto 5%): el bruto quedó cargado y el neto no`);
+            await sleep(800);
+        } else {
+            sinUbicar.push(`no se encontró el casillero 540: $${base5.toFixed(2)} de compras al 5% quedaron sin declarar`);
+        }
+    }
+
     // ─── PASO 3: Compras sin IVA (casilleros 507 y 517) ──────────────────────
     console.log('\n🔍 Paso 3: Compras sin IVA (0%)...');
     const base0 = parseDecimal(facturas.iva0?.baseImponible || 0);
@@ -322,6 +355,17 @@ async function llenarCompras(data) {
             title: '✅ Compras Llenadas',
             msg: `Casilleros 500/510/507/517/564/565 procesados (${camposLlenados} campos).`
         });
+    }
+
+    // Constancia de lo que no encontró casillero. La lee el cierre mágico
+    // antes de enviar: una declaración con plata mal repartida entre casilleros
+    // de IVA cambia el crédito tributario, así que no se manda a ciegas.
+    if (typeof anotarIvaSinUbicar === 'function') {
+        const ambiguas = [].concat(
+            Array.isArray(facturas.ambiguas) ? facturas.ambiguas : [],
+            Array.isArray(notasCredito?.ambiguas) ? notasCredito.ambiguas : []
+        );
+        await anotarIvaSinUbicar(sinUbicar, ambiguas);
     }
 
     console.group('\n📊 RESUMEN COMPRAS: ' + camposLlenados + ' campos llenados.');
@@ -976,4 +1020,4 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
 
 
 
-
+

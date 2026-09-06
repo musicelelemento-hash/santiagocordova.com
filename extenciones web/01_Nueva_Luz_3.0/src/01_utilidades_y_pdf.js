@@ -1985,7 +1985,7 @@ async function handleBatchNextClient() {
     if (typeof SriLoop !== 'undefined') await SriLoop.avanzarA(nextIndex);
 
     // Resetear flag para que el Cierre Mágico se ejecute en el nuevo cliente
-    await SafeStorage.remove(['declaration_synced_flag']);
+    await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
 
 
     await GhostMemory.clearCurrent();
@@ -2771,7 +2771,7 @@ async function renderAnticipationWidget(items) {
           checkNC: true,
           actionTimestamp: Date.now()
         });
-        await SafeStorage.remove(['declaration_synced_flag']);
+        await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
 
         ejecutarLoginDOM(ruc, pass);
       });

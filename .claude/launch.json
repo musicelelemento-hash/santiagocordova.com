@@ -4,8 +4,25 @@
     {
       "name": "santiagocordova-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "santiagocordova-main", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "santiagocordova-main",
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "bancos-extension",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8791",
+        "--directory",
+        "C:\\Programacion\\Paginas Web\\SantiagoCordova.com\\extenciones web\\01_Nueva_Luz_3.0"
+      ],
+      "port": 8791
     }
   ]
 }
