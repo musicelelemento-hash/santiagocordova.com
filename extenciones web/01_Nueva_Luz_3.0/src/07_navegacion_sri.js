@@ -587,6 +587,7 @@ const SriLoopHUD = {
             '<button id="slh-proveedores" aria-label="Ver la base de proveedores" title="La base de proveedores: qué se aprendió y qué falta clasificar" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:rgba(192,132,252,0.16);color:#d8b4fe">🏷️</button>',
             '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
             '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
+            '<button id="slh-chequeo" aria-label="Chequeo: ver si está todo listo para correr el lote" title="Chequeo: la subida, las claves, el catastro, los proveedores y las marcas que frenan el envío" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🩺</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -610,7 +611,8 @@ const SriLoopHUD = {
             '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
             '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
             '<div id="slh-proveedores-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
-            '<div id="slh-notas-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
+            '<div id="slh-notas-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
+            '<div id="slh-chequeo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -779,6 +781,21 @@ const SriLoopHUD = {
                 console.log(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
             }
+        });
+
+        el.querySelector('#slh-chequeo').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-chequeo-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            this.soloUnPanel('slh-chequeo-panel');
+            panel.style.display = 'block';
+            await this.pintarChequeo();
+        });
+
+        el.querySelector('#slh-chequeo-panel').addEventListener('click', async (ev) => {
+            if (!ev.target.closest('#slh-chequeo-otra')) return;
+            ev.stopPropagation();
+            await this.pintarChequeo();
         });
 
         el.querySelector('#slh-notas').addEventListener('click', async (ev) => {
@@ -963,6 +980,7 @@ const SriLoopHUD = {
             ['slh-notas',       'Notas de venta'],
             ['slh-casilleros',  'Casilleros'],
             ['slh-ir',          'Ir a…'],
+            ['slh-chequeo',     'Chequeo'],
             ['slh-subida',      'Probar subida'],
             ['slh-panel',       'Panel']
         ];
@@ -1705,12 +1723,66 @@ const SriLoopHUD = {
         if (!this._el) return;
         ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
          'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
-         'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel']
+         'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel',
+         'slh-chequeo-panel']
             .filter((id) => id !== cual && id !== 'slh-plan')   // null cierra todos
             .forEach((id) => {
                 const p = this._el.querySelector('#' + id);
                 if (p) p.style.display = 'none';
             });
+    },
+
+    /**
+     * Pinta el chequeo: qué anda, qué avisa y qué va a morder.
+     *
+     * Tres estados y ninguno más. Y cada uno dice QUÉ HACER — un diagnóstico
+     * que no dice qué hacer no sirve de nada.
+     */
+    async pintarChequeo() {
+        const panel = document.getElementById('slh-chequeo-panel');
+        if (!panel || typeof Chequeo === 'undefined') return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        panel.innerHTML = '<div style="font-size:11px;opacity:0.75;padding:6px 0">🩺 Revisando…</div>';
+
+        let filas = [];
+        try { filas = await Chequeo.correr(); }
+        catch (e) {
+            panel.innerHTML = `<div style="color:#fca5a5;font-size:11px">No se pudo chequear: ${esc(e.message)}</div>`;
+            return;
+        }
+
+        const resumen = Chequeo.resumir(filas);
+        const COLOR = {
+            ok:       { i: '✅', c: '#86efac' },
+            aviso:    { i: '⚠️', c: '#fcd34d' },
+            problema: { i: '🛑', c: '#fca5a5' }
+        };
+        const cab = COLOR[resumen.estado];
+
+        panel.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">' +
+            `  <span style="font-size:11px;font-weight:800;color:${cab.c}">${cab.i} ${esc(resumen.texto)}</span>` +
+            '  <button id="slh-chequeo-otra" aria-label="Volver a chequear" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">↻ De nuevo</button>' +
+            '</div>' +
+            // Lo que muerde primero, arriba: nadie lee una lista de veinte
+            // líneas buscando la roja.
+            filas
+                .slice()
+                .sort((a, b) => {
+                    const peso = { problema: 0, aviso: 1, ok: 2 };
+                    return peso[a.estado] - peso[b.estado];
+                })
+                .map((f) => {
+                    const c = COLOR[f.estado] || COLOR.ok;
+                    return '<div style="padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
+                        `<div style="font-size:11px"><span style="color:${c.c}">${c.i}</span> ` +
+                        `<b>${esc(f.titulo)}</b> <span style="opacity:0.7">${esc(f.detalle)}</span></div>` +
+                        (f.queHacer
+                            ? `<div style="font-size:10px;opacity:0.65;margin-left:18px;line-height:1.45">→ ${esc(f.queHacer)}</div>`
+                            : '') +
+                        '</div>';
+                }).join('');
     },
 
     /** El 📒 dice de un vistazo si el lote va a preguntar o no. */

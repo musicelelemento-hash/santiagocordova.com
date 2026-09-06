@@ -796,7 +796,28 @@ estado, declarar al que está logueado (🎯), omitidos (⚠️), saltar (⏭️
 
 **El resto vive en el cajón 🧰**, en su propia línea y **con el rótulo escrito
 debajo** de cada ícono: Comprobantes · Registro · La cola · Bitácora ·
-Proveedores · Notas de venta · Casilleros · Ir a… · Probar subida · Panel.
+Proveedores · Notas de venta · Casilleros · Ir a… · **Chequeo** · Probar
+subida · Panel.
+
+### 🩺 El chequeo
+
+`Chequeo.correr()` en `02_servicios_y_memoria.js`. Contesta «¿está todo listo
+para correr el lote?» **antes** de arrancar, en vez de descubrirlo en el cliente
+número doce.
+
+Mira, todo de fuentes que ya existían: la versión · el portal · la cola · **la
+marca `iva_sin_ubicar`** · los omitidos · si hay claves guardadas (sin
+mostrarlas) · el catastro · los proveedores sin clasificar · el interruptor de
+notas de venta · y la subida, contra la red.
+
+Tres estados y ninguno más — `ok`, `aviso`, `problema` — y **cada uno dice qué
+hacer**: un diagnóstico que no dice qué hacer no sirve de nada. En el panel, lo
+que muerde va arriba: nadie lee veinte líneas buscando la roja.
+
+El que más veces va a salvar una tarde es `iva_sin_ubicar`: si quedó pegada de
+una corrida anterior, el cierre mágico **no envía nada** y no es obvio por qué.
+
+Banco: `tests/chequeo.html` (26 comprobaciones, verdes el 06-sep-2026).
 
 Los botones **no se recrean: se mueven** con `appendChild` después de armar el
 `innerHTML`. Así los handlers, que se enganchan buscando por id, siguen

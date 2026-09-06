@@ -1027,6 +1027,160 @@ async function rucDelClienteActual() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 🩺 CHEQUEO — ¿está todo listo para correr el lote?
+// ═══════════════════════════════════════════════════════════════════════════
+// Los problemas se descubren a mitad de camino: la subida no anda y uno se
+// entera en el cliente 12; la marca de «IVA sin ubicar» quedó pegada de ayer y
+// frena el envío sin que nadie entienda por qué.
+//
+// Todo eso ya está registrado en algún lado. Lo que faltaba era un lugar donde
+// mirarlo junto, ANTES de arrancar.
+//
+// Tres estados y ninguno más: `ok` (anda), `aviso` (anda, pero mirá esto) y
+// `problema` (esto te va a morder). Cada uno dice QUÉ HACER, porque un
+// diagnóstico que no dice qué hacer no sirve de nada.
+const Chequeo = {
+    /**
+     * Corre todas las comprobaciones.
+     *
+     * @param {{incluirSubida?: boolean}} opciones La subida se prueba contra la
+     *        red, así que tarda; se puede pedir sin ella.
+     * @returns {Promise<Array<{clave, titulo, estado, detalle, queHacer}>>}
+     */
+    async correr(opciones = {}) {
+        const { incluirSubida = true } = opciones;
+        const r = [];
+        const anotar = (clave, titulo, estado, detalle, queHacer) =>
+            r.push({ clave, titulo, estado, detalle, queHacer: queHacer || '' });
+
+        // ── La extensión ────────────────────────────────────────────────
+        let version = '?';
+        try { version = chrome.runtime.getManifest().version; } catch (e) { /* nada */ }
+        anotar('version', 'Extensión', 'ok', `Nueva Luz ${version}, viva en esta página.`);
+
+        // ── ¿Estamos donde hay que estar? ───────────────────────────────
+        const enSri = location.hostname.includes('sri.gob.ec');
+        anotar('portal', 'Portal del SRI', enSri ? 'ok' : 'problema',
+            enSri ? location.pathname : 'Esta página no es del SRI.',
+            enSri ? '' : 'Abrí srienlinea.sri.gob.ec y volvé a chequear.');
+
+        // ── El lote ─────────────────────────────────────────────────────
+        try {
+            const e = await SriLoop.get();
+            const total = (e.cola || []).length;
+            anotar('cola', 'La cola', total ? 'ok' : 'aviso',
+                total ? `${total} contribuyente(s) · estado ${e.estado}`
+                      : 'No hay nadie en la cola.',
+                total ? '' : 'Cargá el lote desde el popup de la extensión.');
+        } catch (e) {
+            anotar('cola', 'La cola', 'aviso', 'No se pudo leer el semáforo.');
+        }
+
+        // ── La marca que frena el envío ─────────────────────────────────
+        // Si quedó pegada de una corrida anterior, el cierre mágico no manda
+        // NADA y no es obvio por qué. Es el chequeo que más veces va a salvar
+        // una tarde.
+        try {
+            const p = (await SafeStorage.get(['iva_sin_ubicar'])).iva_sin_ubicar;
+            const n = (p && p.motivos && p.motivos.length) || 0;
+            anotar('sinUbicar', 'Compras sin casillero', n ? 'problema' : 'ok',
+                n ? `${n} caso(s) sin ubicar: el cierre mágico NO va a enviar.`
+                  : 'Nada pendiente de ubicar.',
+                n ? 'Mirá el detalle en la consola o volvé a declarar el cliente. Si es de una corrida vieja, arrancar una declaración nueva la limpia.' : '');
+        } catch (e) { /* nada */ }
+
+        // ── Los clientes que quedaron afuera ────────────────────────────
+        try {
+            // Omitidos expone lista(), no contar().
+            const om = typeof Omitidos !== 'undefined' && Omitidos.lista
+                ? ((await Omitidos.lista()) || []).length : 0;
+            anotar('omitidos', 'Quedaron sin declarar', om ? 'aviso' : 'ok',
+                om ? `${om} contribuyente(s).` : 'Ninguno.',
+                om ? 'Abrí ⚠️ en la barra para ver por qué quedó cada uno.' : '');
+        } catch (e) { /* nada */ }
+
+        // ── Las claves, sin mostrarlas ──────────────────────────────────
+        try {
+            const g = await SafeStorage.get(['sc_r2_credenciales', 'sc_ia_credenciales']);
+            const r2 = !!(g.sc_r2_credenciales && g.sc_r2_credenciales.R2_SECRET_ACCESS_KEY);
+            const ia = !!(g.sc_ia_credenciales && g.sc_ia_credenciales.apiKey);
+            anotar('claves', 'Claves guardadas', r2 ? 'ok' : 'aviso',
+                `R2: ${r2 ? 'sí' : 'no'} · IA: ${ia ? 'sí' : 'no'}`,
+                r2 ? '' : 'Cargalas en Ajustes (clic derecho en el ícono → Opciones). Nunca en un archivo del proyecto.');
+        } catch (e) { /* nada */ }
+
+        // ── El catastro ─────────────────────────────────────────────────
+        try {
+            const hay = typeof Catastro !== 'undefined' && await Catastro.cargar();
+            anotar('catastro', 'Catastro del SRI', hay ? 'ok' : 'aviso',
+                hay ? `${Catastro.cuantos().toLocaleString('es-EC')} RUC listos para consultar.`
+                    : 'No está cargado.',
+                hay ? '' : 'Se genera con tools/construir_catastro.py a partir del ZIP del SRI.');
+        } catch (e) { /* nada */ }
+
+        // ── Los proveedores ─────────────────────────────────────────────
+        try {
+            const p = typeof Proveedores !== 'undefined' ? await Proveedores.resumen() : null;
+            if (p) {
+                const faltan = p.total - p.clasificados;
+                anotar('proveedores', 'Base de proveedores', faltan ? 'aviso' : 'ok',
+                    `${p.total} proveedor(es) · ${faltan} sin clasificar`,
+                    faltan ? 'Abrí 🏷️ y pulsá 🗂️ Catastro: completa la actividad de casi todos de una.' : '');
+            }
+        } catch (e) { /* nada */ }
+
+        // ── Notas de venta ──────────────────────────────────────────────
+        try {
+            if (typeof NotasDeVenta !== 'undefined') {
+                const on = await NotasDeVenta.estaEncendido();
+                anotar('notas', 'Notas de venta', 'ok',
+                    on ? 'Encendido: el lote va a preguntar el 508 y el 117.'
+                       : 'Apagado: no se toca el 508 ni el 117.',
+                    on ? 'Si no vas a estar mirando la pantalla, apagalo: cada cliente espera el temporizador.' : '');
+            }
+        } catch (e) { /* nada */ }
+
+        // ── La subida, que es el objetivo §0 ────────────────────────────
+        if (incluirSubida) {
+            try {
+                const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
+                const d = await chrome.runtime.sendMessage({ tipo: 'SC_DIAGNOSTICO_SUBIDA', config: cfg });
+                if (!d) {
+                    anotar('subida', 'Subida de comprobantes', 'problema',
+                        'El service worker no contestó.',
+                        'Recargá la extensión en chrome://extensions.');
+                } else if (d.ok) {
+                    anotar('subida', 'Subida de comprobantes', 'ok', `Funciona por «${d.via}».`);
+                } else {
+                    const porQue = (d.intentos || [])
+                        .map((i) => `${i.via}: ${i.error || i.omitido || ('HTTP ' + i.estado)}`)
+                        .join(' · ');
+                    // Sin esto, el bot declara y tira el comprobante — que es
+                    // justo lo contrario del objetivo del proyecto.
+                    anotar('subida', 'Subida de comprobantes', 'problema',
+                        porQue || 'Ningún camino funcionó.',
+                        'Sin esto el bot declara y el comprobante no queda guardado en ningún lado.');
+                }
+            } catch (e) {
+                anotar('subida', 'Subida de comprobantes', 'problema', e.message,
+                    'Recargá la extensión en chrome://extensions.');
+            }
+        }
+
+        return r;
+    },
+
+    /** Un resumen de una línea, para el rótulo del botón. */
+    resumir(filas) {
+        const problemas = filas.filter((f) => f.estado === 'problema').length;
+        const avisos = filas.filter((f) => f.estado === 'aviso').length;
+        if (problemas) return { estado: 'problema', texto: `${problemas} problema(s)` };
+        if (avisos) return { estado: 'aviso', texto: `${avisos} aviso(s)` };
+        return { estado: 'ok', texto: 'todo en orden' };
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // NOTAS DE VENTA — casilleros 508 y 117
 // ═══════════════════════════════════════════════════════════════════════════
 // Son comprobantes FÍSICOS: nunca aparecen en «comprobantes electrónicos

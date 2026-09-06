@@ -1,0 +1,126 @@
+<!doctype html><meta charset="utf-8"><title>¿Está todo listo para correr el lote?</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Un diagnóstico que no dice qué hacer no sirve de nada</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  // El diagnóstico de subida se le pide al service worker; acá se decide qué
+  // contesta, para poder probar los dos finales.
+  window.__subida = { ok: true, via: 'worker', intentos: [] };
+  window.chrome={runtime:{getURL:p=>'../'+p,getManifest:()=>({version:'3.1.0'}),
+    onMessage:{addListener(){}},
+    sendMessage:(m)=>Promise.resolve(m && m.tipo==='SC_DIAGNOSTICO_SUBIDA' ? window.__subida : {}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const de = (filas, clave) => filas.find(f => f.clave === clave) || {};
+
+  // ══ A · lo que mira ═════════════════════════════════════════════════════
+  sec('A · qué se revisa');
+  let f = await Chequeo.correr({ incluirSubida: false });
+  const claves = f.map(x => x.clave);
+  push('mira el lote, las marcas y las claves',
+       ['cola','sinUbicar','omitidos','claves','catastro'].every(c => claves.includes(c)), true);
+  push('y dice la versión de la extensión', de(f,'version').detalle.includes('3.1.0'), true);
+  push('sin pedirla, no prueba la subida',  claves.includes('subida'), false);
+
+  // Cada estado es uno de tres, y ninguno más.
+  push('todos los estados son válidos',
+       f.every(x => ['ok','aviso','problema'].includes(x.estado)), true);
+
+  // ══ B · la marca que frena el envío ═════════════════════════════════════
+  // Es el chequeo que más veces va a salvar una tarde: si queda pegada de
+  // ayer, el cierre mágico no manda NADA y no es obvio por qué.
+  sec('B · «compras sin casillero», la que más muerde');
+  push('sin nada pendiente, está en verde', de(f,'sinUbicar').estado, 'ok');
+
+  await anotarIvaSinUbicar(['no se encontró el casillero 540: $1000.00 sin declarar'], []);
+  f = await Chequeo.correr({ incluirSubida: false });
+  push('con la marca puesta es un problema', de(f,'sinUbicar').estado, 'problema');
+  push('y avisa que NO se va a enviar',      /NO va a enviar/.test(de(f,'sinUbicar').detalle), true);
+  push('y dice cómo se limpia',              de(f,'sinUbicar').queHacer.length > 20, true);
+  await anotarIvaSinUbicar([], []);
+
+  // ══ C · las claves, sin mostrarlas ══════════════════════════════════════
+  sec('C · las claves');
+  f = await Chequeo.correr({ incluirSubida: false });
+  push('sin claves avisa',              de(f,'claves').estado, 'aviso');
+  push('y manda a Ajustes',             /Ajustes/.test(de(f,'claves').queHacer), true);
+
+  const SECRETO = 'clave-de-mentira-NOSALE';
+  await chrome.storage.local.set({ sc_r2_credenciales: { R2_SECRET_ACCESS_KEY: SECRETO } });
+  f = await Chequeo.correr({ incluirSubida: false });
+  push('con la de R2 puesta pasa a verde', de(f,'claves').estado, 'ok');
+  // Un diagnóstico no es lugar para que se escape una clave.
+  push('y NUNCA muestra la clave',
+       JSON.stringify(f).includes(SECRETO), false);
+  await chrome.storage.local.remove('sc_r2_credenciales');
+
+  // ══ D · la subida, que es el objetivo §0 ════════════════════════════════
+  sec('D · la subida');
+  window.__subida = { ok: true, via: 'worker', intentos: [] };
+  f = await Chequeo.correr();
+  push('cuando anda, lo dice',          de(f,'subida').estado, 'ok');
+  push('y por qué camino',              /worker/.test(de(f,'subida').detalle), true);
+
+  window.__subida = { ok: false, intentos: [
+    { via: 'worker', error: 'no llegué a x.workers.dev: el permiso está…' },
+    { via: 's3', omitido: 'faltan credenciales de R2' } ] };
+  f = await Chequeo.correr();
+  push('cuando no anda, es un problema', de(f,'subida').estado, 'problema');
+  push('y dice por qué falló cada camino',
+       /workers.dev/.test(de(f,'subida').detalle) && /credenciales/.test(de(f,'subida').detalle), true);
+  // Lo que de verdad está en juego, dicho sin vueltas.
+  push('y qué significa que no ande',
+       /no queda guardado/.test(de(f,'subida').queHacer), true);
+
+  // ══ E · el resumen de una línea ═════════════════════════════════════════
+  sec('E · el resumen');
+  push('un problema manda sobre los avisos', Chequeo.resumir(f).estado, 'problema');
+  push('sin problemas, avisa',
+       Chequeo.resumir([{estado:'ok'},{estado:'aviso'}]).estado, 'aviso');
+  push('y todo en verde lo dice',
+       Chequeo.resumir([{estado:'ok'},{estado:'ok'}]).texto, 'todo en orden');
+
+  // ══ F · el panel ════════════════════════════════════════════════════════
+  sec('F · el panel 🩺');
+  SriLoopHUD._enSri = () => true; SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+  push('el botón está en el cajón',
+       !!document.querySelector('#slh-cajon [data-celda="slh-chequeo"]'), true);
+  push('con su rótulo',
+       document.querySelector('[data-celda="slh-chequeo"]').textContent.includes('Chequeo'), true);
+
+  await SriLoopHUD.pintarChequeo();
+  const panel = document.getElementById('slh-chequeo-panel');
+  push('el panel lista los chequeos',   /Subida de comprobantes/.test(panel.innerHTML), true);
+  push('y ofrece repetirlo',            !!panel.querySelector('#slh-chequeo-otra'), true);
+  // Nadie lee veinte líneas buscando la roja: lo que muerde va arriba.
+  // charAt(0) parte el emoji al medio: son dos unidades, no una.
+  const orden = [...panel.querySelectorAll('div[style*="border-bottom"]')]
+    .map(d => d.textContent.trim());
+  push('lo que muerde primero va arriba', orden[0].startsWith('🛑'), true);
+  push('y lo que anda queda al final',    orden[orden.length - 1].startsWith('✅'), true);
+
+  document.getElementById('sri-loop-hud').remove();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

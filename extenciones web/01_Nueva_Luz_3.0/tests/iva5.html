@@ -385,8 +385,13 @@
 
   const cajon = document.getElementById('slh-cajon');
   push('el cajón nace cerrado', cajon.style.display, 'none');
-  push('y adentro están las diez herramientas',
-       cajon.querySelectorAll('[data-celda]').length, 10);
+  // Se nombran, en vez de contarlas: agregar una herramienta no tiene por qué
+  // romper la prueba, pero perder una sí.
+  const enCajon = [...cajon.querySelectorAll('[data-celda]')].map(c => c.getAttribute('data-celda'));
+  push('adentro están todas las herramientas',
+       ['slh-pdfs','slh-registro','slh-cola','slh-bitacora','slh-proveedores',
+        'slh-notas','slh-casilleros','slh-ir','slh-chequeo','slh-subida','slh-panel']
+         .filter(id => !enCajon.includes(id)), []);
   // Un ícono suelto no dice nada: cada uno lleva su rótulo escrito.
   push('cada una con su rótulo',
        [...cajon.querySelectorAll('[data-celda]')].every(c => c.textContent.trim().length > 3), true);
