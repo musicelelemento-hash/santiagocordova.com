@@ -593,6 +593,34 @@ SRI, que trae el desglose estructurado. Siguen siendo N peticiones, pero XML
 liviano en vez de un postback JSF con render de modal — y sin depender de
 `j_idtXX`, que cambia entre versiones.
 
+### 🔑 La clave vencida — `Verificar/vigencia`
+
+Confirmado el 06-sep-2026 con la traza `cambio_de_clave_obligatorio`. El SRI
+pidió actualización de clave a nivel nacional: el aviso aparece **en el portal**
+—donde antes salía el de la declaración pendiente— y **recién después** redirige
+a la pantalla de cambio.
+
+```
+GET /sri-claves-servicio-internet/rest/privado/Verificar/vigencia
+
+→ {"objeto":"Su clave expiro, acceda a la opción cambiar clave y modifíquela.",
+   "mensajeServidor":{"texto":"ok"}, "data":[]}
+```
+
+Con la clave vigente, `objeto` viene vacío. Se interpreta **en positivo**: sólo
+un texto que habla de la clave vencida cuenta como vencida.
+
+Este endpoint es el que hay que mirar, y **antes de navegar a ningún lado**:
+cuando el bot llegaba a la pantalla de cambio ya se había ido al wizard y
+rebotaba.
+
+> 🛑 **En el mismo servicio viven `POST Verificar/persona` y
+> `PUT Verificar/modificar`, que son los que CAMBIAN la clave.** El bot no los
+> nombra siquiera — hay una comprobación en `tests/clavevencida.html` que lo
+> verifica sobre el bundle compilado.
+
+---
+
 ### 📄 El XML de cada comprobante — `lnkXml`
 
 Confirmado el 05-sep-2026 en la misma traza. Cada fila de

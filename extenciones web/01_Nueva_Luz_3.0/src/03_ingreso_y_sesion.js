@@ -319,10 +319,16 @@ SafeStorage.get(null).then(async (items) => {
     // ── El SRI exige cambiar la clave de este cliente ──────────────────────
     // No se puede declarar hasta resolverlo, y cambiar contraseñas no es algo
     // que este bot haga. Se marca al cliente y el lote sigue con el siguiente.
-    if (esPantallaCambioClave()) {
+    const avisoClave = typeof elSriPideCambiarLaClave === 'function'
+        ? await elSriPideCambiarLaClave()
+        : { pide: esPantallaCambioClave(), mensaje: '', via: 'pantalla' };
+
+    if (avisoClave.pide) {
         const ruc = items.pending_sri_autofill?.ruc;
         const nombre = items.pending_sri_autofill?.name || ruc || 'este contribuyente';
-        console.warn(`🔑 [CLAVE] El SRI exige cambiar la clave de ${nombre}. El bot NO cambia contraseñas.`);
+        console.warn(`🔑 [CLAVE] El SRI exige cambiar la clave de ${nombre} (por ${avisoClave.via}). ` +
+                     'El bot NO cambia contraseñas.');
+        if (avisoClave.mensaje) console.warn(`   El portal dice: «${avisoClave.mensaje}»`);
 
         if (ruc) {
             const resErr = await SafeStorage.get(['flagged_errors']);

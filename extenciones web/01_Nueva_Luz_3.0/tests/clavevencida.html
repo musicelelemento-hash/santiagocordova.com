@@ -1,0 +1,120 @@
+<!doctype html><meta charset="utf-8"><title>El SRI pide cambiar la clave</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Detectar no es resolver: el bot marca al cliente y sigue con el siguiente</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>'../'+p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const P=document.getElementById('portal');
+
+  // El endpoint de vigencia se simula: lo que se prueba es cómo se interpreta
+  // lo que contesta, que es donde estaba el hueco.
+  let RESPUESTA = null;
+  SriApi._get = async (ruta) =>
+    ruta.includes('Verificar/vigencia') ? RESPUESTA : null;
+
+  // ══ A · lo que el portal contesta de verdad ═════════════════════════════
+  sec('A · la frase textual del SRI');
+  // Confirmada en la traza cambio_de_clave_obligatorio del 06-sep-2026.
+  RESPUESTA = { objeto: 'Su clave expiro, acceda a la opción cambiar clave y modifíquela.',
+                mensajeServidor: { texto: 'ok' }, data: [] };
+  let r = await SriApi.claveVencida();
+  push('se reconoce como vencida',      r.vencida, true);
+  push('y se conserva el mensaje tal cual',
+       /acceda a la opción cambiar clave/.test(r.mensaje), true);
+
+  // Con acento o sin acento, con mayúsculas o sin ellas: es el mismo aviso.
+  RESPUESTA = { objeto: 'SU CLAVE EXPIRÓ, ACCEDA A LA OPCIÓN CAMBIAR CLAVE' };
+  push('los acentos y las mayúsculas dan igual', (await SriApi.claveVencida()).vencida, true);
+
+  RESPUESTA = { objeto: 'Debe actualizar su clave' };
+  push('otra redacción también',        (await SriApi.claveVencida()).vencida, true);
+
+  // ══ B · lo que NO es una clave vencida ══════════════════════════════════
+  sec('B · no se interpreta de más');
+  RESPUESTA = { objeto: '', mensajeServidor: { texto: 'ok' } };
+  push('sin mensaje, la clave está vigente', (await SriApi.claveVencida()).vencida, false);
+
+  RESPUESTA = { objeto: 'Tiene 3 notificaciones sin leer' };
+  push('un aviso cualquiera NO es clave vencida', (await SriApi.claveVencida()).vencida, false);
+
+  // Y el caso que importa: «no pude preguntar» no es «está vigente».
+  RESPUESTA = null;
+  push('sin respuesta, devuelve null, no false', await SriApi.claveVencida(), null);
+
+  // ══ C · la decisión final ═══════════════════════════════════════════════
+  sec('C · preguntar al portal ANTES de navegar');
+  // Éste es el hueco que se tapó: el aviso aparece en el portal y RECIÉN
+  // DESPUÉS redirige. Cuando el bot miraba, todavía no había campos de
+  // contraseña, así que se iba al wizard y rebotaba. Con la actualización
+  // nacional de claves eso pasaría en TODOS los clientes del lote.
+  P.innerHTML = '';   // sin pantalla de cambio de clave a la vista
+  RESPUESTA = { objeto: 'Su clave expiro, acceda a la opción cambiar clave y modifíquela.' };
+  let d = await elSriPideCambiarLaClave();
+  push('lo detecta sin la pantalla delante', d.pide, true);
+  push('y dice que lo supo por la API',      d.via, 'api');
+
+  RESPUESTA = { objeto: '' };
+  push('con la clave vigente, no frena nada', (await elSriPideCambiarLaClave()).pide, false);
+
+  // Si la API no contesta, queda la pantalla.
+  RESPUESTA = null;
+  push('sin API y sin pantalla, no se inventa nada',
+       (await elSriPideCambiarLaClave()).pide, false);
+
+  P.innerHTML =
+    '<input id="actual" type="password"><input id="nuevo" type="password">' +
+    '<input id="confirmacion" type="password">';
+  d = await elSriPideCambiarLaClave();
+  push('sin API pero con la pantalla, lo detecta', d.pide, true);
+  push('y dice que fue por la pantalla',           d.via, 'pantalla');
+
+  // La API manda sobre la pantalla: si el portal dice que está vigente, una
+  // pantalla parecida no puede sacar al cliente del lote.
+  RESPUESTA = { objeto: '' };
+  push('la API le gana a la pantalla', (await elSriPideCambiarLaClave()).pide, false);
+
+  // ══ D · el respaldo por texto, con la frase que faltaba ═════════════════
+  sec('D · el respaldo por texto');
+  P.innerHTML = '<p>Su clave expiró, acceda a la opción cambiar clave y modifíquela.</p>' +
+                '<input type="password"><input type="password">';
+  push('«su clave expiró» ahora se reconoce', esPantallaCambioClave(), true);
+
+  // Dos campos de contraseña sin el aviso NO son una pantalla de cambio.
+  P.innerHTML = '<input type="password"><input type="password">';
+  push('dos contraseñas sueltas no alcanzan', esPantallaCambioClave(), false);
+
+  // ══ E · lo que el bot NO hace ═══════════════════════════════════════════
+  sec('E · el bot no cambia contraseñas');
+  // Los endpoints que MODIFICAN la clave viven en el mismo servicio. Que no
+  // aparezcan en el código es la comprobación: no alcanza con no llamarlos hoy.
+  const fuente = await (await fetch('../build/content.js')).text();
+  push('no se nombra Verificar/modificar', fuente.includes('Verificar/modificar'), false);
+  push('ni Verificar/persona',             fuente.includes('Verificar/persona'), false);
+  push('sólo se consulta la vigencia',     fuente.includes('Verificar/vigencia'), true);
+
+  P.innerHTML = '';
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

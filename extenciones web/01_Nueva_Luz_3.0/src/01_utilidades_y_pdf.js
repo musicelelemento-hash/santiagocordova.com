@@ -2050,10 +2050,57 @@ function esPantallaCambioClave() {
     if (actual && nuevo && confirmacion) return true;
 
     // Respaldo por texto, por si el SRI renombra los campos.
-    const txt = (document.body ? document.body.textContent || '' : '')
+    //
+    // El texto se busca ALREDEDOR de los campos de contraseña, no en todo
+    // el body. Mirar el body entero hace que el bot se lea a sí mismo: un
+    // aviso NUESTRO que diga «la clave expiró» dispararía la detección. Es
+    // la misma trampa que la de pulsar nuestros propios botones.
+    const cajas = Array.from(document.querySelectorAll('input[type="password"]'))
+        .filter((el) => !(typeof esDeLaExtension === 'function' && esDeLaExtension(el)));
+    const cerca = cajas.length
+        ? (cajas[0].closest('form, section, .ui-dialog, main, article') || cajas[0].parentElement)
+        : null;
+    const txt = ((cerca ? cerca.textContent : (document.body ? document.body.textContent : '')) || '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const pide = /actualice su clave|actualizar su clave|cambio de clave obligatorio|debe cambiar su clave|su clave ha caducado|clave expirada/.test(txt);
-    return pide && document.querySelectorAll('input[type="password"]').length >= 2;
+    // «Su clave expiro, acceda a la opción cambiar clave y modifíquela» es la
+    // frase textual del portal, confirmada en la traza del 06-sep-2026. Faltaba.
+    const pide = /actualice su clave|actualizar su clave|cambio de clave obligatorio|debe cambiar su clave|su clave (ha caducado|expiro|expiró)|clave expirada|acceda a la opcion cambiar clave/.test(txt);
+    return pide && cajas.length >= 2;
+}
+
+/**
+ * ¿El SRI pide cambiar la clave? Se pregunta ANTES de navegar a ningún lado.
+ *
+ * `esPantallaCambioClave()` sólo sirve estando YA en esa pantalla, con los dos
+ * campos de contraseña delante. Pero el aviso aparece antes —en el portal— y
+ * recién después redirige: cuando el bot miraba, todavía no había campos, se
+ * iba derecho al wizard y rebotaba. Con la actualización nacional de claves
+ * eso pasaría en TODOS los clientes del lote.
+ *
+ * Por eso se le pregunta primero al portal, que lo sabe sin ambigüedad, y la
+ * pantalla queda de respaldo.
+ *
+ * 🛑 Detectar no es resolver: cambiar una contraseña es una operación de
+ * credenciales y este bot no la hace nunca. Marca al cliente y sigue.
+ *
+ * @returns {Promise<{pide: boolean, mensaje: string, via: string}>}
+ */
+async function elSriPideCambiarLaClave() {
+  // 1 · El portal, que es quien lo sabe.
+  try {
+    if (typeof SriApi !== 'undefined' && SriApi.claveVencida) {
+      const r = await SriApi.claveVencida();
+      // Un `null` es «no pude preguntar», no «está vigente»: se sigue mirando.
+      if (r && r.vencida) return { pide: true, mensaje: r.mensaje, via: 'api' };
+      if (r && !r.vencida) return { pide: false, mensaje: '', via: 'api' };
+    }
+  } catch (e) { /* se sigue con la pantalla */ }
+
+  // 2 · La pantalla, si ya nos redirigió.
+  if (esPantallaCambioClave()) {
+    return { pide: true, mensaje: 'El portal abrió la pantalla de cambio de clave.', via: 'pantalla' };
+  }
+  return { pide: false, mensaje: '', via: 'ninguno' };
 }
 
 function isSRILoginPage() {

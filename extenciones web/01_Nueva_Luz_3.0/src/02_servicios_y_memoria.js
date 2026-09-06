@@ -918,6 +918,38 @@ const SriApi = {
         }
     },
 
+    /**
+     * ¿El SRI está exigiendo cambiar la clave de este contribuyente?
+     *
+     * CONFIRMADO el 06-sep-2026 con la traza `cambio_de_clave_obligatorio`:
+     *
+     *   GET /sri-claves-servicio-internet/rest/privado/Verificar/vigencia
+     *   → {"objeto":"Su clave expiro, acceda a la opción cambiar clave y
+     *      modifíquela.", "mensajeServidor":{"texto":"ok"}, "data":[]}
+     *
+     * Devuelve **tres** respuestas, y la tercera importa: `null` es «no pude
+     * preguntar», que NO es «está vigente». Con un `null` no se declara ni se
+     * omite por esto — se sigue mirando la pantalla.
+     *
+     * 🛑 En ese mismo servicio viven `Verificar/persona` y `Verificar/modificar`,
+     * que son los que CAMBIAN la clave. **El bot no los llama nunca.**
+     *
+     * @returns {Promise<{vencida: boolean, mensaje: string}|null>}
+     */
+    async claveVencida() {
+        const r = await this._get('/sri-claves-servicio-internet/rest/privado/Verificar/vigencia');
+        if (!r) return null;
+
+        const mensaje = String(r.objeto || '').trim();
+        if (!mensaje) return { vencida: false, mensaje: '' };
+
+        // En positivo a propósito: sólo un texto que HABLA de la clave vencida
+        // cuenta como vencida. Cualquier otra cosa no se interpreta.
+        const limpio = mensaje.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const vencida = /(clave|contrasena).{0,30}(expir|caduc|vencid)|cambiar (su )?clave|actualiz\w*.{0,15}clave/.test(limpio);
+        return { vencida, mensaje };
+    },
+
     /** Quién está realmente dentro de la sesión. Más fiable que leer la cabecera. */
     async perfil() {
         return this._get('/sri-catastro-sujeto-servicio-internet/rest/privado/contribuyente/perfil');
