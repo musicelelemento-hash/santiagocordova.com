@@ -1692,10 +1692,17 @@ async function syncDeclarationToSupabase(
 
         // Compras: Extraídas por el Extractor V1 de las Facturas Recibidas
         compras15: facturas.iva15?.baseImponible || 0,
+        compras5: facturas.iva5?.baseImponible || 0,
         compras0: facturas.iva0?.baseImponible || 0,
+        // El IVA de compras se SUMA, no se recalcula: multiplicar la base por
+        // 0.15 estaba dando de más en cuanto aparecía una compra al 5%.
         montoIvaCompras:
-          facturas.iva15?.montoIva ||
-          (facturas.iva15?.baseImponible || 0) * 0.15,
+          (facturas.iva15?.montoIva ?? (facturas.iva15?.baseImponible || 0) * 0.15) +
+          (facturas.iva5?.montoIva ?? 0),
+        // Cuántas facturas quedaron sin tarifa reconocible. Un cero acá no es
+        // «no había»: es «todas se pudieron ubicar». La diferencia importa
+        // cuando alguien mire estos números dentro de un año.
+        comprasDudosas: Array.isArray(facturas.ambiguas) ? facturas.ambiguas.length : 0,
 
         // Retenciones: Extraídas por el Extractor V1
         retIva: retenciones.ivaRetenido?.total ?? retenciones.retIva ?? 0,
@@ -1711,6 +1718,7 @@ async function syncDeclarationToSupabase(
 
         // Notas de Crédito
         nc15: notasCredito.iva15?.baseImponible || 0,
+        nc5: notasCredito.iva5?.baseImponible || 0,
         nc0: notasCredito.iva0?.baseImponible || 0,
         ncTotal: notasCredito.totalGeneral || 0,
       },
