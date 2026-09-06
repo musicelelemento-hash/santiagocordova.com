@@ -1,0 +1,226 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Bancos de prueba · Nueva Luz 3.0</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    --fondo: #051424; --panel: #0b1c2e; --borde: rgba(255,255,255,0.09);
+    --texto: #e8eef9; --tenue: #8a9ab8;
+    --verde-ok: #4edea3; --rojo: #ff8585; --ambar: #ffb95f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fondo); color: var(--texto);
+    font-family: Manrope, system-ui, sans-serif; font-size: 14px; line-height: 1.55;
+  }
+  .hoja { max-width: 820px; margin: 0 auto; padding: 36px 20px 80px; }
+  h1 { font-size: 23px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--tenue); font-size: 13px; margin: 0 0 24px; max-width: 62ch; }
+
+  .veredicto {
+    border-radius: 14px; padding: 18px 20px; margin-bottom: 20px;
+    border: 1px solid var(--borde); background: var(--panel);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .veredicto .grande {
+    font-family: "JetBrains Mono", monospace; font-size: 26px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .veredicto.ok    { border-left: 4px solid var(--verde-ok); }
+  .veredicto.mal   { border-left: 4px solid var(--rojo); }
+  .veredicto.va    { border-left: 4px solid var(--ambar); }
+  .ok    { color: var(--verde-ok); }
+  .mal   { color: var(--rojo); }
+  .va    { color: var(--ambar); }
+
+  button {
+    font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    border: none; border-radius: 9px; padding: 10px 18px;
+    background: #2b6aff; color: #fff;
+  }
+  button.otro { background: rgba(148,163,184,0.16); color: var(--tenue); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  :focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-size: 11px; font-weight: 800; color: var(--tenue);
+    text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 0 10px 8px; border-bottom: 1px solid var(--borde);
+  }
+  td { padding: 10px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.num {
+    text-align: right; font-family: "JetBrains Mono", monospace;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  a { color: #7dd3fc; }
+  .quees { font-size: 12px; color: var(--tenue); }
+  .fallo {
+    font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--rojo);
+    white-space: pre-wrap; margin-top: 6px;
+  }
+  iframe { display: none; }
+  .pie { color: var(--tenue); font-size: 12px; margin-top: 24px; line-height: 1.6; }
+</style>
+
+<div class="hoja">
+  <h1>🧪 Bancos de prueba</h1>
+  <p class="sub">
+    Cada banco carga el <code>build/content.js</code> de verdad —el mismo que se
+    inyecta en el portal— y comprueba algo que ya se rompió alguna vez.
+    Si algo sale en rojo, la extensión tiene un problema real.
+  </p>
+
+  <div class="veredicto va" id="veredicto">
+    <span class="grande" id="marcador">—</span>
+    <span id="frase">Sin correr todavía.</span>
+    <span style="flex:1"></span>
+    <button id="correr">Correr todos</button>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Banco</th><th>Qué comprueba</th><th class="num">Resultado</th>
+    </tr></thead>
+    <tbody id="filas"></tbody>
+  </table>
+
+  <p class="pie">
+    Se sirven con la configuración <code>bancos-extension</code> de
+    <code>.claude/launch.json</code>: los <code>file://</code> no ejecutan
+    scripts.<br>
+    Un banco que tarda es normal — el del catastro trae 6,2 MB y el de las
+    notas de venta espera un temporizador de verdad.
+  </p>
+</div>
+
+<div id="marcos"></div>
+
+<script>
+// Cada banco, con lo que cuida. La descripción no es adorno: dice por qué
+// existe el banco, que es lo que se olvida a los seis meses.
+const BANCOS = [
+  ['iva5.html',        'Tarifas de IVA, el XML y la botonera',
+                       'Que una compra al 5% no se declare como 15%, que el XML resuelva las mezcladas, y que los botones estén donde se los dejó.'],
+  ['catastro.html',    'El catastro del SRI',
+                       'Que la bisección encuentre los RUC —sobre todo los de los bordes— y que sugiera sin decidir.'],
+  ['proveedores.html', 'La base de proveedores',
+                       'Que se aprenda mirando y que una sugerencia jamás pise lo que decidió el contador.'],
+  ['notasventa.html',  'Notas de venta (508 y 117)',
+                       'Que si nadie contesta, el lote siga y NO se invente un cero.'],
+  ['chequeo.html',     'El chequeo previo',
+                       'Que avise de lo que va a morder, y que un diagnóstico nunca deje escapar una clave.'],
+  ['esperas.html',     'Esperar al portal',
+                       'Que se siga apenas el SRI contesta, y que se aguante más cuando el portal va lento.'],
+  ['subidas.html',     'La subida del comprobante',
+                       'Que «Failed to fetch» se traduzca a algo accionable, y que los permisos del manifest estén.'],
+  ['claves.html',      'Las claves, fuera del código',
+                       'Que se guarden en el almacén y que la pantalla nunca muestre el valor.']
+];
+
+const $ = (id) => document.getElementById(id);
+const filas = $('filas');
+
+BANCOS.forEach(([archivo, titulo, quees]) => {
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    `<td><a href="${archivo}" target="_blank">${titulo}</a><div class="quees">${quees}</div></td>` +
+    `<td class="quees" style="display:none"></td>` +
+    `<td class="num" id="r-${archivo}">—</td>`;
+  tr.querySelector('td:nth-child(2)').remove();
+  filas.appendChild(tr);
+});
+
+/**
+ * Corre un banco en un iframe y lee su veredicto.
+ *
+ * Se lee el <pre id="out">, que es donde cada banco escribe el resultado: no
+ * hace falta que los bancos sepan que existe esta página.
+ */
+function correrUno(archivo, tope = 90000) {
+  return new Promise((resolve) => {
+    const marco = document.createElement('iframe');
+    marco.src = archivo + '?indice=' + Date.now();
+    document.getElementById('marcos').appendChild(marco);
+
+    const arranque = Date.now();
+    const mirar = setInterval(() => {
+      let texto = '';
+      try {
+        const out = marco.contentDocument && marco.contentDocument.getElementById('out');
+        texto = out ? out.textContent : '';
+      } catch (e) { /* todavía cargando */ }
+
+      const listo = /comprobaciones, todas bien|fallaron/.test(texto);
+      if (!listo && Date.now() - arranque < tope) return;
+
+      clearInterval(mirar);
+      const ms = Date.now() - arranque;
+      marco.remove();
+
+      if (!listo) return resolve({ archivo, estado: 'timeout', ms });
+
+      const bien = texto.match(/✓ (\d+) comprobaciones/);
+      if (bien) return resolve({ archivo, estado: 'ok', total: +bien[1], ms });
+
+      const mal = texto.match(/✗ (\d+) de (\d+) fallaron/);
+      const detalle = texto.split('\n').filter((l) => l.startsWith('✗')).slice(0, 6).join('\n');
+      resolve({
+        archivo, estado: 'mal',
+        fallaron: mal ? +mal[1] : 0, total: mal ? +mal[2] : 0, detalle, ms
+      });
+    }, 350);
+  });
+}
+
+$('correr').addEventListener('click', async () => {
+  const boton = $('correr');
+  boton.disabled = true;
+  boton.textContent = 'Corriendo…';
+  BANCOS.forEach(([a]) => { $('r-' + a).textContent = '…'; $('r-' + a).className = 'num'; });
+
+  let totales = 0, fallos = 0, rotos = 0;
+  // De a uno: ocho bancos en paralelo se pisan el almacenamiento simulado y
+  // el resultado dejaría de significar nada.
+  for (const [archivo] of BANCOS) {
+    const r = await correrUno(archivo);
+    const celda = $('r-' + archivo);
+    const seg = (r.ms / 1000).toFixed(1) + 's';
+
+    if (r.estado === 'ok') {
+      totales += r.total;
+      celda.className = 'num ok';
+      celda.textContent = `✓ ${r.total} · ${seg}`;
+    } else if (r.estado === 'mal') {
+      totales += r.total; fallos += r.fallaron;
+      celda.className = 'num mal';
+      celda.innerHTML = `✗ ${r.fallaron} de ${r.total} · ${seg}` +
+                        `<div class="fallo">${r.detalle.replace(/</g, '&lt;')}</div>`;
+    } else {
+      rotos++;
+      celda.className = 'num va';
+      celda.textContent = `⏱ no terminó · ${seg}`;
+    }
+  }
+
+  const v = $('veredicto');
+  if (fallos || rotos) {
+    v.className = 'veredicto mal';
+    $('marcador').className = 'grande mal';
+    $('marcador').textContent = fallos ? `${fallos} ✗` : '⏱';
+    $('frase').textContent = fallos
+      ? `${fallos} comprobación(es) fallaron de ${totales}. La extensión tiene un problema real.`
+      : `${rotos} banco(s) no terminaron. Mirá cada uno por separado.`;
+  } else {
+    v.className = 'veredicto ok';
+    $('marcador').className = 'grande ok';
+    $('marcador').textContent = totales;
+    $('frase').textContent = 'comprobaciones, todas bien. La extensión está sana.';
+  }
+
+  boton.disabled = false;
+  boton.textContent = 'Correr de nuevo';
+});
+</script>

@@ -799,6 +799,27 @@ debajo** de cada ícono: Comprobantes · Registro · La cola · Bitácora ·
 Proveedores · Notas de venta · Casilleros · Ir a… · **Chequeo** · Probar
 subida · Panel.
 
+### Los bancos de prueba, en una sola página
+
+`tests/index.html` corre **los ocho** en iframes y da un veredicto solo:
+**271 comprobaciones, verdes el 06-sep-2026**, en unos 16 segundos.
+
+De a uno, no en paralelo: ocho bancos a la vez se pisan el almacenamiento
+simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
+cada uno, así que un banco nuevo no necesita saber que esta página existe —
+alcanza con agregarlo a la lista `BANCOS`.
+
+| Banco | Qué cuida |
+| :--- | :--- |
+| `iva5` | que una compra al 5% no se declare como 15%, el XML, la botonera |
+| `catastro` | la bisección, sobre todo en los bordes |
+| `proveedores` | que una sugerencia no pise al contador |
+| `notasventa` | que un silencio no se convierta en un cero |
+| `chequeo` | que avise de lo que va a morder, sin filtrar claves |
+| `esperas` | que se siga apenas el portal contesta |
+| `subidas` | que «Failed to fetch» diga algo accionable |
+| `claves` | que la pantalla nunca muestre el valor guardado |
+
 ### 🩺 El chequeo
 
 `Chequeo.correr()` en `02_servicios_y_memoria.js`. Contesta «¿está todo listo

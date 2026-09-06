@@ -61,8 +61,14 @@ async function autoLlenarPeriodoFiscal(data) {
     }
 
     if (obligacionSeleccionada) {
-        console.log('   ⏳ Esperando actualización de campos (2.5s)...');
-        await sleep(2500); // Esperar reload de JSF
+        // Elegir la obligación repinta el paso 1 entero. Lo que hay que esperar
+        // NO es un número de segundos: es que aparezca el campo de período, que
+        // es lo próximo que se va a tocar. `calPeriodo` está en la Matriz
+        // Tatuada (§6C), así que la condición no es una suposición.
+        await esperarAjaxSri(
+            () => document.getElementById('frmFlujoDeclaracion:calPeriodo') ||
+                  document.querySelector('[id$="calPeriodo"]'),
+            'el campo de período del paso 1');
     }
 
     // 3. Llenar Periodo

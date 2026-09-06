@@ -1012,6 +1012,26 @@ const SriLoopHUD = {
             if (abierto) this.soloUnPanel(null);   // al cerrar, no queda nada abierto
         });
 
+        // Escape cierra lo que esté abierto. Es lo que espera cualquiera, y
+        // acá importa más que en otro lado: el HUD flota ENCIMA del portal y un
+        // panel abierto tapa lo que el usuario está tratando de mirar.
+        //
+        // La pregunta de las notas de venta se respeta: tiene su propio reloj y
+        // sus botones, y un Escape de más borraría lo que se acaba de teclear.
+        document.addEventListener('keydown', (ev) => {
+            if (ev.key !== 'Escape' || this._notasPendiente) return;
+            const cajonAbierto = cajon && cajon.style.display === 'flex';
+            this.soloUnPanel(null);
+            if (cajonAbierto) {
+                cajon.style.display = 'none';
+                const b = el.querySelector('#slh-cajon-btn');
+                if (b) {
+                    b.setAttribute('aria-expanded', 'false');
+                    b.style.background = 'rgba(148,163,184,0.16)';
+                }
+            }
+        });
+
         this._hacerArrastrable(el);
 
         try {
@@ -2531,7 +2551,13 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     console.log('✅ Opción 2011 encontrada. Clickeando...');
                     clickElement(opt, '2011');
                     await waitForPortal(); // Esperar Ajax del SRI que carga los periodos
-                    await sleep(1000); // Pausa extra para estabilidad del DOM
+                    // Lo que se espera es que la etiqueta diga 2011, que es
+                    // justo lo que se comprueba abajo. Un segundo fijo era una
+                    // apuesta; esto sigue apenas pegó y aguanta más si tarda.
+                    await esperarAjaxSri(() => {
+                        const l = getLabelObligacion();
+                        return l && (l.textContent || '').includes('2011');
+                    }, 'la obligación 2011 seleccionada', 6000);
 
                     // Verificar si pegó
                     labelActual = getLabelObligacion();
