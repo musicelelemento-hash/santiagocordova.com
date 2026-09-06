@@ -593,6 +593,46 @@ SRI, que trae el desglose estructurado. Siguen siendo N peticiones, pero XML
 liviano en vez de un postback JSF con render de modal — y sin depender de
 `j_idtXX`, que cambia entre versiones.
 
+### 📄 El XML de cada comprobante — `lnkXml`
+
+Confirmado el 05-sep-2026 en la misma traza. Cada fila de
+`frmPrincipal:tablaCompRecibidos` termina en **dos enlaces**:
+
+```html
+<a id="frmPrincipal:tablaCompRecibidos:0:lnkXml" href="#"
+   onclick="mojarra.jsfcljs(document.getElementById('frmPrincipal'),
+            {'frmPrincipal:tablaCompRecibidos:0:lnkXml':
+             'frmPrincipal:tablaCompRecibidos:0:lnkXml'},'');return false">
+  <img src="/comprobantes-electronicos-internet/resources/imagenes/formatos/xml.gif">
+</a>
+<a id="frmPrincipal:tablaCompRecibidos:0:lnkPdf" …>
+```
+
+**No son AJAX.** `mojarra.jsfcljs` manda el formulario entero con el id del
+enlace como parámetro — el mismo mecanismo que `lnkTxtlistado`. Por eso se
+reproduce igual, sin pulsar nada y sin que el archivo baje al disco:
+
+```
+POST /comprobantes-electronicos-internet/pages/consultas/recibidos/comprobantesRecibidos.jsf
+  frmPrincipal                       = frmPrincipal
+  frmPrincipal:opciones              = ruc
+  frmPrincipal:ano / :mes / :dia     = los de la consulta en pantalla
+  frmPrincipal:cmbTipoComprobante    = 1 | 3 | 6
+  javax.faces.ViewState              = …
+  frmPrincipal:tablaCompRecibidos:N:lnkXml = frmPrincipal:tablaCompRecibidos:N:lnkXml
+
+→ el comprobante autorizado, XML
+```
+
+El `N` es el índice de fila de PrimeFaces, el mismo que ya se usa para abrir
+el modal de retenciones. Implementado en `descargarXmlComprobante(N)`.
+
+**No existe un enlace de «bajar todos los XML»**: es una petición por
+comprobante. Por eso `traerXmlDeComprobantes()` sólo pide las filas que hacen
+falta, con pausa entre una y otra.
+
+---
+
 ### ⚠️ El TXT refleja la consulta del servidor, no sus propios parámetros
 
 En la traza, la petición #28 pidió `cmbTipoComprobante=6` y la #30 pidió `=1`,

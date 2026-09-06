@@ -624,7 +624,7 @@ eso afuera. Descartada.
 
 ## 11. El XML del comprobante — la tarifa dicha, no deducida
 
-> **Estado**: parser construido y probado. **Falta el endpoint de descarga.**
+> **Estado**: parser y descarga construidos y probados (05-sep-2026).
 
 ### Por qué
 
@@ -668,25 +668,35 @@ las bases de IVA (probado).
 `<codDoc>`: `01` factura · `04` nota de crédito · `05` nota de débito ·
 `03` liquidación de compra · `07` comprobante de retención.
 
-### Lo que falta: de dónde se baja
+### De dónde se baja — resuelto, y estaba a mano
 
-El TXT de recibidos **ya trae la `CLAVE_ACCESO` de cada comprobante** (Biblia,
-columnas del TXT), así que la lista de qué pedir está resuelta. Lo que no está
-confirmado es el endpoint que devuelve el XML.
+El endpoint ya estaba en una traza que teníamos desde el 04-sep-2026 («flujo de
+reportes de documentos electrónicos recibidos»). **No hizo falta traza nueva.**
 
-Dos caminos, ninguno con evidencia todavía:
+Cada fila de `tablaCompRecibidos` trae dos enlaces, `lnkXml` y `lnkPdf`, y no
+son AJAX: `mojarra.jsfcljs` manda el formulario entero con el id del enlace
+como parámetro — el mismo mecanismo de `lnkTxtlistado`, que ya reproducíamos.
+Ver la Biblia, «El XML de cada comprobante — `lnkXml`».
 
-1. **El enlace de la propia página de recibidos.** La fila de la tabla tiene un
-   control para bajar el comprobante. Es el camino preferido: usa la sesión que
-   ya está abierta y el mismo origen. Falta la traza de Burp de ese click.
-2. **El servicio público de autorización** (`AutorizacionComprobantesOffline`,
-   SOAP, sobre `cel.sri.gob.ec`). Es otro origen: necesitaría `host_permissions`
-   y salir por el service worker, no por el content script.
+```js
+descargarXmlComprobante(N)                 // una fila
+traerXmlDeComprobantes([2, 7, 11])         // varias, de a una y con pausa
+sriBajarXml(3)  ·  sriBajarXml([2, 7])     // desde la consola
+```
 
-> **No inventar el endpoint.** Vale la §5b: mientras no haya traza, el parser
-> queda listo y sin conectar. Una petición mal armada contra el SRI, repetida
-> por cada factura de 27 clientes, es la clase de cosa que termina en un bloqueo
-> del WAF.
+Se reproduce el POST en vez de pulsar el enlace, así el archivo no baja al
+disco del usuario. Si la sesión caducó el portal devuelve HTML en vez del
+comprobante, y eso se detecta antes de parsear.
+
+**No hay un enlace de «bajar todos»**: es una petición por comprobante. Por eso
+`traerXmlDeComprobantes()` pausa 700 ms entre una y otra y corta a las 40. Una
+ráfaga de 27 XML × 27 contribuyentes es la clase de cosa que termina en un
+bloqueo del WAF.
+
+> El servicio público de autorización (`AutorizacionComprobantesOffline`, SOAP
+> sobre `cel.sri.gob.ec`) queda descartado: es otro origen, necesitaría
+> `host_permissions` y salir por el service worker, y no aporta nada que el
+> enlace de la propia página no dé con la sesión ya abierta.
 
 ### Cuándo conviene bajarlo — y cuándo no
 

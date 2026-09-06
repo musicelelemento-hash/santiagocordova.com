@@ -898,6 +898,108 @@ async function esperarTabla() {
 
 const TIPO_COMPROBANTE = { factura: '1', notaCredito: '3', retencion: '6' };
 
+/**
+ * Baja el XML autorizado de UNA fila de la tabla de comprobantes recibidos.
+ *
+ * Cada fila trae dos enlaces, `lnkXml` y `lnkPdf`. No son AJAX: `mojarra.jsfcljs`
+ * manda el formulario entero con el id del enlace como parámetro, exactamente
+ * igual que `lnkTxtlistado`. Confirmado el 05-sep-2026 en la traza «flujo de
+ * reportes de documentos electrónicos recibidos» (Biblia).
+ *
+ * Se reproduce el POST en vez de pulsar el enlace para que el archivo no baje
+ * al disco del usuario: se lee y se descarta.
+ *
+ * @param {number} indiceFila Índice de la fila tal como lo numera PrimeFaces
+ *                            (el N de `tablaCompRecibidos:N:lnkXml`).
+ * @returns {Promise<Object|null>} salida de parsearXmlComprobante(), o null.
+ */
+async function descargarXmlComprobante(indiceFila) {
+    const val = (id) => {
+        const el = document.getElementById(id);
+        return el ? (el.value || '') : '';
+    };
+    const viewState = document.querySelector('input[name="javax.faces.ViewState"]');
+    if (!viewState) {
+        console.warn('📄 [XML] No hay ViewState en la página: no se puede pedir el comprobante.');
+        return null;
+    }
+
+    const enlace = `frmPrincipal:tablaCompRecibidos:${indiceFila}:lnkXml`;
+    if (!document.getElementById(enlace)) {
+        console.warn(`📄 [XML] La fila ${indiceFila} no tiene enlace de XML en pantalla.`);
+        return null;
+    }
+
+    const cuerpo = new URLSearchParams({
+        'frmPrincipal': 'frmPrincipal',
+        'frmPrincipal:opciones': 'ruc',
+        'frmPrincipal:ano': val('frmPrincipal:ano'),
+        'frmPrincipal:mes': val('frmPrincipal:mes'),
+        'frmPrincipal:dia': val('frmPrincipal:dia') || '0',
+        'frmPrincipal:cmbTipoComprobante': val('frmPrincipal:cmbTipoComprobante') || TIPO_COMPROBANTE.factura,
+        'javax.faces.ViewState': viewState.value,
+        [enlace]: enlace
+    });
+
+    try {
+        const r = await fetch(window.location.href.split('#')[0], {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: cuerpo.toString()
+        });
+        if (!r.ok) { console.warn(`📄 [XML] El portal devolvió HTTP ${r.status} en la fila ${indiceFila}.`); return null; }
+
+        const texto = await r.text();
+        // Si la sesión caducó el portal devuelve HTML, no el comprobante.
+        if (!texto.trimStart().startsWith('<?xml') && !texto.includes('<infoTributaria')) {
+            console.warn(`📄 [XML] La respuesta de la fila ${indiceFila} no es un comprobante (¿sesión caducada?).`);
+            return null;
+        }
+        return parsearXmlComprobante(texto);
+    } catch (err) {
+        console.warn(`📄 [XML] Falló la descarga de la fila ${indiceFila}:`, err.message);
+        return null;
+    }
+}
+
+/**
+ * Baja el XML de varias filas, de a una y con pausa.
+ *
+ * A propósito NO baja todo: el XML se pide sólo para las pocas facturas que lo
+ * necesitan —las que quedaron sin tarifa reconocible, las que el cociente leyó
+ * como 5%, las candidatas a activo fijo—. Bajar 27 XML por cliente y por mes,
+ * en serie y por 27 contribuyentes, es la clase de ráfaga que termina en un
+ * bloqueo del WAF.
+ *
+ * @param {number[]} indices Filas a pedir.
+ * @param {{pausaMs?: number, tope?: number}} opciones
+ * @returns {Promise<Map<number, Object>>} índice → comprobante parseado.
+ */
+async function traerXmlDeComprobantes(indices, opciones = {}) {
+    const { pausaMs = 700, tope = 40 } = opciones;
+    const pedidos = (indices || []).slice(0, tope);
+    const salida = new Map();
+
+    if ((indices || []).length > tope) {
+        console.warn(`📄 [XML] Se pidieron ${indices.length} comprobantes; se bajan los primeros ${tope}.`);
+    }
+
+    for (let i = 0; i < pedidos.length; i++) {
+        const idx = pedidos[i];
+        const xml = await descargarXmlComprobante(idx);
+        if (xml) {
+            salida.set(idx, xml);
+            const tarifas = Object.keys(xml.porTarifa).map((k) => `${k}%: $${xml.porTarifa[k].base}`).join(' · ');
+            console.log(`   📄 [XML ${i + 1}/${pedidos.length}] fila ${idx} → ${tarifas || 'sin IVA'}`);
+        }
+        if (i < pedidos.length - 1) await sleep(pausaMs);
+    }
+
+    console.log(`📄 [XML] ${salida.size} de ${pedidos.length} comprobantes leídos.`);
+    return salida;
+}
+
 // ── El XML autorizado: la tarifa dicha, no deducida ───────────────────────
 // `codigoPorcentaje` del esquema de comprobantes electrónicos. Es lo que
 // declaró quien emitió, así que acá no se adivina nada.
@@ -1183,6 +1285,8 @@ if (typeof window !== 'undefined') {
     window.sriMapaCasilleros = (op) => (typeof sriMapaCasilleros === 'function' ? sriMapaCasilleros(op) : null);
     // Pegale el texto de un XML autorizado y devuelve la base y el IVA por tarifa.
     window.sriLeerXml = (texto) => parsearXmlComprobante(texto);
+    // Parado en Comprobantes Recibidos: baja el XML de una fila, o de varias.
+    window.sriBajarXml = (n) => (Array.isArray(n) ? traerXmlDeComprobantes(n) : descargarXmlComprobante(n));
 }
 
 // ── Tarifas de IVA y el corte por cociente ────────────────────────────────

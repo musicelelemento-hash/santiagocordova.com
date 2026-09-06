@@ -201,6 +201,72 @@
   push('un texto que no es XML no revienta', parsearXmlComprobante('hola'), null);
   push('ni una cadena vacía',                parsearXmlComprobante(''),     null);
 
+  // ══ H · la descarga del XML: que el POST salga bien armado ══════════════
+  sec('H · el POST que baja el XML de una fila');
+
+  // El portal de recibidos, con lo mínimo que mira descargarXmlComprobante().
+  document.getElementById('portal').innerHTML = `
+    <input type="hidden" name="javax.faces.ViewState" value="VS-123">
+    <select id="frmPrincipal:ano"><option selected value="2026">2026</option></select>
+    <select id="frmPrincipal:mes"><option selected value="8">8</option></select>
+    <select id="frmPrincipal:dia"><option selected value="0">0</option></select>
+    <select id="frmPrincipal:cmbTipoComprobante"><option selected value="1">Factura</option></select>
+    <table><tbody>
+      <tr><td><a id="frmPrincipal:tablaCompRecibidos:0:lnkXml" href="#">xml</a></td></tr>
+      <tr><td><a id="frmPrincipal:tablaCompRecibidos:1:lnkXml" href="#">xml</a></td></tr>
+    </tbody></table>`;
+
+  let ultimo = null;
+  const fetchReal = window.fetch;
+  const responder = (cuerpo, ok2 = true) => {
+    window.fetch = async (url, op) => {
+      ultimo = { url, op, params: new URLSearchParams(op.body) };
+      return { ok: ok2, status: ok2 ? 200 : 500, text: async () => cuerpo };
+    };
+  };
+
+  responder(XML([['4',100,15]]));
+  let res = await descargarXmlComprobante(0);
+  push('devuelve el comprobante parseado', res.porTarifa['15'], {base:100, iva:15});
+  push('manda el id del enlace como parámetro',
+       ultimo.params.get('frmPrincipal:tablaCompRecibidos:0:lnkXml'),
+       'frmPrincipal:tablaCompRecibidos:0:lnkXml');
+  push('con el ViewState de la página',   ultimo.params.get('javax.faces.ViewState'), 'VS-123');
+  push('y el período que está en pantalla',
+       [ultimo.params.get('frmPrincipal:ano'), ultimo.params.get('frmPrincipal:mes')], ['2026','8']);
+  push('lleva la sesión del portal',      ultimo.op.credentials, 'include');
+  // Si mandara la clave de acceso o el RUC en la URL, quedaría en los logs del
+  // servidor. Va todo en el cuerpo del POST.
+  push('nada de datos en la URL',         /[?&]/.test(ultimo.url), false);
+
+  // La fila 1 tiene su propio índice: no se puede pedir siempre la 0.
+  await descargarXmlComprobante(1);
+  push('cada fila pide su propio índice',
+       ultimo.params.has('frmPrincipal:tablaCompRecibidos:1:lnkXml'), true);
+
+  // Una fila que no está en pantalla no se inventa.
+  push('una fila inexistente devuelve null', await descargarXmlComprobante(99), null);
+
+  // Sesión caducada: el portal devuelve HTML, no el comprobante.
+  responder('<html><body>Su sesión ha expirado</body></html>');
+  push('el HTML de sesión caducada no se toma por comprobante',
+       await descargarXmlComprobante(0), null);
+
+  responder('', false);
+  push('un HTTP 500 tampoco',  await descargarXmlComprobante(0), null);
+
+  // Varias filas: se piden todas, sin pausa larga en la prueba.
+  responder(XML([['5',200,10]]));
+  const varios = await traerXmlDeComprobantes([0, 1], { pausaMs: 0 });
+  push('baja las dos filas pedidas',        varios.size, 2);
+  push('y cada una viene parseada',         varios.get(1).porTarifa['5'], {base:200, iva:10});
+
+  // El tope existe para no dispararle una ráfaga al WAF.
+  push('nunca pide más que el tope',
+       (await traerXmlDeComprobantes([0,1,0,1,0], { pausaMs: 0, tope: 2 })).size, 2);
+
+  window.fetch = fetchReal;
+
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =
