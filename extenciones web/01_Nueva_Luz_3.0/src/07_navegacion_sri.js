@@ -569,6 +569,7 @@ const SriLoopHUD = {
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
+            '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -585,7 +586,8 @@ const SriLoopHUD = {
             '<div id="slh-registro-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-cola-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
-            '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>'
+            '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
+            '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -684,7 +686,7 @@ const SriLoopHUD = {
         // pantalla justo cuando hay que mirar el portal.
         const soloUno = (cual) => {
             ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
-             'slh-cola-panel', 'slh-bitacora-panel']
+             'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel']
                 .filter((id) => id !== cual && id !== 'slh-plan')
                 .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
         };
@@ -758,6 +760,45 @@ const SriLoopHUD = {
             } catch (e) {
                 console.log(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
+            }
+        });
+
+        el.querySelector('#slh-casilleros').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-casilleros-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-casilleros-panel');
+            panel.style.display = 'block';
+            this.pintarCasilleros();
+        });
+
+        // Copiar vive DENTRO del panel, igual que en la bitácora: primero se
+        // mira lo que hay, después se copia. Y el click es el gesto del usuario
+        // que el navegador exige para dejar tocar el portapapeles.
+        el.querySelector('#slh-casilleros-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('#slh-casilleros-copiar');
+            if (!btn) return;
+            ev.stopPropagation();
+            const md = (window.__mapaCasilleros && window.__mapaCasilleros.markdown) || '';
+            try {
+                await navigator.clipboard.writeText(md);
+                btn.textContent = '✅ copiado';
+                setTimeout(() => { btn.textContent = '📋 Copiar la tabla'; }, 2500);
+            } catch (e) {
+                // Si el portapapeles no deja, queda seleccionable a mano.
+                const pre = el.querySelector('#slh-casilleros-texto');
+                if (pre) {
+                    pre.style.display = 'block';
+                    const r = document.createRange();
+                    r.selectNodeContents(pre);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    btn.textContent = '👆 seleccionado: Ctrl+C';
+                } else {
+                    btn.textContent = '⚠️ mirá la consola';
+                    console.log(md);
+                }
             }
         });
 
@@ -1501,6 +1542,79 @@ const SriLoopHUD = {
     /**
      * La bitácora, para leerla acá en vez de copiarla a ciegas.
      */
+    /**
+     * Pinta los casilleros que el formulario tiene DE VERDAD.
+     *
+     * Existe porque el 540 y el 550 no aparecen en pantalla y no se sabe si es
+     * que no existen, que se llaman distinto o que el portal solo los muestra
+     * en ciertos períodos. Suponerles un id es lo que la §5b prohíbe.
+     *
+     * Va como botón y no como comando de consola por una razón concreta: la
+     * consola del content script no siempre deja pegar, y un dato que solo se
+     * saca escribiendo es un dato que no se saca.
+     */
+    pintarCasilleros() {
+        const panel = document.getElementById('slh-casilleros-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        if (typeof sriMapaCasilleros !== 'function') {
+            panel.innerHTML = '<div style="opacity:0.7;font-size:11px">No está cargado el lector de casilleros.</div>';
+            return;
+        }
+
+        let mapa = [];
+        try { mapa = sriMapaCasilleros() || []; } catch (e) {
+            panel.innerHTML = `<div style="color:#fca5a5;font-size:11px">No pude leer el formulario: ${esc(e.message)}</div>`;
+            return;
+        }
+
+        if (mapa.length === 0) {
+            panel.innerHTML =
+                '<div style="opacity:0.75;font-size:11px;line-height:1.5">' +
+                'No encontré ningún casillero en esta pantalla.<br>' +
+                'Hay que estar <b>dentro del formulario</b> de la declaración (el paso 3 del ' +
+                'asistente), no en el período ni en el resumen.</div>';
+            return;
+        }
+
+        // Lo que se está buscando: el 5% y las compras sin derecho a crédito.
+        const buscados = ['502', '512', '540', '550'];
+        const hallados = mapa.filter((f) => buscados.includes(f.casillero) || /5\s*%/.test(f.rotulo));
+
+        const aviso = hallados.length
+            ? `<div style="background:rgba(74,222,128,0.14);color:#86efac;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px">` +
+              `🟡 <b>${hallados.length}</b> casillero(s) del 5% / sin crédito: ` +
+              esc(hallados.map((f) => `${f.casillero} → ${f.id}`).join(' · ')) + '</div>'
+            : `<div style="background:rgba(245,158,11,0.14);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px">` +
+              '⚠️ Ni rastro del 502/512 ni del 540/550 en este formulario. ' +
+              'Copiá la tabla y pasámela: puede que se llamen distinto.</div>';
+
+        const filas = mapa.map((f) => {
+            const marcado = buscados.includes(f.casillero) || /5\s*%/.test(f.rotulo);
+            const fondo = marcado ? 'background:rgba(251,191,36,0.12)' : '';
+            return `<tr style="${fondo}">` +
+                `<td style="padding:2px 6px;font-weight:800;color:#fcd34d">${esc(f.casillero)}</td>` +
+                `<td style="padding:2px 6px;font-family:monospace;font-size:10px;color:#7dd3fc">${esc(f.id)}</td>` +
+                `<td style="padding:2px 6px;font-size:10px;opacity:0.6">${f.editable ? '✏️' : '🔒'}</td>` +
+                `<td style="padding:2px 6px;font-size:10px;opacity:0.85">${esc(f.rotulo)}</td>` +
+                '</tr>';
+        }).join('');
+
+        const md = (window.__mapaCasilleros && window.__mapaCasilleros.markdown) || '';
+
+        panel.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+            `  <span style="font-size:11px;font-weight:800">📐 ${mapa.length} casilleros en este formulario</span>` +
+            '  <button id="slh-casilleros-copiar" aria-label="Copiar la tabla de casilleros al portapapeles" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar la tabla</button>' +
+            '</div>' +
+            aviso +
+            '<table style="width:100%;border-collapse:collapse;font-size:11px">' + filas + '</table>' +
+            // Respaldo por si el portapapeles no está disponible: se selecciona
+            // y se copia a mano. Nunca dejar al usuario sin salida.
+            `<pre id="slh-casilleros-texto" style="display:none;white-space:pre-wrap;word-break:break-all;font-size:10px;margin-top:8px;padding:6px;background:rgba(0,0,0,0.35);border-radius:8px;user-select:text">${esc(md)}</pre>`;
+    },
+
     async pintarBitacora() {
         const panel = document.getElementById('slh-bitacora-panel');
         if (!panel) return;
@@ -1650,6 +1764,18 @@ const SriLoopHUD = {
             const info = (window.sriAssistant && window.sriAssistant.extractClientInfo)
                 ? window.sriAssistant.extractClientInfo() : {};
             pdfs.style.display = (info && info.ruc) ? '' : 'none';
+        }
+
+        // Solo tiene sentido dentro del formulario: en el resto de las
+        // pantallas no hay casilleros que leer.
+        const cas = this._el.querySelector('#slh-casilleros');
+        if (cas) {
+            const enForm = typeof estaEnFormularioIva === 'function' && estaEnFormularioIva();
+            cas.style.display = enForm ? '' : 'none';
+            if (!enForm) {
+                const p = this._el.querySelector('#slh-casilleros-panel');
+                if (p) p.style.display = 'none';
+            }
         }
 
         const stop = this._el.querySelector('#slh-stop');

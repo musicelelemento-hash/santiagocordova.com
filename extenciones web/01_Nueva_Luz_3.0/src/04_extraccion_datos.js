@@ -1279,10 +1279,10 @@ if (typeof window !== 'undefined') {
         return filas;
     };
     window.sriAuditar = (tipo, n) => auditarExtraccionConTxt(tipo || TIPO_COMPROBANTE.factura, n);
-    // Parado en el formulario de IVA: lista los casilleros que el portal tiene
-    // de verdad, con su id real. Es la unica forma honesta de saber si el 540
-    // y el 550 existen — suponerlos es lo que la 5b prohibe.
-    window.sriMapaCasilleros = (op) => (typeof sriMapaCasilleros === 'function' ? sriMapaCasilleros(op) : null);
+    // sriMapaCasilleros() NO se envuelve. El bundle es una concatenacion sin
+    // IIFE, asi que toda funcion de nivel superior YA es window.<nombre>:
+    // reasignarla con un envoltorio que la llama por su propio nombre se
+    // llamaba a si mismo hasta reventar la pila. Lo cazo el banco de pruebas.
     // Pegale el texto de un XML autorizado y devuelve la base y el IVA por tarifa.
     window.sriLeerXml = (texto) => parsearXmlComprobante(texto);
     // Parado en Comprobantes Recibidos: baja el XML de una fila, o de varias.

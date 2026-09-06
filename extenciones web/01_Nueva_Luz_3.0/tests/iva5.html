@@ -267,6 +267,61 @@
 
   window.fetch = fetchReal;
 
+  // ══ I · leer los casilleros del formulario ══════════════════════════════
+  sec('I · el mapa de casilleros');
+
+  // La forma de la tabla del SRI: el número del casillero en una celda, el
+  // rótulo en otra, y el input en la siguiente.
+  const CAS = (num, rotulo, id, extra) =>
+    `<tr><td>${num}</td><td>${rotulo}</td>` +
+    `<td><input type="text" id="${id}" value="0.00" ${extra||''}></td></tr>`;
+
+  document.getElementById('portal').innerHTML = `<table><tbody>
+    ${CAS('500','Adquisiciones y pagos (excluye activos fijos) gravados tarifa diferente de cero','concepto1270')}
+    ${CAS('510','Adquisiciones netas tarifa diferente de cero','concepto1280')}
+    ${CAS('507','Adquisiciones y pagos gravados tarifa 0%','concepto1720')}
+    ${CAS('520','Impuesto generado en adquisiciones','concepto1290','readonly')}
+    <tr><td>Total</td><td>no es un casillero</td><td><input type="text" id="basura"></td></tr>
+  </tbody></table>`;
+
+  let mapa = sriMapaCasilleros();
+  push('encuentra los cuatro casilleros',    mapa.length, 4);
+  push('los ordena por número',              mapa.map(f=>f.casillero), ['500','507','510','520']);
+  push('con el id real de cada uno',         mapa[0].id, 'concepto1270');
+  push('y su rótulo',  /excluye activos fijos/.test(mapa[0].rotulo), true);
+  push('distingue lo editable de lo que no',
+       [mapa[0].editable, mapa.find(f=>f.casillero==='520').editable], [true, false]);
+  push('la fila sin número de casillero no entra',
+       mapa.some(f=>f.id==='basura'), false);
+
+  // El filtro por rango sirve para mirar solo compras, por ejemplo.
+  push('se puede pedir un rango',
+       sriMapaCasilleros({desde:507, hasta:510}).map(f=>f.casillero), ['507','510']);
+
+  // Lo que se está buscando de verdad.
+  push('avisa que acá no está el 5% ni el 502',
+       mapa.some(f=>['502','512','540','550'].includes(f.casillero)), false);
+
+  // Y si estuviera, lo encuentra.
+  document.getElementById('portal').insertAdjacentHTML('beforeend',
+    `<table><tbody>${CAS('540','Adquisiciones locales gravadas con tarifa 5%','concepto9999')}</tbody></table>`);
+  mapa = sriMapaCasilleros();
+  push('con el 540 en pantalla, lo lista',
+       (mapa.find(f=>f.casillero==='540')||{}).id, 'concepto9999');
+
+  // La tabla en Markdown queda lista para pegar en la Biblia.
+  push('deja la tabla lista para copiar',
+       /\| \*\*540\*\* \| `concepto9999` \| editable \|/.test(window.__mapaCasilleros.markdown), true);
+
+  // Los botones del propio HUD no son casilleros del SRI.
+  document.getElementById('portal').insertAdjacentHTML('beforeend',
+    `<div data-sc-ui="hud"><table><tbody>${CAS('601','Un input nuestro','sc-falso')}</tbody></table></div>`);
+  push('no confunde la UI de la extensión con el formulario',
+       sriMapaCasilleros().some(f=>f.id==='sc-falso'), false);
+
+  document.getElementById('portal').innerHTML = '';
+  push('sin formulario devuelve lista vacía', sriMapaCasilleros().length, 0);
+
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =

@@ -513,18 +513,26 @@ un cliente bloquearía al próximo.
 > formulario; si no aparecen, la plata **no** se manda al 500 por las dudas —
 > se anota y se frena. Lo mismo vale para el 502 y el 512.
 
-#### Cómo se sale de la duda: `sriMapaCasilleros()`
+#### Cómo se sale de la duda: el botón 📐
 
-Parado en el formulario de IVA, en la consola del content script:
+En el HUD, **dentro del formulario** (aparece solo ahí). Abre un panel con
+**todos** los casilleros que el formulario tiene de verdad —número, `id` real,
+rótulo y si es editable—, resalta los del 5% y los del 502/512, y tiene un
+botón que copia la tabla en Markdown lista para pegar en la Biblia.
 
-```js
-sriMapaCasilleros({ copiar: true })
-```
+Es un botón y no un comando de consola a propósito: **la consola del content
+script no siempre deja pegar**, y un dato que sólo se saca escribiendo es un
+dato que no se saca. Si el portapapeles tampoco responde, el panel muestra el
+texto ya seleccionado para un Ctrl+C.
 
-Lista **todos** los casilleros que el formulario tiene de verdad —número, `id`
-real, rótulo, valor y si es editable—, ordenados, y deja la tabla en Markdown
-en el portapapeles lista para pegar en la Biblia. Al final avisa si encontró
-algo del 5% o del 502/512.
+Desde la consola sigue estando como `sriMapaCasilleros({ desde, hasta })`.
+
+> ⚠️ **No envolver estas funciones en `window.<mismo nombre>`.** El bundle es
+> una concatenación sin IIFE, así que toda función de nivel superior **ya es**
+> `window.<nombre>`. Reasignarla con un envoltorio que la llama por su propio
+> nombre se llama a sí mismo hasta reventar la pila. Pasó el 06-sep-2026 y lo
+> cazó el banco, no la lectura. Un alias sólo vale si el nombre es distinto
+> (`sriLeerXml`, `sriBajarXml`).
 
 Con esa salida se cierran de una sola vez el 540/550, el 502/512 y el resto del
 `fieldMap`. Es el único camino que no viola la §5b.
