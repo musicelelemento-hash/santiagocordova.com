@@ -1,0 +1,117 @@
+<!doctype html><meta charset="utf-8"><title>Las claves, fuera del código</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Una clave en <code>shared_config.js</code> es una clave publicada</h3>
+<pre id="out">…</pre>
+<div id="popup"></div>
+<script>
+  // El popup real, con su propio mock: se prueba el markup y el código que
+  // están en producción, no una copia.
+  const store = {};
+  window.__errors = [];
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  window.chrome = {
+    runtime: { getURL: p => p, onMessage: { addListener() {} }, sendMessage: () => Promise.resolve({}), id: 't' },
+    storage: {
+      local: {
+        get: k => Promise.resolve(
+          k === null ? { ...store }
+          : Array.isArray(k) ? Object.fromEntries(k.filter(x => x in store).map(x => [x, store[x]]))
+          : (typeof k === 'string' ? (k in store ? { [k]: store[k] } : {}) : {})),
+        set: o => { Object.assign(store, o); return Promise.resolve(); },
+        remove: k => { [].concat(k).forEach(x => delete store[x]); return Promise.resolve(); }
+      },
+      onChanged: { addListener() {} }
+    },
+    tabs: { create() {}, query: () => Promise.resolve([]) }
+  };
+</script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(58) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+  };
+
+  // ── El markup de verdad, sacado del popup que se distribuye ─────────────
+  const html = await (await fetch('../popup.html')).text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const panel = doc.getElementById('panelClaves');
+  const boton = doc.getElementById('btnAbrirClaves');
+
+  sec('A · el panel existe en el popup real');
+  push('hay un botón para abrirlo',        !!boton, true);
+  push('y el panel con los dos campos',    !!panel, true);
+  push('la clave de IA no se ve al teclear',
+       panel && panel.querySelector('#claveIa').type, 'password');
+  push('la de R2 tampoco',
+       panel && panel.querySelector('#claveR2').type, 'password');
+  push('ni las autocompleta el navegador',
+       panel && panel.querySelector('#claveIa').getAttribute('autocomplete'), 'off');
+
+  // ── B · el código real, corriendo sobre ese markup ──────────────────────
+  document.getElementById('popup').append(boton.cloneNode(true), panel.cloneNode(true));
+  document.getElementById('panelClaves').style.display = 'block';
+
+  await new Promise((r) => {
+    const sc = document.createElement('script');
+    sc.src = '../popup.js';
+    sc.onload = r; sc.onerror = r;
+    document.body.appendChild(sc);
+  });
+  // popup.js hace su propio arranque contra un DOM que acá no está entero; lo
+  // que importa es que la parte de las claves quede enganchada.
+  window.__errors.length = 0;
+  inicializarClaves();
+
+  sec('B · guardar');
+  const SECRETO = 'AIza-de-mentira-1234-FINAL';
+  document.getElementById('claveIa').value = SECRETO;
+  document.getElementById('btnGuardarClaves').click();
+  await new Promise(r => setTimeout(r, 60));
+
+  push('la clave queda en el almacén local',
+       (store.sc_ia_credenciales || {}).apiKey, SECRETO);
+  push('y el campo se vacía al guardar',
+       document.getElementById('claveIa').value, '');
+
+  sec('C · lo que se muestra no es la clave');
+  const estado = document.getElementById('estadoIa').textContent;
+  push('el estado NO contiene la clave',    estado.includes(SECRETO), false);
+  push('pero dice que hay una guardada',    /guardada/.test(estado), true);
+  push('y cómo termina, para reconocerla',  estado.includes('FINAL'), true);
+  // Seis caracteres alcanzan para saber cuál está puesta y no alcanzan para
+  // nada más. La clave entera nunca sale de chrome.storage.local.
+  push('pero no muestra más que la cola',   estado.includes('mentira'), false);
+  push('el markup tampoco la deja escrita',
+       document.getElementById('popup').innerHTML.includes(SECRETO), false);
+
+  sec('D · un campo vacío no borra nada');
+  document.getElementById('claveIa').value = '';
+  document.getElementById('claveR2').value = 'r2-de-mentira';
+  document.getElementById('btnGuardarClaves').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('la de IA sigue donde estaba',
+       (store.sc_ia_credenciales || {}).apiKey, SECRETO);
+  push('y la de R2 se guardó aparte',
+       (store.sc_r2_credenciales || {}).R2_SECRET_ACCESS_KEY, 'r2-de-mentira');
+
+  sec('E · borrar es un botón aparte, y borra de verdad');
+  document.getElementById('btnBorrarClaves').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('no queda la de IA',  'sc_ia_credenciales' in store, false);
+  push('ni la de R2',        'sc_r2_credenciales' in store, false);
+  push('y el estado lo dice',
+       /no hay ninguna/.test(document.getElementById('estadoIa').textContent), true);
+
+  pintar();
+})();
+</script>

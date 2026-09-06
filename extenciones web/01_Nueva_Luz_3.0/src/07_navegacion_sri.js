@@ -1649,12 +1649,32 @@ const SriLoopHUD = {
             return;
         }
 
+        // Cuando no encuentra nada tiene que decir QUÉ vio. «No hay casilleros»
+        // no permite arreglar nada; «hay 84 inputs y ninguno con número al
+        // lado» sí. El diagnóstico se copia igual que la tabla.
+        const d = (window.__mapaCasilleros && window.__mapaCasilleros.diagnostico) || {};
+        const radiografia =
+            '<div style="font-size:10px;opacity:0.75;line-height:1.6;background:rgba(148,163,184,0.10);' +
+            'border-radius:8px;padding:6px 8px;margin-top:6px">' +
+            `<b>Lo que hay en esta pantalla</b><br>` +
+            `ruta: <code>${esc(d.url)}</code><br>` +
+            `inputs de texto: <b>${d.inputsDeTexto}</b> · ocultos: ${d.inputsOcultos}<br>` +
+            `con id <code>conceptoNNNN</code>: <b>${d.conIdConcepto}</b><br>` +
+            `tablas: ${d.tablas} · celdas con un número solo: <b>${d.celdasSoloNumero}</b><br>` +
+            `primeros ids: <code>${esc((d.primerosIds || []).join(', '))}</code>` +
+            '</div>';
+
         if (mapa.length === 0) {
             panel.innerHTML =
-                '<div style="opacity:0.75;font-size:11px;line-height:1.5">' +
-                'No encontré ningún casillero en esta pantalla.<br>' +
-                'Hay que estar <b>dentro del formulario</b> de la declaración (el paso 3 del ' +
-                'asistente), no en el período ni en el resumen.</div>';
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+                '  <span style="font-size:11px;font-weight:800">📐 Ningún casillero acá</span>' +
+                '  <button id="slh-casilleros-copiar" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar la tabla</button>' +
+                '</div>' +
+                '<div style="opacity:0.85;font-size:11px;line-height:1.5">' +
+                'Hay que estar <b>dentro del formulario</b> (el paso 3 del asistente), ' +
+                'no en el período fiscal ni en el resumen de pago.<br>' +
+                'Si ya estás ahí, copiá esto y pasámelo — dice qué vio:' +
+                '</div>' + radiografia;
             return;
         }
 
@@ -1690,6 +1710,7 @@ const SriLoopHUD = {
             '</div>' +
             aviso +
             '<table style="width:100%;border-collapse:collapse;font-size:11px">' + filas + '</table>' +
+            radiografia +
             // Respaldo por si el portapapeles no está disponible: se selecciona
             // y se copia a mano. Nunca dejar al usuario sin salida.
             `<pre id="slh-casilleros-texto" style="display:none;white-space:pre-wrap;word-break:break-all;font-size:10px;margin-top:8px;padding:6px;background:rgba(0,0,0,0.35);border-radius:8px;user-select:text">${esc(md)}</pre>`;

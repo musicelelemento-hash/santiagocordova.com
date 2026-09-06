@@ -828,63 +828,144 @@ function sriMapaCasilleros(opciones = {}) {
     const mapa = [];
     const vistos = new Set();
 
-    document.querySelectorAll('input[type="text"], input[type="hidden"]').forEach((input) => {
-        if (typeof esDeLaExtension === 'function' && esDeLaExtension(input)) return;
+    const propio = (el) => (typeof esDeLaExtension === 'function' && esDeLaExtension(el));
+    const soloNumero = (t) => /^\s*\d{3}\s*$/.test(t || '');
+    const limpio = (el) => ((el && el.textContent) || '').trim();
 
-        const fila = input.closest('tr');
-        if (!fila) return;
-
-        const celdas = Array.from(fila.querySelectorAll('td, th'));
-        // El casillero es la celda que contiene SOLO un número de 3 dígitos.
-        const celdaNum = celdas.find((c) => /^\s*\d{3}\s*$/.test(c.textContent || ''));
-        if (!celdaNum) return;
-
-        const casillero = celdaNum.textContent.trim();
+    const anotar = (casillero, input, rotulo, via) => {
+        if (!input || propio(input)) return;
         const n = Number(casillero);
-        if (n < desde || n > hasta) return;
-
-        const clave = casillero + '|' + input.id;
+        if (!(n >= desde && n <= hasta)) return;
+        const clave = casillero + '|' + (input.id || '');
         if (vistos.has(clave)) return;
         vistos.add(clave);
-
-        // El rótulo es la celda de texto más larga que no sea el número.
-        const rotulo = celdas
-            .map((c) => (c.textContent || '').trim())
-            .filter((t) => t && t !== casillero)
-            .sort((a, b) => b.length - a.length)[0] || '';
-
         mapa.push({
             casillero,
             id: input.id || '(sin id)',
-            rotulo: rotulo.slice(0, 110),
+            rotulo: (rotulo || '').replace(/\s+/g, ' ').trim().slice(0, 110),
             valor: input.value,
-            editable: input.type === 'text' && !input.readOnly && !input.disabled
+            editable: input.type === 'text' && !input.readOnly && !input.disabled,
+            via
+        });
+    };
+
+    const entradas = Array.from(document.querySelectorAll('input[type="text"], input[type="hidden"]'))
+        .filter((el) => !propio(el));
+
+    // ── Estrategia 1 · el número y el input en la misma fila ────────────────
+    // Es el caso simple, y era el ÚNICO que había. Falla cuando el portal anida
+    // una tabla por celda: closest('tr') devuelve la fila interna, sin número.
+    entradas.forEach((input) => {
+        const fila = input.closest('tr');
+        if (!fila) return;
+        const celdas = Array.from(fila.querySelectorAll('td, th'));
+        const celdaNum = celdas.find((c) => soloNumero(c.textContent));
+        if (!celdaNum) return;
+        const casillero = limpio(celdaNum);
+        const rotulo = celdas.map(limpio).filter((t) => t && t !== casillero)
+            .sort((a, b) => b.length - a.length)[0] || '';
+        anotar(casillero, input, rotulo, 'fila');
+    });
+
+    // ── Estrategia 2 · desde el rótulo hacia el input ───────────────────────
+    // El mismo camino que ya usa encontrarInputPorCasillero(): una celda cuyo
+    // texto es sólo el número, y el input en la celda de al lado. Funciona
+    // aunque el input viva dentro de una tabla anidada.
+    document.querySelectorAll('td, th, span, label').forEach((et) => {
+        if (propio(et) || !soloNumero(et.textContent)) return;
+        const casillero = limpio(et);
+        const celda = et.closest('td, th');
+        if (!celda) return;
+        let cursor = celda.nextElementSibling;
+        for (let salto = 0; cursor && salto < 3; salto++, cursor = cursor.nextElementSibling) {
+            const input = cursor.querySelector('input[type="text"], input[type="hidden"]');
+            if (input) {
+                const fila = celda.closest('tr');
+                const rotulo = fila
+                    ? Array.from(fila.querySelectorAll('td, th')).map(limpio)
+                        .filter((t) => t && t !== casillero).sort((a, b) => b.length - a.length)[0] || ''
+                    : '';
+                anotar(casillero, input, rotulo, 'rótulo');
+                break;
+            }
+        }
+    });
+
+    // ── Estrategia 3 · por el id, que en el SRI es `conceptoNNNN` ───────────
+    // Último recurso, y el más valioso cuando las otras dos no encuentran nada:
+    // devuelve los ids REALES aunque no se sepa a qué casillero corresponden.
+    // Un id sin número sigue siendo evidencia; «no hay nada» no lo es.
+    // Pedir un rango es preguntar por casilleros NUMERADOS: si alguien pide
+    // 507-510, no puede recibir además los que no tienen número.
+    const rangoCompleto = desde === 0 && hasta === 9999;
+    entradas.forEach((input) => {
+        if (!rangoCompleto) return;
+        if (!/concepto\d+/i.test(input.id || '')) return;
+        if (Array.from(vistos).some((k) => k.endsWith('|' + input.id))) return;
+        const fila = input.closest('tr');
+        const rotulo = fila ? limpio(fila).slice(0, 110) : '';
+        // Sin número de casillero conocido: se marca como tal, no se inventa.
+        const clave = '???|' + input.id;
+        if (vistos.has(clave)) return;
+        vistos.add(clave);
+        mapa.push({
+            casillero: '???',
+            id: input.id,
+            rotulo: rotulo.replace(/\s+/g, ' ').trim(),
+            valor: input.value,
+            editable: input.type === 'text' && !input.readOnly && !input.disabled,
+            via: 'id'
         });
     });
 
-    mapa.sort((a, b) => Number(a.casillero) - Number(b.casillero));
+    mapa.sort((a, b) => {
+        const na = Number(a.casillero), nb = Number(b.casillero);
+        if (isNaN(na) && isNaN(nb)) return (a.id || '').localeCompare(b.id || '');
+        if (isNaN(na)) return 1;
+        if (isNaN(nb)) return -1;
+        return na - nb;
+    });
 
-    console.log(`📋 ${mapa.length} casilleros en este formulario:`);
-    if (console.table) console.table(mapa);
-    else mapa.forEach((f) => console.log(`   ${f.casillero}  ${f.id.padEnd(16)} ${f.rotulo}`));
+    // ── Diagnóstico ─────────────────────────────────────────────────────────
+    // Cuando no encuentra nada tiene que decir QUÉ vio. «No hay casilleros» no
+    // permite arreglar nada; «hay 84 inputs y ninguno tiene número al lado» sí.
+    const diagnostico = {
+        url: location.pathname,
+        inputsDeTexto: entradas.filter((e) => e.type === 'text').length,
+        inputsOcultos: entradas.filter((e) => e.type === 'hidden').length,
+        conIdConcepto: entradas.filter((e) => /concepto\d+/i.test(e.id || '')).length,
+        tablas: document.querySelectorAll('table').length,
+        celdasSoloNumero: Array.from(document.querySelectorAll('td, th, span, label'))
+            .filter((e) => !propio(e) && soloNumero(e.textContent)).length,
+        primerosIds: entradas.slice(0, 12).map((e) => e.id || '(sin id)')
+    };
+
+    console.log(`📋 ${mapa.length} casilleros encontrados.`);
+    if (mapa.length && console.table) console.table(mapa);
+    else mapa.forEach((f) => console.log(`   ${f.casillero}  ${String(f.id).padEnd(16)} ${f.rotulo}`));
+    console.log('🔎 Lo que hay en pantalla:', diagnostico);
 
     // Para pegar en la Biblia sin tener que transcribir a mano.
-    const comoTabla = mapa
-        .map((f) => `| **${f.casillero}** | \`${f.id}\` | ${f.editable ? 'editable' : 'solo lectura'} | ${f.rotulo} |`)
-        .join('\n');
+    const comoTabla = [
+        `<!-- ${diagnostico.url} · ${diagnostico.inputsDeTexto} inputs de texto · ` +
+        `${diagnostico.conIdConcepto} con id conceptoNNNN · ${diagnostico.celdasSoloNumero} celdas con un número solo -->`,
+        ...mapa.map((f) =>
+            `| **${f.casillero}** | \`${f.id}\` | ${f.editable ? 'editable' : 'solo lectura'} | ${f.rotulo} |`)
+    ].join('\n');
+
     if (copiar && navigator.clipboard) {
         navigator.clipboard.writeText(comoTabla)
             .then(() => console.log('📎 Copiado al portapapeles, listo para pegar en la Biblia.'))
             .catch(() => console.log('No se pudo copiar. Está en window.__mapaCasilleros.'));
     }
-    window.__mapaCasilleros = { filas: mapa, markdown: comoTabla };
+    window.__mapaCasilleros = { filas: mapa, markdown: comoTabla, diagnostico };
 
-    const cincoPorCiento = mapa.filter((f) => /5%/.test(f.rotulo) || ['502','512','540','550'].includes(f.casillero));
+    const cincoPorCiento = mapa.filter((f) => /5\s*%/.test(f.rotulo) || ['502','512','540','550'].includes(f.casillero));
     if (cincoPorCiento.length) {
         console.log('🟡 Candidatos para el 5% / sin derecho a crédito:');
         cincoPorCiento.forEach((f) => console.log(`   ${f.casillero} → ${f.id} · ${f.rotulo}`));
     } else {
-        console.log('🟡 Ni rastro del 5% ni del 502/512 en este formulario.');
+        console.log('🟡 Ni rastro del 5% ni del 502/512 en esta pantalla.');
     }
 
     return mapa;

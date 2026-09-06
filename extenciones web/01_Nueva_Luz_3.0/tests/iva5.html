@@ -294,6 +294,49 @@
   push('la fila sin número de casillero no entra',
        mapa.some(f=>f.id==='basura'), false);
 
+  // ── EL CASO QUE FALLÓ EN PANTALLA ──────────────────────────────────────
+  // El portal anida una tabla por celda, así que closest('tr') del input
+  // devuelve la fila interna, que no tiene el número. Antes: «no hay
+  // casilleros». Ahora lo encuentra yendo desde el rótulo hacia el input.
+  document.getElementById('portal').innerHTML = `<table><tbody>
+    <tr>
+      <td><span>540</span></td>
+      <td>Adquisiciones locales gravadas con tarifa 5%</td>
+      <td><table><tbody><tr><td><input type="text" id="conceptoAnidado" value="0.00"></td></tr></tbody></table></td>
+    </tr>
+  </tbody></table>`;
+  let anidado = sriMapaCasilleros();
+  push('encuentra el input dentro de una tabla anidada',
+       (anidado.find(f=>f.casillero==='540')||{}).id, 'conceptoAnidado');
+
+  // Y aunque no haya ningún número a la vista, los ids reales son evidencia.
+  document.getElementById('portal').innerHTML =
+    '<div><input type="text" id="concepto1270" value="0.00"><input type="text" id="concepto1280"></div>';
+  anidado = sriMapaCasilleros();
+  push('sin número al lado, igual devuelve los ids',
+       anidado.map(f=>f.id), ['concepto1270','concepto1280']);
+  push('y no les inventa un casillero',
+       anidado.every(f=>f.casillero==='???'), true);
+
+  // Lo que hace útil un «no encontré nada»: decir qué sí había.
+  document.getElementById('portal').innerHTML =
+    '<div><input type="text" id="raro-1"><input type="text" id="raro-2"></div>';
+  push('sin casilleros, igual cuenta lo que vio', sriMapaCasilleros().length, 0);
+  const diag = window.__mapaCasilleros.diagnostico;
+  push('dice cuántos inputs de texto había',   diag.inputsDeTexto, 2);
+  push('y que ninguno tenía id de casillero',  diag.conIdConcepto, 0);
+  push('y nombra los primeros, para reconocerlos',
+       diag.primerosIds.includes('raro-1'), true);
+
+  // Volver al formulario simple para lo que sigue.
+  document.getElementById('portal').innerHTML = `<table><tbody>
+    ${CAS('500','Adquisiciones y pagos (excluye activos fijos) gravados tarifa diferente de cero','concepto1270')}
+    ${CAS('510','Adquisiciones netas tarifa diferente de cero','concepto1280')}
+    ${CAS('507','Adquisiciones y pagos gravados tarifa 0%','concepto1720')}
+    ${CAS('520','Impuesto generado en adquisiciones','concepto1290','readonly')}
+  </tbody></table>`;
+  mapa = sriMapaCasilleros();
+
   // El filtro por rango sirve para mirar solo compras, por ejemplo.
   push('se puede pedir un rango',
        sriMapaCasilleros({desde:507, hasta:510}).map(f=>f.casillero), ['507','510']);

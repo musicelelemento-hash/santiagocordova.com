@@ -637,6 +637,35 @@ eso afuera. Descartada.
 
 ---
 
+## 10a. Dónde viven las claves
+
+**Nunca en `shared_config.js`.** Ese archivo viaja dentro de la extensión y
+está en el repositorio: una clave ahí es una clave publicada, y el historial de
+git no se deshace. La de R2 se coló así y hay que rotarla igual.
+
+Van en `chrome.storage.local`, que no se versiona ni se distribuye. Se cargan
+desde el popup, botón **🔑 Claves y servicios**:
+
+| Llave | Qué guarda | Quién la lee |
+| :--- | :--- | :--- |
+| `sc_r2_credenciales` | `R2_SECRET_ACCESS_KEY` | `credencialesR2()` en `background.js`, por encima de `shared_config.js` |
+| `sc_ia_credenciales` | `apiKey` | la clasificación de proveedores (§7), cuando exista |
+
+Reglas de la ventana, probadas en `tests/claves.html`:
+
+- Los campos son `type="password"` y `autocomplete="off"`.
+- **Nunca se muestra el valor guardado**: solo si hay uno, cuántos caracteres
+  tiene y sus últimos seis. Alcanza para saber cuál está puesta y no alcanza
+  para nada más.
+- Un campo vacío significa «no la toques», no «borrala». Para borrar hay un
+  botón que lo dice.
+- Al guardar, el campo se vacía: la clave no queda en el DOM.
+
+> Una clave pegada en un chat, un correo o un ticket ya está comprometida:
+> hay que anularla y generar otra, aunque nunca se haya escrito en un archivo.
+
+---
+
 ## 10b. Esperar al portal, no contar hasta tres
 
 Un `sleep(2500)` es una apuesta a dos puntas: **sobra** cuando el SRI responde
