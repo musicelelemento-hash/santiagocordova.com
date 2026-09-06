@@ -1,0 +1,147 @@
+<!doctype html><meta charset="utf-8"><title>La base de proveedores</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Se aprende una vez y sirve para todos los clientes que le compren</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(60)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const A = '0990123456001';   // proveedor
+  const B = '1791234567001';   // otro proveedor
+  const C1 = '0703891838001';  // cliente del estudio
+  const C2 = '0912345678001';  // otro cliente
+
+  await Proveedores.olvidarTodo();
+
+  // ══ A · aprender mirando ════════════════════════════════════════════════
+  sec('A · se aprende de las facturas, sin preguntar nada');
+
+  // Como los da el TXT: RUC y razón social separados.
+  await Proveedores.registrarLote([
+    { rucEmisor: A, razonSocial: 'COMERCIAL XYZ S.A.' },
+    { rucEmisor: A, razonSocial: 'COMERCIAL XYZ S.A.' },
+    { rucEmisor: B, razonSocial: 'FARMACIA SANA' }
+  ], C1);
+
+  push('quedan los dos proveedores',        (await Proveedores.resumen()).total, 2);
+  push('con la cuenta de comprobantes',     (await Proveedores.saber(A)).veces, 2);
+  push('y de quién le compra',              (await Proveedores.saber(A)).vistoEn, [C1]);
+  push('nadie nace clasificado',            (await Proveedores.saber(A)).deducible, null);
+
+  // Como los da la tabla del portal: RUC y nombre pegados en una celda.
+  await Proveedores.registrarLote([{ rucRazon: `${A} COMERCIAL XYZ S.A.` }], C2);
+  push('también los lee pegados en una celda', (await Proveedores.saber(A)).veces, 3);
+  push('y suma el segundo cliente',            (await Proveedores.saber(A)).vistoEn.length, 2);
+
+  // ÉSTE es el punto de la §7: se aprende una vez y sirve para todos.
+  push('el mismo proveedor sirve para los dos clientes',
+       (await Proveedores.saber(A)).vistoEn.includes(C2), true);
+
+  // Un RUC que no es un RUC no entra.
+  await Proveedores.registrarLote([{ rucEmisor: '123' }, { rucEmisor: '' }], C1);
+  push('no entra cualquier cosa como RUC',  (await Proveedores.resumen()).total, 2);
+
+  // Un nombre vacío no pisa a uno bueno.
+  await Proveedores.registrarLote([{ rucEmisor: A, razonSocial: '' }], C1);
+  push('un nombre vacío no borra el que había',
+       (await Proveedores.saber(A)).nombre, 'COMERCIAL XYZ S.A.');
+
+  // ══ B · el orden: primero lo que más rinde ══════════════════════════════
+  sec('B · los pendientes, por lo que rinde clasificarlos');
+  const faltan = await Proveedores.pendientes();
+  push('salen los dos',                     faltan.length, 2);
+  push('y primero el que más aparece',      faltan[0].ruc, A);
+
+  // ══ C · el origen no es decoración ══════════════════════════════════════
+  // La regla de todo el proyecto: nunca presentar como dato una suposición, y
+  // que una suposición jamás pise una decisión del contador.
+  sec('C · una suposición no pisa al contador');
+
+  push('el contador clasifica',
+       await Proveedores.clasificar(A, { deducible: true, origen: 'usuario' }), true);
+  push('y queda marcado como decisión suya', (await Proveedores.saber(A)).origen, 'usuario');
+
+  push('una sugerencia de la IA NO lo pisa',
+       await Proveedores.clasificar(A, { deducible: false, origen: 'ia' }), false);
+  push('y el valor sigue siendo el del contador',
+       (await Proveedores.saber(A)).deducible, true);
+  push('el catastro tampoco lo pisa',
+       await Proveedores.clasificar(A, { deducible: false, origen: 'catastro' }), false);
+
+  // Pero el contador sí puede cambiar de opinión.
+  push('el contador sí puede corregirse',
+       await Proveedores.clasificar(A, { deducible: false, origen: 'usuario' }), true);
+  push('y queda su nuevo criterio',         (await Proveedores.saber(A)).deducible, false);
+
+  // Sobre uno sin clasificar, una sugerencia sí entra — marcada como tal.
+  push('sobre uno sin clasificar, la sugerencia entra',
+       await Proveedores.clasificar(B, { actividad: 'salud', origen: 'catastro' }), true);
+  push('y se ve que fue sugerida, no confirmada',
+       (await Proveedores.saber(B)).origen, 'catastro');
+
+  // Un RUC que nunca se vio no se puede clasificar: primero hay que verlo.
+  push('no se clasifica un RUC que nunca apareció',
+       await Proveedores.clasificar('1799999999001', { deducible: true, origen: 'usuario' }), false);
+
+  // ══ D · lo que sale para afuera ═════════════════════════════════════════
+  sec('D · exportar');
+  const txt = await Proveedores.exportar();
+  push('encabezado con las columnas',       txt.split('\n')[0].startsWith('RUC\tRAZON_SOCIAL'), true);
+  push('y una fila por proveedor',          txt.trim().split('\n').length, 3);
+  // Los RUC de los clientes del estudio no salen: es con quién opera cada uno.
+  push('NO se lleva los RUC de los clientes', txt.includes(C1), false);
+
+  // ══ E · el panel del HUD ════════════════════════════════════════════════
+  sec('E · el botón 🏷️');
+  SriLoopHUD._enSri = () => true;
+  SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+  const ver = (id) => { const b = document.getElementById(id);
+    return !b ? 'NO EXISTE' : (getComputedStyle(b).display !== 'none' ? 'visible' : 'oculto'); };
+  push('el botón está y se ve',             ver('slh-proveedores'), 'visible');
+
+  await SriLoopHUD.pintarProveedores();
+  const panel = document.getElementById('slh-proveedores-panel');
+  push('el panel dice cuántos hay',         /2 proveedores/.test(panel.innerHTML), true);
+  push('y ofrece copiar la base',           !!panel.querySelector('#slh-prov-copiar'), true);
+
+  // En el DOM del SRI va el RUC y nada más — ni el nombre del cliente ni claves.
+  push('en el DOM solo va el RUC del proveedor',
+       [...panel.querySelectorAll('[data-sc-prov]')].every(b => /^\d{13}$/.test(b.getAttribute('data-sc-prov'))), true);
+  push('y nunca un RUC de cliente del estudio', panel.innerHTML.includes(C1), false);
+
+  // Con todo clasificado, lo dice en vez de mostrar una lista vacía.
+  await Proveedores.clasificar(B, { deducible: true, origen: 'usuario' });
+  await SriLoopHUD.pintarProveedores();
+  push('sin pendientes, lo celebra',        /No queda ninguno/.test(panel.innerHTML), true);
+
+  await Proveedores.olvidarTodo();
+  await SriLoopHUD.pintarProveedores();
+  push('y con la base vacía explica cómo se llena',
+       /[Ss]e llena sola/.test(panel.innerHTML), true);
+
+  document.getElementById('sri-loop-hud').remove();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

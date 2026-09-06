@@ -157,6 +157,15 @@ async function extraerTodasLasFacturas() {
 
     console.log('Total: ' + todasLasFacturas.length + ' facturas');
 
+    // §7 · Cada proveedor que aparece queda anotado. No se le pregunta nada a
+    // nadie: se aprende mirando, y lo aprendido sirve para todos los clientes
+    // que le compren. Anotar nunca puede romper una extracción.
+    if (typeof Proveedores !== 'undefined') {
+        try {
+            await Proveedores.registrarLote(todasLasFacturas, await rucDelClienteActual());
+        } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+    }
+
     const resumen = calcularResumen(todasLasFacturas);
     return resumen;
 }
@@ -1184,7 +1193,18 @@ async function descargarTxtRecibidos(tipo = TIPO_COMPROBANTE.factura) {
             console.warn('📄 [TXT] La respuesta no es el listado (¿sesión caducada?).');
             return null;
         }
-        return parsearTxtRecibidos(texto);
+        const filas = parsearTxtRecibidos(texto);
+
+        // El TXT es la mejor fuente: trae el RUC y la razón social SEPARADOS,
+        // no pegados como en la tabla. Las retenciones NO entran: las emite el
+        // cliente que te retuvo, no un proveedor.
+        if (typeof Proveedores !== 'undefined' && tipo !== TIPO_COMPROBANTE.retencion) {
+            try {
+                await Proveedores.registrarLote(filas, await rucDelClienteActual());
+            } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+        }
+
+        return filas;
     } catch (err) {
         console.warn('📄 [TXT] Falló la descarga:', err.message);
         return null;
@@ -1500,6 +1520,14 @@ async function extraerTodasLasNotasCredito() {
     }
 
     console.log('Total: ' + todasLasNC.length + ' notas de crédito');
+
+    // Una nota de crédito la emite el mismo proveedor: cuenta igual.
+    if (typeof Proveedores !== 'undefined') {
+        try {
+            await Proveedores.registrarLote(todasLasNC, await rucDelClienteActual());
+        } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+    }
+
     return calcularResumenNotasCredito(todasLasNC);
 }
 

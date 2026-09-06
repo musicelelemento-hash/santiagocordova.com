@@ -300,7 +300,61 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 
 ## 7. La base de proveedores — la pieza que falta
 
-> **Estado**: diseñada, no construida. Es parte del objetivo, no un extra.
+> **Estado (06-sep-2026)**: el cimiento está construido y probado. Falta el
+> mapa CIIU → deducible, que es criterio contable, y el casillero donde va lo
+> no deducible (§9a).
+
+### Lo que ya funciona
+
+`Proveedores` en `02_servicios_y_memoria.js`, con la marca `sc_proveedores`.
+
+**Se aprende mirando, sin preguntarle nada a nadie.** Cada factura y cada nota
+de crédito que pasa por el bot deja anotado a su proveedor, desde las tres
+bocas por donde entran:
+
+- el TXT de recibidos — la mejor fuente: da RUC y razón social **separados**;
+- la tabla del portal — los da pegados en una celda, y se parten;
+- las notas de crédito, que las emite el mismo proveedor.
+
+Las **retenciones no entran**: las emite el cliente que te retuvo, no un
+proveedor.
+
+| Método | Qué hace |
+| :--- | :--- |
+| `registrarLote(lista, clienteRuc)` | anota o actualiza, una sola escritura |
+| `saber(ruc)` | lo que se sabe, o `null` |
+| `clasificar(ruc, {actividad, deducible, origen})` | ver la regla de abajo |
+| `pendientes(tope)` | los que faltan, **los más frecuentes primero** |
+| `resumen()` · `exportar()` | conteos · TSV para revisar afuera |
+
+El orden de `pendientes()` no es cosmético: clasificar el proveedor que aparece
+en 200 facturas rinde doscientas veces más que el que aparece en una. Con 500
+contribuyentes, esa diferencia es la que hace que la base se llene sola en vez
+de nunca.
+
+**La regla del `origen`, probada:** una sugerencia —`catastro`, `sugerido`,
+`ia`— **nunca pisa** una decisión con `origen: 'usuario'`. Sólo el contador
+puede cambiar lo que decidió el contador. Es la misma regla de todo el
+proyecto: nunca presentar como dato lo que es una suposición.
+
+El botón **🏷️** del HUD muestra el resumen, los pendientes ordenados, y deja
+marcar cada uno como deducible o no. En el DOM del SRI va **sólo el RUC del
+proveedor** — ni el nombre del cliente, ni nada más. Los RUC de los clientes del
+estudio tampoco salen en la exportación: es con quién opera cada uno.
+
+Banco: `tests/proveedores.html` (31 comprobaciones, verdes el 06-sep-2026).
+
+### Lo que falta
+
+- El **mapa CIIU → deducible**: criterio contable, lo pone el contador.
+- El **casillero** donde va lo no deducible (502/512) — sin confirmar (§9a).
+- El interruptor **preguntar / seguir** para los desconocidos. Hoy rige el modo
+  por defecto de hecho: un proveedor sin clasificar va donde va hoy y queda en
+  la lista, **nunca al 502 por las dudas**.
+
+---
+
+### El diseño original, para no perderlo
 
 ### El problema, dicho una vez
 

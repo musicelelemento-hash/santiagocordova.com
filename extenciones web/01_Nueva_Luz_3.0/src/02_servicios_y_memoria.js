@@ -1007,6 +1007,239 @@ if (typeof window !== 'undefined') {
 }
 
 /**
+ * El RUC del contribuyente que está declarando ahora.
+ *
+ * Primero lo que dijo el lote —que es la verdad de a quién se está
+ * declarando— y recién después la cabecera de la página, que en el SRI llega
+ * cacheada de otra pantalla más seguido de lo que uno querría.
+ */
+async function rucDelClienteActual() {
+    try {
+        const af = (await SafeStorage.get(['pending_sri_autofill'])).pending_sri_autofill;
+        if (af && af.ruc) return String(af.ruc).replace(/\D/g, '');
+    } catch (e) { /* sigue por la cabecera */ }
+    try {
+        const info = window.sriAssistant && window.sriAssistant.extractClientInfo
+            ? window.sriAssistant.extractClientInfo() : null;
+        if (info && info.ruc) return String(info.ruc).replace(/\D/g, '');
+    } catch (e) { /* nada */ }
+    return '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LA BASE DE PROVEEDORES
+// ═══════════════════════════════════════════════════════════════════════════
+// El bot mete todas las compras en un solo bloque, pero la declaración separa
+// lo deducible de lo no deducible según la ACTIVIDAD del proveedor. Lo que
+// falta no es lógica: es saber a qué se dedica cada RUC.
+//
+// Se aprende una vez y sirve para siempre. Un proveedor clasificado sirve para
+// todos los clientes que le compren, y en un estudio los proveedores se repiten
+// muchísimo: la base se llena sola en los primeros meses.
+//
+// La misma pregunta la hacen tres extensiones —IVA, anexo de gastos personales
+// y devolución de tercera edad— y hoy cada una la resuelve por su cuenta.
+//
+// **Acá NO se decide nada.** Esto guarda lo que se aprende; qué compra es
+// deducible es criterio contable y lo pone el contador.
+const Proveedores = {
+    _KEY: 'sc_proveedores',
+    // Guardar los 500 clientes de un proveedor no sirve para nada y ocupa.
+    // Con saber que le compran muchos alcanza.
+    _TOPE_CLIENTES: 40,
+
+    async _todos() {
+        try { return (await SafeStorage.get([this._KEY]))[this._KEY] || {}; }
+        catch (e) { return {}; }
+    },
+
+    /**
+     * Anota que este RUC emitió un comprobante. No clasifica: solo recuerda.
+     *
+     * @param {string} ruc RUC del emisor (13 dígitos).
+     * @param {string} nombre Razón social, tal como la da el portal.
+     * @param {string} clienteRuc A quién le facturó.
+     */
+    async registrar(ruc, nombre, clienteRuc) {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13) return false;
+
+        const base = await this._todos();
+        const previo = base[limpio] || {
+            nombre: '', actividad: null, deducible: null, origen: null,
+            vistoEn: [], veces: 0, primero: Date.now()
+        };
+
+        // El nombre puede llegar vacío desde la tabla y completo desde el TXT:
+        // se queda el más informativo, nunca se pisa uno bueno con uno vacío.
+        const nom = String(nombre || '').trim();
+        if (nom.length > (previo.nombre || '').length) previo.nombre = nom.slice(0, 120);
+
+        previo.veces = (previo.veces || 0) + 1;
+        previo.ultimo = Date.now();
+
+        const cli = String(clienteRuc || '').replace(/\D/g, '');
+        if (cli.length === 13 && !previo.vistoEn.includes(cli) &&
+            previo.vistoEn.length < this._TOPE_CLIENTES) {
+            previo.vistoEn.push(cli);
+        }
+
+        base[limpio] = previo;
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+        return true;
+    },
+
+    /**
+     * Registra varios de una. Una sola escritura, no una por comprobante.
+     *
+     * @param {Array<{rucEmisor?: string, ruc?: string, razonSocial?: string,
+     *                rucRazon?: string, nombre?: string}>} lista
+     * @param {string} clienteRuc
+     * @returns {Promise<number>} cuántos RUC distintos quedaron anotados.
+     */
+    async registrarLote(lista, clienteRuc) {
+        if (!Array.isArray(lista) || !lista.length) return 0;
+
+        const base = await this._todos();
+        const cli = String(clienteRuc || '').replace(/\D/g, '');
+        const nuevos = new Set();
+
+        lista.forEach((f) => {
+            // La tabla del portal da "RUC Razón social" pegados; el TXT los da
+            // separados. Se acepta cualquiera de las dos formas.
+            let ruc = String(f.rucEmisor || f.ruc || '').replace(/\D/g, '');
+            let nombre = String(f.razonSocial || f.nombre || '').trim();
+            if (ruc.length !== 13 && f.rucRazon) {
+                const m = String(f.rucRazon).match(/\b(\d{13})\b/);
+                if (m) {
+                    ruc = m[1];
+                    if (!nombre) nombre = String(f.rucRazon).replace(m[1], '').trim();
+                }
+            }
+            if (ruc.length !== 13) return;
+
+            const previo = base[ruc] || {
+                nombre: '', actividad: null, deducible: null, origen: null,
+                vistoEn: [], veces: 0, primero: Date.now()
+            };
+            if (!base[ruc]) nuevos.add(ruc);
+
+            const nom = nombre.replace(/^[\s\-·|]+/, '').trim();
+            if (nom.length > (previo.nombre || '').length) previo.nombre = nom.slice(0, 120);
+
+            previo.veces = (previo.veces || 0) + 1;
+            previo.ultimo = Date.now();
+            if (cli.length === 13 && !previo.vistoEn.includes(cli) &&
+                previo.vistoEn.length < this._TOPE_CLIENTES) {
+                previo.vistoEn.push(cli);
+            }
+            base[ruc] = previo;
+        });
+
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return 0; }
+        if (nuevos.size) console.log(`🏷️ [PROVEEDORES] ${nuevos.size} proveedor(es) nuevo(s) anotado(s).`);
+        return nuevos.size;
+    },
+
+    /** Lo que se sabe de un RUC, o null si nunca se lo vio. */
+    async saber(ruc) {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        const base = await this._todos();
+        return base[limpio] ? { ruc: limpio, ...base[limpio] } : null;
+    },
+
+    /**
+     * Clasifica un proveedor.
+     *
+     * **Una suposición nunca pisa lo que confirmó el contador.** El `origen` no
+     * es decoración: es la misma regla de todo el proyecto —nunca presentar
+     * como dato lo que es una suposición—. Sólo otra decisión del usuario puede
+     * cambiar una decisión del usuario.
+     *
+     * @param {string} ruc
+     * @param {{actividad?: string, deducible?: boolean, origen: string}} datos
+     *        origen: 'usuario' | 'catastro' | 'sugerido' | 'ia'
+     * @returns {Promise<boolean>} false si se rechazó por no pisar al usuario.
+     */
+    async clasificar(ruc, datos = {}) {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13) return false;
+
+        const base = await this._todos();
+        const previo = base[limpio];
+        if (!previo) {
+            console.warn(`🏷️ [PROVEEDORES] ${limpio} no está en la base: primero hay que verlo en una factura.`);
+            return false;
+        }
+
+        const origen = datos.origen || 'sugerido';
+        if (previo.origen === 'usuario' && origen !== 'usuario') {
+            console.warn(`🏷️ [PROVEEDORES] ${limpio} ya lo clasificó el contador. ` +
+                         `Una sugerencia (${origen}) no lo pisa.`);
+            return false;
+        }
+
+        if (datos.actividad !== undefined) previo.actividad = datos.actividad;
+        if (datos.deducible !== undefined) previo.deducible = datos.deducible;
+        previo.origen = origen;
+        previo.clasificado = Date.now();
+
+        base[limpio] = previo;
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+        return true;
+    },
+
+    /**
+     * Los que faltan clasificar, los más frecuentes primero.
+     *
+     * El orden importa: clasificar el proveedor que aparece en 200 facturas
+     * rinde doscientas veces más que el que aparece en una.
+     */
+    async pendientes(tope = 200) {
+        const base = await this._todos();
+        return Object.keys(base)
+            .filter((r) => base[r].origen === null || base[r].deducible === null)
+            .map((r) => ({ ruc: r, ...base[r] }))
+            .sort((a, b) => (b.veces || 0) - (a.veces || 0))
+            .slice(0, tope);
+    },
+
+    async resumen() {
+        const base = await this._todos();
+        const rucs = Object.keys(base);
+        const porOrigen = {};
+        rucs.forEach((r) => {
+            const o = base[r].origen || 'sin clasificar';
+            porOrigen[o] = (porOrigen[o] || 0) + 1;
+        });
+        return {
+            total: rucs.length,
+            clasificados: rucs.filter((r) => base[r].origen !== null).length,
+            porOrigen,
+            comprobantes: rucs.reduce((a, r) => a + (base[r].veces || 0), 0)
+        };
+    },
+
+    /** Texto para copiar y revisar afuera. Sin datos de los clientes. */
+    async exportar() {
+        const base = await this._todos();
+        const filas = Object.keys(base).sort((a, b) => (base[b].veces || 0) - (base[a].veces || 0));
+        return ['RUC\tRAZON_SOCIAL\tACTIVIDAD\tDEDUCIBLE\tORIGEN\tCOMPROBANTES\tCLIENTES']
+            .concat(filas.map((r) => {
+                const p = base[r];
+                return [r, p.nombre || '', p.actividad || '',
+                        p.deducible === null || p.deducible === undefined ? '' : (p.deducible ? 'SI' : 'NO'),
+                        p.origen || 'sin clasificar', p.veces || 0,
+                        (p.vistoEn || []).length].join('\t');
+            })).join('\n');
+    },
+
+    async olvidarTodo() {
+        try { await SafeStorage.remove(this._KEY); return true; } catch (e) { return false; }
+    }
+};
+
+/**
  * Deja constancia de compras cuya tarifa no se pudo llevar a un casillero.
  *
  * Dos casos distintos caen acá:

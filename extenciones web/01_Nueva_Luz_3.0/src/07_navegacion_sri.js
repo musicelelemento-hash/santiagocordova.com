@@ -582,6 +582,7 @@ const SriLoopHUD = {
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
+            '<button id="slh-proveedores" aria-label="Ver la base de proveedores" title="La base de proveedores: qué se aprendió y qué falta clasificar" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:rgba(192,132,252,0.16);color:#d8b4fe">🏷️</button>',
             '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
             '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
@@ -602,7 +603,8 @@ const SriLoopHUD = {
             '<div id="slh-cola-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
-            '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>'
+            '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
+            '<div id="slh-proveedores-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -702,7 +704,7 @@ const SriLoopHUD = {
         const soloUno = (cual) => {
             ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
              'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
-             'slh-ir-panel']
+             'slh-ir-panel', 'slh-proveedores-panel']
                 .filter((id) => id !== cual && id !== 'slh-plan')
                 .forEach((id) => { const p = el.querySelector('#' + id); if (p) p.style.display = 'none'; });
         };
@@ -777,6 +779,41 @@ const SriLoopHUD = {
                 console.log(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
             }
+        });
+
+        el.querySelector('#slh-proveedores').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-proveedores-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-proveedores-panel');
+            panel.style.display = 'block';
+            await this.pintarProveedores();
+        });
+
+        el.querySelector('#slh-proveedores-panel').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+
+            const copiar = ev.target.closest('#slh-prov-copiar');
+            if (copiar) {
+                const txt = await Proveedores.exportar();
+                try {
+                    await navigator.clipboard.writeText(txt);
+                    copiar.textContent = '✅ copiado';
+                    setTimeout(() => { copiar.textContent = '📋 Copiar la base'; }, 2500);
+                } catch (e) { console.log(txt); copiar.textContent = '⚠️ mirá la consola'; }
+                return;
+            }
+
+            // Clasificar a mano. El RUC va en el elemento; nada más — la misma
+            // regla que con las claves del SRI: nunca datos de más en el DOM.
+            const marca = ev.target.closest('[data-sc-prov]');
+            if (!marca) return;
+            const ruc = marca.getAttribute('data-sc-prov');
+            const deducible = marca.getAttribute('data-sc-ded') === 'si';
+            // origen 'usuario': lo decidió el contador, y a partir de acá
+            // ninguna sugerencia lo pisa.
+            await Proveedores.clasificar(ruc, { deducible, origen: 'usuario' });
+            await this.pintarProveedores();
         });
 
         // Discreto de verdad: medio transparente hasta que lo mirás.
@@ -1586,6 +1623,70 @@ const SriLoopHUD = {
     /**
      * La bitácora, para leerla acá en vez de copiarla a ciegas.
      */
+    /**
+     * La base de proveedores: qué se aprendió y qué falta.
+     *
+     * Los pendientes salen ordenados por cuántas veces apareció cada uno.
+     * Clasificar el proveedor que está en 200 facturas rinde doscientas veces
+     * más que el que está en una, y con 500 contribuyentes esa diferencia es
+     * la que hace que la base se llene sola en vez de nunca.
+     */
+    async pintarProveedores() {
+        const panel = document.getElementById('slh-proveedores-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        if (typeof Proveedores === 'undefined') {
+            panel.innerHTML = '<div style="opacity:0.7;font-size:11px">La base de proveedores no está cargada.</div>';
+            return;
+        }
+
+        const r = await Proveedores.resumen();
+        const faltan = await Proveedores.pendientes(40);
+
+        if (r.total === 0) {
+            panel.innerHTML =
+                '<div style="opacity:0.8;font-size:11px;line-height:1.55">' +
+                '🏷️ <b>La base está vacía.</b><br>' +
+                'Se llena sola: cada factura de compras que pasa por el bot deja anotado ' +
+                'a su proveedor. Corré una extracción y volvé.</div>';
+            return;
+        }
+
+        const cabecera =
+            '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">' +
+            `  <span style="font-size:11px;font-weight:800">🏷️ ${r.total} proveedores · ${r.comprobantes} comprobantes</span>` +
+            '  <button id="slh-prov-copiar" aria-label="Copiar la base de proveedores" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar la base</button>' +
+            '</div>' +
+            `<div style="font-size:10px;opacity:0.7;margin-bottom:8px">` +
+            Object.keys(r.porOrigen).map((o) => `${esc(o)}: <b>${r.porOrigen[o]}</b>`).join(' · ') +
+            '</div>';
+
+        if (!faltan.length) {
+            panel.innerHTML = cabecera +
+                '<div style="background:rgba(74,222,128,0.14);color:#86efac;border-radius:8px;padding:8px;font-size:11px">' +
+                '✅ No queda ninguno sin clasificar.</div>';
+            return;
+        }
+
+        const filas = faltan.map((p) => {
+            const nombre = p.nombre || '(sin nombre)';
+            return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
+                `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}">` +
+                `  <b>${esc(nombre)}</b><span style="opacity:0.55"> · ${p.veces} comp. · ${(p.vistoEn || []).length} cliente(s)</span></span>` +
+                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
+                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
+                '</div>';
+        }).join('');
+
+        panel.innerHTML = cabecera +
+            `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">Faltan clasificar <b>${faltan.length}</b>, los más frecuentes primero:</div>` +
+            filas +
+            '<div style="font-size:10px;opacity:0.6;margin-top:8px;line-height:1.5">' +
+            'Lo que marques queda como decisión tuya y ninguna sugerencia lo pisa. ' +
+            'Sin clasificar, la compra va donde va hoy — nunca al 502 por las dudas.</div>';
+    },
+
     /**
      * Los tres saltos que siempre se hacen a mano.
      *
