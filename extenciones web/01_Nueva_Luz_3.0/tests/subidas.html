@@ -103,6 +103,23 @@
   await chrome.storage.local.remove('sc_r2_credenciales');
 
   // ══ D · el informe nunca devuelve secretos ══════════════════════════════
+  sec('D2 · el diagnóstico también traduce el fallo');
+  // Era la única función que devolvía «Failed to fetch» pelado, y es JUSTAMENTE
+  // la herramienta que existe para explicar. Se detectó usándola de verdad.
+  const fetchReal = window.fetch;
+  window.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  const d = await diagnosticarSubida({
+    R2_UPLOAD_ENDPOINT: 'https://x.workers.dev',
+    R2_ACCOUNT_ID: 'cuenta', R2_ACCESS_KEY_ID: 'ak',
+    R2_SECRET_ACCESS_KEY: 'sk', R2_BUCKET_NAME: 'balde'
+  });
+  window.fetch = fetchReal;
+  const delWorker = (d.intentos || []).find(i => i.via === 'worker') || {};
+  push('el worker no devuelve «Failed to fetch» pelado',
+       delWorker.error === 'Failed to fetch', false);
+  push('sino que dice si el permiso está o no',
+       /permiso/.test(delWorker.error || ''), true);
+
   sec('D · el diagnóstico no filtra claves');
   await chrome.storage.local.set({ sc_r2_credenciales: { R2_SECRET_ACCESS_KEY: 'SECRETO-QUE-NO-DEBE-SALIR' } });
   const inf = await diagnosticarSubida({ R2_ACCOUNT_ID: 'cuenta', R2_BUCKET_NAME: 'balde' });

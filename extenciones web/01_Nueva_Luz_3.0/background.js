@@ -124,7 +124,7 @@ async function diagnosticarSubida(recibido) {
         informe.url = informe.url || `${config.R2_UPLOAD_ENDPOINT}/files/${key}`;
       }
     } catch (e) {
-      informe.intentos.push({ via: 'worker', url, error: e.message });
+      informe.intentos.push({ via: 'worker', url, error: porQueFalloElFetch(e, url) });
     }
   } else {
     informe.intentos.push({ via: 'worker', omitido: 'no hay R2_UPLOAD_ENDPOINT configurado' });
@@ -141,7 +141,10 @@ async function diagnosticarSubida(recibido) {
         informe.intentos.push({ via: 's3', ok: !!(r && r.ok), url: r && r.url });
         if (r && r.ok) { informe.ok = true; informe.via = 's3'; informe.url = r.url; }
       } catch (e) {
-        informe.intentos.push({ via: 's3', error: e.message });
+        informe.intentos.push({
+          via: 's3',
+          error: porQueFalloElFetch(e, `https://${config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/`)
+        });
       }
     } else {
       informe.intentos.push({ via: 's3', omitido: 'faltan credenciales de R2' });
