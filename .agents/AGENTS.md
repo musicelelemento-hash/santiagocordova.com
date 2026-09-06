@@ -363,6 +363,38 @@ por eso `exportar()` los saca en TSV: la base no es de la extensión de IVA, es
 del estudio. Cuando se arme el proyecto de tercera edad, la parte cara —saber a
 qué se dedica cada RUC— ya va a estar hecha y confirmada por el contador.
 
+### La cascada, construida el 06-sep-2026
+
+```
+1. lo que decidió el contador   → MANDA      gratis, instantáneo
+2. el catastro del SRI (CIIU)   → sugiere    gratis, en disco
+3. la IA                        → sugiere    cuesta y sale de casa
+```
+
+`Proveedores.sugerirDesdeIA()` pregunta **sólo por los que llegaron hasta ahí
+sin categoría**, los más frecuentes primero. Lo que confirme se guarda: al mes
+siguiente ese proveedor no cuesta nada. Con 500 contribuyentes los proveedores
+se repiten muchísimo, así que el gasto tiende a cero solo.
+
+**Qué sale de la máquina, y nada más:** el nombre del proveedor y su actividad
+pública del catastro. **No** sale el RUC del proveedor, **no** sale el RUC del
+cliente, **no** salen importes. Quien responde no puede armar el mapa comercial
+del estudio — que es exactamente por lo que se descartó la extensión de
+terceros. Probado en `tests/proveedores.html`.
+
+Sale por el **service worker**, no por el content script: la clave no tiene por
+qué estar dentro de la página del SRI, y un fetch cross-origin del content
+script está sujeto a CORS (la misma lección que la subida a R2).
+
+Categorías: las seis del anexo de gastos personales más `ninguna`. **`ninguna`
+es «no sé» y no se guarda** — una respuesta honesta no se convierte en dato.
+Una categoría que no esté en la lista se normaliza a `ninguna`: la IA no puede
+inventar categorías nuevas.
+
+La IA **nunca dice si algo es deducible**. Igual que el catastro: dice a qué se
+dedica el proveedor; si esa compra concreta da crédito tributario depende del
+gasto y lo decide el contador.
+
 ### Lo que falta
 
 - El **mapa CIIU → deducible**: criterio contable, lo pone el contador.

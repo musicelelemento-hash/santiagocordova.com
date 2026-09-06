@@ -257,6 +257,106 @@ async function subirComprobante({ key, base64, contentType, config: recibido }) 
   return { ok: false, error: motivos.join(' | '), motivos };
 }
 
+/**
+ * Le pregunta a la IA a qué categoría pertenece cada proveedor.
+ *
+ * QUÉ SALE DE ACÁ, y nada más: el **nombre** del proveedor y, si se conoce, su
+ * actividad según el catastro público del SRI. No sale el RUC del proveedor, no
+ * sale el RUC del cliente, no salen importes, no sale con quién opera nadie.
+ * El que responde no puede armar el mapa comercial del estudio.
+ *
+ * Y lo que vuelve es una SUGERENCIA. Se guarda con `origen: 'ia'` y, por la
+ * regla de la §7, no pisa nada que haya decidido el contador.
+ *
+ * @param {{nombres: string[], actividades: string[], modelo?: string}} msg
+ * @returns {Promise<{ok, categorias?: string[], error?: string}>}
+ */
+async function clasificarConIA({ nombres, actividades, modelo }) {
+  const g = await chrome.storage.local.get(['sc_ia_credenciales']);
+  const clave = (g.sc_ia_credenciales || {}).apiKey;
+  if (!clave) {
+    return { ok: false, error: 'No hay clave de IA guardada. Cargala en Ajustes.' };
+  }
+  if (!Array.isArray(nombres) || !nombres.length) {
+    return { ok: false, error: 'No se mandó ningún proveedor.' };
+  }
+
+  // Las seis del anexo de gastos personales del SRI, más «ninguna». Son las
+  // mismas que ya usa la extensión del anexo: el dato sirve para los tres
+  // proyectos, no sólo para el IVA.
+  const CATEGORIAS = ['vivienda', 'salud', 'educacion', 'alimentacion',
+                      'vestimenta', 'turismo', 'ninguna'];
+
+  const lista = nombres.map((n, i) => {
+    const act = (actividades && actividades[i]) || '';
+    return `${i + 1}. ${n}${act ? ' — actividad registrada: ' + act : ''}`;
+  }).join('\n');
+
+  const instruccion =
+    'Sos un asistente contable ecuatoriano. Para cada proveedor de la lista, decí a cuál de ' +
+    'estas categorías del anexo de gastos personales del SRI corresponde lo que vende:\n' +
+    CATEGORIAS.join(', ') + '.\n\n' +
+    'Reglas:\n' +
+    '- Usá "ninguna" si no encaja o si no estás seguro. Es preferible a adivinar.\n' +
+    '- No expliques nada. No agregues texto fuera del JSON.\n' +
+    '- Respondé SOLO un arreglo JSON de strings, uno por proveedor, en el mismo orden.\n\n' +
+    'Proveedores:\n' + lista;
+
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/' +
+              encodeURIComponent(modelo || 'gemini-2.5-flash') + ':generateContent';
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': clave },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: instruccion }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json' }
+      })
+    });
+  } catch (e) {
+    return { ok: false, error: porQueFalloElFetch(e, url) };
+  }
+
+  const cuerpo = await res.text().catch(() => '');
+  if (!res.ok) {
+    // El error del proveedor se devuelve tal cual: si el modelo no existe para
+    // esa clave, o la cuota se acabó, hay que poder leerlo y arreglarlo.
+    let detalle = cuerpo.slice(0, 300);
+    try { detalle = JSON.parse(cuerpo).error.message; } catch (e) { /* texto pelado */ }
+    return { ok: false, error: `HTTP ${res.status} · ${detalle}` };
+  }
+
+  let texto = '';
+  try {
+    texto = JSON.parse(cuerpo).candidates[0].content.parts[0].text;
+  } catch (e) {
+    return { ok: false, error: 'La respuesta no tiene el formato esperado.' };
+  }
+
+  // Por las dudas viene envuelto en un bloque de código.
+  const limpio = texto.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+  let categorias;
+  try {
+    categorias = JSON.parse(limpio);
+  } catch (e) {
+    return { ok: false, error: 'La IA no devolvió JSON: ' + limpio.slice(0, 160) };
+  }
+  if (!Array.isArray(categorias)) {
+    return { ok: false, error: 'La IA devolvió algo que no es una lista.' };
+  }
+
+  // Nunca se acepta una categoría inventada: lo que no está en la lista es
+  // «ninguna», que es lo mismo que decir «no sé».
+  const normal = categorias.map((c) => {
+    const v = String(c || '').toLowerCase().trim();
+    return CATEGORIAS.includes(v) ? v : 'ninguna';
+  });
+
+  return { ok: true, categorias: normal, pedidos: nombres.length, devueltos: categorias.length };
+}
+
 /** Petición genérica cross-origin por cuenta del content script. */
 async function peticion({ url, opciones }) {
   try {
@@ -321,6 +421,13 @@ chrome.runtime.onMessage.addListener((msg, sender, responder) => {
 
   if (msg.tipo === "SC_DIAGNOSTICO_SUBIDA") {
     diagnosticarSubida(msg.config || {})
+      .then(responder)
+      .catch((e) => responder({ ok: false, error: e.message }));
+    return true;
+  }
+
+  if (msg.tipo === "SC_CLASIFICAR_IA") {
+    clasificarConIA(msg)
       .then(responder)
       .catch((e) => responder({ ok: false, error: e.message }));
     return true;

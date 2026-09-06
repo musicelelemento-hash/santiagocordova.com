@@ -10,7 +10,13 @@
   console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
   window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
   window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
-  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+  // Se guarda lo que se le manda al service worker: la prueba que importa es
+  // QUÉ SALE de la máquina, no qué contesta el proveedor de IA.
+  window.__ia = { ok: true, categorias: [] };
+  window.__ultimoAlSW = null;
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},
+    sendMessage:(m)=>{ window.__ultimoAlSW = m;
+      return Promise.resolve(m && m.tipo==='SC_CLASIFICAR_IA' ? window.__ia : {ok:false}); },id:'s'},
    storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
 </script>
 <script src="../shared_config.js"></script>
@@ -137,6 +143,49 @@
        /[Ss]e llena sola/.test(panel.innerHTML), true);
 
   document.getElementById('sri-loop-hud').remove();
+
+  // ══ F · la IA, el último escalón ════════════════════════════════════════
+  sec('F · la IA sugiere, y sólo por lo que nadie resolvió');
+  await Proveedores.olvidarTodo();
+  await Proveedores.registrarLote([
+    { rucEmisor: A, razonSocial: 'FARMACIA SANA' },
+    { rucEmisor: A, razonSocial: 'FARMACIA SANA' },
+    { rucEmisor: B, razonSocial: 'YA LO RESOLVIÓ EL CONTADOR' }
+  ], C1);
+  await Proveedores.clasificar(B, { deducible: true, origen: 'usuario' });
+
+  window.__ia = { ok: true, categorias: ['salud'] };
+  let r = await Proveedores.sugerirDesdeIA();
+  push('sólo pregunta por el que quedó sin resolver', r.preguntados, 1);
+  push('y guarda la categoría',   (await Proveedores.saber(A)).categoria, 'salud');
+  push('marcada como sugerencia', (await Proveedores.saber(A)).origen, 'ia');
+  push('sin tocar al que ya resolvió el contador',
+       (await Proveedores.saber(B)).origen, 'usuario');
+
+  // ── LO QUE SALE DE LA MÁQUINA ──────────────────────────────────────────
+  // Esto es lo que hay que cuidar: quien responde no puede armar el mapa
+  // comercial del estudio.
+  const enviado = JSON.stringify(window.__ultimoAlSW);
+  push('sale el nombre del proveedor',   /FARMACIA SANA/.test(enviado), true);
+  push('NO sale el RUC del proveedor',   enviado.includes(A), false);
+  push('NO sale el RUC del cliente',     enviado.includes(C1), false);
+  push('ni ningún importe',              /monto|importe|total/i.test(enviado), false);
+
+  // «ninguna» es «no sé», y un «no sé» no se guarda como si fuera un dato.
+  await Proveedores.olvidarTodo();
+  await Proveedores.registrarLote([{ rucEmisor: A, razonSocial: 'ALGO RARO' }], C1);
+  window.__ia = { ok: true, categorias: ['ninguna'] };
+  r = await Proveedores.sugerirDesdeIA();
+  push('un «ninguna» no se guarda',      (await Proveedores.saber(A)).categoria, undefined);
+  push('y no cuenta como sugerido',      r.sugeridos, 0);
+
+  // Si la IA falla, se dice por qué y no se inventa nada.
+  window.__ia = { ok: false, error: 'HTTP 429 · cuota agotada' };
+  r = await Proveedores.sugerirDesdeIA();
+  push('el error del proveedor se devuelve tal cual', r.error, 'HTTP 429 · cuota agotada');
+  push('y no se clasificó nada',         r.sugeridos, 0);
+
+  await Proveedores.olvidarTodo();
 
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =

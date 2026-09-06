@@ -1634,6 +1634,81 @@ const Proveedores = {
     },
 
     /**
+     * Le pide a la IA la categoría de los proveedores que quedaron sin nada.
+     *
+     * **Es el último escalón de la cascada**, y a propósito:
+     *
+     *   1. lo que decidió el contador  → manda, gratis, instantáneo
+     *   2. el catastro del SRI         → sugiere, gratis, en disco
+     *   3. la IA                       → sugiere, cuesta y sale de casa
+     *
+     * Por eso sólo se le pregunta por los que llegaron hasta acá sin categoría.
+     * Y lo que ella confirme se guarda: al mes siguiente ese proveedor ya no
+     * cuesta nada. Con 500 contribuyentes los proveedores se repiten muchísimo,
+     * así que el gasto tiende a cero solo.
+     *
+     * Sale por el service worker: la clave no tiene por qué estar dentro de la
+     * página del SRI, y un fetch del content script está sujeto a CORS.
+     *
+     * @param {{tope?: number, modelo?: string}} opciones
+     * @returns {Promise<{preguntados, sugeridos, error?: string}>}
+     */
+    async sugerirDesdeIA(opciones = {}) {
+        const { tope = 40, modelo } = opciones;
+        const informe = { preguntados: 0, sugeridos: 0 };
+
+        const base = await this._todos();
+        // Sólo los que nadie pudo resolver antes, y los más frecuentes
+        // primero: si hay que gastar, que sea en los que más rinden.
+        const candidatos = Object.keys(base)
+            .filter((r) => base[r].origen !== 'usuario' && !base[r].categoria)
+            .sort((a, b) => (base[b].veces || 0) - (base[a].veces || 0))
+            .slice(0, tope);
+
+        if (!candidatos.length) return informe;
+
+        // Lo ÚNICO que sale: el nombre y la actividad pública del catastro.
+        // Ni el RUC del proveedor, ni el del cliente, ni un importe.
+        const nombres = candidatos.map((r) => base[r].nombre || '(sin nombre)');
+        const actividades = candidatos.map((r) => base[r].actividad || '');
+        informe.preguntados = candidatos.length;
+
+        let r;
+        try {
+            r = await chrome.runtime.sendMessage({
+                tipo: 'SC_CLASIFICAR_IA', nombres, actividades, modelo
+            });
+        } catch (e) {
+            informe.error = 'No se pudo hablar con el service worker: ' + e.message;
+            return informe;
+        }
+
+        if (!r || !r.ok) {
+            informe.error = (r && r.error) || 'La IA no contestó.';
+            console.warn('🤖 [IA] ' + informe.error);
+            return informe;
+        }
+
+        let toco = false;
+        candidatos.forEach((ruc, i) => {
+            const cat = r.categorias[i];
+            // «ninguna» es una respuesta honesta —«no sé»— y no se guarda como
+            // si fuera una clasificación.
+            if (!cat || cat === 'ninguna') return;
+            base[ruc].categoria = cat;
+            base[ruc].origen = 'ia';
+            base[ruc].clasificado = Date.now();
+            informe.sugeridos++;
+            toco = true;
+        });
+
+        if (toco) { try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { /* nada */ } }
+        console.log(`🤖 [IA] ${informe.sugeridos} de ${informe.preguntados} clasificados. ` +
+                    'Son SUGERENCIAS: quedan marcadas como tales hasta que las confirmes.');
+        return informe;
+    },
+
+    /**
      * Completa la actividad de los proveedores con lo que dice el catastro.
      *
      * **Sólo la actividad.** El catastro dice a qué se dedica un RUC; NO dice

@@ -206,8 +206,16 @@ footer {
     </div>
 
     <div class="campo">
+        <label for="idR2">Access Key ID de R2</label>
+        <span class="para-que">Al rotar el token de Cloudflare cambian los dos: el ID y la clave.</span>
+        <div class="estado" id="estadoIdR2">—</div>
+        <input type="text" id="idR2" autocomplete="off" spellcheck="false"
+               placeholder="pegá el Access Key ID acá">
+    </div>
+
+    <div class="campo">
         <label for="claveR2">Clave secreta de R2</label>
-        <span class="para-que">Para subir los comprobantes a la nube.</span>
+        <span class="para-que">Se muestra una sola vez en Cloudflare. Si la perdés, hay que crear otro token.</span>
         <div class="estado" id="estadoR2">—</div>
         <input type="password" id="claveR2" autocomplete="off" spellcheck="false"
                placeholder="pegá la clave acá">

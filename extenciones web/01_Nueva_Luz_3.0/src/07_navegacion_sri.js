@@ -823,6 +823,25 @@ const SriLoopHUD = {
         el.querySelector('#slh-proveedores-panel').addEventListener('click', async (ev) => {
             ev.stopPropagation();
 
+            const ia = ev.target.closest('#slh-prov-ia');
+            if (ia) {
+                const antes = ia.textContent;
+                ia.textContent = '⏳ preguntando…';
+                const r = await Proveedores.sugerirDesdeIA();
+                await this.pintarProveedores();
+                const nuevo = document.getElementById('slh-prov-ia');
+                if (nuevo) {
+                    // El error del proveedor se muestra tal cual: si el modelo
+                    // no existe o se acabó la cuota, hay que poder leerlo.
+                    nuevo.textContent = r.error ? '⚠️ falló'
+                                      : (r.sugeridos ? `✅ ${r.sugeridos}` : '🤖 sin datos');
+                    nuevo.title = r.error || antes;
+                    if (r.error) this._aviso('🤖 La IA no pudo', r.error, 9000);
+                    setTimeout(() => { nuevo.textContent = antes; }, 3500);
+                }
+                return;
+            }
+
             const cat = ev.target.closest('#slh-prov-catastro');
             if (cat) {
                 const antes = cat.textContent;
@@ -1936,6 +1955,7 @@ const SriLoopHUD = {
             `  <span style="font-size:11px;font-weight:800">🏷️ ${r.total} proveedores · ${r.comprobantes} comprobantes</span>` +
             '  <span style="display:flex;gap:6px">' +
             '    <button id="slh-prov-catastro" aria-label="Sugerir la actividad de cada proveedor desde el catastro del SRI" title="Completa la actividad de cada RUC con el catastro del SRI. Sugiere, no decide." style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(56,189,248,0.16);color:#7dd3fc;font-size:11px;font-weight:800;cursor:pointer">🗂️ Catastro</button>' +
+            '    <button id="slh-prov-ia" aria-label="Preguntarle a la IA la categoría de los que quedaron sin clasificar" title="Le pregunta a la IA SOLO por los que ni el contador ni el catastro resolvieron. Sale el nombre y la actividad pública; nunca el RUC ni los importes." style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(192,132,252,0.16);color:#d8b4fe;font-size:11px;font-weight:800;cursor:pointer">🤖 IA</button>' +
             '    <button id="slh-prov-copiar" aria-label="Copiar la base de proveedores" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar</button>' +
             '  </span>' +
             '</div>' +
@@ -1964,12 +1984,17 @@ const SriLoopHUD = {
             // La actividad que sugiere el catastro: no decide, pero ahorra el
             // 90% del trabajo de clasificar a mano.
             const act = p.actividad
-                ? `<span style="opacity:0.7"> · ${esc(String(p.actividad).slice(0, 58))}</span>` : '';
+                ? `<span style="opacity:0.7"> · ${esc(String(p.actividad).slice(0, 48))}</span>` : '';
+            // La categoría lleva de dónde salió pegada al lado. Una sugerencia
+            // de la IA no puede parecer lo mismo que algo que confirmó alguien.
+            const cat = p.categoria
+                ? `<span style="background:rgba(192,132,252,0.18);color:#d8b4fe;border-radius:5px;padding:1px 5px;margin-left:4px;font-size:10px">${esc(p.categoria)}${p.origen === 'ia' ? ' · IA' : ''}</span>`
+                : '';
             const bandera = p.estadoSri
                 ? `<span style="color:#fca5a5;font-weight:800"> · ${esc(p.estadoSri)}</span>` : '';
             return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
                 `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}${p.actividad ? ' · ' + esc(p.actividad) : ''}">` +
-                `  <b>${esc(nombre)}</b>${bandera}<span style="opacity:0.55"> · ${p.veces} comp.</span>${act}</span>` +
+                `  <b>${esc(nombre)}</b>${bandera}${cat}<span style="opacity:0.55"> · ${p.veces} comp.</span>${act}</span>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
                 '</div>';

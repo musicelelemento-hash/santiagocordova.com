@@ -39,6 +39,12 @@ async function pintarEstado() {
     $('estadoIa').dataset.hay = ia ? 'si' : 'no';
     $('estadoR2').textContent = comoTermina(r2);
     $('estadoR2').dataset.hay = r2 ? 'si' : 'no';
+
+    // El Access Key ID no es secreto —viaja en cada petición firmada—, así que
+    // se muestra entero: sirve para comprobar de un vistazo que quedó el nuevo.
+    const id = (g[CLAVE_R2] || {}).R2_ACCESS_KEY_ID;
+    $('estadoIdR2').textContent = id || 'no hay ninguno guardado (se usa el del código)';
+    $('estadoIdR2').dataset.hay = id ? 'si' : 'no';
 }
 
 function avisar(texto) {
@@ -62,9 +68,14 @@ async function guardar() {
     if (campoIa.value.trim()) {
         cambios[CLAVE_IA] = { apiKey: campoIa.value.trim(), cuando: Date.now() };
     }
-    if (campoR2.value.trim()) {
+    // Los dos de R2 van juntos en la misma llave: rotar cambia ambos.
+    const campoIdR2 = $('idR2');
+    if (campoR2.value.trim() || campoIdR2.value.trim()) {
         const previo = (await chrome.storage.local.get([CLAVE_R2]))[CLAVE_R2] || {};
-        cambios[CLAVE_R2] = { ...previo, R2_SECRET_ACCESS_KEY: campoR2.value.trim(), cuando: Date.now() };
+        const nuevo = { ...previo, cuando: Date.now() };
+        if (campoR2.value.trim()) nuevo.R2_SECRET_ACCESS_KEY = campoR2.value.trim();
+        if (campoIdR2.value.trim()) nuevo.R2_ACCESS_KEY_ID = campoIdR2.value.trim();
+        cambios[CLAVE_R2] = nuevo;
     }
 
     if (!Object.keys(cambios).length) { avisar('No escribiste ninguna clave'); return; }
@@ -73,6 +84,7 @@ async function guardar() {
     // Que no quede en pantalla ni en el DOM más de lo necesario.
     campoIa.value = '';
     campoR2.value = '';
+    campoIdR2.value = '';
     await pintarEstado();
     avisar('🔑 Guardada fuera del código');
 }
@@ -81,6 +93,7 @@ async function borrar() {
     await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2]);
     $('claveIa').value = '';
     $('claveR2').value = '';
+    $('idR2').value = '';
     await pintarEstado();
     avisar('🗑️ Borradas del almacén');
 }
@@ -134,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Enter en cualquiera de los dos campos guarda: es lo que espera cualquiera
     // que acaba de pegar una clave.
-    ['claveIa', 'claveR2'].forEach((id) => {
+    ['claveIa', 'claveR2', 'idR2'].forEach((id) => {
         $(id).addEventListener('keydown', (ev) => { if (ev.key === 'Enter') guardar(); });
     });
 
