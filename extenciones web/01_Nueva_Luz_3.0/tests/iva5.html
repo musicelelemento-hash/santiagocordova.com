@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>El corte de tarifas: 0 / 5 / plena</title>
+<!doctype html><meta charset="utf-8"><title>Tarifas de IVA: cociente y XML</title>
 <body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
 <h3>Las compras al 5% van al 540/550, no al 500 junto con el 15%</h3>
 <pre id="out">…</pre>
@@ -118,6 +118,88 @@
   push('una factura dudosa alcanza para frenar',
        await frenarSiHayIvaSinUbicar('prueba'), true);
   await anotarIvaSinUbicar([], []);
+
+  // ══ G · el XML: la tarifa dicha, no deducida ════════════════════════════
+  sec('G · el XML autorizado del SRI');
+
+  const XML = (bloques, codDoc) => `<?xml version="1.0" encoding="UTF-8"?>
+<factura id="comprobante" version="1.1.0">
+  <infoTributaria>
+    <razonSocial>TECNOLOGIAS ECUADOR S.A.</razonSocial>
+    <ruc>1792183578001</ruc>
+    <codDoc>${codDoc||'01'}</codDoc>
+    <claveAcceso>1509202601179218357800110010010000154201234567818</claveAcceso>
+  </infoTributaria>
+  <infoFactura>
+    <fechaEmision>15/09/2026</fechaEmision>
+    <totalSinImpuestos>${bloques.reduce((a,b)=>a+b[1],0).toFixed(2)}</totalSinImpuestos>
+    <totalConImpuestos>
+      ${bloques.map(([cp,base,val])=>`<totalImpuesto>
+        <codigo>2</codigo><codigoPorcentaje>${cp}</codigoPorcentaje>
+        <baseImponible>${base.toFixed(2)}</baseImponible><valor>${val.toFixed(2)}</valor>
+      </totalImpuesto>`).join('')}
+    </totalConImpuestos>
+    <importeTotal>${bloques.reduce((a,b)=>a+b[1]+b[2],0).toFixed(2)}</importeTotal>
+  </infoFactura>
+</factura>`;
+
+  // El ejemplo del informe: $1000 al 15% y $200 al 0% en la misma factura.
+  let x = parsearXmlComprobante(XML([['4',1000,150],['0',200,0]]));
+  push('lee la base del 15%',        x.porTarifa['15'], {base:1000, iva:150});
+  push('y la del 0% por separado',   x.porTarifa['0'],  {base:200, iva:0});
+  push('con el RUC del emisor',      x.rucEmisor, '1792183578001');
+  push('y no la toma por nota de crédito', x.esNotaCredito, false);
+
+  // codDoc 04 = nota de crédito: hay que restar, no sumar.
+  push('codDoc 04 es nota de crédito',
+       parsearXmlComprobante(XML([['4',100,15]],'04')).esNotaCredito, true);
+
+  // El 5% viene dicho por el emisor, no deducido.
+  x = parsearXmlComprobante(XML([['5',500,25]]));
+  push('el codigoPorcentaje 5 es tarifa 5%', x.porTarifa['5'], {base:500, iva:25});
+
+  // ── EL CASO QUE JUSTIFICA TODO ESTO ────────────────────────────────────
+  // $100 con un tercio al 15% y el resto al 0%: el cociente da 4,95% y no se
+  // puede distinguir de una factura del 5%. El XML lo dice exacto.
+  const mezclada = XML([['4',33,4.95],['0',67,0]]);
+  // Y acá está la trampa, medida y no supuesta: el cociente la lee como 5%.
+  // No es un bug que haya que "arreglar" — rechazar todo lo que caiga en 5%
+  // frenaría cada lote con compras legítimas al 5%. Es el límite del método, y
+  // la razón por la que hace falta el XML.
+  push('el cociente la confunde con una del 5%',
+       clasificarTarifaIva(100, 4.95).tarifa, 5);
+  x = parsearXmlComprobante(mezclada);
+  push('el XML sí: $33 al 15%',   x.porTarifa['15'], {base:33, iva:4.95});
+  push('y $67 al 0%',             x.porTarifa['0'],  {base:67, iva:0});
+
+  // Y repartido en el resumen cae donde corresponde, sin quedar dudosa.
+  const vacio = {iva0:{cantidad:0,total:0,baseImponible:0,montoIva:0},
+                 iva5:{cantidad:0,total:0,baseImponible:0,montoIva:0},
+                 iva15:{cantidad:0,total:0,baseImponible:0,montoIva:0}};
+  push('se reparte en los baldes sin ambigüedad', repartirXmlEnResumen(vacio, x), true);
+  push('la parte gravada al balde de tarifa plena', vacio.iva15.baseImponible, 33);
+  push('y la exenta al de 0%',                      vacio.iva0.baseImponible, 67);
+
+  // La respuesta de autorización trae el comprobante envuelto en un CDATA.
+  const envuelto = '<autorizacion><estado>AUTORIZADO</estado><comprobante><![CDATA[' +
+                   XML([['4',100,15]]) + ']]></comprobante></autorizacion>';
+  push('desenvuelve el CDATA de la autorización',
+       parsearXmlComprobante(envuelto).porTarifa['15'], {base:100, iva:15});
+
+  // Un código nuevo no se reparte a ojo.
+  x = parsearXmlComprobante(XML([['4',100,15],['99',50,4]]));
+  push('un codigoPorcentaje desconocido se anota', x.tarifasDesconocidas, ['99']);
+  push('y su plata NO se mete en ningún balde',    x.porTarifa['15'], {base:100, iva:15});
+  push('repartirlo avisa que quedó algo afuera',
+       repartirXmlEnResumen({iva0:{baseImponible:0,total:0},iva5:{baseImponible:0,total:0},
+                             iva15:{baseImponible:0,total:0}}, x), false);
+
+  // El ICE (código 3) no es IVA y no debe contaminar las bases.
+  x = parsearXmlComprobante(XML([['4',100,15]]).replace('<codigo>2</codigo>','<codigo>3</codigo>'));
+  push('el ICE no entra como IVA', Object.keys(x.porTarifa).length, 0);
+
+  push('un texto que no es XML no revienta', parsearXmlComprobante('hola'), null);
+  push('ni una cadena vacía',                parsearXmlComprobante(''),     null);
 
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;

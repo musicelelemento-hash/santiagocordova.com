@@ -463,8 +463,17 @@ Devuelve **tres** respuestas, no dos, y la tercera es `null` = «no sé»:
 | cualquier otro | `null` | 500/510 **y anotada para frenar** |
 
 **El cociente no distingue una factura al 5% de una mezclada.** Una de $100 con
-un tercio al 15% y el resto al 0% da 4,95%: idéntica a una del 5%. Eso solo lo
-resuelve el detalle por línea del XML del comprobante, que se baja por su clave de acceso — pendiente de confirmar el endpoint contra una traza real. Por eso:
+un tercio al 15% y el resto al 0% da 4,95%, y el clasificador la lee como
+**5%** — no la marca como dudosa, la confunde. Está medido en el banco, no
+supuesto.
+
+No es un bug que haya que «arreglar»: rechazar todo lo que caiga en 5% frenaría
+cada lote con compras legítimas al 5%. Es el límite del método, y la razón por
+la que hace falta el XML (§11).
+
+En plata el daño es chico —el crédito sale $5,00 donde correspondían $4,95—
+pero las **bases** quedan mal repartidas, y eso sí se cruza contra el ATS. Por
+eso:
 
 - **El 8% de feriados queda AFUERA de la lista a propósito.** Existe, pero cae
   justo en la zona donde una mezclada produce ese cociente. Preferimos que una
@@ -494,12 +503,31 @@ seis puntos donde ya se borraba `declaration_synced_flag` (arranque de
 declaración, siguiente cliente, reset total) — si quedara pegada, el freno de
 un cliente bloquearía al próximo.
 
-> **Los `id` del 540 y el 550 NO están confirmados en la Biblia.** No se
-> cablearon en el `fieldMap`: se buscan por número de casillero con el XPath
-> que ya usa el resto del formulario. Si no aparecen, la plata **no** se manda
-> al 500 por las dudas — se anota y se frena. Cuando llegue la evidencia,
-> agregá la entrada a la Biblia y el `id` al `fieldMap` de
-> `05_llenado_formulario.js`. Lo mismo vale para el 502 y el 512.
+> **El 540 y el 550 NO aparecen en el formulario.** Verificado por el usuario
+> el 05-sep-2026 mirando la pantalla real. No se sabe si es porque no existen,
+> porque se llaman distinto, o porque el portal solo los muestra en ciertos
+> períodos u obligaciones.
+>
+> **No se cablearon en el `fieldMap`** y no se van a cablear por suposición. Se
+> buscan por número de casillero con el XPath que ya usa el resto del
+> formulario; si no aparecen, la plata **no** se manda al 500 por las dudas —
+> se anota y se frena. Lo mismo vale para el 502 y el 512.
+
+#### Cómo se sale de la duda: `sriMapaCasilleros()`
+
+Parado en el formulario de IVA, en la consola del content script:
+
+```js
+sriMapaCasilleros({ copiar: true })
+```
+
+Lista **todos** los casilleros que el formulario tiene de verdad —número, `id`
+real, rótulo, valor y si es editable—, ordenados, y deja la tabla en Markdown
+en el portapapeles lista para pegar en la Biblia. Al final avisa si encontró
+algo del 5% o del 502/512.
+
+Con esa salida se cierran de una sola vez el 540/550, el 502/512 y el resto del
+`fieldMap`. Es el único camino que no viola la §5b.
 
 Banco de pruebas: `extenciones web/01_Nueva_Luz_3.0/tests/iva5.html`
 (30 comprobaciones, todas en verde el 05-sep-2026). Se sirve con la
@@ -591,3 +619,117 @@ contra el servidor de su autor, o sea que ese tercero vería los RUC de los
 proveedores de todos los clientes del estudio — con quién opera cada
 contribuyente. Teniendo el catastro en disco propio, no hay motivo para mandar
 eso afuera. Descartada.
+
+---
+
+## 11. El XML del comprobante — la tarifa dicha, no deducida
+
+> **Estado**: parser construido y probado. **Falta el endpoint de descarga.**
+
+### Por qué
+
+El cociente IVA/base deduce la tarifa cuando la factura es de una sola tarifa.
+Cuando trae líneas mezcladas no puede: $100 con un tercio al 15% da 4,95% y se
+lee como 5% (§9a). El XML no deduce nada — trae la base y el IVA **separados
+por tarifa**, tal como los declaró quien emitió.
+
+### Lo que ya está
+
+`parsearXmlComprobante(xmlTexto)` en `04_extraccion_datos.js`. Acepta el
+comprobante suelto (`<factura>`, `<notaCredito>`) y también la respuesta de
+autorización, que lo trae envuelto en un CDATA. Devuelve:
+
+```js
+{ claveAcceso, rucEmisor, razonSocial, codDoc, esNotaCredito, fechaEmision,
+  porTarifa: { '15': {base, iva}, '0': {base, iva}, '5': {…} },
+  totalSinImpuestos, importeTotal, tarifasDesconocidas: [] }
+```
+
+`repartirXmlEnResumen(resumen, xml)` lo vuelca en los baldes 0 / 5 / plena y
+devuelve `false` si el XML traía un `codigoPorcentaje` que no se reconoce —
+que **no se reparte a ojo**, se anota.
+
+Desde la consola: `sriLeerXml(texto)`.
+
+**Códigos de `<codigoPorcentaje>`** (esquema de comprobantes electrónicos):
+
+| Código | Tarifa | | Código | Tarifa |
+| :---: | :--- | :--- | :---: | :--- |
+| `0` | 0% | | `5` | **5%** |
+| `2` | 12% | | `6` | no objeto de IVA |
+| `3` | 14% | | `7` | exento |
+| `4` | 15% | | `10` | 15% |
+
+El `6` y el `7` **no son «tarifa cero»**: son transferencias que no gravan. Van
+al 507/517 igual que el 0% porque el formulario no los separa, pero se cuentan
+aparte por si hace falta. `<codigo>` `2` es IVA; `3` es ICE y no debe tocar
+las bases de IVA (probado).
+
+`<codDoc>`: `01` factura · `04` nota de crédito · `05` nota de débito ·
+`03` liquidación de compra · `07` comprobante de retención.
+
+### Lo que falta: de dónde se baja
+
+El TXT de recibidos **ya trae la `CLAVE_ACCESO` de cada comprobante** (Biblia,
+columnas del TXT), así que la lista de qué pedir está resuelta. Lo que no está
+confirmado es el endpoint que devuelve el XML.
+
+Dos caminos, ninguno con evidencia todavía:
+
+1. **El enlace de la propia página de recibidos.** La fila de la tabla tiene un
+   control para bajar el comprobante. Es el camino preferido: usa la sesión que
+   ya está abierta y el mismo origen. Falta la traza de Burp de ese click.
+2. **El servicio público de autorización** (`AutorizacionComprobantesOffline`,
+   SOAP, sobre `cel.sri.gob.ec`). Es otro origen: necesitaría `host_permissions`
+   y salir por el service worker, no por el content script.
+
+> **No inventar el endpoint.** Vale la §5b: mientras no haya traza, el parser
+> queda listo y sin conectar. Una petición mal armada contra el SRI, repetida
+> por cada factura de 27 clientes, es la clase de cosa que termina en un bloqueo
+> del WAF.
+
+### Cuándo conviene bajarlo — y cuándo no
+
+No hace falta un XML por factura. El cociente resuelve la gran mayoría solo.
+El XML se pide para las pocas que lo necesitan:
+
+- las que quedaron **sin tarifa reconocible** (`resumen.ambiguas`),
+- las que el cociente leyó como **5%**, para confirmar que no son mezcladas,
+- y las candidatas a **activo fijo**, donde además se quiere ver *qué* se compró.
+
+Con eso son unas pocas peticiones por cliente, no 27.
+
+---
+
+## 12. Sobre el informe técnico del 05-sep-2026
+
+Llegó un documento externo («Especificación Técnica de Automatización:
+Formulario 104 de IVA»). **Tiene partes correctas y partes equivocadas, y se
+contradice a sí mismo.** Queda anotado para que nadie lo tome como fuente.
+
+### Lo que sí sirve
+
+- La estructura del XML: `totalConImpuestos/totalImpuesto` con `codigo`,
+  `codigoPorcentaje`, `baseImponible` y `valor`. Coincide con lo que ya lee el
+  modal de notas de crédito.
+- `codDoc` `01` factura / `04` nota de crédito.
+- La idea de tomar `<baseImponible>` y `<valor>` en vez de recalcular el
+  impuesto, para no arrastrar redondeos.
+
+### Lo que NO hay que copiar
+
+| Dice el informe | Qué pasa |
+| :--- | :--- |
+| `411` = «Ventas Locales Tarifa 0%» (en el código Python) | **Se contradice con su propia tabla**, que pone 411 = ventas netas 15%. Lo confirmado en el DOM es `411 → concepto460`, ventas tarifa ≠ 0% neto. |
+| `503 / 513 / 523` para compras sin derecho a crédito | Se contradice con su propia tabla, que dice `502 / 512 / 522`. |
+| `553` factor de proporcionalidad · `554` crédito aplicable | Lo confirmado en el DOM es **`564`** (`concepto2130`, crédito según factor) y **`565`** (`concepto1276`, IVA no considerado como crédito). |
+| `607` = arrastre de retenciones | Lo confirmado es **`606`** (`concepto2170`). El `605` sí coincide. |
+| `429` = IVA de ventas 15% | Lo confirmado son `421` (`concepto470`), `422` activo fijo y `425` otros. |
+| factor = `(411+412+415+416+417+418)/419` | Mete el `415`, que su propia tabla define como ventas 0% **sin** derecho a crédito. Por definición no va en el numerador. |
+| «multa de USD 31.25» | Cifra suelta, sin respaldo. |
+
+**Regla**: ese documento describe una versión del formulario que no es la que
+tenemos delante. Ningún casillero de ahí entra al `fieldMap` sin pasar antes
+por `sriMapaCasilleros()` y por la Biblia.
+
+

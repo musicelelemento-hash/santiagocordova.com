@@ -898,6 +898,145 @@ async function esperarTabla() {
 
 const TIPO_COMPROBANTE = { factura: '1', notaCredito: '3', retencion: '6' };
 
+// ── El XML autorizado: la tarifa dicha, no deducida ───────────────────────
+// `codigoPorcentaje` del esquema de comprobantes electrónicos. Es lo que
+// declaró quien emitió, así que acá no se adivina nada.
+//   0 = 0%   ·  2 = 12%  ·  3 = 14%  ·  4 = 15%  ·  5 = 5%
+//   6 = no objeto de IVA ·  7 = exento ·  8 = IVA diferenciado ·  10 = 15%
+//
+// El 6 y el 7 NO son «tarifa cero»: son transferencias que no gravan. Van al
+// 507/517 igual que el 0% porque el formulario no los separa, pero se cuentan
+// aparte por si algún día hace falta.
+const CODIGO_PORCENTAJE_IVA = {
+    '0': 0, '2': 12, '3': 14, '4': 15, '5': 5, '6': 0, '7': 0, '10': 15
+};
+
+/**
+ * Lee un comprobante electrónico del SRI y devuelve la base y el IVA
+ * SEPARADOS POR TARIFA.
+ *
+ * Esto es lo que el cociente IVA/base no puede hacer. Una factura de $100 con
+ * un tercio al 15% y el resto al 0% da un cociente de 4,95%, idéntico al de
+ * una del 5%: desde la tabla de recibidos las dos se ven igual. El XML dice
+ * cuánto va en cada tarifa, línea por línea, y ahí se termina la duda.
+ *
+ * Acepta tanto el comprobante suelto (`<factura>`, `<notaCredito>`) como la
+ * respuesta de autorización que lo trae envuelto en un CDATA.
+ *
+ * @param {string} xmlTexto Contenido del XML.
+ * @returns {{claveAcceso: string, rucEmisor: string, razonSocial: string,
+ *            codDoc: string, esNotaCredito: boolean, fechaEmision: string,
+ *            porTarifa: Object<string, {base: number, iva: number}>,
+ *            totalSinImpuestos: number, importeTotal: number,
+ *            tarifasDesconocidas: string[]}|null}
+ */
+function parsearXmlComprobante(xmlTexto) {
+    if (!xmlTexto || typeof xmlTexto !== 'string') return null;
+
+    let texto = xmlTexto;
+
+    // La respuesta de autorización envuelve el comprobante en un CDATA. Si
+    // está, el comprobante de verdad es lo de adentro.
+    const cdata = texto.match(/<comprobante>\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*<\/comprobante>/);
+    if (cdata) texto = cdata[1];
+
+    let doc;
+    try {
+        doc = new DOMParser().parseFromString(texto, 'text/xml');
+    } catch (e) {
+        console.error('❌ [XML] No se pudo parsear el comprobante:', e);
+        return null;
+    }
+    if (!doc || doc.querySelector('parsererror')) {
+        console.error('❌ [XML] El contenido no es un XML válido.');
+        return null;
+    }
+
+    const txt = (sel) => {
+        const el = doc.querySelector(sel);
+        return el ? (el.textContent || '').trim() : '';
+    };
+    const num = (sel) => parseDecimal(txt(sel));
+
+    const codDoc = txt('infoTributaria > codDoc');
+    const porTarifa = {};
+    const tarifasDesconocidas = [];
+
+    // El bloque de totales es el que hay que declarar: ya viene agrupado por
+    // tarifa y es el que el SRI autorizó. El detalle por línea sirve para ver
+    // QUÉ se compró (activo fijo), no para sumar.
+    const impuestos = doc.querySelectorAll('totalConImpuestos > totalImpuesto');
+    impuestos.forEach((imp) => {
+        const codigo = (imp.querySelector('codigo')?.textContent || '').trim();
+        if (codigo !== '2') return;   // 2 = IVA; 3 = ICE; 5 = IRBPNR
+
+        const cp = (imp.querySelector('codigoPorcentaje')?.textContent || '').trim();
+        const base = parseDecimal(imp.querySelector('baseImponible')?.textContent);
+        const valor = parseDecimal(imp.querySelector('valor')?.textContent);
+
+        const tarifa = CODIGO_PORCENTAJE_IVA[cp];
+        if (tarifa === undefined) {
+            // Un código nuevo no se reparte a ojo: se anota y lo mira el contador.
+            tarifasDesconocidas.push(cp);
+            console.warn(`   ⚠️ [XML] codigoPorcentaje "${cp}" desconocido: base $${base}, IVA $${valor}.`);
+            return;
+        }
+
+        const k = String(tarifa);
+        if (!porTarifa[k]) porTarifa[k] = { base: 0, iva: 0 };
+        porTarifa[k].base += base;
+        porTarifa[k].iva += valor;
+    });
+
+    Object.keys(porTarifa).forEach((k) => {
+        porTarifa[k].base = redondear(porTarifa[k].base);
+        porTarifa[k].iva = redondear(porTarifa[k].iva);
+    });
+
+    return {
+        claveAcceso: txt('infoTributaria > claveAcceso') || txt('claveAcceso'),
+        rucEmisor: txt('infoTributaria > ruc'),
+        razonSocial: txt('infoTributaria > razonSocial'),
+        codDoc,
+        esNotaCredito: codDoc === '04',
+        fechaEmision: txt('fechaEmision'),
+        porTarifa,
+        totalSinImpuestos: num('totalSinImpuestos'),
+        importeTotal: num('importeTotal') || num('valorModificacion'),
+        tarifasDesconocidas
+    };
+}
+
+/**
+ * Reparte lo que dice un XML en los baldes del resumen (0 / 5 / plena).
+ *
+ * Se usa igual para facturas y para notas de crédito: los dos resúmenes tienen
+ * los mismos tres baldes. Al venir del XML, ninguna cae en «ambiguas»: la
+ * tarifa está dicha.
+ *
+ * @param {Object} resumen Resumen con baldes iva0 / iva5 / iva15.
+ * @param {Object} xml Salida de parsearXmlComprobante().
+ * @returns {boolean} false si el XML traía tarifas que no se reconocen.
+ */
+function repartirXmlEnResumen(resumen, xml) {
+    if (!resumen || !xml || !xml.porTarifa) return false;
+
+    Object.keys(xml.porTarifa).forEach((k) => {
+        const { base, iva } = xml.porTarifa[k];
+        const tarifa = Number(k);
+        const balde = tarifa === 0 ? resumen.iva0
+                    : tarifa === 5 ? resumen.iva5
+                    : resumen.iva15;
+        if (!balde) return;
+        balde.baseImponible += base;
+        if (typeof balde.montoIva === 'number') balde.montoIva += iva;
+        balde.total += base + iva;
+        if (typeof balde.cantidad === 'number') balde.cantidad++;
+    });
+
+    return (xml.tarifasDesconocidas || []).length === 0;
+}
+
 /**
  * Descarga el listado TXT del período que esté cargado en pantalla.
  * Reproduce el POST del enlace en vez de pulsarlo, así el archivo no baja al
@@ -1038,6 +1177,12 @@ if (typeof window !== 'undefined') {
         return filas;
     };
     window.sriAuditar = (tipo, n) => auditarExtraccionConTxt(tipo || TIPO_COMPROBANTE.factura, n);
+    // Parado en el formulario de IVA: lista los casilleros que el portal tiene
+    // de verdad, con su id real. Es la unica forma honesta de saber si el 540
+    // y el 550 existen — suponerlos es lo que la 5b prohibe.
+    window.sriMapaCasilleros = (op) => (typeof sriMapaCasilleros === 'function' ? sriMapaCasilleros(op) : null);
+    // Pegale el texto de un XML autorizado y devuelve la base y el IVA por tarifa.
+    window.sriLeerXml = (texto) => parsearXmlComprobante(texto);
 }
 
 // ── Tarifas de IVA y el corte por cociente ────────────────────────────────

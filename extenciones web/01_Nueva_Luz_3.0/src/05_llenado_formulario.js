@@ -806,6 +806,90 @@ async function leerCampo(casillero) {
     return 0;
 }
 
+/**
+ * Lista TODOS los casilleros que el formulario tiene de verdad, con su `id`
+ * real, su rótulo y su valor.
+ *
+ * Existe por una razón concreta: el 540 y el 550 (compras al 5%) no aparecen
+ * en el formulario, y nadie sabe si es porque no existen, porque se llaman
+ * distinto o porque el portal solo los muestra en ciertos períodos. Suponer
+ * un número de casillero es exactamente lo que la §5b prohíbe.
+ *
+ * Se corre desde la consola, parado en el formulario:
+ *
+ *     sriMapaCasilleros()            → tabla en consola
+ *     sriMapaCasilleros({copiar:true}) → además lo deja en el portapapeles
+ *     sriMapaCasilleros({desde:500, hasta:599})
+ *
+ * @returns {Array<{casillero: string, id: string, rotulo: string, valor: string, editable: boolean}>}
+ */
+function sriMapaCasilleros(opciones = {}) {
+    const { desde = 0, hasta = 9999, copiar = false } = opciones;
+    const mapa = [];
+    const vistos = new Set();
+
+    document.querySelectorAll('input[type="text"], input[type="hidden"]').forEach((input) => {
+        if (typeof esDeLaExtension === 'function' && esDeLaExtension(input)) return;
+
+        const fila = input.closest('tr');
+        if (!fila) return;
+
+        const celdas = Array.from(fila.querySelectorAll('td, th'));
+        // El casillero es la celda que contiene SOLO un número de 3 dígitos.
+        const celdaNum = celdas.find((c) => /^\s*\d{3}\s*$/.test(c.textContent || ''));
+        if (!celdaNum) return;
+
+        const casillero = celdaNum.textContent.trim();
+        const n = Number(casillero);
+        if (n < desde || n > hasta) return;
+
+        const clave = casillero + '|' + input.id;
+        if (vistos.has(clave)) return;
+        vistos.add(clave);
+
+        // El rótulo es la celda de texto más larga que no sea el número.
+        const rotulo = celdas
+            .map((c) => (c.textContent || '').trim())
+            .filter((t) => t && t !== casillero)
+            .sort((a, b) => b.length - a.length)[0] || '';
+
+        mapa.push({
+            casillero,
+            id: input.id || '(sin id)',
+            rotulo: rotulo.slice(0, 110),
+            valor: input.value,
+            editable: input.type === 'text' && !input.readOnly && !input.disabled
+        });
+    });
+
+    mapa.sort((a, b) => Number(a.casillero) - Number(b.casillero));
+
+    console.log(`📋 ${mapa.length} casilleros en este formulario:`);
+    if (console.table) console.table(mapa);
+    else mapa.forEach((f) => console.log(`   ${f.casillero}  ${f.id.padEnd(16)} ${f.rotulo}`));
+
+    // Para pegar en la Biblia sin tener que transcribir a mano.
+    const comoTabla = mapa
+        .map((f) => `| **${f.casillero}** | \`${f.id}\` | ${f.editable ? 'editable' : 'solo lectura'} | ${f.rotulo} |`)
+        .join('\n');
+    if (copiar && navigator.clipboard) {
+        navigator.clipboard.writeText(comoTabla)
+            .then(() => console.log('📎 Copiado al portapapeles, listo para pegar en la Biblia.'))
+            .catch(() => console.log('No se pudo copiar. Está en window.__mapaCasilleros.'));
+    }
+    window.__mapaCasilleros = { filas: mapa, markdown: comoTabla };
+
+    const cincoPorCiento = mapa.filter((f) => /5%/.test(f.rotulo) || ['502','512','540','550'].includes(f.casillero));
+    if (cincoPorCiento.length) {
+        console.log('🟡 Candidatos para el 5% / sin derecho a crédito:');
+        cincoPorCiento.forEach((f) => console.log(`   ${f.casillero} → ${f.id} · ${f.rotulo}`));
+    } else {
+        console.log('🟡 Ni rastro del 5% ni del 502/512 en este formulario.');
+    }
+
+    return mapa;
+}
+
 async function encontrarInputPorCasillero(casillero) {
     // 0. PRIMARY: Manual Map & Validated ID pattern
     // MAPA CONFIRMADO: casillero -> id real del DOM del SRI
