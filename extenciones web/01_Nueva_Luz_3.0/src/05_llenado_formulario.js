@@ -1060,6 +1060,67 @@ function sriMapaCasilleros(opciones = {}) {
         return na - nb;
     });
 
+    // ── Los DESPLEGABLES, que hasta el 07-sep-2026 no se miraban ────────────
+    // Todo lo de arriba busca `input`. El formulario del SRI también tiene
+    // `<select>`, y uno de ellos es el que impide declarar al 5%:
+    //
+    //   «Casillero 203. Seleccione el decreto que determina la tarifa
+    //    reducida a aplicar.»
+    //
+    // Un lector que no los ve no está incompleto: dice «no hay nada» donde sí
+    // hay, que es peor que no contestar. Se listan TODOS, tengan número o no
+    // — un desplegable sin número se identifica por sus opciones, y ésa es
+    // justamente la evidencia que hace falta para el 203.
+    const desplegables = [];
+    document.querySelectorAll('select').forEach((sel) => {
+        if (propio(sel)) return;
+
+        // El número de casillero, si la fila lo dice. Si no lo dice, se anota
+        // como desconocido: nunca se le adivina uno.
+        let casillero = '???';
+        const fila = sel.closest('tr');
+        if (fila) {
+            const celdaNum = Array.from(fila.querySelectorAll('td, th'))
+                .find((c) => soloNumero(c.textContent));
+            if (celdaNum) casillero = limpio(celdaNum);
+        }
+
+        let opciones = Array.from(sel.options || []).map((o) => ({
+            valor: o.value,
+            texto: (o.text || '').replace(/\s+/g, ' ').trim(),
+            elegida: !!o.selected
+        }));
+
+        // PrimeFaces esconde el `<select>` real y pinta un widget con `<li>`.
+        // Cuando el select llega vacío, las opciones están en ese panel.
+        if (opciones.length === 0 && sel.id) {
+            const base = sel.id.replace(/_input$/, '');
+            const panelItems = document.getElementById(base + '_items') ||
+                               document.querySelector(`[id="${base}_panel"] .ui-selectonemenu-items`);
+            if (panelItems) {
+                opciones = Array.from(panelItems.querySelectorAll('li')).map((li) => ({
+                    valor: li.getAttribute('data-label') || li.id || '',
+                    texto: (li.textContent || '').replace(/\s+/g, ' ').trim(),
+                    elegida: li.classList.contains('ui-state-highlight')
+                }));
+            }
+        }
+
+        const rotulo = fila
+            ? (Array.from(fila.querySelectorAll('td, th')).map(limpio)
+                .filter((t) => t && t !== casillero).sort((a, b) => b.length - a.length)[0] || '')
+            : '';
+
+        desplegables.push({
+            casillero,
+            id: sel.id || '(sin id)',
+            rotulo: rotulo.replace(/\s+/g, ' ').trim().slice(0, 110),
+            opciones,
+            elegida: (opciones.find((o) => o.elegida) || {}).texto || '(ninguna)',
+            editable: !sel.disabled
+        });
+    });
+
     // ── Diagnóstico ─────────────────────────────────────────────────────────
     // Cuando no encuentra nada tiene que decir QUÉ vio. «No hay casilleros» no
     // permite arreglar nada; «hay 84 inputs y ninguno tiene número al lado» sí.
@@ -1071,6 +1132,7 @@ function sriMapaCasilleros(opciones = {}) {
         tablas: document.querySelectorAll('table').length,
         celdasSoloNumero: Array.from(document.querySelectorAll('td, th, span, label'))
             .filter((e) => !propio(e) && soloNumero(e.textContent)).length,
+        desplegables: desplegables.length,
         primerosIds: entradas.slice(0, 12).map((e) => e.id || '(sin id)')
     };
 
@@ -1080,11 +1142,19 @@ function sriMapaCasilleros(opciones = {}) {
     console.log('🔎 Lo que hay en pantalla:', diagnostico);
 
     // Para pegar en la Biblia sin tener que transcribir a mano.
+    // Las OPCIONES de cada desplegable van enteras: para el 203 son los
+    // decretos, y esa lista es el dato que hay que traer del portal. Elegir
+    // cuál aplica es del contador; saber cuáles existen es del bot.
     const comoTabla = [
         `<!-- ${diagnostico.url} · ${diagnostico.inputsDeTexto} inputs de texto · ` +
-        `${diagnostico.conIdConcepto} con id conceptoNNNN · ${diagnostico.celdasSoloNumero} celdas con un número solo -->`,
+        `${diagnostico.conIdConcepto} con id conceptoNNNN · ${diagnostico.celdasSoloNumero} celdas con un número solo · ` +
+        `${desplegables.length} desplegables -->`,
         ...mapa.map((f) =>
-            `| **${f.casillero}** | \`${f.id}\` | ${f.editable ? 'editable' : 'solo lectura'} | ${f.rotulo} |`)
+            `| **${f.casillero}** | \`${f.id}\` | ${f.editable ? 'editable' : 'solo lectura'} | ${f.rotulo} |`),
+        ...(desplegables.length ? ['', '<!-- DESPLEGABLES -->'] : []),
+        ...desplegables.map((d) =>
+            `| **${d.casillero}** | \`${d.id}\` | desplegable (${d.opciones.length} opciones) | ${d.rotulo} |\n` +
+            d.opciones.map((o) => `|   |   | \`${o.valor}\` | ${o.texto}${o.elegida ? ' ← elegida' : ''} |`).join('\n'))
     ].join('\n');
 
     if (copiar && navigator.clipboard) {
@@ -1092,9 +1162,23 @@ function sriMapaCasilleros(opciones = {}) {
             .then(() => console.log('📎 Copiado al portapapeles, listo para pegar en la Biblia.'))
             .catch(() => console.log('No se pudo copiar. Está en window.__mapaCasilleros.'));
     }
-    window.__mapaCasilleros = { filas: mapa, markdown: comoTabla, diagnostico };
+    window.__mapaCasilleros = { filas: mapa, desplegables, markdown: comoTabla, diagnostico };
 
-    const cincoPorCiento = mapa.filter((f) => /5\s*%/.test(f.rotulo) || ['502','512','540','550'].includes(f.casillero));
+    if (desplegables.length) {
+        console.log(`🔽 ${desplegables.length} desplegable(s) en esta pantalla:`);
+        desplegables.forEach((d) => {
+            console.log(`   ${d.casillero} → ${d.id} · ${d.rotulo}`);
+            d.opciones.forEach((o) => console.log(`        \u00b7 [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
+        });
+    } else {
+        console.log('🔽 No hay ningún desplegable en esta pantalla.');
+    }
+
+    // El 203 entra acá aunque sea un desplegable: es lo que hoy impide enviar
+    // una declaración con compras al 5%.
+    const cincoPorCiento = mapa.concat(desplegables)
+        .filter((f) => /5\s*%|tarifa reducida|decreto/i.test(f.rotulo) ||
+                       ['203','502','512','540','550','560'].includes(f.casillero));
     if (cincoPorCiento.length) {
         console.log('🟡 Candidatos para el 5% / sin derecho a crédito:');
         cincoPorCiento.forEach((f) => console.log(`   ${f.casillero} → ${f.id} · ${f.rotulo}`));

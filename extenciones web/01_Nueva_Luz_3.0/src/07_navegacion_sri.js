@@ -2265,6 +2265,7 @@ const SriLoopHUD = {
             `inputs de texto: <b>${d.inputsDeTexto}</b> · ocultos: ${d.inputsOcultos}<br>` +
             `con id <code>conceptoNNNN</code>: <b>${d.conIdConcepto}</b><br>` +
             `tablas: ${d.tablas} · celdas con un número solo: <b>${d.celdasSoloNumero}</b><br>` +
+            `desplegables: <b>${d.desplegables || 0}</b><br>` +
             `primeros ids: <code>${esc((d.primerosIds || []).join(', '))}</code>` +
             '</div>';
 
@@ -2278,12 +2279,49 @@ const SriLoopHUD = {
                 'Hay que estar <b>dentro del formulario</b> (el paso 3 del asistente), ' +
                 'no en el período fiscal ni en el resumen de pago.<br>' +
                 'Si ya estás ahí, copiá esto y pasámelo — dice qué vio:' +
-                '</div>' + radiografia;
+                '</div>' +
+                // Aunque no haya cajas de texto puede haber desplegables, y uno
+                // de ellos es el que hoy frena el 5%. Irse diciendo «no hay
+                // nada» sin mirarlos fue exactamente el error de esta pantalla.
+                (((window.__mapaCasilleros && window.__mapaCasilleros.desplegables) || []).length
+                    ? '<div style="margin-top:8px;font-size:11px;color:#fcd34d">' +
+                      '🔽 Pero sí hay <b>' +
+                      window.__mapaCasilleros.desplegables.length +
+                      '</b> desplegable(s) — mirá la consola o copiá la tabla.</div>'
+                    : '') +
+                radiografia;
             return;
         }
 
-        // Lo que se está buscando: el 5% y las compras sin derecho a crédito.
-        const buscados = ['502', '512', '540', '550'];
+        // Los DESPLEGABLES van en su propio bloque, con las opciones desplegadas.
+        // El 203 —el decreto que habilita la tarifa reducida del 5%— es uno de
+        // ellos, y hasta el 07-sep-2026 este panel ni los miraba: decía «no hay
+        // nada» donde sí había.
+        const desps = (window.__mapaCasilleros && window.__mapaCasilleros.desplegables) || [];
+        const bloqueDesplegables = desps.length
+            ? '<div style="margin-top:10px">' +
+              `<div style="font-size:11px;font-weight:800;margin-bottom:4px">🔽 ${desps.length} desplegable(s)</div>` +
+              desps.map((dd) => {
+                  const esDelDecreto = dd.casillero === '203' ||
+                        /tarifa reducida|decreto/i.test(dd.rotulo);
+                  const borde = esDelDecreto ? 'border-left:3px solid #fbbf24;' : 'border-left:3px solid rgba(148,163,184,0.3);';
+                  const ops = dd.opciones.length
+                      ? dd.opciones.map((o) =>
+                            `<div style="font-size:10px;opacity:0.85;padding-left:10px">` +
+                            `<code style="color:#7dd3fc">${esc(o.valor)}</code> · ${esc(o.texto)}` +
+                            (o.elegida ? ' <b style="color:#86efac">← elegida</b>' : '') + '</div>').join('')
+                      : '<div style="font-size:10px;opacity:0.6;padding-left:10px">(sin opciones a la vista — ' +
+                        'puede que el portal las cargue al abrirlo)</div>';
+                  return `<div style="${borde}padding:4px 0 4px 8px;margin-bottom:6px">` +
+                         `<div style="font-size:11px"><b style="color:#fcd34d">${esc(dd.casillero)}</b> ` +
+                         `<code style="font-size:10px;color:#7dd3fc">${esc(dd.id)}</code></div>` +
+                         `<div style="font-size:10px;opacity:0.8">${esc(dd.rotulo)}</div>` + ops + '</div>';
+              }).join('') + '</div>'
+            : '<div style="margin-top:10px;font-size:10px;opacity:0.6">🔽 Ningún desplegable en esta pantalla.</div>';
+
+        // Lo que se está buscando: el 5%, las compras sin derecho a crédito,
+        // y el 203 que hoy impide enviar cualquier declaración con 5%.
+        const buscados = ['203', '502', '512', '540', '550', '560'];
         const hallados = mapa.filter((f) => buscados.includes(f.casillero) || /5\s*%/.test(f.rotulo));
 
         const aviso = hallados.length
@@ -2314,6 +2352,7 @@ const SriLoopHUD = {
             '</div>' +
             aviso +
             '<table style="width:100%;border-collapse:collapse;font-size:11px">' + filas + '</table>' +
+            bloqueDesplegables +
             radiografia +
             // Respaldo por si el portapapeles no está disponible: se selecciona
             // y se copia a mano. Nunca dejar al usuario sin salida.

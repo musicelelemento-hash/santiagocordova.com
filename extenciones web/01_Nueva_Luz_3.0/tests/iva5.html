@@ -699,6 +699,63 @@
   push('y el 518 también',                    i518 && i518.id, 'concepto1740');
   P.innerHTML = '';
 
+  // ══ P · el 500 no veía los desplegables ══════════════════════════
+  sec('P · el 📐 tiene que ver los desplegables');
+  // `sriMapaCasilleros` sólo miraba `input[type=text]` e `input[type=hidden]`.
+  // El casillero 203 —el decreto que habilita la tarifa reducida del 5%— es
+  // un `<select>`: la herramienta con la que había que buscarlo no lo podía
+  // encontrar, y decía «no hay nada» donde sí había.
+  P.innerHTML =
+    '<table><tr>' +
+    '  <td>203</td>' +
+    '  <td>Decreto que determina la tarifa reducida a aplicar</td>' +
+    '  <td><select id="frmFlujoDeclaracion:somDecreto">' +
+    '        <option value="">Seleccione...</option>' +
+    '        <option value="D1" selected>Decreto Ejecutivo 1 de 2024</option>' +
+    '        <option value="D2">Decreto Ejecutivo 2 de 2025</option>' +
+    '      </select></td>' +
+    '</tr></table>';
+  sriMapaCasilleros();
+  const desp = (window.__mapaCasilleros && window.__mapaCasilleros.desplegables) || [];
+  push('el desplegable aparece',              desp.length, 1);
+  push('con su número de casillero',          desp[0] && desp[0].casillero, '203');
+  push('y con su id real',                    desp[0] && desp[0].id, 'frmFlujoDeclaracion:somDecreto');
+  push('con las tres opciones',               desp[0] && desp[0].opciones.length, 3);
+  push('y dice cuál está elegida',
+       desp[0] && desp[0].elegida, 'Decreto Ejecutivo 1 de 2024');
+  // El markdown es lo que se pega en la Biblia: si no lleva las opciones, la
+  // pasada no sirve para nada — los decretos SON el dato que hay que traer.
+  const md1 = (window.__mapaCasilleros && window.__mapaCasilleros.markdown) || '';
+  push('el markdown lleva el id del 203',     /somDecreto/.test(md1), true);
+  push('y también los decretos',              /Decreto Ejecutivo 2 de 2025/.test(md1), true);
+
+  // PrimeFaces esconde el `<select>` real y pinta un widget con `<li>`. Así
+  // es como el portal renderiza sus desplegables de verdad.
+  P.innerHTML =
+    '<table><tr><td>203</td><td>Tarifa reducida</td><td>' +
+    '  <div class="ui-selectonemenu">' +
+    '    <select id="frmFlujoDeclaracion:somPF_input"></select>' +
+    '    <ul id="frmFlujoDeclaracion:somPF_items">' +
+    '      <li data-label="A" class="ui-state-highlight">Decreto A</li>' +
+    '      <li data-label="B">Decreto B</li>' +
+    '    </ul>' +
+    '  </div>' +
+    '</td></tr></table>';
+  sriMapaCasilleros();
+  const pf = (window.__mapaCasilleros && window.__mapaCasilleros.desplegables) || [];
+  push('un desplegable de PrimeFaces también se lee', pf.length, 1);
+  push('sus opciones salen del panel de items', pf[0] && pf[0].opciones.length, 2);
+  push('y la resaltada es la elegida',        pf[0] && pf[0].elegida, 'Decreto A');
+
+  // Sin desplegables no se inventa ninguno.
+  P.innerHTML = '<input id="concepto1270" type="text">';
+  sriMapaCasilleros();
+  push('sin desplegables, la lista va vacía',
+       ((window.__mapaCasilleros || {}).desplegables || []).length, 0);
+
+  P.innerHTML = '';
+
+
 
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;

@@ -184,6 +184,18 @@ editables, resalta los del 5% y los del 502/512, y copia una tabla en Markdown
 lista para pegar en la Biblia (`_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`).
 Desde consola es `sriMapaCasilleros({ desde, hasta })`.
 
+> **Y desde el 07-sep-2026 también lee los DESPLEGABLES, con sus opciones.**
+> Hasta ese día sólo miraba `input[type=text]` e `input[type=hidden]`. El 203
+> es un `<select>`: la única herramienta que teníamos para encontrarlo **no lo
+> podía ver**, y contestaba «no hay nada» donde sí había — que es peor que no
+> contestar. Cubre el `<select>` nativo y el widget de PrimeFaces, que esconde
+> el select real y pinta los items como `<li>` en un panel aparte.
+>
+> Para el 203, el dato que hace falta son **las opciones**: los decretos que
+> el portal ofrece, con su `value`. Salen en la consola, en el panel y en el
+> Markdown. **Cuál corresponde lo elige el contador**; cuáles existen lo
+> averigua el bot.
+
 Es un botón y no un comando a propósito: **Chrome bloquea el pegado en la
 consola** (protección contra self-XSS, que pide escribir `allow pasting`), y un
 dato que sólo se saca escribiendo a mano es un dato que no se saca.
@@ -1287,7 +1299,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los trece** en iframes y da un veredicto solo:
-**467 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+**478 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -1301,7 +1313,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 
 | Banco | Qué cuida | ✓ |
 | :--- | :--- | --: |
-| `iva5` | el 5%, el XML, el casillero 203, los `id` cableados, la botonera | 149 |
+| `iva5` | el 5%, el XML, el casillero 203, los desplegables, la botonera | 160 |
 | `catastro` | la bisección, sobre todo en los bordes | 31 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
 | `notasventa` | que un silencio no se convierta en un cero | 35 |
