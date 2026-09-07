@@ -1832,7 +1832,7 @@ async function syncDeclarationToSupabase(
 
     // 1. Upsert a la tabla relacional sri_declaraciones con on_conflict explícito
     try {
-      await fetch(`${SUPABASE_URL}/rest/v1/sri_declaraciones?on_conflict=client_id,type,period`, {
+      const res1 = await fetch(`${SUPABASE_URL}/rest/v1/sri_declaraciones?on_conflict=client_id,type,period`, {
         method: "POST",
         headers: {
           apikey: SUPABASE_KEY,
@@ -1842,6 +1842,35 @@ async function syncDeclarationToSupabase(
         },
         body: JSON.stringify(declarationToUpsert),
       });
+
+      if (res1.ok || res1.status === 201 || res1.status === 204) {
+        console.log(`✅ [SUPABASE] sri_declaraciones guardado (upsert): ${ruc} (${canonicalPeriod}).`);
+      } else {
+        const errText = await res1.text().catch(() => "");
+        // Si falló con 401/42501 (falta de política UPDATE en RLS para anon), intentar INSERT directo
+        if (res1.status === 401 || errText.includes("42501")) {
+          console.warn(`⚠️ [SUPABASE] Upsert bloqueado por RLS (401/42501). Probando INSERT directo para ${ruc}...`);
+          const resDirect = await fetch(`${SUPABASE_URL}/rest/v1/sri_declaraciones`, {
+            method: "POST",
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${SUPABASE_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(declarationToUpsert),
+          });
+
+          if (resDirect.ok || resDirect.status === 201) {
+            console.log(`✅ [SUPABASE] sri_declaraciones guardado (INSERT directo): ${ruc} (${canonicalPeriod}).`);
+          } else if (resDirect.status === 409) {
+            console.log(`ℹ️ [SUPABASE] sri_declaraciones ya existía para ${ruc} (${canonicalPeriod}).`);
+          } else {
+            console.warn(`⚠️ [SUPABASE] sri_declaraciones INSERT falló: HTTP ${resDirect.status}`);
+          }
+        } else {
+          console.warn(`⚠️ [SUPABASE] sri_declaraciones POST HTTP ${res1.status}: ${errText.slice(0, 150)}`);
+        }
+      }
     } catch (e1) {
       console.warn("⚠️ sri_declaraciones POST error:", e1);
     }
@@ -1859,7 +1888,7 @@ async function syncDeclarationToSupabase(
         }
       ];
 
-      await fetch(`${SUPABASE_URL}/rest/v1/clients?id=eq.${client.id}`, {
+      const resPatch = await fetch(`${SUPABASE_URL}/rest/v1/clients?id=eq.${client.id}`, {
         method: "PATCH",
         headers: {
           apikey: SUPABASE_KEY,
@@ -1872,6 +1901,12 @@ async function syncDeclarationToSupabase(
           updated_at: new Date().toISOString()
         })
       });
+
+      if (resPatch.ok || resPatch.status === 204) {
+        console.log(`✅ [SUPABASE] clients.declaration_history actualizado para ${ruc} (${canonicalPeriod}).`);
+      } else {
+        console.warn(`⚠️ [SUPABASE] clients.declaration_history PATCH HTTP ${resPatch.status}`);
+      }
     } catch (patchErr) {
       console.warn("⚠️ clients declaration_history PATCH error:", patchErr);
     }
