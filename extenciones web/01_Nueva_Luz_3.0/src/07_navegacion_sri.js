@@ -1871,14 +1871,35 @@ const SriLoopHUD = {
             'de dónde sacarlas. Si no las cargás, el 508 y el 117 quedan <b>vacíos</b> — ' +
             'no en cero.</div>' +
 
+            // `autocomplete="off"` NO es decoración. El id es el mismo en cada
+            // contribuyente, así que sin esto el navegador ofrecía lo tecleado
+            // para el cliente anterior — y un número de otro aceptado sin
+            // querer es una declaración mal hecha. Lo avisó el usuario:
+            // «la sugerencia es para cada cliente, si no pone nada por defecto
+            // vacío».
             '<div style="display:grid;grid-template-columns:1fr 92px;gap:10px;align-items:end">' +
             '  <label style="font-size:11px;opacity:0.85;font-weight:700">Valor total' +
             '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 508 · en dólares</span>' +
-            `    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
+            `    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
             '  <label style="font-size:11px;opacity:0.85;font-weight:700">Cuántas' +
             '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 117</span>' +
-            `    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" placeholder="0" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
+            `    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" placeholder="0" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
             '</div>' +
+
+            // El 518 es el NETO del 508: «menos las notas de crédito». Sin
+            // esto quedaba vacío con el 508 lleno — el mismo error que el
+            // 550, y el crédito tributario sale del neto.
+            //
+            // Se deja vacío a propósito: la mayoría de las veces no hay notas
+            // de crédito de notas de venta, y ahí el 518 vale lo mismo que el
+            // 508. Un cero escrito acá y un campo vacío significan lo mismo
+            // para el formulario, pero el vacío no le pone al contador un
+            // número que él no puso.
+            '<label style="display:block;margin-top:10px;font-size:11px;opacity:0.85;font-weight:700">' +
+            '  Notas de crédito de esas notas de venta' +
+            '  <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">' +
+            '    casillero 518 · dejalo vacío si no hubo</span>' +
+            `  <input id="slh-nv-nc" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
 
             // Lo que se va a escribir, en palabras, antes de escribirlo.
             '<div id="slh-nv-eco" style="font-size:11px;margin-top:8px;min-height:16px;color:#7dd3fc"></div>' +
@@ -1906,6 +1927,12 @@ const SriLoopHUD = {
         const barra = panel.querySelector('#slh-nv-barra');
         const eco = panel.querySelector('#slh-nv-eco');
         const campoCant = panel.querySelector('#slh-nv-cant');
+        const campoNc = panel.querySelector('#slh-nv-nc');
+
+        // Vacíos SIEMPRE, para cada contribuyente. Aunque el navegador haya
+        // restaurado algo, aunque el panel se reabra: el dato de uno no puede
+        // aparecer prellenado en la pantalla del siguiente.
+        campoMonto.value = ''; campoCant.value = ''; campoNc.value = '';
 
         return new Promise((resolve) => {
             const total = segundos;
@@ -1945,7 +1972,8 @@ const SriLoopHUD = {
                 // lectura. Cuenta lo que la persona hizo: algo escrito, o una
                 // tecla en los últimos segundos.
                 const recien = Date.now() - ultimaTecla < 6000;
-                const escribiendo = campoMonto.value !== '' || campoCant.value !== '' || recien;
+                const escribiendo = campoMonto.value !== '' || campoCant.value !== '' ||
+                                    campoNc.value !== '' || recien;
                 if (escribiendo) {
                     reloj.textContent = 'El reloj está detenido mientras cargás. Apretá ✓ Guardar o Enter.';
                     barra.style.background = '#5eead4';
@@ -1966,11 +1994,20 @@ const SriLoopHUD = {
             const repetir = () => {
                 const m = parseFloat(campoMonto.value);
                 const c = parseInt(campoCant.value, 10);
-                if (!campoMonto.value && !campoCant.value) { eco.textContent = ''; return; }
+                const nc = parseFloat(campoNc.value);
+                if (!campoMonto.value && !campoCant.value && !campoNc.value) {
+                    eco.textContent = ''; return;
+                }
                 const partes = [];
-                partes.push(m > 0 ? `$${m.toFixed(2)} al casillero 508` : 'nada al 508');
+                partes.push(m > 0 ? `$${m.toFixed(2)} al 508` : 'nada al 508');
+                // El 518 es el neto, y se muestra ya calculado: es el número
+                // que va a quedar en el formulario, no el que se tecleó.
+                if (m > 0) {
+                    const neto = Math.max(0, m - (nc > 0 ? nc : 0));
+                    partes.push(`$${neto.toFixed(2)} al 518` + (nc > 0 ? ` (menos $${nc.toFixed(2)} de NC)` : ''));
+                }
                 partes.push(c > 0 ? `${c} comprobante(s) al 117` : 'nada al 117');
-                eco.textContent = '→ Se va a escribir ' + partes.join(' y ') + '.';
+                eco.textContent = '→ Se va a escribir ' + partes.join(', ') + '.';
             };
             campoMonto.addEventListener('input', repetir);
             campoCant.addEventListener('input', repetir);
@@ -1982,14 +2019,15 @@ const SriLoopHUD = {
                 ev.stopPropagation();
                 cerrar({
                     monto: parseFloat(campoMonto.value) || 0,
-                    cantidad: parseInt(campoCant.value, 10) || 0
+                    cantidad: parseInt(campoCant.value, 10) || 0,
+                    nc: parseFloat(campoNc.value) || 0
                 });
             });
             // «No tuvo» es una respuesta, no un silencio: cuenta para dejar de
             // preguntarle a este cliente en los próximos períodos.
             panel.querySelector('#slh-nv-no').addEventListener('click', (ev) => {
                 ev.stopPropagation();
-                cerrar({ monto: 0, cantidad: 0 });
+                cerrar({ monto: 0, cantidad: 0, nc: 0 });
             });
             // Un minuto más, para cuando hay que ir a buscar el dato.
             panel.querySelector('#slh-nv-mas').addEventListener('click', (ev) => {

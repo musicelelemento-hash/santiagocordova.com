@@ -524,7 +524,17 @@ contador.
 | Casillero | Qué es |
 | :--- | :--- |
 | **508** | Adquisiciones a contribuyentes RISE (hasta dic-2021) / NEGOCIOS POPULARES (desde ene-2022) |
+| **518** | El **neto** del 508: menos las notas de crédito |
 | **117** | Total de notas de venta recibidas (cantidad) |
+
+> **El 518 se agregó el 07-sep-2026**, avisado por el usuario: «508 son las
+> notas de venta física pero 518 es menos las notas de crédito, y estamos
+> poniendo 0». Quedaba **vacío con el 508 lleno** — el mismo error que el 550,
+> y el que importa: el crédito tributario sale del neto, no del bruto.
+>
+> El panel pide las notas de crédito como un tercer campo, **vacío por
+> defecto**: la mayoría de las veces no hay, y ahí el 518 vale lo mismo que el
+> 508. Si no sale por número, se lo busca como vecino de fila del 508.
 
 **Construido el 06-sep-2026.** `NotasDeVenta` en `02_servicios_y_memoria.js`,
 interruptor **📒** en el cajón 🧰 — **encendido por defecto** desde esa misma
@@ -551,6 +561,12 @@ en el orden en que el formulario lista los casilleros.
 > Y cuando **no** se pregunta, ahora se dice por qué —el interruptor 📒 está
 > apagado, o el cliente lleva tres períodos en cero—. Una ausencia callada es
 > indistinguible de una falla, y fue exactamente lo que pasó.
+
+> **Los campos arrancan vacíos para CADA contribuyente.** Sin
+> `autocomplete="off"` el navegador ofrecía lo tecleado para el cliente
+> anterior —el `id` es el mismo en todos— y un número de otro aceptado sin
+> querer es una declaración mal hecha. Avisado por el usuario el 07-sep-2026:
+> «la sugerencia es para cada cliente, si no pone nada por defecto vacío».
 
 > **`null` no es cero.** Un silencio significa «no sé» y **no se escribe nada**
 > en el 508 ni en el 117. Un cero inventado ahí es una declaración mal hecha.

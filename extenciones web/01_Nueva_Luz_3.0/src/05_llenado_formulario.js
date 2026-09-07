@@ -422,8 +422,31 @@ async function llenarCompras(data) {
         // número. Si no aparecen, la plata NO se manda a otro casillero — se
         // anota y el cierre mágico frena.
         if (nvPendiente.monto > 0) {
-            if (await llenarCampo('508', nvPendiente.monto)) { camposLlenados++; await sleep(900); }
+            const input508 = await encontrarInputPorCasillero('508');
+            if (await llenarCampo('508', nvPendiente.monto, input508)) { camposLlenados++; await sleep(900); }
             else sinUbicar.push(`no se encontró el casillero 508: $${nvPendiente.monto.toFixed(2)} de notas de venta quedaron sin declarar`);
+
+            // El 518 es el NETO del 508: «menos las notas de crédito», dicho
+            // por el usuario el 07-sep-2026. Quedaba vacío con el 508 lleno —
+            // el mismo error que el 550, y el crédito tributario sale del
+            // neto, no del bruto.
+            const ncNv = Number(nvPendiente.nc) || 0;
+            const valor518 = Math.max(0, nvPendiente.monto - ncNv);
+            console.log(`  📝 Casillero 518 = $${nvPendiente.monto.toFixed(2)} - $${ncNv.toFixed(2)} (NC) = $${valor518.toFixed(2)}`);
+
+            let ok518 = await llenarCampo('518', valor518);
+            // Y si no sale por número, es el vecino de fila del 508. Misma
+            // lección que el 550: la estructura de la pantalla es un dato.
+            if (!ok518 && input508) {
+                const vecino = vecinoDeFila(input508);
+                if (vecino) {
+                    console.log(`  🔎 El 518 no salió por número; se toma el vecino de fila del 508: id=${vecino.id || '(sin id)'}`);
+                    ok518 = await llenarCampo('518', valor518, vecino);
+                }
+            }
+            if (ok518) camposLlenados++;
+            else sinUbicar.push('no se encontró el casillero 518 (neto de notas de venta): el bruto quedó cargado y el neto no');
+            await sleep(700);
         }
         if (nvPendiente.cantidad > 0) {
             if (await llenarCampo('117', nvPendiente.cantidad)) { camposLlenados++; await sleep(600); }

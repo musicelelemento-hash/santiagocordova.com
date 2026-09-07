@@ -68,7 +68,7 @@
   document.getElementById('slh-nv-cant').value = '7';
   document.getElementById('slh-nv-ok').click();
   const dato = await p;
-  push('devuelve lo que se cargó',       dato, { monto: 340.5, cantidad: 7 });
+  push('devuelve lo que se cargó',       dato, { monto: 340.5, cantidad: 7, nc: 0 });
 
   await NotasDeVenta.guardar(RUC, '2026-08', dato);
   push('y queda guardado para ese período',
@@ -81,11 +81,11 @@
   const OTRO = '0912345678001';
   push('al principio se le pregunta',   await NotasDeVenta.debePreguntar(OTRO), true);
 
-  await NotasDeVenta.guardar(OTRO, '2026-06', { monto: 0, cantidad: 0 });
-  await NotasDeVenta.guardar(OTRO, '2026-07', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-06', { monto: 0, cantidad: 0, nc: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-07', { monto: 0, cantidad: 0, nc: 0 });
   push('dos ceros todavía no dicen nada', await NotasDeVenta.debePreguntar(OTRO), true);
 
-  await NotasDeVenta.guardar(OTRO, '2026-08', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-08', { monto: 0, cantidad: 0, nc: 0 });
   // Con 500 contribuyentes, seguir preguntándole al que nunca usa notas de
   // venta es lo que haría inservible al interruptor.
   push('al tercero se deja de preguntarle', await NotasDeVenta.debePreguntar(OTRO), false);
@@ -95,9 +95,9 @@
   push('si aparece un dato, vuelve a preguntarse', await NotasDeVenta.debePreguntar(OTRO), true);
 
   // Y siempre se puede reactivar a mano.
-  await NotasDeVenta.guardar(OTRO, '2026-10', { monto: 0, cantidad: 0 });
-  await NotasDeVenta.guardar(OTRO, '2026-11', { monto: 0, cantidad: 0 });
-  await NotasDeVenta.guardar(OTRO, '2026-12', { monto: 0, cantidad: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-10', { monto: 0, cantidad: 0, nc: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-11', { monto: 0, cantidad: 0, nc: 0 });
+  await NotasDeVenta.guardar(OTRO, '2026-12', { monto: 0, cantidad: 0, nc: 0 });
   push('vuelve a quedar callado',       await NotasDeVenta.debePreguntar(OTRO), false);
   await NotasDeVenta.volverAPreguntar(OTRO);
   push('y se lo puede despertar a mano', await NotasDeVenta.debePreguntar(OTRO), true);
@@ -108,7 +108,7 @@
     { ruc: RUC, nombre: 'CLIENTE', periodo: '2026-09', segundos: 30 });
   await new Promise(r => setTimeout(r, 120));
   document.getElementById('slh-nv-no').click();
-  push('devuelve ceros explícitos, no null', await p2, { monto: 0, cantidad: 0 });
+  push('devuelve ceros explícitos, no null', await p2, { monto: 0, cantidad: 0, nc: 0 });
 
   // ══ F · apagar el interruptor lo apaga de verdad ════════════════════════
   sec('F · apagar');
@@ -118,6 +118,54 @@
   // Pero lo ya cargado no se pierde: apagar no borra.
   push('lo cargado sigue estando',
        (await NotasDeVenta.saber(RUC, '2026-08')).cantidad, 7);
+
+  // ══ Z · el 518, y que un cliente no herede lo del anterior ══════════════
+  sec('Z · el neto, y el panel vacío para cada uno');
+  // El usuario, 07-sep-2026: «ojo 508 son las notas de venta física pero 518
+  // es menos las notas de crédito y estamos poniendo 0, además la sugerencia
+  // es para cada cliente, si no pone nada por defecto vacío».
+
+  const OTRO_RUC = '0799999999001';
+  await NotasDeVenta.guardar(OTRO_RUC, '2026-08', { monto: 999, cantidad: 9, nc: 5 });
+  const zG = await NotasDeVenta.saber(OTRO_RUC, '2026-08');
+  push('las NC se guardan para el 518',      zG.nc, 5);
+
+  // El panel arranca VACÍO aunque el navegador o el cliente anterior hayan
+  // dejado algo. Un número de otro contribuyente aceptado sin querer es una
+  // declaración mal hecha.
+  // El HUD se remonta: las secciones anteriores lo dejan en cualquier estado y
+  // sin el panel `#slh-notas-panel` la pregunta se resuelve sola con null.
+  const viejoHud = document.getElementById('sri-loop-hud');
+  if (viejoHud) viejoHud.remove();
+  SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+
+  const promesaZ = SriLoopHUD.preguntarNotasDeVenta(
+    { ruc: RUC, nombre: 'CLIENTE NUEVO', periodo: '2026-08', segundos: 30 });
+  await new Promise(r => setTimeout(r, 120));
+  const zMonto = document.getElementById('slh-nv-monto');
+  const zCant = document.getElementById('slh-nv-cant');
+  const zNc = document.getElementById('slh-nv-nc');
+  push('existe el campo del 518',            !!zNc, true);
+  push('el importe arranca vacío',           zMonto.value, '');
+  push('la cantidad también',                zCant.value, '');
+  push('y las NC también',                   zNc.value, '');
+  // `autocomplete="off"` es lo que impide que el navegador ofrezca lo del
+  // cliente anterior: el id es el mismo en todos.
+  push('nada de autocompletado en el importe', zMonto.getAttribute('autocomplete'), 'off');
+  push('ni en la cantidad',                    zCant.getAttribute('autocomplete'), 'off');
+  push('ni en las NC',                         zNc.getAttribute('autocomplete'), 'off');
+
+  // Lo que se va a escribir se dice ANTES, con el neto ya calculado.
+  zMonto.value = '50'; zNc.value = '8';
+  zMonto.dispatchEvent(new Event('input', { bubbles: true }));
+  zNc.dispatchEvent(new Event('input', { bubbles: true }));
+  const zEco = document.getElementById('slh-nv-eco').textContent;
+  push('el zEco anuncia el 508',              /50\.00 al 508/.test(zEco), true);
+  push('y el 518 YA restado',                /42\.00 al 518/.test(zEco), true);
+
+  document.getElementById('slh-nv-ok').click();
+  push('y la respuesta lleva las NC',        await promesaZ, { monto: 50, cantidad: 0, nc: 8 });
 
   document.getElementById('sri-loop-hud').remove();
 

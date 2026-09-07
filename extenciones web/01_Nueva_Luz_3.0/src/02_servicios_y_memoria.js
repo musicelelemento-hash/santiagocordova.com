@@ -1467,7 +1467,10 @@ const NotasDeVenta = {
 
         const monto = Number(datos && datos.monto) || 0;
         const cantidad = Math.round(Number(datos && datos.cantidad) || 0);
-        c.periodos[periodo] = { monto, cantidad, cuando: Date.now() };
+        // Las notas de crédito de esas notas de venta, para el 518. Se guardan
+        // porque sin ellas el neto no se puede recalcular al recargar.
+        const nc = Number(datos && datos.nc) || 0;
+        c.periodos[periodo] = { monto, cantidad, nc, cuando: Date.now() };
 
         if (monto === 0 && cantidad === 0) {
             c.ceros = (c.ceros || 0) + 1;
