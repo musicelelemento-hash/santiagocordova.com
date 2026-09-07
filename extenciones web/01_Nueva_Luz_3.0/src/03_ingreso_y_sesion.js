@@ -827,6 +827,9 @@ SafeStorage.get(null).then(async (items) => {
         if (YA_DECIDIDAS.includes(items.pendingAction)) {
             console.log(`🎯 [FLUJO] Ya hay algo decidido en curso («${items.pendingAction}»). ` +
                         'No se planta la extracción encima: eso rehacía todo el trabajo.');
+            console.log('🔄 Recuperando estado pendiente:', items);
+            const ghostData = await GhostMemory.getData();
+            ejecutarAccionPendiente({ ...ghostData, ...items });
             return;
         }
 

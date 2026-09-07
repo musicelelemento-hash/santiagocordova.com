@@ -80,7 +80,11 @@ comprobante de quien ya declaró.
    retenciones, NC y el wizard entero **para nada**, hasta que el paso 4 decía
    lo que el perfil ya había dicho. **No rompía nada** — el freno de la
    sustitutiva agarraba al final— así que costaba un minuto por cliente sin
-   que se notara. Guardia: `YA_DECIDIDAS = ['recuperar_comprobante', 'bajarTodos']`.
+   que se notara. Guardia: `YA_DECIDIDAS = ['recuperar_comprobante', 'bajar_todos_comprobantes', 'bajarTodos']`.
+   *Nota del 07-sep:* Al cortar la extracción con `return`, se omitía la llamada
+   posterior a `ejecutarAccionPendiente()`, dejando al bot congelado en
+   `lista-obligaciones.jsf`. Se corrigió despachando `ejecutarAccionPendiente()`
+   antes de salir.
 
 2. **El PDF se iba a la carpeta de descargas.** El botón «Comprobante de
    declaración» es un `submit` de JSF; el portal responde con
