@@ -1941,6 +1941,27 @@ const SriLoopHUD = {
         const r = await Proveedores.resumen();
         const faltan = await Proveedores.pendientes(40);
 
+        // A qué se dedica el CLIENTE. Sin esto no se puede juzgar ninguna de
+        // las decisiones de abajo: una compra da crédito tributario cuando
+        // alimenta una actividad que a su vez está gravada, así que la misma
+        // factura da distinta respuesta para un constructor y para otro rubro.
+        let quienCompra = null;
+        try {
+            const rucCli = typeof rucDelClienteActual === 'function' ? await rucDelClienteActual() : '';
+            if (rucCli && typeof Catastro !== 'undefined' && await Catastro.cargar()) {
+                quienCompra = Catastro.buscar(rucCli);
+            }
+        } catch (e) { /* sin catastro se sigue, con menos datos */ }
+
+        const bandaCliente = quienCompra
+            ? '<div style="background:rgba(56,189,248,0.12);color:#7dd3fc;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
+              `👤 <b>El cliente se dedica a:</b> ${esc(String(quienCompra.actividad || '(sin actividad en el catastro)').slice(0, 110))}` +
+              '<br><span style="opacity:0.75">Una compra da crédito tributario si es compatible con esta actividad. ' +
+              'Eso lo decidís vos: acá sólo está el dato.</span></div>'
+            : '<div style="background:rgba(251,191,36,0.14);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
+              '👤 <b>No se sabe a qué se dedica el cliente.</b> Sin eso no se puede juzgar si una ' +
+              'compra es compatible con su actividad. (Puede ser de otra provincia: el catastro es de El Oro.)</div>';
+
         if (r.total === 0) {
             panel.innerHTML =
                 '<div style="opacity:0.8;font-size:11px;line-height:1.55">' +
@@ -1964,7 +1985,7 @@ const SriLoopHUD = {
             '</div>';
 
         if (!faltan.length) {
-            panel.innerHTML = cabecera +
+            panel.innerHTML = cabecera + bandaCliente +
                 '<div style="background:rgba(74,222,128,0.14);color:#86efac;border-radius:8px;padding:8px;font-size:11px">' +
                 '✅ No queda ninguno sin clasificar.</div>';
             return;
@@ -1977,6 +1998,20 @@ const SriLoopHUD = {
             ? '<div style="background:rgba(239,68,68,0.16);color:#fca5a5;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
               `🚩 <b>${noActivos.length}</b> proveedor(es) NO figuran activos en el catastro del SRI. ` +
               'Una compra a un RUC suspendido es la clase de cosa que el SRI objeta.</div>'
+            : '';
+
+        // Los del 5% van primero. El usuario avisó que esa tarifa es del
+        // sector construcción: son justo los que hay que mirar contra la
+        // actividad del cliente, y perderlos al final de una lista de cuarenta
+        // es perderlos.
+        const del5 = faltan.filter((p) => p.tarifas && p.tarifas['5']);
+        faltan.sort((a, b) => ((b.tarifas && b.tarifas['5']) ? 1 : 0) - ((a.tarifas && a.tarifas['5']) ? 1 : 0));
+
+        const alerta5 = del5.length
+            ? '<div style="background:rgba(251,146,60,0.16);color:#fdba74;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
+              `🧱 <b>${del5.length}</b> proveedor(es) facturaron al <b>5%</b>, la tarifa del sector construcción. ` +
+              'Van primeros en la lista: revisá que su actividad y la del cliente justifiquen el crédito ' +
+              'tributario antes de marcarlos.</div>'
             : '';
 
         const filas = faltan.map((p) => {
@@ -1992,15 +2027,24 @@ const SriLoopHUD = {
                 : '';
             const bandera = p.estadoSri
                 ? `<span style="color:#fca5a5;font-weight:800"> · ${esc(p.estadoSri)}</span>` : '';
+            // A qué tarifa factura, contado de lo que se vio. No hace falta
+            // preguntárselo a nadie: está en cada factura.
+            const t = p.tarifas || {};
+            const vistas = Object.keys(t).sort();
+            const chapaTarifa = vistas.length
+                ? '<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;' +
+                  (t['5'] ? 'background:rgba(251,146,60,0.2);color:#fdba74"' : 'background:rgba(148,163,184,0.16);color:#cbd5e1"') +
+                  ` title="Tarifas vistas en sus comprobantes">${vistas.map((k) => (k === '?' ? '?' : k + '%') + '×' + t[k]).join(' ')}</span>`
+                : '';
             return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
                 `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}${p.actividad ? ' · ' + esc(p.actividad) : ''}">` +
-                `  <b>${esc(nombre)}</b>${bandera}${cat}<span style="opacity:0.55"> · ${p.veces} comp.</span>${act}</span>` +
+                `  <b>${esc(nombre)}</b>${bandera}${cat}<span style="opacity:0.55"> · ${p.veces} comp.</span>${chapaTarifa}${act}</span>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
                 '</div>';
         }).join('');
 
-        panel.innerHTML = cabecera + alertaEstado +
+        panel.innerHTML = cabecera + bandaCliente + alertaEstado + alerta5 +
             `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">Faltan clasificar <b>${faltan.length}</b>, los más frecuentes primero:</div>` +
             filas +
             '<div style="font-size:10px;opacity:0.6;margin-top:8px;line-height:1.5">' +

@@ -1585,7 +1585,10 @@ const Proveedores = {
 
             const previo = base[ruc] || {
                 nombre: '', actividad: null, deducible: null, origen: null,
-                vistoEn: [], veces: 0, primero: Date.now()
+                vistoEn: [], veces: 0, primero: Date.now(),
+                // A qué tarifa factura este proveedor, contado de lo que se ve.
+                // No es un dato que haya que preguntar: está en cada factura.
+                tarifas: {}
             };
             if (!base[ruc]) nuevos.add(ruc);
 
@@ -1594,6 +1597,19 @@ const Proveedores = {
 
             previo.veces = (previo.veces || 0) + 1;
             previo.ultimo = Date.now();
+
+            // La tarifa se deduce del cociente IVA/base, igual que en el
+            // llenado. Se cuenta, no se promedia: un proveedor puede facturar
+            // al 15% y al 5% —materiales y obra— y las dos cosas son ciertas.
+            if (typeof clasificarTarifaIva === 'function' &&
+                typeof f.valorSinImpuestos === 'number') {
+                let t;
+                try { t = clasificarTarifaIva(f.valorSinImpuestos, f.iva || 0).tarifa; }
+                catch (e) { t = undefined; }
+                const clave = (t === null || t === undefined) ? '?' : String(t);
+                previo.tarifas = previo.tarifas || {};
+                previo.tarifas[clave] = (previo.tarifas[clave] || 0) + 1;
+            }
             if (cli.length === 13 && !previo.vistoEn.includes(cli) &&
                 previo.vistoEn.length < this._TOPE_CLIENTES) {
                 previo.vistoEn.push(cli);
@@ -1604,6 +1620,84 @@ const Proveedores = {
         try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return 0; }
         if (nuevos.size) console.log(`🏷️ [PROVEEDORES] ${nuevos.size} proveedor(es) nuevo(s) anotado(s).`);
         return nuevos.size;
+    },
+
+    /**
+     * Junta los TRES datos que deciden si una compra da crédito tributario.
+     *
+     * **No decide.** Junta. El crédito tributario no es una propiedad del
+     * proveedor: sale de la tarifa, de a qué se dedica el proveedor y de a qué
+     * se dedica el cliente —porque una compra da crédito cuando alimenta una
+     * actividad que a su vez está gravada—. Con `deducible` colgando sólo del
+     * RUC del proveedor, la misma factura daba la misma respuesta para un
+     * constructor y para una peluquería, y eso es falso.
+     *
+     * Lo dijo el usuario el 06-sep-2026 y por eso existe esto.
+     *
+     * @param {string} rucProveedor Quien emitió la factura.
+     * @param {string} rucCliente El contribuyente que la recibió.
+     * @returns {Promise<object>} Los tres datos, la decisión si alguien la tomó
+     *   (o `null`), y los avisos que valga la pena mirar.
+     */
+    async porQueDecidir(rucProveedor, rucCliente) {
+        const rp = String(rucProveedor || '').replace(/\D/g, '');
+        const rc = String(rucCliente || '').replace(/\D/g, '');
+        const p = (await this._todos())[rp] || null;
+
+        // El catastro está en disco: preguntarle no cuesta una petición.
+        let cat = null, catCliente = null;
+        if (typeof Catastro !== 'undefined') {
+            try {
+                if (await Catastro.cargar()) {
+                    cat = Catastro.buscar(rp);
+                    catCliente = Catastro.buscar(rc);
+                }
+            } catch (e) { /* sin catastro se sigue, con menos datos */ }
+        }
+
+        const tarifas = (p && p.tarifas) || {};
+        const avisos = [];
+
+        // El 5%: el usuario avisó que esa tarifa es del sector construcción.
+        // Queda anotado como lo que es —lo que dijo él, no una lectura de la
+        // ley— y sirve para que salte a la vista, no para decidir por nadie.
+        if (tarifas['5']) {
+            avisos.push(
+                `Facturó al 5% en ${tarifas['5']} comprobante(s). Según el usuario esa tarifa ` +
+                'es del sector construcción: confirmá que la actividad del proveedor y la del ' +
+                'cliente la justifiquen antes de darle crédito tributario.');
+        }
+        if (tarifas['?']) {
+            avisos.push(`${tarifas['?']} comprobante(s) suyos quedaron sin tarifa reconocible.`);
+        }
+        if (cat && !cat.activo) {
+            avisos.push(`El catastro lo da como ${cat.estado} y sigue emitiendo.`);
+        }
+        if (!catCliente) {
+            avisos.push('No se sabe a qué se dedica el CLIENTE: sin eso no se puede juzgar ' +
+                        'si la compra es compatible con su actividad.');
+        }
+
+        return {
+            proveedor: {
+                ruc: rp,
+                nombre: (p && p.nombre) || '',
+                actividad: (p && p.actividad) || (cat && cat.actividad) || null,
+                ciiu: (cat && cat.ciiu) || null,
+                estado: (cat && cat.estado) || null
+            },
+            cliente: {
+                ruc: rc,
+                actividad: (catCliente && catCliente.actividad) || null,
+                ciiu: (catCliente && catCliente.ciiu) || null
+            },
+            tarifas,
+            // `null` es «nadie lo decidió», y no se convierte en un sí ni en un
+            // no. Es la misma regla de todo el proyecto.
+            credito: p ? (p.deducible === undefined ? null : p.deducible) : null,
+            origen: (p && p.origen) || null,
+            avisos
+        };
     },
 
     /** Lo que se sabe de un RUC, o null si nunca se lo vio. */

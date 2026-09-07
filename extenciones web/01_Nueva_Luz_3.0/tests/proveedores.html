@@ -187,6 +187,73 @@
 
   await Proveedores.olvidarTodo();
 
+  // ══ Z · el credito tributario no cuelga del proveedor solo ══════════════
+  sec('Z · tarifa + actividad del proveedor + actividad del cliente');
+  // El usuario, 06-sep-2026: «hay iva 5% que es de construccion y hay valores
+  // sin derecho tributario, o sea la herramienta tiene que saber de IVA
+  // porcentaje y la actividad para saber si es credito tributario, ademas
+  // saber la actividad del CLIENTE para que sea compatible».
+  //
+  // Con `deducible` colgando solo del RUC del proveedor, la misma factura daba
+  // la misma respuesta para un constructor y para una peluqueria. Es falso.
+
+  const OBRA = '0790000000001';   // factura al 5%: construccion
+  const SUPER = '0791111111001';  // factura al 15% y al 0%: supermercado
+
+  // Se anota la tarifa mirando la factura, no preguntandosela a nadie.
+  await Proveedores.registrarLote([
+    { rucEmisor: OBRA,  razonSocial: 'CONSTRUCTORA DEL SUR', valorSinImpuestos: 1000, iva: 50 },
+    { rucEmisor: OBRA,  razonSocial: 'CONSTRUCTORA DEL SUR', valorSinImpuestos: 200,  iva: 10 },
+    { rucEmisor: SUPER, razonSocial: 'SUPERMERCADO',         valorSinImpuestos: 100,  iva: 15 },
+    { rucEmisor: SUPER, razonSocial: 'SUPERMERCADO',         valorSinImpuestos: 80,   iva: 0  }
+  ], C1);
+
+  const obra = await Proveedores.saber(OBRA);
+  push('se cuenta a que tarifa factura cada uno', obra.tarifas, { '5': 2 });
+  const sup = await Proveedores.saber(SUPER);
+  push('y un proveedor puede tener varias',       sup.tarifas, { '15': 1, '0': 1 });
+
+  const d = await Proveedores.porQueDecidir(OBRA, C1);
+  push('junta al proveedor…',   d.proveedor.ruc, OBRA);
+  push('…y al cliente',         d.cliente.ruc,   C1);
+  push('con las tarifas vistas',d.tarifas,       { '5': 2 });
+
+  // Lo central: NO decide. Nadie lo clasifico todavia, asi que es null — y
+  // null no es «no da credito», es «nadie lo decidio».
+  push('y NO decide por su cuenta',               d.credito, null);
+  push('ni se inventa un origen',                 d.origen,  null);
+
+  // El 5% salta a la vista, que es lo que pidio el usuario.
+  push('avisa que facturó al 5%',
+       d.avisos.some(a => /5%/.test(a)), true);
+  push('y nombra a la construcción',
+       d.avisos.some(a => /construcci/i.test(a)), true);
+  // Y no lo presenta como ley: lo presenta como lo que dijo el usuario.
+  push('sin hacerlo pasar por lectura de la ley',
+       d.avisos.some(a => /seg[uú]n el usuario/i.test(a)), true);
+
+  // Si no se sabe a que se dedica el cliente, se DICE. Callarlo seria dejar
+  // creer que la decision se puede tomar con lo que hay.
+  push('avisa cuando no se sabe del cliente',
+       d.avisos.some(a => /CLIENTE/.test(a)), true);
+
+  // Un proveedor que factura al 15% y al 0% no dispara el aviso del 5%.
+  const d2 = await Proveedores.porQueDecidir(SUPER, C1);
+  push('el que no factura al 5% no lo dispara',
+       d2.avisos.some(a => /5%/.test(a)), false);
+
+  // Y lo que decide el contador se devuelve tal cual, con su origen.
+  await Proveedores.clasificar(OBRA, { deducible: true, origen: 'usuario' });
+  const d3 = await Proveedores.porQueDecidir(OBRA, C1);
+  push('la decisión del contador se devuelve',    d3.credito, true);
+  push('con su origen a la vista',                d3.origen,  'usuario');
+
+  // Un RUC que nunca se vio no rompe nada ni inventa una respuesta.
+  const d4 = await Proveedores.porQueDecidir('0799999999001', C1);
+  push('un desconocido no inventa una decisión',  d4.credito, null);
+
+  await Proveedores.olvidarTodo();
+
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =
     L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'

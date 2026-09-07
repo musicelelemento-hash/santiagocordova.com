@@ -513,9 +513,20 @@ contador.
 **Construido el 06-sep-2026.** `NotasDeVenta` en `02_servicios_y_memoria.js`,
 interruptor **📒** en la barra flotante — **apagado por defecto**.
 
-Cuando está encendido, el paso 3.5 de `llenarCompras()` pide los dos números en
-un panel del HUD, con temporizador visible. Si nadie contesta, la promesa se
-resuelve sola con `null` y el lote sigue.
+Cuando está encendido, el **paso 1.2** de `llenarCompras()` —apenas se abre la
+sección COMPRAS, no al final del llenado— pide los dos números en un panel del
+HUD, con temporizador visible. Si nadie contesta, la promesa se resuelve sola
+con `null` y el lote sigue. El paso 3.5 sólo **escribe** lo que se preguntó,
+en el orden en que el formulario lista los casilleros.
+
+> **Movido el 06-sep-2026 a pedido del usuario**: «tampoco vi la sugerencia a
+> entrar valores y cantidades de doc físicos notas de venta, eso desde que
+> formulario sección compras, no al último». Preguntar con todo ya lleno era
+> preguntar tarde.
+>
+> Y cuando **no** se pregunta, ahora se dice por qué —el interruptor 📒 está
+> apagado, o el cliente lleva tres períodos en cero—. Una ausencia callada es
+> indistinguible de una falla, y fue exactamente lo que pasó.
 
 > **`null` no es cero.** Un silencio significa «no sé» y **no se escribe nada**
 > en el 508 ni en el 117. Un cero inventado ahí es una declaración mal hecha.
@@ -721,11 +732,57 @@ scripts en el panel del navegador.
 
 ### 9b. Cómo decide qué va a cada uno
 
-Con la base de proveedores de la §7:
+> **CORREGIDO el 06-sep-2026 por el usuario.** Lo que decía acá abajo estaba
+> corto: hacía colgar el crédito tributario del proveedor solo, como si fuera
+> una propiedad suya.
+
+Sus palabras:
+
+> «hay iva 5% que es de construcción y hay valores sin derecho tributario, o
+> sea la herramienta tiene que saber de IVA porcentaje **y la actividad** para
+> saber si es crédito tributario, además saber **la actividad del cliente**
+> para que sea compatible»
+
+El crédito tributario sale de **tres** cosas juntas, no de una:
+
+| | Dato | De dónde sale |
+| :--- | :--- | :--- |
+| 1 | **La tarifa** de la compra | del cociente IVA/base, o del XML (§11) |
+| 2 | **A qué se dedica el proveedor** | del catastro (§10a) |
+| 3 | **A qué se dedica el cliente** | del catastro, por su propio RUC |
+
+El tercero es el que faltaba, y es el que hace que la respuesta cambie: una
+compra da crédito cuando **alimenta una actividad que a su vez está gravada**.
+La misma factura da distinta respuesta para un constructor que para otro rubro.
+Con `deducible` colgando sólo del RUC del proveedor, las dos daban lo mismo.
+
+**El 5% es la tarifa del sector construcción** — dicho por el usuario, no leído
+de la ley, y anotado como tal. Por eso una factura al 5% es justo la que hay
+que mirar contra las actividades de los dos lados.
+
+#### Lo que está construido (06-sep-2026)
+
+- `Proveedores.registrarLote()` **cuenta a qué tarifa factura cada proveedor**,
+  mirando cada comprobante. No hay que preguntárselo a nadie: está en la
+  factura. Queda en `tarifas: { '15': n, '5': n, '0': n, '?': n }`.
+- `Proveedores.porQueDecidir(rucProveedor, rucCliente)` junta los tres datos y
+  devuelve los avisos que valen la pena. **No decide**: `credito` es `null`
+  mientras nadie lo haya decidido, y `null` no es «no da crédito».
+- El panel **🏷️** muestra arriba **a qué se dedica el cliente**, avisa cuando
+  no se sabe, pone **los del 5% primero** y le cuelga a cada proveedor la chapa
+  de las tarifas que se le vieron.
+
+Banco: `tests/proveedores.html`, sección Z.
+
+#### Lo que falta, y es criterio contable
+
+El **mapa**: qué combinación de (tarifa · actividad del proveedor · actividad
+del cliente) da crédito tributario y cuál no. Eso lo pone el contador; el bot
+junta los datos y los muestra.
 
     factura recibida
-        ├─ proveedor con derecho a crédito  → 500/510 (15%) · 540/550 (5%) · 507/517 (0%)
-        └─ proveedor sin derecho a crédito  → 502/512
+        ├─ con derecho a crédito  → 500/510 (15%) · 540/550 (5%) · 507/517 (0%)
+        └─ sin derecho a crédito  → 502/512
 
 Y la misma regla de siempre: **si no se sabe, no se inventa.** Un proveedor sin
 clasificar va donde va hoy, queda en la lista de pendientes, y no se lo manda

@@ -237,6 +237,53 @@ async function llenarCompras(data) {
     // ─── PASO 1: Expandir Sección COMPRAS si está colapsada ───────────────────
     await toggleSriSection('COMPRAS', true);
 
+    // ─── PASO 1.2: Notas de venta (casilleros 508 y 117) ─────────────────────
+    // Son comprobantes FÍSICOS: no están en «comprobantes electrónicos
+    // recibidos» y el bot no tiene de dónde sacarlos. El dato lo tiene el
+    // contador. Si no lo da, NO se escribe nada: un cero inventado acá es una
+    // declaración mal hecha.
+    //
+    // Se pregunta ACÁ, apenas se abre COMPRAS, y no al final del llenado.
+    // Pedido del usuario el 06-sep-2026: la pregunta llega cuando la sección
+    // está en pantalla, que es cuando quien mira puede contestarla mirando el
+    // formulario. Preguntarlo al final, con todo lleno, era preguntar tarde.
+    let nvPendiente = null;
+    if (typeof NotasDeVenta !== 'undefined') {
+        try {
+            const rucNv = typeof rucDelClienteActual === 'function' ? await rucDelClienteActual() : '';
+            const st = await SafeStorage.get(['workflowPeriod', 'pending_sri_autofill']);
+            const wp = st.workflowPeriod;
+            const periodoNv = wp
+                ? `${wp.year}-${String((wp.monthIndex || 0) + 1).padStart(2, '0')}`
+                : '';
+
+            if (rucNv && periodoNv) {
+                let nv = await NotasDeVenta.saber(rucNv, periodoNv);
+                if (!nv) {
+                    if (await NotasDeVenta.debePreguntar(rucNv)) {
+                        // Con temporizador: si nadie contesta, el lote sigue.
+                        nv = await NotasDeVenta.preguntar(
+                            rucNv, (st.pending_sri_autofill || {}).name, periodoNv);
+                    } else {
+                        // Y se DICE por qué no se preguntó. Una ausencia callada
+                        // es indistinguible de una falla, y fue justo lo que
+                        // pasó: «tampoco vi la sugerencia».
+                        const enc = await NotasDeVenta.estaEncendido();
+                        console.log(enc
+                            ? '📒 Paso 1.2: a este contribuyente no se le pregunta por notas de venta ' +
+                              '(tres períodos seguidos en cero). Se lo despierta con sriNotasDeVentaPreguntar("RUC").'
+                            : '📒 Paso 1.2: no se pregunta por notas de venta porque el interruptor 📒 está APAGADO. ' +
+                              'Está en el cajón 🧰 de la barra, rotulado «Notas de venta».');
+                    }
+                }
+                nvPendiente = nv;
+            }
+        } catch (e) {
+            // Preguntar por las notas de venta nunca puede tumbar el llenado.
+            console.warn('📒 [NOTAS DE VENTA] No se pudo preguntar:', e.message);
+        }
+    }
+
     // ─── PASO 1.5: Número de Comprobantes (Casillero 115) ───────────────────
     const docsCount = facturas.totalFacturas || facturas.recibidosCount || 0;
     if (docsCount > 0) {
@@ -340,51 +387,25 @@ async function llenarCompras(data) {
         console.log('  ℹ️ Sin compras ni NC tarifa 0%.');
     }
 
-    // ─── PASO 3.5: Notas de venta (casilleros 508 y 117) ─────────────────────
-    // Son comprobantes FÍSICOS: no están en «comprobantes electrónicos
-    // recibidos» y el bot no tiene de dónde sacarlos. El dato lo tiene el
-    // contador. Si no lo da, NO se escribe nada: un cero inventado acá es una
-    // declaración mal hecha.
-    if (typeof NotasDeVenta !== 'undefined') {
-        try {
-            const rucNv = typeof rucDelClienteActual === 'function' ? await rucDelClienteActual() : '';
-            const st = await SafeStorage.get(['workflowPeriod', 'pending_sri_autofill']);
-            const wp = st.workflowPeriod;
-            const periodoNv = wp
-                ? `${wp.year}-${String((wp.monthIndex || 0) + 1).padStart(2, '0')}`
-                : '';
-
-            if (rucNv && periodoNv) {
-                let nv = await NotasDeVenta.saber(rucNv, periodoNv);
-                if (!nv && await NotasDeVenta.debePreguntar(rucNv)) {
-                    // Con temporizador: si nadie contesta, el lote sigue.
-                    nv = await NotasDeVenta.preguntar(
-                        rucNv, (st.pending_sri_autofill || {}).name, periodoNv);
-                }
-
-                if (nv && (nv.monto > 0 || nv.cantidad > 0)) {
-                    console.log(`\n📒 Paso 3.5: Notas de venta · $${nv.monto.toFixed(2)} en ${nv.cantidad} comprobante(s)...`);
-                    // Los id del 508 y el 117 no están en la Matriz Tatuada: se
-                    // buscan por número. Si no aparecen, la plata NO se manda a
-                    // otro casillero — se anota y el cierre mágico frena.
-                    if (nv.monto > 0) {
-                        if (await llenarCampo('508', nv.monto)) { camposLlenados++; await sleep(900); }
-                        else sinUbicar.push(`no se encontró el casillero 508: $${nv.monto.toFixed(2)} de notas de venta quedaron sin declarar`);
-                    }
-                    if (nv.cantidad > 0) {
-                        if (await llenarCampo('117', nv.cantidad)) { camposLlenados++; await sleep(600); }
-                        else sinUbicar.push(`no se encontró el casillero 117: la cantidad de notas de venta quedó sin declarar`);
-                    }
-                } else if (nv) {
-                    console.log('📒 Paso 3.5: el contador dijo que este período no tiene notas de venta. No se toca el 508 ni el 117.');
-                } else {
-                    console.log('📒 Paso 3.5: sin dato de notas de venta. No se escribe nada — un cero inventado sería una declaración mal hecha.');
-                }
-            }
-        } catch (e) {
-            // Preguntar por las notas de venta nunca puede tumbar el llenado.
-            console.warn('📒 [NOTAS DE VENTA] No se pudo preguntar:', e.message);
+    // ─── PASO 3.5: Notas de venta: escribir lo que se preguntó al abrir ──────
+    // La PREGUNTA se hizo en el paso 1.2, con la sección recién abierta. Acá
+    // sólo se escribe, y en el orden en que el formulario lista los casilleros.
+    if (nvPendiente && (nvPendiente.monto > 0 || nvPendiente.cantidad > 0)) {
+        console.log(`
+📒 Paso 3.5: Notas de venta · $${nvPendiente.monto.toFixed(2)} en ${nvPendiente.cantidad} comprobante(s)...`);
+        // Los id del 508 y el 117 no están en la Matriz Tatuada: se buscan por
+        // número. Si no aparecen, la plata NO se manda a otro casillero — se
+        // anota y el cierre mágico frena.
+        if (nvPendiente.monto > 0) {
+            if (await llenarCampo('508', nvPendiente.monto)) { camposLlenados++; await sleep(900); }
+            else sinUbicar.push(`no se encontró el casillero 508: $${nvPendiente.monto.toFixed(2)} de notas de venta quedaron sin declarar`);
         }
+        if (nvPendiente.cantidad > 0) {
+            if (await llenarCampo('117', nvPendiente.cantidad)) { camposLlenados++; await sleep(600); }
+            else sinUbicar.push('no se encontró el casillero 117: la cantidad de notas de venta quedó sin declarar');
+        }
+    } else if (nvPendiente) {
+        console.log('📒 Paso 3.5: el contador dijo que este período no tiene notas de venta. No se toca el 508 ni el 117.');
     }
 
     // ─── PASO 4: Valores Sugeridos (564 y 565) ───────────────────────────────
