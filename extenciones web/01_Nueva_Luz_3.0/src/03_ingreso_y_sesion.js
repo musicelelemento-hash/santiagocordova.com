@@ -808,6 +808,28 @@ SafeStorage.get(null).then(async (items) => {
             }
         } catch (e) { /* la consulta nunca puede frenar el flujo */ }
 
+        // ── El atajo no se pisa ─────────────────────────────────────────────
+        // Este bloque corre en CADA carga con sesión abierta, y hasta el
+        // 07-sep-2026 terminaba siempre plantando `turbo_step1_facturas`.
+        // Cuando el perfil ya había decidido ir a buscar un comprobante, la
+        // página siguiente lo borraba y mandaba a extraer facturas de un
+        // contribuyente que ya había declarado: 19 facturas, retenciones,
+        // notas de crédito y el wizard entero, para que el paso 4 dijera lo
+        // que el perfil ya había dicho al principio.
+        //
+        // No rompía nada —el freno de la sustitutiva agarraba al final— así
+        // que costaba un minuto por cliente sin que se notara.
+        //
+        // Las acciones de abajo son DECISIONES ya tomadas, no pasos de una
+        // secuencia: quien las puso sabía más que este bloque, que llega a
+        // esta línea justamente cuando NO supo concluir nada.
+        const YA_DECIDIDAS = ['recuperar_comprobante', 'bajar_todos_comprobantes', 'bajarTodos'];
+        if (YA_DECIDIDAS.includes(items.pendingAction)) {
+            console.log(`🎯 [FLUJO] Ya hay algo decidido en curso («${items.pendingAction}»). ` +
+                        'No se planta la extracción encima: eso rehacía todo el trabajo.');
+            return;
+        }
+
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();

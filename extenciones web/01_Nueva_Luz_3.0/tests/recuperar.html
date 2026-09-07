@@ -1,0 +1,154 @@
+<!doctype html><meta charset="utf-8"><title>Traer el comprobante de lo ya declarado</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>«Se pulsó la descarga pero no llegó ningún PDF»</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  El objetivo de la §0 no es declarar el mes: es que <b>cada</b> contribuyente
+  tenga guardado el comprobante de <b>cada</b> declaración presentada. Para los
+  que ya declararon, eso pasa por Consulta de declaraciones.
+  <br><br>
+  El botón «Comprobante de declaración» es un <code>submit</code> de JSF
+  (<code>PrimeFaces.onPost()</code>): manda el formulario entero y el portal
+  contesta con el PDF y <code>Content-Disposition: attachment</code>. El
+  <b>navegador</b> se lo lleva a la carpeta de descargas — ni <code>fetch</code>
+  ni <code>URL.createObjectURL</code> lo ven, así que el interceptor no tiene
+  cómo agarrarlo.
+  <br><br>
+  Se resuelve como el <code>lnkXml</code> de la §11: <b>reproducir el POST</b> en
+  vez de pulsar.
+  <br><br>
+  Y antes de eso, el 07-sep-2026 el atajo se perdía: el perfil decía
+  <code>ya_declarada</code>, arrancaba la recuperación, y la página siguiente
+  <b>pisaba la acción</b> y mandaba a extraer 19 facturas de alguien que ya
+  había declarado. No rompía nada — sólo costaba un minuto por cliente sin que
+  se notara.
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(54)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,66-t.length)));
+
+  const P = document.getElementById('portal');
+  const real = window.fetch;
+  // Lo último que se le pidió al portal, para poder mirarlo.
+  let ultimo = null;
+  const fingirPortal = (responder) => {
+    window.fetch = async (url, opts) => { ultimo = { url: String(url), opts }; return responder(); };
+  };
+  const comoPdf = (texto) => {
+    const b = new TextEncoder().encode(texto);
+    return { ok: true, status: 200, arrayBuffer: async () => b.buffer };
+  };
+
+  // La fila tal como la pinta Consulta de declaraciones.
+  const pintarFila = () => {
+    P.innerHTML =
+      '<form id="formPresentada" action="/sri-eyr-consulta-web-internet/pages/consulta/obligacion/lista-obligaciones.jsf">' +
+      '  <input type="hidden" name="formPresentada" value="formPresentada">' +
+      '  <input type="hidden" name="javax.faces.ViewState" value="VS-123">' +
+      '  <input type="text" name="formPresentada:somAnioFiscal" value="2026">' +
+      '  <input type="checkbox" name="formPresentada:chkOtro">' +
+      '  <input type="text" name="formPresentada:deshabilitado" value="no" disabled>' +
+      '  <button type="submit" name="formPresentada:tblConsultaDeclaracion:7:j_idt66"' +
+      '          title="Comprobante de declaración">bajar</button>' +
+      '</form>';
+    return P.querySelector('button');
+  };
+
+  // ══ A · el POST lleva lo que JSF necesita ═══════════════════════════════
+  sec('A · reproducir el POST del botón');
+  const boton = pintarFila();
+  fingirPortal(() => comoPdf('%PDF-1.4 comprobante de prueba'));
+  const b64 = await traerPdfDelComprobantePresentado(boton);
+
+  push('vuelve un PDF en base64',            typeof b64 === 'string' && b64.length > 10, true);
+  push('y es el que mandó el portal',
+       atob(b64).startsWith('%PDF-1.4'), true);
+
+  const cuerpo = new URLSearchParams(ultimo.opts.body);
+  // Sin el name del botón, JSF recibe el POST y no sabe qué se pulsó.
+  push('el POST dice QUÉ botón se pulsó',
+       cuerpo.get('formPresentada:tblConsultaDeclaracion:7:j_idt66'),
+       'formPresentada:tblConsultaDeclaracion:7:j_idt66');
+  push('lleva el ViewState',                 cuerpo.get('javax.faces.ViewState'), 'VS-123');
+  push('y el resto de los campos',           cuerpo.get('formPresentada:somAnioFiscal'), '2026');
+  // Un checkbox sin marcar no se manda, igual que haría el navegador.
+  push('un checkbox sin marcar no va',       cuerpo.has('formPresentada:chkOtro'), false);
+  push('un campo deshabilitado tampoco',     cuerpo.has('formPresentada:deshabilitado'), false);
+  push('va al action del formulario',
+       /lista-obligaciones\.jsf$/.test(ultimo.url.split('?')[0]), true);
+  push('y es POST con las cookies',
+       ultimo.opts.method === 'POST' && ultimo.opts.credentials === 'include', true);
+
+  // ══ B · lo que NO es un comprobante no se guarda ════════════════════════
+  sec('B · nunca guardar basura como comprobante');
+  // Con la sesión caída el portal contesta HTML. Guardar eso como comprobante
+  // es peor que no tener ninguno: el panel diría que está y no estaría.
+  fingirPortal(() => comoPdf('<!doctype html><html>Su sesión ha expirado'));
+  push('un HTML no pasa por PDF',            await traerPdfDelComprobantePresentado(boton), null);
+  push('y lo dice',
+       window.__logs.some(l => /no es un PDF/.test(l)), true);
+
+  fingirPortal(() => ({ ok: false, status: 500, arrayBuffer: async () => new ArrayBuffer(0) }));
+  push('un HTTP 500 devuelve null',          await traerPdfDelComprobantePresentado(boton), null);
+
+  fingirPortal(() => { throw new Error('sin red'); });
+  push('si no hay red, tampoco revienta',    await traerPdfDelComprobantePresentado(boton), null);
+
+  // ══ C · sin dónde postear, no se inventa ════════════════════════════════
+  sec('C · un botón suelto no alcanza');
+  P.innerHTML = '<button id="huerfano" name="x">bajar</button>';
+  push('un botón fuera de un form da null',
+       await traerPdfDelComprobantePresentado(document.getElementById('huerfano')), null);
+
+  P.innerHTML = '<form><button id="sinnombre">bajar</button></form>';
+  push('un botón sin name tampoco',
+       await traerPdfDelComprobantePresentado(document.getElementById('sinnombre')), null);
+
+  push('y sin botón, null',                  await traerPdfDelComprobantePresentado(null), null);
+
+  window.fetch = real;
+  P.innerHTML = '';
+
+  // ══ D · el atajo no se pisa ═════════════════════════════════════════════
+  sec('D · una decisión tomada no se rehace');
+  // El perfil dijo `ya_declarada` y arrancó la recuperación. La página
+  // siguiente NO puede plantar `turbo_step1_facturas` encima: eso mandaba a
+  // extraer 19 facturas de alguien que ya había declarado, y el freno recién
+  // llegaba cuatro pasos después, en el wizard.
+  const fuente = await (await fetch('../src/03_ingreso_y_sesion.js')).text();
+  push('el auto-arranque respeta lo ya decidido',
+       /YA_DECIDIDAS[\s\S]{0,200}recuperar_comprobante/.test(fuente), true);
+  push('y frena antes de plantar la extracción',
+       /YA_DECIDIDAS\.includes\(items\.pendingAction\)[\s\S]{0,320}return;[\s\S]{0,320}pendingAction = 'turbo_step1_facturas'/.test(fuente), true);
+  push('también cuida `bajarTodos`',
+       /YA_DECIDIDAS[\s\S]{0,200}bajarTodos/.test(fuente), true);
+
+  // Y que el bundle esté reconstruido: si alguien toca el fuente y no corre
+  // `npm run build`, la extensión sigue con el código viejo y nadie se entera.
+  const bundle = await (await fetch('../build/content.js')).text();
+  push('el bundle está reconstruido',
+       /traerPdfDelComprobantePresentado/.test(bundle), true);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

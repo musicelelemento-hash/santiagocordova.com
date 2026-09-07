@@ -94,6 +94,16 @@
   - Añadir un pequeño respiro (`await sleep(500)`) antes del salto de navegación desde el perfil.
   - Soportar el fallback a la URL directa de comprobantes (`SRI_RECIBIDOS_URL`) o detectar `verificaEmail.jspa`.
 
+### F. Recuperación Directa de Comprobante y Captura de PDF en Consulta de Declaraciones
+- **Problema detectado en corrida con Guido Chávez (RUC `0706482023001`):**
+  1. **Secuestro de flujo y pérdida de tiempo:** El perfil detectaba correctamente `ya_declarada` y redirigía a *Consulta de declaraciones*, pero al cargar `lista-obligaciones.jsf`, la guarda de sesión activa sin filtro sobreescribía `pendingAction = 'turbo_step1_facturas'`, haciendo que el bot perdiera 25 segundos extrayendo 19 facturas, retenciones y navegando el wizard de declaración hasta que el paso 4 volvía a detectar sustitutiva.
+  2. **Descarga de PDF no capturada:** Al pulsar «Comprobante de declaración» (`PrimeFaces.onPost()`), el navegador enviaba el archivo a la carpeta de descargas del usuario sin pasar por `fetch` ni `URL.createObjectURL`, por lo que el log arrojaba `Se pulsó la descarga pero no llegó ningún PDF`.
+- **Solución implementada:**
+  1. **Blindaje de acción decidida (`src/03_ingreso_y_sesion.js`):** Guarda `YA_DECIDIDAS = ['recuperar_comprobante', 'bajar_todos_comprobantes', 'bajarTodos']`. Si ya hay una acción de recuperación o barrido en curso, o ya estamos en Consulta de declaraciones, no se pisa con la extracción. Va directo por el comprobante.
+  2. **Reproducción de POST nativo (`src/07_navegacion_sri.js`):** Nueva función `traerPdfDelComprobantePresentado(boton)` que emula el POST JSF vía `fetch` enviando el formulario completo con `javax.faces.ViewState` y el `name` del botón. Valida los magic bytes `%PDF` y convierte a base64 para subirlo directamente a Supabase y Cloudflare R2 sin depender de descargas del navegador.
+  3. **Banco de pruebas:** `tests/recuperar.html` (añadido a `tests/index.html`).
+
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS

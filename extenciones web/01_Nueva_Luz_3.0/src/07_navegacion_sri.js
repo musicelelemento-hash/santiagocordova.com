@@ -333,6 +333,91 @@ async function prepararTablaDeclaraciones(anio) {
     return !!document.getElementById('formPresentada:tblConsultaDeclaracion');
 }
 
+/**
+ * Trae el PDF del botón «Comprobante de declaración» sin pulsarlo.
+ *
+ * **Por qué no se pulsa.** Ese botón es un `submit` de JSF
+ * (`onclick="PrimeFaces.onPost()"`): manda el formulario entero y el portal
+ * responde con el PDF y `Content-Disposition: attachment`. El navegador se lo
+ * lleva a la carpeta de descargas del usuario, y ni `fetch` ni
+ * `URL.createObjectURL` lo ven — o sea que el interceptor del módulo 01 no
+ * tiene forma de agarrarlo. El 07-sep-2026 el log decía «se pulsó la descarga
+ * pero no llegó ningún PDF» mientras el archivo, probablemente, bajaba.
+ *
+ * Es el mismo caso de `lnkXml` (§11) y se resuelve igual: se arma el POST a
+ * mano con todos los campos del formulario más el nombre del botón, y se lee
+ * la respuesta. Así el comprobante llega a la mano, listo para subirlo.
+ *
+ * @param {HTMLElement} boton El botón de la fila que corresponde.
+ * @returns {Promise<string|null>} El PDF en base64, o `null`.
+ */
+async function traerPdfDelComprobantePresentado(boton) {
+    if (!boton) return null;
+    const form = boton.closest('form');
+    if (!form) {
+        console.warn('🧾 [RECUPERAR] El botón no está dentro de un formulario.');
+        return null;
+    }
+
+    // El nombre del botón ES el parámetro que le dice a JSF qué se pulsó. Sin
+    // eso el POST llega pero el portal no sabe qué hacer con él.
+    const nombre = boton.getAttribute('name') || boton.id;
+    if (!nombre) {
+        console.warn('🧾 [RECUPERAR] El botón no tiene name ni id: no se puede reproducir el POST.');
+        return null;
+    }
+
+    const cuerpo = new URLSearchParams();
+    // Todos los campos del formulario, tal como los mandaría el navegador.
+    Array.from(form.elements).forEach((el) => {
+        if (!el.name || el.disabled) return;
+        if (el.type === 'submit' || el.type === 'button') return;
+        if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+        cuerpo.append(el.name, el.value);
+    });
+    cuerpo.append(nombre, boton.value || nombre);
+
+    const destino = form.getAttribute('action') || window.location.href.split('#')[0];
+
+    try {
+        const r = await fetch(new URL(destino, window.location.href).href, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: cuerpo.toString()
+        });
+        if (!r.ok) {
+            console.warn(`🧾 [RECUPERAR] El portal devolvió HTTP ${r.status} al pedir el comprobante.`);
+            return null;
+        }
+
+        const buf = await r.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        // Un PDF empieza con «%PDF». Si vino HTML, la sesión caducó o el
+        // portal contestó otra cosa: no se guarda basura como comprobante.
+        if (bytes.length < 5 ||
+            !(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) {
+            console.warn('🧾 [RECUPERAR] La respuesta no es un PDF ' +
+                         `(${bytes.length} bytes, empieza con «${String.fromCharCode(...bytes.slice(0, 12))}»). ` +
+                         '¿Sesión caducada?');
+            return null;
+        }
+
+        // A base64 de a pedazos: `String.fromCharCode(...)` con un PDF entero
+        // revienta la pila de argumentos.
+        let bin = '';
+        for (let i = 0; i < bytes.length; i += 8192) {
+            bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+        }
+        const b64 = btoa(bin);
+        console.log(`🧾 [RECUPERAR] PDF traído por POST. Tamaño: ${bytes.length} bytes.`);
+        return b64;
+    } catch (err) {
+        console.warn('🧾 [RECUPERAR] Falló el POST del comprobante:', err.message);
+        return null;
+    }
+}
+
 async function ejecutarRecuperacionComprobante() {
     const st = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
     if (!st) { console.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
@@ -465,6 +550,7 @@ async function ejecutarRecuperacionComprobante() {
 
     // Si hay sustitutivas, la última presentada es la que vale.
     const fila = candidatas[candidatas.length - 1];
+    // (la función que reproduce el POST vive más abajo, junto a las utilidades)
     const celdas = Array.from(fila.querySelectorAll('td')).map((td) => (td.textContent || '').trim());
     const cep = celdas.find((c) => /^\d{10,}$/.test(c)) || '';
     const tipo = celdas.find((c) => /^(Original|Sustitutiva)/i.test(c)) || '';
@@ -487,16 +573,28 @@ async function ejecutarRecuperacionComprobante() {
 
     console.log(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
     capturedPdfBase64 = null;
-    clickElement(disparador, 'Consulta · comprobante de declaración');
 
-    // El PDF lo levanta el interceptor de URL.createObjectURL del módulo 01.
-    for (let i = 0; i < 25; i++) {
-        await sleep(700);
-        if (capturedPdfBase64) break;
+    // Primero se REPRODUCE el POST del botón. Pulsarlo hace que el navegador
+    // se lleve el PDF a la carpeta de descargas, donde el bot no lo ve: por
+    // eso el 07-sep-2026 decía «se pulsó la descarga pero no llegó ningún
+    // PDF» aunque el archivo hubiera bajado.
+    capturedPdfBase64 = await traerPdfDelComprobantePresentado(disparador);
+
+    // Y si el POST no salió, se pulsa igual: el interceptor del módulo 01
+    // levanta el PDF cuando el portal lo entrega por `createObjectURL`.
+    if (!capturedPdfBase64) {
+        console.log('🧾 [RECUPERAR] El POST no trajo el PDF. Pulsando el botón como respaldo...');
+        clickElement(disparador, 'Consulta · comprobante de declaración');
+        for (let i = 0; i < 25; i++) {
+            await sleep(700);
+            if (capturedPdfBase64) break;
+        }
     }
 
     if (!capturedPdfBase64) {
-        console.warn('🧾 [RECUPERAR] Se pulsó la descarga pero no llegó ningún PDF.');
+        console.warn('🧾 [RECUPERAR] Ni el POST ni el botón trajeron el comprobante. ' +
+                     'Puede que haya bajado a la carpeta de descargas del navegador: ' +
+                     'si está ahí, el portal contestó bien y lo que falla es la captura.');
         return false;
     }
 
