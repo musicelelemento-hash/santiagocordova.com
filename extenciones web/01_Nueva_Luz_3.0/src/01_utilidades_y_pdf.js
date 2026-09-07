@@ -511,8 +511,27 @@ function avisoLlaveWeb(status) {
            'a la del código. Abrí Ajustes de la extensión y apretá «Borrar»: si la del ' +
            'código está sana, con eso alcanza. Recién si sigue fallando hace falta una nueva.';
   }
-  return ' · Supabase rechaza la llave anon que viene en el código. ' +
-         'Copiá la nueva desde el panel de Supabase y pegala en Ajustes de la extensión.';
+  // La llave del código dio HTTP 200 probada desde afuera el 07-sep-2026 y
+  // 401 desde el content script. Antes de mandar a rotarla hay que descartar
+  // que lo que sale por el cable no sea la llave entera: si el bundle la
+  // truncara, el síntoma sería exactamente éste.
+  //
+  // Se dice la FORMA, nunca el valor: cuántos caracteres tiene y si sigue
+  // pareciendo un JWT (tres partes separadas por punto). Alcanza para
+  // distinguir «está rota» de «está sana y la rechazan», y no alcanza para
+  // nada más. Un log se pega en un chat.
+  const partes = String(SC_SUPABASE_ANON_KEY).split('.').length;
+  const forma = `${SC_SUPABASE_ANON_KEY.length} caracteres, ${partes} parte(s)`;
+  const sana = partes === 3 && SC_SUPABASE_ANON_KEY.length > 100;
+
+  return ' · Supabase rechaza la llave anon que viene en el código ' +
+         `(${forma}${sana ? '' : ' — NO parece un JWT completo: puede estar truncada'}). ` +
+         (sana
+            ? 'La llave llegó entera, así que el rechazo es del lado de Supabase: ' +
+              'revisá que el proyecto esté activo y que la llave no esté revocada. ' +
+              'Si hay que reemplazarla, se pega en Ajustes.'
+            : 'Revisá shared_config.js: eso NO es una llave completa, y rotarla no ' +
+              'arreglaría nada.');
 }
 
 /**

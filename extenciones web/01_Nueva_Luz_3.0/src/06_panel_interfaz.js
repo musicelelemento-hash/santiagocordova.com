@@ -1625,9 +1625,16 @@ class SriAssistantPanel {
                             const reg = guardadas[`${info.ruc}|${targetPeriodStr}`];
                             respaldado = !!(reg && reg.pdfSubido);
                         } catch (e) { /* si no se puede saber, no se afirma */ }
+                        // «NO llegó a la nube» afirmaba algo falso el 07-sep-2026:
+                        // el PDF SÍ se había subido a R2 (dos veces, con su URL en
+                        // el log) y lo que falló fue el registro en Supabase. Un
+                        // mensaje que dice que se perdió algo que está guardado
+                        // manda a rehacer trabajo hecho.
                         this.log(respaldado
                             ? '🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada. Comprobante guardado en la nube.'
-                            : '🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada, pero el comprobante NO llegó a la nube. Queda pendiente de respaldo: mirá el botón 📊.');
+                            : '🔄 [1-CLIC / AUTO BUCLE] Declaración finalizada. NO pude confirmar que el ' +
+                              'respaldo quede registrado — mirá más arriba si hay una URL de R2: si la hay, ' +
+                              'el PDF está guardado y lo que falló fue anotarlo. El botón 📊 lo dice.');
                         this.showEliteToast({ title: '⏩ Misión Cumplida', msg: 'Declaración OK. Finalizando sesión...', duration: 3000 });
                         
                         setTimeout(async () => {

@@ -34,6 +34,160 @@ edad, que preguntan lo mismo sobre el mismo RUC.
 
 ---
 
+## 0a. DOS IAs TRABAJANDO A LA VEZ — leé esto antes de tocar nada
+
+> Anotado el **07-sep-2026**, a pedido del usuario: *«estamos trabajando con
+> Gemini en paralelo»*. Puede que quien lea esto no sea la única IA sobre este
+> repositorio en este momento.
+
+### Las tres reglas que evitan pisarse
+
+**1 · El disco no es tuyo mientras lo leés.** Entre que leés un archivo y lo
+escribís, la otra IA pudo haberlo cambiado. Nunca sobrescribas un archivo
+entero a partir de lo que leíste hace rato: buscá el fragmento exacto,
+verificá que aparezca **una sola vez**, y reemplazá ése. Todos los parches de
+este proyecto se hacen así, y por eso se pueden aplicar sin miedo:
+
+```python
+if s.count(viejo) != 1:
+    raise SystemExit('esperaba 1, encontro %d' % s.count(viejo))
+```
+
+Si el conteo no da 1, **parar y mirar** — significa que el archivo no es el que
+creías. No "arreglarlo" ampliando el patrón.
+
+**2 · `npm run build` es de a uno.** `build/content.js` lo generan los siete
+`src/*.js` concatenados. Si las dos IAs compilan a la vez, gana la última y la
+otra se queda con un bundle que no corresponde a su código — y el síntoma es
+un fallo imposible de reproducir. Antes de compilar, `git status`: si hay
+cambios en `src/` que no son tuyos, la otra IA está en el medio de algo.
+
+**3 · Un commit, un tema.** Nada de commits que tocan el 5%, la subida y el
+panel a la vez. Si hay que revertir, tiene que poder revertirse una cosa sin
+llevarse las otras dos por delante.
+
+### Cómo dejar una propuesta en vez de hacerla
+
+Cuando veas algo que conviene cambiar pero **no es lo que te pidieron**, no lo
+hagas: anotalo. Las propuestas viven en la **§0c**, con este formato:
+
+```
+### Propuesta · <título corto>
+**Quién la propone**: <IA / fecha>
+**Qué se vio**: el hecho concreto, con el log o el archivo.
+**Qué se propone**: el cambio.
+**Qué cuesta / qué rompe**: honesto, incluido «no sé».
+**Estado**: propuesta · aceptada · descartada (con el motivo)
+```
+
+Una propuesta descartada **se deja escrita con el motivo**. Si no, la próxima
+IA la vuelve a proponer y se vuelve a descartar.
+
+### Lo que NO se toca sin pedirlo
+
+- **La Matriz de la §6.** Un `id` entra sólo con evidencia de que el bot
+  escribió en él, nunca por patrón numérico. Lo dice la §5b y ya salvó dos
+  veces.
+- **El contrato de envío de la §4.** Cinco condiciones, todas obligatorias.
+  Agregar está bien; aflojar una, no.
+- **Los bancos de `tests/`.** Se agregan comprobaciones; no se borran. Cada una
+  cuida un fallo que llegó a pantalla y costó un lote.
+- **Las claves.** Ni en `shared_config.js`, ni en el DOM del SRI, ni en un log.
+
+### Antes de decir «listo»
+
+```bash
+node --check src/0*.js && npm run build
+```
+
+y los catorce bancos en `tests/index.html` (hace falta el servidor:
+`bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
+scripts). **500 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
+número, algo se rompió; si lo sube, dejá dicho qué agregaste.
+
+---
+
+## 0c. PROPUESTAS ABIERTAS
+
+> Formato en la §0a. Lo que está acá **no está hecho**: es lo que una IA vio y
+> dejó anotado para que lo decida el usuario, u otra IA con más contexto.
+
+### Propuesta · Auditar los comprobantes archivados con el período equivocado
+
+**Quién la propone**: Claude · 07-sep-2026
+**Qué se vio**: el bug del período (§2c) archivó la declaración de agosto de
+2026 de CHAVEZ CORDOVA como **agosto de 2023**, porque su RUC
+(`0706482023001`) lleva `2023` adentro. El bug está arreglado, pero **lo que ya
+se archivó mal sigue archivado mal**.
+**Cuánta gente**: en el lote de 15 del 07-sep, 1 RUC de 15 contenía un `202X`.
+Sobre 500 contribuyentes son del orden de **30 o 40** — no es un caso raro.
+**Qué se propone**: un botón que no toca nada y sólo compara. La memoria local
+(`filed_<ruc>_2011_<mes>_<año>`) tiene el período **correcto**, porque se arma
+con `workflowPeriod` y no con la pantalla. Cruzarla contra lo que hay en
+Supabase / R2 y listar los que no coinciden. Después el usuario decide si se
+re-suben o se dejan.
+**Qué cuesta / qué rompe**: nada, si es sólo de lectura. El riesgo está en
+"arreglarlo solo": mover un comprobante puede pisar uno legítimo de ese
+período viejo. **Listar sí, mover no** sin confirmación.
+**Estado**: propuesta
+
+### Propuesta · Un solo lector de texto del portal, y prohibir `document.body.innerText`
+
+**Quién la propone**: Claude · 07-sep-2026
+**Qué se vio**: el bot leyéndose a sí mismo ya rompió **tres** veces, cada una
+en un lugar distinto y cada una descubierta en producción:
+
+| Cuándo | Qué pasó |
+| :--- | :--- |
+| modales | `offsetParent` era null en todo `position:fixed`; `dismissSridialogs()` nunca cerró uno |
+| login | `document.body.innerText` incluía el HUD, y el bot creyó que el SRI lo rechazaba |
+| período | sin cabecera se raspaba la página entera y salía cualquier mes |
+
+Es el mismo error tres veces. No es mala suerte: es que **no hay una sola
+manera correcta de leer texto del portal**, así que cada quien improvisa la
+suya.
+**Qué se propone**: un helper único —`textoDelPortal(zonaOSelector)`— que
+clone, saque los nodos de la extensión y devuelva el texto; que **devuelva
+`null`** si la zona no existe, en vez de caer al `body`; y una comprobación en
+un banco que falle si aparece un `document.body.innerText` nuevo en `src/`.
+**Qué cuesta / qué rompe**: hay que revisar cada uso actual, y alguno puede
+depender del comportamiento viejo. Es una tarde, no cinco minutos.
+**Estado**: propuesta
+
+### Propuesta · Que el 📐 se dispare solo cuando el portal reclama un casillero
+
+**Quién la propone**: Claude · 07-sep-2026
+**Qué se vio**: cuando el SRI pide el casillero 203 (§9d), lo que hace falta
+para resolverlo es justamente lo que el 📐 sabe leer — el `id` del campo y sus
+opciones. Hoy el usuario tiene que acordarse de apretarlo, estando en la
+pantalla correcta, antes de que el lote siga.
+**Qué se propone**: que `loQuePideElFormulario()`, al encontrar un reclamo con
+número de casillero, corra el 📐 acotado a ese número y **deje la radiografía
+guardada** en `SafeStorage`. Así el dato queda tomado en el momento exacto en
+que el portal lo estaba pidiendo, sin depender de que alguien llegue a tiempo.
+**Qué cuesta / qué rompe**: poco. El 📐 ya no toca nada del formulario, sólo
+lee. Hay que cuidar que no se dispare en bucle si el reclamo persiste.
+**Estado**: propuesta
+
+### Propuesta · Preguntar por qué la llave anon funciona desde Node y no desde el content script
+
+**Quién la propone**: Claude · 07-sep-2026
+**Qué se vio**: la misma llave devuelve **HTTP 200** probada desde afuera y
+**401** desde el content script del portal. Eso no es una llave revocada: es
+algo del camino. Candidatos, sin haberlos probado: que el bundle la trunque,
+que Supabase esté aplicando alguna restricción por `Origin`, o que el proyecto
+tenga un problema (en la misma corrida hubo **500** y **521**).
+**Qué se propone**: el aviso ya dice ahora **la forma** de la llave que sale
+(cuántos caracteres, si sigue pareciendo un JWT de tres partes) sin decir su
+valor. Con eso la próxima corrida distingue «está truncada» de «está entera y
+la rechazan», que son dos arreglos completamente distintos. **Antes de rotar
+nada, leer ese dato.**
+**Qué cuesta / qué rompe**: la parte del diagnóstico ya está hecha. Lo que
+falta es una corrida que lo muestre.
+**Estado**: en curso — falta la evidencia
+
+---
+
 ## 0b. TABLERO DE PENDIENTES — empezá por acá
 
 > Actualizado el **07-sep-2026**. Este documento pasa las 1.400 líneas y sus
@@ -55,6 +209,7 @@ edad, que preguntan lo mismo sobre el mismo RUC.
 | 3 | **jsPDF nunca carga** (CSP `unsafe-eval`) | el PDF de respaldo sale simple, siempre | §0b.3 |
 | 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
 | 5 | **La clave de R2 sigue en el repositorio** | seguridad, ya | §10a |
+| 6 | **Comprobantes ya archivados con el año del RUC** | ~30-40 de 500 · el bug está arreglado, lo archivado no | §2c · propuesta en §0c |
 
 ### Lo que falta construir, por tamaño
 
@@ -345,6 +500,91 @@ Dado que la plataforma del SRI es una Single Page Application (SPA) híbrida que
   > almacén, sin forma de rendirse. Banco: `tests/bucles.html`.
 
 **Regla**: Si necesitas crear un flujo que atraviese más de una URL del SRI, **debes** usar `SafeStorage` para guardar el estado siguiente antes de inyectar el redireccionamiento `window.location.href`.
+
+---
+
+## 2c. El período con el que se archiva — y el año que salía del RUC
+
+> Corregido el **07-sep-2026**. Es el fallo más caro que encontró este
+> proyecto, porque no perdía nada: **archivaba bien, en el lugar equivocado.**
+
+`getCanonicalPeriodStr()` devuelve `AAAA-MM`, y de ahí salen **la ruta del
+comprobante en R2** y **la clave de Supabase** (`on_conflict=client_id,type,period`).
+
+En la corrida del 07-sep-2026, CHAVEZ CORDOVA GUIDO ERMEL declaró **agosto de
+2026** y el comprobante quedó guardado así:
+
+```
+✅ [R2] .../Declaracion_IVA_0706482023001_2023-08.pdf
+⚡ [SUPABASE] ... 0706482023001 2023-08
+```
+
+**Agosto de 2023.** `extractFormPeriod()` buscaba el año así:
+
+```js
+const yearMatch = headerText.match(/202[0-9]/);   // ← el culpable
+```
+
+El primer `202X` del texto de la cabecera. Y la cabecera del portal muestra el
+RUC del contribuyente: **`07064820`⁠`2300`⁠`1`** lleva `2023` adentro.
+
+### Por qué costó tanto verlo
+
+**No fallaba siempre.** RODRIGUEZ GUTIERREZ (`1722764808001`) salía perfecto,
+porque su RUC no contiene ningún `202X`. Un bug que muerde a unos clientes y a
+otros no **parece que funciona**: se ve un caso bueno y se da por cerrado.
+
+En el lote de 15 del 07-sep, 1 de 15 RUC tenía un `202X`. Sobre 500
+contribuyentes son del orden de 30 o 40.
+
+### El daño, que no es cosmético
+
+1. El panel sigue diciendo que **ese mes no tiene comprobante** — o sea, la
+   §0 sin cumplir para ese contribuyente.
+2. Se **pisa la fila del período viejo**, que puede tener un comprobante real.
+3. Nadie se entera, porque el log dice «subido exitosamente». Y lo está: al
+   lugar equivocado.
+
+### Cómo se lee ahora, en orden
+
+| # | Fuente | Por qué |
+| :-: | :--- | :--- |
+| 1 | `frmFlujoDeclaracion:calPeriodo` (`mm/yyyy`) | el campo del wizard: el período que el portal aceptó, sin ambigüedad |
+| 2 | La cabecera, **mes y año juntos** | `AGOSTO 2026`, `AGOSTO DE 2026`, `AGOSTO - 2026`, `AGOSTO/2026` |
+| 3 | `workflowPeriod` del almacén | lo que el bot navegó |
+
+Tres cosas cambiaron, y las tres importan:
+
+- **El año nunca se busca solo.** Va pegado al nombre del mes, y se exige que
+  no tenga otro dígito detrás (`(20\d{2})(?!\d)`), que es lo que impedía que
+  `2023001` contara como `2023`.
+- **Nunca se raspa `document.body`.** Sin cabecera identificable se devuelve
+  `null`. Ése era el otro medio del mismo bug: sin cabecera se leía la página
+  entera, el HUD de la extensión incluido. **Tercera vez** que este proyecto
+  tropieza con el bot leyéndose a sí mismo — ver la propuesta de la §0c.
+- **Se desapareció el «mes anterior» silencioso.** Había un tercer camino que
+  devolvía el mes pasado con el año sacado del RUC. Inventar un período es
+  peor que no saberlo: el comprobante se archiva igual, y en cualquier lado.
+
+### Y si las dos fuentes no coinciden
+
+No se resuelve a ojo. Manda **el período que el bot navegó** —que es el que
+efectivamente se declaró— y **queda dicho en el log y en la bitácora**:
+
+```
+⚠️ [PERÍODO] La pantalla dice 2024-03 y el lote 2026-08.
+   Se archiva como 2026-08, que es el período que se navegó.
+```
+
+Si ninguna de las dos sabe, se supone el mes anterior **y se avisa**. Un
+período supuesto en silencio es un comprobante archivado donde nadie lo va a
+buscar.
+
+Banco: `tests/periodo.html` (22 comprobaciones, verdes el 07-sep-2026). Usa el
+RUC real que lo destapó.
+
+> **Lo ya archivado sigue mal.** El arreglo no repara el pasado: ver la
+> propuesta de auditoría en la §0c.
 
 ---
 
@@ -1298,15 +1538,15 @@ subida · Panel.
 
 ### Los bancos de prueba, en una sola página
 
-`tests/index.html` corre **los trece** en iframes y da un veredicto solo:
-**478 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+`tests/index.html` corre **los catorce** en iframes y da un veredicto solo:
+**500 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
 `/tests/index.html`. **Hace falta el servidor**: los `file://` no ejecutan
 scripts.
 
-De a uno, no en paralelo: trece bancos a la vez se pisan el almacenamiento
+De a uno, no en paralelo: catorce bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
 cada uno, así que un banco nuevo no necesita saber que esta página existe —
 alcanza con agregarlo a la lista `BANCOS`.
@@ -1326,9 +1566,10 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `rutas` | que con una cédula ajena no se baje la declaración de nadie | 14 |
 | `login` | que el bot no se lea a sí mismo y crea que lo rechazaron | 11 |
 | `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
+| `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
 
 > **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
-> trece se escribió por completitud: cada uno cuida un fallo que ya llegó a
+> catorce se escribió por completitud: cada uno cuida un fallo que ya llegó a
 > pantalla y costó un lote. Si arreglás algo que salió de un log real, dejale
 > su comprobación antes de cerrar.
 
