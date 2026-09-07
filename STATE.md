@@ -54,6 +54,20 @@
 - Se prohibió la lectura de períodos sobre `document.body` (evitando que el bot lea su propio HUD).
 - Se añadió suite de pruebas dedicada en `tests/periodo.html`.
 
+### E. Incidencia en Vivo: `chrome-error://chromewebdata/` tras Auto-Login (Walter Miño, RUC 0801048844001)
+- **Hecho observado en la corrida:**
+  - El auto-login de Walter Miño en Keycloak funcionó exitosamente (`[KEYCLOAK] Token expires in 300 s`, perfil detectado y cliente identificado con alta fidelidad).
+  - El bot detectó obligación pendiente de IVA Agosto 2026 y disparó la navegación al Paso 1:
+    `window.location.href = SRI_PUENTE_RECIBIDOS` (`https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=57&idGrupo=55`).
+  - Inmediatamente, la pestaña del navegador cayó en `chrome-error://chromewebdata/` (página de error interna de Chrome).
+- **Hipótesis técnicas bajo análisis:**
+  1. **Bucle de redirección (`ERR_TOO_MANY_REDIRECTS`):** Si el contribuyente tiene pendiente la pantalla de confirmación de medios de contacto del SRI, `accederAplicacion.jspa` redirige a `tuportal-internet/verificaEmail.jspa` (comprobado vía fetch: HTTP 302). Si no hay cookie de `tuportal-internet`, `verificaEmail` intenta volver a Keycloak provocando bucle.
+  2. **Colisión de navegación en el ciclo de vida:** `window.location.href` se asignó inmediatamente mientras Angular aún emitía eventos y verificaciones en segundo plano.
+  3. **Proxy / Red:** Intercepción activa de Burp Suite o corte de socket por el WAF del SRI.
+- **Acciones y mitigaciones en evaluación:**
+  - Añadir un pequeño respiro (`await sleep(500)`) antes del salto de navegación desde el perfil.
+  - Soportar el fallback a la URL directa de comprobantes (`SRI_RECIBIDOS_URL`) o detectar `verificaEmail.jspa`.
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS
