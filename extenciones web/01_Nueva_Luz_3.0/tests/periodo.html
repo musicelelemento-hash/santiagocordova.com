@@ -1,0 +1,153 @@
+<!doctype html><meta charset="utf-8"><title>El año que salía del RUC</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Una declaración de agosto de 2026 archivada como agosto de 2023</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  Corrida real del 07-sep-2026, CHAVEZ CORDOVA GUIDO ERMEL:
+  <br><br>
+  <code>✅ [R2] .../Declaracion_IVA_0706482023001_<b>2023-08</b>.pdf</code>
+  <br><br>
+  Declaró <b>agosto de 2026</b>. <code>extractFormPeriod()</code> buscaba el año
+  con <code>headerText.match(/202[0-9]/)</code> — el primer <code>202X</code> del
+  texto de la cabecera. Y la cabecera muestra el RUC:
+  <b>07064820<u>2300</u>1</b> lleva <code>2023</code> adentro.
+  <br><br>
+  RODRIGUEZ GUTIERREZ (<code>1722764808001</code>) salía bien porque su RUC no
+  contiene ningún <code>202X</code>. <b>Un bug que muerde a unos clientes y a
+  otros no parece que funciona.</b>
+  <br><br>
+  Y no es cosmético: de este número salen la ruta en R2 y la clave de Supabase
+  (<code>on_conflict=client_id,type,period</code>). El panel sigue diciendo que
+  el mes no tiene comprobante, y encima se pisa la fila del período viejo.
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(56)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,68-t.length)));
+
+  const P = document.getElementById('portal');
+  // Los dos métodos viven en la clase del HUD. Se los llama sueltos: no usan
+  // `this` para nada más que llamarse entre ellos.
+  const leerPantalla = () => SriAssistantPanel.prototype.extractFormPeriod.call({});
+  const canonico = () => SriAssistantPanel.prototype.getCanonicalPeriodStr.call({
+      extractFormPeriod: leerPantalla });
+
+  // ══ A · el caso real que rompió ═════════════════════════════════════════
+  sec('A · el RUC con un año adentro');
+  // La cabecera tal como la pinta el portal: RUC y nombre, y el período.
+  P.innerHTML = '<div class="contenido-cabecera" style="width:400px;height:60px">' +
+                'RUC: 0706482023001 · CHAVEZ CORDOVA GUIDO ERMEL<br>' +
+                '2011 DECLARACION DE IVA — AGOSTO 2026</div>';
+  const a = leerPantalla();
+  push('el año es 2026, no el del RUC',     a && a.year, 2026);
+  push('y el mes, agosto',                  a && a.month, 8);
+
+  // Sin período en la cabecera, el RUC NO puede aportar un año.
+  P.innerHTML = '<div class="contenido-cabecera" style="width:400px;height:60px">' +
+                'RUC: 0706482023001 · CHAVEZ CORDOVA GUIDO ERMEL</div>';
+  push('sin período no se inventa uno',     leerPantalla(), null);
+
+  // Ni siquiera con un mes suelto: «AGOSTO» y un RUC con 2023 no son un período.
+  P.innerHTML = '<div class="contenido-cabecera" style="width:400px;height:60px">' +
+                'RUC: 0706482023001 · AGOSTO</div>';
+  push('un mes suelto tampoco alcanza',     leerPantalla(), null);
+
+  // ══ B · el campo del wizard manda ═══════════════════════════════════════
+  sec('B · calPeriodo, que es el dato oficial');
+  // Está en la Matriz de la §6: `data-p-pattern="mm/yy"`, valor «08/2026».
+  P.innerHTML = '<input id="frmFlujoDeclaracion:calPeriodo" value="08/2026">' +
+                '<div class="contenido-cabecera">RUC: 0706482023001 · DICIEMBRE 2024</div>';
+  const b = leerPantalla();
+  push('gana el campo del wizard',          b && (b.year+'-'+b.month), '2026-8');
+  push('y dice de dónde salió',             b && b.via, 'calPeriodo');
+
+  // Un valor que no es un período no se fuerza: se pasa a la cabecera.
+  P.innerHTML = '<input id="frmFlujoDeclaracion:calPeriodo" value="">' +
+                '<div class="contenido-cabecera">JULIO 2026</div>';
+  const b2 = leerPantalla();
+  push('vacío, cae a la cabecera',          b2 && (b2.year+'-'+b2.month), '2026-7');
+  push('y lo dice',                         b2 && b2.via, 'cabecera');
+
+  // Un mes fuera de rango no se acepta.
+  P.innerHTML = '<input id="frmFlujoDeclaracion:calPeriodo" value="13/2026">';
+  push('mes 13 no existe',                  leerPantalla(), null);
+
+  // ══ C · las formas en que el portal escribe el período ══════════════════
+  sec('C · «AGOSTO 2026», «AGOSTO DE 2026», «AGOSTO - 2026»');
+  const formas = ['AGOSTO 2026', 'AGOSTO DE 2026', 'AGOSTO - 2026', 'AGOSTO/2026'];
+  formas.forEach((f) => {
+    P.innerHTML = '<div class="contenido-cabecera">RUC 0706482023001 · ' + f + '</div>';
+    const r = leerPantalla();
+    push('«' + f + '»', r && (r.year + '-' + r.month), '2026-8');
+  });
+
+  // ══ D · el HUD de la extensión no cuenta ════════════════════════════════
+  sec('D · el bot no se lee a sí mismo');
+  // Misma lección que el lector del login: `innerText` incluye lo que la
+  // extensión inyecta, y el HUD tiene texto y números propios.
+  P.innerHTML = '<div class="contenido-cabecera" style="width:400px;height:80px">' +
+                '  <div id="slh-barra">cliente 3/15 · MARZO 2020</div>' +
+                '  RUC: 0706482023001 · AGOSTO 2026' +
+                '</div>';
+  const d = leerPantalla();
+  push('el período del HUD se descarta',    d && (d.year + '-' + d.month), '2026-8');
+
+  // ══ E · el período canónico, que es el que archiva ══════════════════════
+  sec('E · AAAA-MM: de acá salen la ruta y la clave');
+  P.innerHTML = '';
+  await SafeStorage.set({ workflowPeriod: { monthIndex: 7, year: 2026 } });
+  push('sin pantalla, manda el lote',       await canonico(), '2026-08');
+
+  P.innerHTML = '<input id="frmFlujoDeclaracion:calPeriodo" value="08/2026">';
+  push('coincidiendo, el mismo',            await canonico(), '2026-08');
+
+  // Discrepancia: manda lo que se navegó, y queda avisado.
+  window.__logs.length = 0;
+  P.innerHTML = '<input id="frmFlujoDeclaracion:calPeriodo" value="03/2024">';
+  push('si difieren, manda el lote',        await canonico(), '2026-08');
+  push('y lo dice en voz alta',
+       window.__logs.some(l => /PER[ÍI]ODO/.test(l) && /2024-03/.test(l) && /2026-08/.test(l)), true);
+
+  // Sin ninguna de las dos: se supone, pero se avisa. Un período supuesto en
+  // silencio es un comprobante archivado donde nadie lo va a buscar.
+  await SafeStorage.remove(['workflowPeriod']);
+  P.innerHTML = '';
+  window.__logs.length = 0;
+  const sup = await canonico();
+  push('sin nada, el formato igual es válido', /^20\d\d-\d\d$/.test(sup), true);
+  push('y avisa que lo está suponiendo',
+       window.__logs.some(l => /PER[ÍI]ODO/.test(l) && /supone/i.test(l)), true);
+
+  // ══ F · el fuente ya no tiene la regex que agarraba el RUC ══════════════
+  sec('F · la regex culpable no volvió');
+  const fuente = await (await fetch('../src/06_panel_interfaz.js')).text();
+  // Se busca la ASIGNACIÓN, no el texto: el comentario del código cita la
+  // regex vieja a propósito, para que se entienda qué hacía.
+  push('no queda `const yearMatch = headerText.match(`',
+       /const\s+yearMatch\s*=\s*headerText\.match/.test(fuente), false);
+  push('y el año se exige sin dígito detrás',
+       /\(20\\\\d\{2\}\)\(\?!\\\\d\)/.test(fuente), true);
+
+  P.innerHTML = '';
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

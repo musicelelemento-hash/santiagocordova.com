@@ -645,9 +645,17 @@ class SriAssistantPanel {
             // ── 2 · La cabecera, leyendo el mes y el año COMO UNA UNIDAD ─────
             // Nunca un año suelto: eso es lo que agarraba el RUC. Y sin el HUD
             // de la extensión, que también tiene texto y números propios.
+            // **Nunca `document.body`.** Ese era el otro medio del mismo bug:
+            // sin cabecera identificable, se raspaba la página entera —el HUD
+            // de la extensión incluido, que tiene meses y años propios— y
+            // salía cualquier período. Es la tercera vez que este proyecto
+            // tropieza con el bot leyéndose a sí mismo (los modales, el login,
+            // y ahora esto). Si no hay cabecera, no hay período que leer: se
+            // contesta `null` y decide `workflowPeriod`, que es lo que el bot
+            // efectivamente navegó.
             const zona = document.querySelector('.contenido-cabecera') ||
-                         document.querySelector('#j_idt15_content') ||
-                         document.body;
+                         document.querySelector('#j_idt15_content');
+            if (!zona) return null;
             const limpio = zona.cloneNode(true);
             limpio.querySelectorAll('[id^="sri-"], [id^="slh-"], [class*="sri-assistant"], [class*="ghost-"]')
                   .forEach((n) => n.remove());
