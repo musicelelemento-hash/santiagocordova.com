@@ -438,6 +438,68 @@ function avisoLlaveWeb(status) {
          'Copiá la nueva desde el panel de Supabase y pegala en Ajustes de la extensión.';
 }
 
+/**
+ * La semilla con la que se ofuscan las rutas de los comprobantes.
+ *
+ * Se genera sola la primera vez y vive **únicamente** en el almacén local de
+ * esta computadora: no está en el repositorio, no viaja en la extensión y no
+ * se sube a ningún lado. Perderla no pierde ningún comprobante —la URL de cada
+ * uno queda guardada en la base— pero cambia las rutas de los que vengan.
+ *
+ * @returns {Promise<string>} 64 hex.
+ */
+async function semillaDeRutas() {
+  try {
+    const g = await SafeStorage.get(['sc_semilla_rutas']);
+    if (g.sc_semilla_rutas) return g.sc_semilla_rutas;
+  } catch (e) { /* se genera una nueva */ }
+
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const semilla = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  try { await SafeStorage.set({ sc_semilla_rutas: semilla }); } catch (e) { /* nada */ }
+  console.log('🔐 [RUTAS] Semilla nueva creada. Las rutas de los comprobantes dejan de ser adivinables.');
+  return semilla;
+}
+
+/**
+ * La ruta donde se guarda el comprobante de un contribuyente.
+ *
+ * **Por qué no es `declaraciones/<RUC>/<archivo>` a secas.** Esa ruta se deduce
+ * del RUC, y el RUC en Ecuador es la cédula + 001. Con el bucket servido por el
+ * dominio público `pub-*.r2.dev`, cualquiera que sepa una cédula se bajaba la
+ * declaración de esa persona. El link ES la credencial cuando se manda por
+ * WhatsApp: lo que no puede pasar es que la credencial se derive de un dato
+ * público.
+ *
+ * El tramo del medio son 88 bits de HMAC sobre (RUC · período) con la semilla
+ * local. Determinista a propósito: el mismo comprobante siempre cae en la
+ * misma ruta, así que sigue valiendo no volver a subir lo que ya está.
+ *
+ * @param {string} ruc
+ * @param {string} periodo 'YYYY-MM'
+ * @param {string} archivo Nombre del PDF.
+ * @returns {Promise<string>}
+ */
+async function rutaDeComprobante(ruc, periodo, archivo) {
+  try {
+    const semilla = await semillaDeRutas();
+    const enc = new TextEncoder();
+    const llave = await crypto.subtle.importKey(
+      'raw', enc.encode(semilla), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const firma = await crypto.subtle.sign('HMAC', llave, enc.encode(`${ruc}|${periodo}`));
+    const tramo = Array.from(new Uint8Array(firma).slice(0, 11),
+                             (b) => b.toString(16).padStart(2, '0')).join('');
+    return `declaraciones/${ruc}/${tramo}/${archivo}`;
+  } catch (e) {
+    // Si el navegador no diera WebCrypto, es preferible una ruta con azar sin
+    // memoria —que puede duplicar una subida— antes que una adivinable.
+    console.warn('🔐 [RUTAS] No se pudo derivar la ruta; se usa uno al azar:', e.message);
+    const azar = Array.from(crypto.getRandomValues(new Uint8Array(11)),
+                            (b) => b.toString(16).padStart(2, '0')).join('');
+    return `declaraciones/${ruc}/${azar}/${archivo}`;
+  }
+}
+
 function redondear(numero) {
   return Math.round(numero * 100) / 100;
 }
@@ -1447,9 +1509,11 @@ async function syncDeclarationToSupabase(
     let pdfUrl = "";
     let storageProvider = "cloudflare_r2";
     const fileName = `Declaracion_IVA_${ruc}_${canonicalPeriod}.pdf`;
-    const vaultPath = `declaraciones/${ruc}/${fileName}`;
+    // UNA sola ruta para los tres destinos. Calcularla dos veces invita a que
+    // se suba a un lado y se devuelva el link de otro.
+    const vaultPath = await rutaDeComprobante(ruc, canonicalPeriod, fileName);
     const publicUrlVault = `${SUPABASE_URL}/storage/v1/object/public/clients-vault/${vaultPath}`;
-    const publicUrlProofs = `${SUPABASE_URL}/storage/v1/object/public/sri_proofs/${ruc}/${fileName}`;
+    const publicUrlProofs = `${SUPABASE_URL}/storage/v1/object/public/sri_proofs/${vaultPath}`;
 
     // ── TIER 1: CLOUDFLARE R2 (.r2.cloudflarestorage.com + Worker Relay) ──
     try {
@@ -1522,7 +1586,7 @@ async function syncDeclarationToSupabase(
           } else {
             // Fallback a bucket 'sri_proofs'
             uploadRes = await fetch(
-              `${SUPABASE_URL}/storage/v1/object/sri_proofs/${ruc}/${fileName}`,
+              `${SUPABASE_URL}/storage/v1/object/sri_proofs/${vaultPath}`,
               {
                 method: "POST",
                 headers: {
@@ -2061,6 +2125,44 @@ function encontrarCamposLogin() {
         null;
 
     return (ruc && pass && btn) ? { ruc, pass, btn } : null;
+}
+
+/**
+ * Lo que dice el formulario de acceso del PORTAL, y nada más.
+ *
+ * **Por qué no `document.body.innerText`.** El cuerpo de la página incluye la
+ * barra flotante de la extensión, sus avisos y el panel de omitidos, donde
+ * figuran las palabras «clave», «incorrecta» y «error». Leer eso y concluir
+ * que el SRI rechazó una credencial es el bot leyéndose a sí mismo y creyendo
+ * que habló el portal.
+ *
+ * Ya había pasado con `esPantallaCambioClave()` y volvió a pasar el
+ * 07-sep-2026: un contribuyente que HABÍA entrado quedó marcado con la clave
+ * mala, y esa marca lo deja afuera hasta que alguien la borre a mano.
+ *
+ * Devuelve cadenas vacías cuando no hay formulario. Eso significa «no hay de
+ * dónde leer», no «no fue rechazado»: quien llame decide, y lo correcto ahí es
+ * reintentar, no condenar.
+ *
+ * @returns {{aviso: string, texto: string}} `aviso` es el cartel de error del
+ *   formulario, si está a la vista. `texto` es el formulario entero.
+ */
+function loQueDiceElFormularioDeAcceso() {
+  const campos = typeof encontrarCamposLogin === 'function' ? encontrarCamposLogin() : null;
+  const ancla = campos && (campos.pass || campos.ruc);
+  const zona = ancla
+    ? (ancla.closest('form') || ancla.closest('div.card, div.login, main') || ancla.parentElement)
+    : null;
+  if (!zona) return { aviso: '', texto: '' };
+
+  // `.alert` a secas agarra cualquier caja informativa de una página hecha con
+  // Bootstrap. Se exige que esté DENTRO del formulario y a la vista.
+  const cartel = zona.querySelector(
+    '.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, .alert');
+  const aviso = (cartel && (typeof esVisible !== 'function' || esVisible(cartel)))
+    ? (cartel.innerText || cartel.textContent || '').trim() : '';
+
+  return { aviso, texto: zona.innerText || zona.textContent || '' };
 }
 
 /** Escribe en un input avisando al framework que lo maneja. */

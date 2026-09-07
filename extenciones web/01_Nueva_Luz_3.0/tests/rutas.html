@@ -1,0 +1,99 @@
+<!doctype html><meta charset="utf-8"><title>La ruta del comprobante no se deduce del RUC</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Con una cédula ajena no se baja la declaración de nadie</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  Hasta el 07-sep-2026 el comprobante de cada contribuyente vivía en
+  <code>declaraciones/&lt;RUC&gt;/Declaracion_IVA_&lt;RUC&gt;_&lt;periodo&gt;.pdf</code>,
+  servido por el dominio público <code>pub-*.r2.dev</code>. El RUC en Ecuador es
+  la cédula + 001, así que la ruta se deducía de un dato público: con el número
+  de cédula de alguien se le bajaba la declaración.
+  <br><br>
+  Cuando el link viaja por WhatsApp, <b>el link ES la credencial</b>. Lo que no
+  puede pasar es que la credencial se derive de algo que cualquiera sabe.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const RUC='0705562171001', OTRO='0703891838001';
+  const arch=(r,p)=>`Declaracion_IVA_${r}_${p}.pdf`;
+
+  // ══ A · la semilla ══════════════════════════════════════════════════════
+  sec('A · la semilla vive sólo acá');
+  const s1=await semillaDeRutas();
+  push('se crea sola la primera vez',   /^[0-9a-f]{64}$/.test(s1), true);
+  push('y no cambia en cada llamada',   await semillaDeRutas(), s1);
+  // 256 bits: adivinarla no es un camino.
+  push('son 256 bits, no un número corto', s1.length, 64);
+
+  // ══ B · la ruta ═════════════════════════════════════════════════════════
+  sec('B · la ruta ya no se deduce del RUC');
+  const r1=await rutaDeComprobante(RUC,'2026-08',arch(RUC,'2026-08'));
+
+  // Lo central: la ruta vieja era exactamente esto, y ya no lo es.
+  push('NO es la ruta vieja, la adivinable',
+       r1===`declaraciones/${RUC}/${arch(RUC,'2026-08')}`, false);
+  push('lleva un tramo de 88 bits en el medio',
+       /^declaraciones\/\d{13}\/[0-9a-f]{22}\//.test(r1), true);
+  push('y termina en el archivo de siempre',
+       r1.endsWith('/'+arch(RUC,'2026-08')), true);
+
+  // ══ C · determinista, que es lo que hace que no se suba dos veces ═══════
+  sec('C · el mismo comprobante, la misma ruta');
+  push('dos veces el mismo dato, la misma ruta',
+       await rutaDeComprobante(RUC,'2026-08',arch(RUC,'2026-08')), r1);
+
+  // Pero distinto para otro período del mismo cliente…
+  const r2=await rutaDeComprobante(RUC,'2026-07',arch(RUC,'2026-07'));
+  push('otro período, otro tramo',      r2.split('/')[2]===r1.split('/')[2], false);
+  // …y para el mismo período de otro cliente.
+  const r3=await rutaDeComprobante(OTRO,'2026-08',arch(OTRO,'2026-08'));
+  push('otro cliente, otro tramo',      r3.split('/')[2]===r1.split('/')[2], false);
+
+  // ══ D · sin la semilla no se reconstruye ════════════════════════════════
+  sec('D · el tramo depende de la semilla, no del RUC');
+  // Alguien que sepa el RUC y el período —los dos datos públicos— pero no la
+  // semilla, no llega a la ruta. Se comprueba cambiando la semilla: si el
+  // tramo dependiera sólo del RUC, no se movería.
+  delete store.sc_semilla_rutas;
+  const s2=await semillaDeRutas();
+  push('la semilla nueva es otra',      s2===s1, false);
+  const r1b=await rutaDeComprobante(RUC,'2026-08',arch(RUC,'2026-08'));
+  push('y con otra semilla, otra ruta', r1b===r1, false);
+  push('para el mismo RUC y período',   r1b.split('/')[1], RUC);
+
+  // ══ E · lo que se puede afirmar y lo que no ═════════════════════════════
+  sec('E · qué protege esto y qué no');
+  // Esto NO convierte el archivo en privado: quien tenga el link lo abre, igual
+  // que un enlace de Drive. Lo que arregla es que el link se pueda DERIVAR de
+  // un dato público. Se deja dicho para que nadie lo lea como más de lo que es.
+  push('el RUC sigue a la vista en la ruta',
+       r1.includes(RUC), true);
+  // …y eso está bien: quien abre el link es el dueño del comprobante, y el
+  // nombre del archivo ya lleva el RUC. Lo secreto es el tramo del medio.
+  push('lo secreto es el tramo, no el RUC',
+       r1.split('/')[2].length, 22);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

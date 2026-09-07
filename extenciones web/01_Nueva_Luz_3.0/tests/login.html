@@ -1,0 +1,103 @@
+<!doctype html><meta charset="utf-8"><title>El bot leyéndose a sí mismo</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Marcar una clave como mala deja al contribuyente afuera: hay que verlo, no deducirlo</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  Corrida real del 07-sep-2026. Un contribuyente que <b>había entrado</b> quedó
+  anotado con <code>clave_incorrecta</code>. Las pruebas de rechazo leían
+  <code>document.body.innerText</code> entero — que incluye la barra flotante de
+  la propia extensión, sus avisos y el panel de omitidos, donde figuran las
+  palabras «clave», «incorrecta» y «error».
+  <br><br>
+  Es la misma trampa que ya nos había mordido en <code>esPantallaCambioClave()</code>:
+  <b>el bot leyéndose a sí mismo y creyendo que habló el portal.</b>
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const P=document.getElementById('portal');
+  // El formulario del SRI, tal como es: RUC, clave, botón.
+  const FORM=(extra='')=>`
+    <form id="kc-form-login">
+      ${extra}
+      <input type="text" id="usuario" value="">
+      <input type="password" id="password" value="">
+      <button id="kc-login">Ingresar</button>
+    </form>`;
+  // La barra de la extensión, con el texto que se lee a sí misma.
+  const HUD=`<div id="sri-loop-hud">🔒 Acceso Detenido · credenciales inválidas ·
+             clave incorrecta · error de credenciales</div>`;
+
+  // ══ A · sin formulario no se lee nada ═══════════════════════════════════
+  sec('A · sin formulario, no hay de dónde leer');
+  P.innerHTML='';
+  let d=loQueDiceElFormularioDeAcceso();
+  push('devuelve vacío, no inventa',        d, {aviso:'',texto:''});
+  // Vacío significa «no sé», y quien llama tiene que reintentar, no condenar.
+
+  // ══ B · el bot NO se lee a sí mismo ═════════════════════════════════════
+  sec('B · la barra de la extensión no es el portal');
+  P.innerHTML=HUD+FORM();
+  d=loQueDiceElFormularioDeAcceso();
+  push('el formulario no dice nada malo',   d.aviso, '');
+  // ÉSTE es el bug del 07-sep-2026, dicho como prueba.
+  push('y su texto NO trae lo del HUD',     /credenciales inv/i.test(d.texto), false);
+  push('ni la palabra «incorrecta»',        /incorrecta/i.test(d.texto), false);
+  // Que quede claro que el HUD SÍ está en la página: la prueba no pasa por
+  // casualidad de un DOM vacío.
+  push('aunque el HUD sí está en la página',
+       /credenciales inv/i.test(document.body.innerText), true);
+
+  // ══ C · cuando el portal SÍ lo dice, se lee ═════════════════════════════
+  sec('C · un rechazo de verdad se ve');
+  P.innerHTML=HUD+FORM('<div class="alert alert-error">Usuario o contraseña inválidos</div>');
+  d=loQueDiceElFormularioDeAcceso();
+  push('el cartel del portal se lee',       /contrase.a inv/i.test(d.aviso), true);
+  push('y el texto del formulario también', /contrase.a inv/i.test(d.texto), true);
+
+  // ══ D · «.alert» a secas no alcanza ═════════════════════════════════════
+  sec('D · una caja informativa no es un rechazo');
+  // Cualquier página hecha con Bootstrap tiene `.alert` para avisos que no son
+  // errores. Se exige que esté a la vista dentro del formulario.
+  P.innerHTML=FORM('<div class="alert" style="display:none">Recuerde cambiar su clave cada 90 días</div>');
+  d=loQueDiceElFormularioDeAcceso();
+  push('un cartel oculto no cuenta',        d.aviso, '');
+
+  P.innerHTML=FORM('<div class="alert">Recuerde cambiar su clave cada 90 días</div>');
+  d=loQueDiceElFormularioDeAcceso();
+  push('uno a la vista sí se lee…',         /Recuerde/.test(d.aviso), true);
+  // …pero no dispara nada, porque no dice ninguna de las palabras de rechazo.
+  const PALABRAS=/error|inv[aá]lid|incorrect|bloquead|no registrad|superado|fallid/i;
+  push('…y no contiene palabra de rechazo', PALABRAS.test(d.aviso), false);
+
+  // ══ E · el cartel de fuera del formulario no cuenta ═════════════════════
+  sec('E · un cartel de otra parte de la página');
+  P.innerHTML='<div class="alert alert-danger">Error del sistema de facturación</div>'+FORM();
+  d=loQueDiceElFormularioDeAcceso();
+  push('no se toma un error ajeno al login', d.aviso, '');
+
+  P.innerHTML='';
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

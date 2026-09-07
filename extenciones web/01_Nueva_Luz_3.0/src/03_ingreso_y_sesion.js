@@ -106,21 +106,44 @@ SafeStorage.get(null).then(async (items) => {
     // Si el SRI rechaza las credenciales o la página recarga y sigue en el login
     // tras haberlo intentado, NUNCA se reintenta: se detiene al PRIMER intento fallido,
     // se purga el storage, se registra en SriCredentialVault y el bucle ferrocarril continúa.
-    const feedbackEl = document.querySelector('.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, .alert');
-    const feedbackText = feedbackEl ? (feedbackEl.innerText || feedbackEl.textContent || '').trim() : '';
+    // ── Lo que dice el PORTAL, no lo que decimos nosotros ─────────────────
+    //
+    // `document.body.innerText` incluye la barra flotante de la extensión, sus
+    // avisos y el panel de omitidos —donde figuran «clave», «incorrecta» y
+    // «error»—. Leer eso y concluir que el SRI rechazó la credencial es el bot
+    // leyéndose a sí mismo. Ya nos había mordido en `esPantallaCambioClave()`
+    // y volvió a morder el 07-sep-2026: un contribuyente que había entrado
+    // quedó marcado con la clave mala.
+    //
+    // El texto se toma del formulario de acceso del portal, donde la extensión
+    // no inyecta nada. Si no hay formulario, no hay de dónde leer y no se
+    // concluye nada: eso es `''`, no «no rechazado por defecto» — el rechazo
+    // hay que verlo, y no verlo lleva al rebote, que reintenta.
+    const dicho = typeof loQueDiceElFormularioDeAcceso === 'function'
+        ? loQueDiceElFormularioDeAcceso() : { aviso: '', texto: '' };
+    const feedbackText = dicho.aviso;
+    const textoDelPortal = dicho.texto;
     const yaIntentoLogin = isLoginPage && isExplicitlyOutside && !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
-    const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || document.body.innerText) ||
-        /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || document.body.innerText);
+    const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || textoDelPortal) ||
+        /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || textoDelPortal);
     // El portal DIJO que la credencial no sirve. Es lo único que autoriza a
     // anotar `clave_incorrecta`: esa marca escribe en la bóveda y en la ficha
     // web del cliente, y lo deja afuera hasta que alguien la borre a mano.
     const elSriLoRechazo = isLoginPage && (
         isAccountLocked ||
         (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad|superado|fallid/i.test(feedbackText)) ||
-        /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
-        /credencial(es)? (inv[aá]lid|incorrect)/i.test(document.body.innerText) ||
-        /identificaci[oó]n no registrada/i.test(document.body.innerText)
+        /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(textoDelPortal) ||
+        /credencial(es)? (inv[aá]lid|incorrect)/i.test(textoDelPortal) ||
+        /identificaci[oó]n no registrada/i.test(textoDelPortal)
     );
+
+    if (elSriLoRechazo) {
+        // Se deja dicho QUÉ se leyó y DÓNDE. Marcar una clave como mala deja al
+        // contribuyente afuera hasta que alguien lo deshaga a mano: el log
+        // tiene que permitir discutir la decisión, no sólo anunciarla.
+        console.warn('🔎 [LOGIN] El portal rechaza la credencial. Lo que dice el formulario: ' +
+                     `«${(feedbackText || textoDelPortal).slice(0, 160).replace(/\s+/g, ' ').trim() || '(nada legible)'}»`);
+    }
 
     // ── Volvimos al login sin que el portal dijera una palabra ─────────────
     // Pasó de verdad el 06-sep-2026: tres contribuyentes entraron —se los vio
@@ -514,7 +537,19 @@ SafeStorage.get(null).then(async (items) => {
         }
 
         // 🧾 Este cliente solo necesita su comprobante: no se le declara nada.
-        if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante) {
+        //
+        // La guarda `!enConsultaDeclaraciones()` NO es cosmética. Sin ella esto
+        // cruzaba el puente estando ya del otro lado: la página cargaba, este
+        // mismo bloque volvía a navegar al mismo sitio, y otra vez. El
+        // manejador que de verdad baja el comprobante vive mucho más abajo en
+        // esta misma función (`ejecutarRecuperacionComprobante`) y nunca se
+        // alcanzaba, porque este `return` cortaba antes.
+        //
+        // Pasó de verdad el 07-sep-2026: el lote se colgó en el cliente 2 dando
+        // vueltas hasta que el usuario apretó 🛑. Es la misma guarda que ya
+        // tenía el salto al perfil, tres líneas más arriba.
+        if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante &&
+            typeof enConsultaDeclaraciones === 'function' && !enConsultaDeclaraciones()) {
             console.log('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
             await SafeStorage.set({ actionTimestamp: Date.now() });
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
