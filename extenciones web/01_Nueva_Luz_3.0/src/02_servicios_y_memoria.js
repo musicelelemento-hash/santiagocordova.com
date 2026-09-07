@@ -1284,11 +1284,36 @@ const Chequeo = {
                         anotar('web', 'Panel web', 'ok',
                             `La llave anon (${origen}) funciona: las declaraciones van a llegar al panel.`);
                     } else if (rw.status === 401 || rw.status === 403) {
+                        // Se prueba también la del CÓDIGO. Un diagnóstico que
+                        // dice «la llave no sirve» y para ahí obliga a adivinar
+                        // cuál de las dos: la guardada en Ajustes pisa a la del
+                        // código, así que una guardada mala tapa una buena.
+                        //
+                        // Pasó el 07-sep-2026: la del código estaba sana y la
+                        // de Ajustes daba 401. La corrida entera perdió las
+                        // métricas y la solución era borrar la de Ajustes.
+                        let laDelCodigo = null;
+                        const kCodigo = (typeof window !== 'undefined' && window.SC_CONFIG &&
+                                         window.SC_CONFIG.SUPABASE_ANON_KEY) || '';
+                        if (origen === 'de Ajustes' && kCodigo && kCodigo !== SC_SUPABASE_ANON_KEY) {
+                            try {
+                                const rc = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?select=id&limit=1`, {
+                                    headers: { apikey: kCodigo, Authorization: `Bearer ${kCodigo}` }
+                                });
+                                laDelCodigo = rc.ok;
+                            } catch (e) { laDelCodigo = null; }
+                        }
+
                         anotar('web', 'Panel web', 'problema',
-                            `Supabase rechaza la llave anon (${origen}): HTTP ${rw.status}.`,
-                            'Copiá la llave nueva del panel de Supabase (Project Settings → API) y ' +
-                            'pegala en Ajustes. Sin esto el bot declara, guarda el comprobante, y ' +
-                            'el panel web no se entera de nada.');
+                            `Supabase rechaza la llave anon (${origen}): HTTP ${rw.status}.` +
+                            (laDelCodigo === true ? ' La del CÓDIGO, en cambio, funciona.' : '') +
+                            (laDelCodigo === false ? ' La del código tampoco funciona.' : ''),
+                            laDelCodigo === true
+                                ? 'Abrí Ajustes y apretá «Borrar»: la llave guardada pisa a la del ' +
+                                  'código, que está sana. Con eso alcanza; no hace falta buscar otra.'
+                                : 'Copiá la llave nueva del panel de Supabase (Project Settings → API) y ' +
+                                  'pegala en Ajustes. Sin esto el bot declara, guarda el comprobante, y ' +
+                                  'el panel web no se entera de nada.');
                     } else {
                         anotar('web', 'Panel web', 'aviso',
                             `Supabase contestó HTTP ${rw.status}.`,

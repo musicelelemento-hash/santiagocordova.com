@@ -1030,6 +1030,19 @@ también contra la red**.
 > Un **401/403 es `problema`**; un 5xx o no llegar es `aviso`, porque puede ser
 > pasajero y la declaración igual se hace. Y el informe **nunca** trae el valor
 > de la llave: sólo si funciona y de dónde salió.
+>
+> **Y prueba LAS DOS.** El 07-sep-2026 la llave del código estaba sana —HTTP
+> 200 comprobado— y la que el usuario había pegado en Ajustes daba 401. Como
+> lo guardado pisa a lo del código, una llave de repuesto rota **tapó a la
+> buena en silencio** y la corrida entera perdió las métricas.
+>
+> El consejo obvio —«buscá una llave nueva en Supabase»— era el que hacía
+> perder media hora. La solución eran treinta segundos: **borrar la de
+> Ajustes**. Por eso el chequeo prueba también la del código y, si esa
+> funciona, lo dice y manda a borrar la otra.
+>
+> Vale como regla general: **una credencial de repuesto que no anda es peor
+> que no tener repuesto.**
 
 Tres estados y ninguno más — `ok`, `aviso`, `problema` — y **cada uno dice qué
 hacer**: un diagnóstico que no dice qué hacer no sirve de nada. En el panel, lo

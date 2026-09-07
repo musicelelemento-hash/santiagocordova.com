@@ -159,6 +159,32 @@
   window.fetch = async () => ({ ok: false, status: 401 });
   w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
   push('un 401 es un problema, no un aviso',  w.estado, 'problema');
+
+  // ── La guardada tapando a una buena ─────────────────────────────────────
+  // Pasó el 07-sep-2026: la del código estaba SANA y la de Ajustes daba 401.
+  // Como la guardada pisa a la del código, una corrida entera perdió las
+  // métricas — y la solución era borrar la de Ajustes, no buscar otra llave.
+  // Un diagnóstico que dice «no sirve» y para ahí obliga a adivinar cuál.
+  window.SC_CONFIG = { SUPABASE_ANON_KEY: 'la-del-codigo-que-si-anda' };
+  window.fetch = async (u, o) => {
+    const k = (o && o.headers && o.headers.apikey) || '';
+    return { ok: k === 'la-del-codigo-que-si-anda', status: k === 'la-del-codigo-que-si-anda' ? 200 : 401 };
+  };
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('detecta que la del código sí anda',
+       /del C[ÓO]DIGO, en cambio, funciona/i.test(w.detalle || ''), true);
+  push('y manda a BORRAR la de Ajustes',
+       /Ajustes[\s\S]{0,40}Borrar/i.test(w.queHacer || ''), true);
+  // Lo que NO hay que decir: «buscá una llave nueva». Es el consejo que hace
+  // perder media hora cuando la buena ya está en el código.
+  push('y no manda a buscar una llave nueva',
+       /llave nueva del panel/i.test(w.queHacer || ''), false);
+  window.SC_CONFIG = undefined;
+
+  // Se vuelve al 401 pelado: las comprobaciones que siguen son sobre ESE caso
+  // —cuando no hay una del código que salve— y comparten el mismo `w`.
+  window.fetch = async () => ({ ok: false, status: 401 });
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
   push('y dice exactamente qué hacer',
        /Ajustes/.test(w.queHacer || '') && /Supabase/.test(w.queHacer || ''), true);
   // Lo que se pierde tiene que estar dicho: el bot igual declara y guarda el

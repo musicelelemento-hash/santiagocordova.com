@@ -434,7 +434,18 @@ function parseImporteEstricto(texto) {
  */
 function avisoLlaveWeb(status) {
   if (status !== 401 && status !== 403) return '';
-  return ` · la llave anon (${SC_SUPABASE_ORIGEN}) no la acepta Supabase. ` +
+
+  // Si la llave salió de Ajustes, lo primero que hay que probar NO es buscar
+  // otra: es BORRAR la de Ajustes. Pisa a la del código, y la del código puede
+  // estar perfectamente sana — pasó el 07-sep-2026 y costó una corrida entera
+  // de métricas. Una credencial de repuesto que no anda es peor que no tener
+  // repuesto, porque tapa a la buena sin decir nada.
+  if (SC_SUPABASE_ORIGEN === 'de Ajustes') {
+    return ' · Supabase rechaza la llave que está guardada en AJUSTES, y esa llave pisa ' +
+           'a la del código. Abrí Ajustes de la extensión y apretá «Borrar»: si la del ' +
+           'código está sana, con eso alcanza. Recién si sigue fallando hace falta una nueva.';
+  }
+  return ' · Supabase rechaza la llave anon que viene en el código. ' +
          'Copiá la nueva desde el panel de Supabase y pegala en Ajustes de la extensión.';
 }
 
