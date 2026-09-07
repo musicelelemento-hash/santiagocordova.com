@@ -6,6 +6,59 @@ SafeStorage.get(null).then(async (items) => {
         aplicarCredencialesSupabaseGuardadas(items);
     }
 
+    // ── El cortacircuitos de verdad ───────────────────────────────────────
+    //
+    // El AGENTS.md §2 promete que `actionTimestamp` previene los bucles
+    // infinitos porque «toda acción tiene una fecha de caducidad». Esa promesa
+    // NO se cumplía: el timestamp se reescribe con `Date.now()` en treinta y
+    // dos lugares, y la caducidad se medía contra ese valor renovado. El
+    // propio bucle renovaba su propio plazo, así que un bucle rápido no vencía
+    // nunca.
+    //
+    // Contar tiempo no sirve. Se cuentan RECARGAS: una acción que trabaja
+    // dentro de una sola página no recarga; un bucle recarga siempre. Si la
+    // misma acción sobrevive a ocho cargas seguidas, es un bucle — y no hay
+    // ningún caso legítimo que se parezca a eso.
+    //
+    // Lo contó el usuario el 07-sep-2026 con una clienta: «se quedaba en bucle
+    // al querer marcar declaraciones de IVA, y luego cerré y abrí y siempre
+    // así esa ejecución con ese cliente». «Siempre así» es lo que este bloque
+    // corta: la acción quedaba pegada en el almacén sin forma de rendirse.
+    const TOPE_DE_VUELTAS = 8;
+    if (items.pendingAction) {
+        const mismaQueAntes = items.accionEnCurso === items.pendingAction;
+        const vueltas = mismaQueAntes ? (items.accionVueltas || 0) + 1 : 1;
+
+        if (vueltas > TOPE_DE_VUELTAS) {
+            console.error(`🔁 [BUCLE] La acción «${items.pendingAction}» lleva ${vueltas} cargas de ` +
+                          'página sin terminar. Eso es un bucle: se descarta y el navegador queda libre.');
+            console.error('   Si esto se repite con el mismo contribuyente, el paso que se traba es ése ' +
+                          'y hay que mirarlo — no es un problema de su clave.');
+            await anotarBitacora('🔁 bucle cortado', `${items.pendingAction} · ${vueltas} cargas`);
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionEnCurso',
+                                      'accionVueltas', 'recuperarComprobante', 'bajarTodos']);
+            if (window.sriAssistant?.showEliteToast) {
+                window.sriAssistant.showEliteToast({
+                    title: '🔁 Bucle cortado',
+                    msg: `«${items.pendingAction}» daba vueltas sin avanzar. Se descartó para liberar la página.`,
+                    duration: 9000
+                });
+            }
+            items.pendingAction = null;
+        } else {
+            await SafeStorage.set({ accionEnCurso: items.pendingAction, accionVueltas: vueltas });
+            // A la mitad se avisa, para que se vea venir en el log en vez de
+            // descubrirlo cuando ya se cortó.
+            if (vueltas === Math.ceil(TOPE_DE_VUELTAS / 2)) {
+                console.warn(`🔁 [BUCLE] «${items.pendingAction}» va por la vuelta ${vueltas} de ` +
+                             `${TOPE_DE_VUELTAS}. Si llega al tope se descarta.`);
+            }
+        }
+    } else if (items.accionEnCurso) {
+        // No hay acción pendiente: el contador vuelve a cero solo.
+        await SafeStorage.remove(['accionEnCurso', 'accionVueltas']);
+    }
+
     const isLoginPage = isSRILoginPage();
 
     // ── Radiografía de arranque ────────────────────────────────────────────

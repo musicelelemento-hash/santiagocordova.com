@@ -1,0 +1,137 @@
+<!doctype html><meta charset="utf-8"><title>El bucle que renovaba su propia caducidad</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Una acción que da ocho vueltas sin terminar no es lenta: es un bucle</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  El usuario, 07-sep-2026, sobre una clienta:
+  <i>«entró a su portal y quiso ir a documentos declarados, y ahí se quedaba en
+  bucle al querer marcar declaraciones de IVA, y luego cerré y abrí y
+  <b>siempre así</b> esa ejecución con ese cliente»</i>.
+  <br><br>
+  El <code>AGENTS.md</code> §2 promete que <code>actionTimestamp</code> impide
+  los bucles porque «toda acción tiene una fecha de caducidad». <b>Esa promesa
+  no se cumplía</b>: el timestamp se reescribe con <code>Date.now()</code> en
+  32 lugares, y la caducidad se medía contra ese valor renovado. El propio
+  bucle renovaba su plazo, así que un bucle rápido no vencía nunca.
+  <br><br>
+  Contar tiempo no sirve. Se cuentan <b>recargas</b>.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const TOPE = 8;
+  // Una carga de página: es exactamente lo que hace el bloque de arranque del
+  // 03, replicado acá porque ese bloque vive dentro de un `.then()` que no se
+  // puede invocar suelto. Si el original cambia, esta prueba deja de cubrirlo
+  // — y por eso el número 8 se comprueba también contra el bundle, más abajo.
+  const unaCarga = async () => {
+    const it = await SafeStorage.get(null);
+    if (!it.pendingAction) {
+      if (it.accionEnCurso) await SafeStorage.remove(['accionEnCurso','accionVueltas']);
+      return 'sin acción';
+    }
+    const misma = it.accionEnCurso === it.pendingAction;
+    const vueltas = misma ? (it.accionVueltas || 0) + 1 : 1;
+    if (vueltas > TOPE) {
+      await SafeStorage.remove(['pendingAction','actionTimestamp','accionEnCurso',
+                                'accionVueltas','recuperarComprobante','bajarTodos']);
+      return 'cortado';
+    }
+    await SafeStorage.set({ accionEnCurso: it.pendingAction, accionVueltas: vueltas });
+    // El bucle real hacía esto en cada vuelta: renovar su propia caducidad.
+    await SafeStorage.set({ actionTimestamp: Date.now() });
+    return 'sigue';
+  };
+
+  // ══ A · el bucle se corta ═══════════════════════════════════════════════
+  sec('A · ocho vueltas y se corta');
+  await SafeStorage.set({ pendingAction: 'recuperar_comprobante',
+                          recuperarComprobante: { ruc: '0702706813001', intentos: 0 } });
+
+  let r = '';
+  for (let i = 1; i <= TOPE; i++) r = await unaCarga();
+  push('a las ocho vueltas todavía sigue',   r, 'sigue');
+  push('y la acción sigue en el almacén',    (await SafeStorage.get(['pendingAction'])).pendingAction,
+       'recuperar_comprobante');
+
+  r = await unaCarga();
+  push('en la novena se corta',              r, 'cortado');
+  push('la acción se borró',                 (await SafeStorage.get(['pendingAction'])).pendingAction, undefined);
+  // Lo que dejó pegado el bucle también se limpia: si `recuperarComprobante`
+  // quedara, la próxima carga volvería a armar la misma acción.
+  push('y lo que la alimentaba, también',
+       (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante, undefined);
+  push('el contador queda a cero',           (await SafeStorage.get(['accionVueltas'])).accionVueltas, undefined);
+
+  // ══ B · renovar la caducidad ya no salva al bucle ═══════════════════════
+  sec('B · el bucle no puede renovarse el plazo');
+  // ÉSTE era el agujero: `unaCarga` reescribe `actionTimestamp` en cada vuelta
+  // —igual que el código real, en 32 lugares— y aun así el corte llega.
+  await SafeStorage.set({ pendingAction: 'recuperar_comprobante' });
+  for (let i = 1; i <= TOPE; i++) await unaCarga();
+  const antes = (await SafeStorage.get(['actionTimestamp'])).actionTimestamp;
+  push('el timestamp se renovó en cada vuelta', typeof antes === 'number', true);
+  push('y el corte llega igual',             await unaCarga(), 'cortado');
+
+  // ══ C · una acción que avanza NO se corta ═══════════════════════════════
+  sec('C · avanzar reinicia la cuenta');
+  // Un flujo sano cambia de paso: turbo_step1 → step2 → step3. Cada cambio
+  // vuelve el contador a uno, así que un lote largo nunca se corta solo.
+  await SafeStorage.remove(['pendingAction','accionEnCurso','accionVueltas']);
+  const pasos = ['turbo_step1_facturas','turbo_step2_extraer_facturas','turbo_step3_retenciones',
+                 'turbo_step4_extraer_retenciones','turbo_step5_notas_credito','startIvaNavigation'];
+  let cortes = 0;
+  for (const p of pasos) {
+    await SafeStorage.set({ pendingAction: p });
+    // Tres cargas por paso: el puente SSO, el traspaso y la página real.
+    for (let i = 0; i < 3; i++) if (await unaCarga() === 'cortado') cortes++;
+  }
+  push('un lote sano de 6 pasos no se corta nunca', cortes, 0);
+  push('y el contador va por 3, no por 18',
+       (await SafeStorage.get(['accionVueltas'])).accionVueltas, 3);
+
+  // ══ D · sin acción, no se cuenta nada ═══════════════════════════════════
+  sec('D · sin acción pendiente');
+  await SafeStorage.remove(['pendingAction']);
+  push('se limpia solo',                     await unaCarga(), 'sin acción');
+  push('y no queda contador colgado',        (await SafeStorage.get(['accionEnCurso'])).accionEnCurso, undefined);
+
+  // ══ E · el tope del bundle es el mismo que esta prueba comprueba ════════
+  sec('E · la prueba mira el número de verdad');
+  // Si alguien cambia el tope en el código y no acá, esto se pone en rojo en
+  // vez de dejar la prueba comprobando un número que ya no existe.
+  // Se lee el FUENTE, no el bundle: Vite minifica los nombres de las
+  // constantes locales, asi que en build/content.js ya no existe el nombre.
+  const fuente = await (await fetch('../src/03_ingreso_y_sesion.js')).text();
+  push('el codigo usa TOPE_DE_VUELTAS = 8',
+       /TOPE_DE_VUELTAS\s*=\s*8\b/.test(fuente), true);
+  push('y limpia recuperarComprobante al cortar',
+       /accionVueltas[\s\S]{0,150}recuperarComprobante|recuperarComprobante[\s\S]{0,150}accionVueltas/.test(fuente), true);
+  // Y que el bundle este reconstruido: si alguien toca el fuente y no corre
+  // `npm run build`, la extension sigue con el codigo viejo y nadie se entera.
+  const bundle = await (await fetch('../build/content.js')).text();
+  push('y el bundle esta reconstruido', /cargas de/.test(bundle), true);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

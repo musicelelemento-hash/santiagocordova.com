@@ -81,7 +81,21 @@ Dado que la plataforma del SRI es una Single Page Application (SPA) híbrida que
 
 - `GhostMemory`: Almacena el progreso lógico temporal.
 - `SafeStorage`: Envuelve `chrome.storage.local`. La llave `pendingAction` dicta qué bloque de código debe ejecutarse cuando la página termine de cargar (ej. `pendingAction: 'startIvaNavigation'`).
-- `actionTimestamp`: Previene bucles infinitos. Toda acción tiene una fecha de caducidad.
+- `actionTimestamp`: **NO previene bucles infinitos, aunque esta línea lo
+  prometió durante mucho tiempo.** Se reescribe con `Date.now()` en 32 lugares,
+  y la caducidad se medía contra ese valor renovado: el propio bucle renovaba
+  su plazo, así que un bucle rápido no vencía nunca. Sigue sirviendo para saber
+  cuándo se pidió algo; no como freno.
+- `accionEnCurso` + `accionVueltas`: **el freno de verdad, desde el
+  07-sep-2026.** Cuenta RECARGAS, no tiempo — una acción que trabaja dentro de
+  una sola página no recarga; un bucle recarga siempre. A las 8 cargas con la
+  misma acción pendiente se descarta todo y se avisa. Cambiar de paso reinicia
+  la cuenta, así que un lote largo nunca se corta solo.
+
+  > Lo destapó el usuario con una clienta: «se quedaba en bucle al querer
+  > marcar declaraciones de IVA, y luego cerré y abrí y **siempre así** esa
+  > ejecución con ese cliente». «Siempre así» era la acción pegada en el
+  > almacén, sin forma de rendirse. Banco: `tests/bucles.html`.
 
 **Regla**: Si necesitas crear un flujo que atraviese más de una URL del SRI, **debes** usar `SafeStorage` para guardar el estado siguiente antes de inyectar el redireccionamiento `window.location.href`.
 

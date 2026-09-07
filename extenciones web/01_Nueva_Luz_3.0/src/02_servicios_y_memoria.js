@@ -224,7 +224,8 @@ const SriLoop = {
             if (!r.pendingAction) return;
             console.log(`🧹 [BUCLE] Se descarta la acción «${r.pendingAction}» que quedó a medias` +
                         `${porQue ? ' por ' + porQue : ''}.`);
-            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'recuperarComprobante', 'bajarTodos']);
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'recuperarComprobante',
+                                      'bajarTodos', 'accionEnCurso', 'accionVueltas']);
         } catch (e) { /* parar no puede fallar por esto */ }
     },
 
