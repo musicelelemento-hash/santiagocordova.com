@@ -524,14 +524,60 @@ function avisoLlaveWeb(status) {
   const forma = `${SC_SUPABASE_ANON_KEY.length} caracteres, ${partes} parte(s)`;
   const sana = partes === 3 && SC_SUPABASE_ANON_KEY.length > 100;
 
-  return ' · Supabase rechaza la llave anon que viene en el código ' +
-         `(${forma}${sana ? '' : ' — NO parece un JWT completo: puede estar truncada'}). ` +
-         (sana
-            ? 'La llave llegó entera, así que el rechazo es del lado de Supabase: ' +
-              'revisá que el proyecto esté activo y que la llave no esté revocada. ' +
-              'Si hay que reemplazarla, se pega en Ajustes.'
-            : 'Revisá shared_config.js: eso NO es una llave completa, y rotarla no ' +
-              'arreglaría nada.');
+  if (!sana) {
+    return ` · la llave del código NO parece un JWT completo (${forma}). ` +
+           'Revisá shared_config.js: rotarla no arreglaría nada.';
+  }
+
+  return ` · la llave del código llegó entera (${forma}) y Supabase igual dijo que no. ` +
+         'Mirá el `code` que devolvió (arriba): si no lo hay, revisá que el proyecto ' +
+         'esté activo. **Antes de rotar nada, leelo**: un 401 de Supabase casi nunca ' +
+         'es la llave.';
+}
+
+/**
+ * Lo que Supabase contestó en el cuerpo, traducido a qué hacer.
+ *
+ * **Un 401 de Supabase casi nunca es la llave.** PostgREST devuelve el motivo
+ * real en el cuerpo, con el código de PostgreSQL, y este proyecto lo estuvo
+ * tirando a la basura mientras el aviso mandaba a rotar una credencial sana.
+ * Comprobado el 07-sep-2026 contra el proyecto de verdad:
+ *
+ *     401  select=id           → 200 ok
+ *     401  select=is_deleted   → {"code":"42501","message":"permission denied for table clients"}
+ *
+ * `42501` es *insufficient_privilege*: la llave estaba perfecta y lo que
+ * faltaba era un permiso sobre UNA columna. Media hora de diferencia entre el
+ * diagnóstico bueno y el malo.
+ *
+ * @param {string} cuerpo El texto crudo de la respuesta.
+ * @returns {string} Qué pasa y qué hacer, o '' si no se pudo interpretar.
+ */
+function loQueDijoSupabase(cuerpo) {
+  if (!cuerpo) return '';
+  let d = null;
+  try { d = JSON.parse(cuerpo); } catch (e) { return ' · contestó: ' + String(cuerpo).slice(0, 160); }
+  if (!d || typeof d !== 'object') return '';
+
+  const code = d.code || '';
+  const msg = d.message || d.msg || d.error_description || d.error || '';
+
+  // Los dos que ya mordieron, dichos con lo que hay que hacer.
+  if (code === '42501') {
+    return ` · **NO es la llave**: PostgreSQL dice 42501 (permiso insuficiente) — «${msg}». ` +
+           'El rol `anon` no puede tocar alguna columna de las que se piden. ' +
+           'Se arregla con un GRANT en Supabase, o sacando esa columna de la consulta. ' +
+           'Rotar la llave no cambia nada.';
+  }
+  if (code === '42703') {
+    return ` · **NO es la llave**: PostgreSQL dice 42703 — «${msg}». ` +
+           'Se está pidiendo una columna que no existe en la tabla. ' +
+           'O se crea, o se saca de la consulta.';
+  }
+  if (/jwt|expired|invalid.*(key|token)/i.test(msg)) {
+    return ` · Supabase habla de la credencial: «${msg}». Acá sí puede ser la llave.`;
+  }
+  return msg ? ` · Supabase contestó${code ? ' [' + code + ']' : ''}: «${msg}».` : '';
 }
 
 /**
@@ -1516,11 +1562,22 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
 
   try {
     const r = await fetch(
-      `${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&is_deleted=eq.false&select=id,tax_profile`,
+      // SIN `is_deleted=eq.false`. El rol `anon` no tiene permiso sobre esa
+      // columna (42501, comprobado el 07-sep-2026) y el filtro convertía cada
+      // consulta en un 401. La búsqueda es por UN RUC concreto — el que se
+      // está declarando—, así que traer un borrado sería inofensivo; no
+      // traer nada no lo era.
+      `${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=id,tax_profile`,
       { headers: cab }
     );
     if (!r.ok) {
-      console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}${avisoLlaveWeb(r.status)}`);
+      // El cuerpo PRIMERO: Supabase dice el motivo real ahí. El aviso sobre la
+      // llave queda como último recurso, para cuando no dijo nada.
+      let cuerpo = '';
+      try { cuerpo = await r.text(); } catch (e) { /* si no se puede leer, se sigue */ }
+      const dijo = (typeof loQueDijoSupabase === 'function') ? loQueDijoSupabase(cuerpo) : '';
+      console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}` +
+                   (dijo || avisoLlaveWeb(r.status)));
       return false;
     }
 
@@ -2444,7 +2501,14 @@ async function fetchClientsDirectly() {
     const authToken = authStore.sc_supabase_token || SUPABASE_KEY;
 
     // 💡 ULTRA-LIGHT QUERY: Incluye sri_declaraciones relacional y declaration_history
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=id,ruc,name,regime,tax_profile,declaration_history,sri_declaraciones(id,period,type,status,proof_file,is_paid,created_at,updated_at)`, {
+    // También sin `is_deleted=eq.false`, por lo mismo (42501). Acá sí puede
+    // entrar algún contribuyente dado de baja en la web. Para recuperar el
+    // filtro alcanza con una línea en el editor SQL de Supabase:
+    //
+    //     GRANT SELECT (is_deleted) ON public.clients TO anon;
+    //
+    // Mientras no esté, esto anda; con el filtro puesto no anda nada.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id,ruc,name,regime,tax_profile,declaration_history,sri_declaraciones(id,period,type,status,proof_file,is_paid,created_at,updated_at)`, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${authToken}`

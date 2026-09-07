@@ -218,6 +218,48 @@
 
   document.getElementById('sri-loop-hud').remove();
 
+
+  // ══ W · un 401 de Supabase casi nunca es la llave ═════════════════
+  sec('W · leer lo que Supabase contesta, en vez de adivinar');
+  // Comprobado el 07-sep-2026 contra el proyecto real: la misma llave daba
+  // 200 en `select=id` y 401 en `select=is_deleted`. No era la llave — era un
+  // permiso sobre UNA columna. Supabase lo decía en el cuerpo de cada 401 y
+  // el bot lo tiraba, para mandar a rotar una credencial sana.
+  const permiso = loQueDijoSupabase(
+    '{"code":"42501","details":null,"hint":null,"message":"permission denied for table clients"}');
+  push('42501 se reconoce',                  /42501/.test(permiso), true);
+  push('y dice que NO es la llave',          /NO es la llave/.test(permiso), true);
+  push('y manda a un GRANT, no a rotar',     /GRANT/.test(permiso), true);
+  push('sin sugerir rotar nada',             /rotar la llave no cambia nada/i.test(permiso), true);
+
+  const columna = loQueDijoSupabase(
+    '{"code":"42703","message":"column clients.notification_count does not exist"}');
+  push('42703 también se reconoce',          /42703/.test(columna), true);
+  push('y nombra la columna que falta',      /notification_count/.test(columna), true);
+
+  // Cuando SÍ habla de la credencial, hay que decirlo: el aviso no puede
+  // descartar siempre a la llave, o taparía el caso real.
+  const jwt = loQueDijoSupabase('{"message":"JWT expired"}');
+  push('un JWT vencido sí apunta a la llave', /puede ser la llave/i.test(jwt), true);
+
+  // Y nunca se inventa un diagnóstico si no hay nada que leer.
+  push('sin cuerpo, no dice nada',           loQueDijoSupabase(''), '');
+  push('con basura, la muestra tal cual',
+       /contestó: no soy json/.test(loQueDijoSupabase('no soy json')), true);
+
+  // El aviso de la llave NUNCA muestra su valor: sólo la forma.
+  const av = avisoLlaveWeb(401);
+  push('el aviso no filtra la llave',
+       av.includes(String(SC_SUPABASE_ANON_KEY || 'xx').slice(0, 24)), false);
+
+  // Y el filtro que causaba el 401 no volvió al código.
+  const src = await (await fetch('../src/01_utilidades_y_pdf.js')).text();
+  // Se busca dentro de una URL, no el texto suelto: los comentarios del
+  // código citan el filtro a propósito, para que se entienda qué rompía.
+  push('ninguna URL de clients pide is_deleted',
+       /\/rest\/v1\/clients\?[^`'\"]*is_deleted/.test(src), false);
+
+
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =
     L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'

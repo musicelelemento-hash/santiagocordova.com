@@ -102,7 +102,7 @@ node --check src/0*.js && npm run build
 
 y los catorce bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **500 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
+scripts). **511 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
 número, algo se rompió; si lo sube, dejá dicho qué agregaste.
 
 ---
@@ -169,6 +169,29 @@ que el portal lo estaba pidiendo, sin depender de que alguien llegue a tiempo.
 lee. Hay que cuidar que no se dispare en bucle si el reclamo persiste.
 **Estado**: propuesta
 
+### Propuesta · Crear `notification_count`, o sacarla del upsert
+
+**Quién la propone**: Claude · 07-sep-2026
+**Qué se vio**: `notification_count` **no existe** en ninguna de las dos
+tablas — comprobado contra el proyecto real:
+`{"code":"42703","message":"column ... does not exist"}`. Y
+`services/supabaseClientService.ts:75` la manda en el upsert de cada
+declaración. PostgREST rechaza el payload **entero** cuando trae una columna
+desconocida.
+**Por qué importa**: si ese upsert falla, no se guarda **nada** de la
+declaración — ni la notificación ni el resto. La sala de envío nunca se
+verificó en pantalla con datos reales (§0b.6), así que puede estar fallando
+sin que nadie lo haya visto.
+**Qué se propone**: o crear la columna
+(`ALTER TABLE public.sri_declaraciones ADD COLUMN notification_count int DEFAULT 0;`)
+o sacarla del payload. La columna hace falta de verdad — es la etapa del
+mensaje, y sin ella todos vuelven a recibir el de bienvenida— así que crearla
+parece lo correcto. **Decisión del usuario: toca su base.**
+**Qué cuesta / qué rompe**: el `ALTER TABLE` es aditivo y no rompe nada. Falta
+confirmar en qué tabla la quiere.
+**Estado**: propuesta — **verificar primero si la sala de envío está guardando
+algo**
+
 ### Propuesta · Preguntar por qué la llave anon funciona desde Node y no desde el content script
 
 **Quién la propone**: Claude · 07-sep-2026
@@ -184,7 +207,10 @@ la rechazan», que son dos arreglos completamente distintos. **Antes de rotar
 nada, leer ese dato.**
 **Qué cuesta / qué rompe**: la parte del diagnóstico ya está hecha. Lo que
 falta es una corrida que lo muestre.
-**Estado**: en curso — falta la evidencia
+**Estado**: **CERRADA el 07-sep-2026 — no era la llave.** Era un permiso sobre
+la columna `is_deleted` (`42501`). Ver la §0b.2. Se deja escrita porque la
+lección vale más que el caso: **leer lo que la API contesta antes de acusar a
+la credencial.**
 
 ---
 
@@ -205,7 +231,7 @@ falta es una corrida que lo muestre.
 | # | Qué | A quién frena | Detalle |
 | :-: | :--- | :--- | :--- |
 | 1 | **Casillero 203 · el decreto del 5%** | **todo contribuyente con compras al 5%** — no se puede enviar | §9d |
-| 2 | **Supabase rechaza la llave (401)** | las métricas del panel web, de todos | §0b.2 |
+| 2 | ~~Supabase rechaza la llave (401)~~ **RESUELTO** — nunca fue la llave | — | §0b.2 |
 | 3 | **jsPDF nunca carga** (CSP `unsafe-eval`) | el PDF de respaldo sale simple, siempre | §0b.3 |
 | 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
 | 5 | **La clave de R2 sigue en el repositorio** | seguridad, ya | §10a |
@@ -275,7 +301,62 @@ IVA de tercera edad. Por eso se guardan `actividad` y `ciiu` **además** de
 `deducible`, y por eso `exportar()` los saca en TSV. Cuando se arme el
 proyecto de tercera edad, la parte cara ya va a estar hecha.
 
-### 0b.2 · Supabase: el 401 que se lleva las métricas
+### 0b.2 · El 401 de Supabase — RESUELTO, y nunca fue la llave
+
+> Cerrado el **07-sep-2026**, después de dos tardes buscando en el lugar
+> equivocado. **Vale como lección general del proyecto**, no sólo para esto.
+
+Probado contra el proyecto real, con la llave que venía dando 401:
+
+```
+200  select=id                    ok
+200  select=tax_profile           ok
+401  select=is_deleted            {"code":"42501","message":"permission denied for table clients"}
+401  is_deleted=eq.false          idem
+```
+
+`42501` es **insufficient_privilege** de PostgreSQL. La llave estaba perfecta:
+el rol `anon` podía leer la tabla `clients` pero **no la columna
+`is_deleted`** — y todas las consultas de la extensión filtraban por
+`is_deleted=eq.false`.
+
+**Supabase venía diciendo exactamente esto en el cuerpo de cada 401**, y el
+bot lo tiraba a la basura para en su lugar mandar a rotar una credencial sana.
+Es la segunda vez que el mismo diagnóstico equivocado cuesta una tarde (la
+primera fue la llave de Ajustes que tapaba a la del código).
+
+> **Regla**: cuando una API contesta un error, **lo primero es leer lo que
+> contestó**. Un 401 de Supabase casi nunca es la llave. `loQueDijoSupabase()`
+> en `01_utilidades_y_pdf.js` traduce el `code` a qué hacer, y el aviso sobre
+> la llave quedó como último recurso — para cuando la respuesta no dijo nada.
+
+#### Qué se hizo, y qué podés hacer vos
+
+Las dos consultas dejaron de pedir `is_deleted`. Con eso anda hoy, sin tocar
+permisos. El costo: la lista del cockpit puede incluir algún contribuyente
+dado de baja en la web.
+
+Para recuperar el filtro, **una línea en el editor SQL de Supabase**:
+
+```sql
+GRANT SELECT (is_deleted) ON public.clients TO anon;
+```
+
+Es una decisión tuya: le da al rol público acceso de lectura a esa columna.
+
+#### Y una columna que no existe
+
+```
+400  select=notification_count    {"code":"42703","message":"column ... does not exist"}
+```
+
+`notification_count` **no está ni en `clients` ni en `sri_declaraciones`**, y
+`services/supabaseClientService.ts` lo manda en el upsert de cada declaración
+(línea 75). PostgREST rechaza el payload entero cuando trae una columna
+desconocida: eso puede estar tirando abajo el guardado completo desde la sala
+de envío. Ver la propuesta en la §0c.
+
+### 0b.2b · Lo que quedó anotado de aquella búsqueda
 
 La declaración se hace bien y el comprobante se guarda — por eso el fallo pasa
 desapercibido. Lo que se pierde son las métricas del panel web.
@@ -1539,7 +1620,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los catorce** en iframes y da un veredicto solo:
-**500 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+**511 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -1557,7 +1638,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `catastro` | la bisección, sobre todo en los bordes | 31 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
 | `notasventa` | que un silencio no se convierta en un cero | 35 |
-| `chequeo` | que avise de lo que va a morder, sin filtrar claves | 45 |
+| `chequeo` | que avise de lo que va a morder, y que lea lo que Supabase contesta | 56 |
 | `esperas` | que se siga apenas el portal contesta | 20 |
 | `subidas` | que «Failed to fetch» diga algo accionable | 27 |
 | `clavevencida` | que se detecte antes de navegar, sin cambiar la clave | 19 |
