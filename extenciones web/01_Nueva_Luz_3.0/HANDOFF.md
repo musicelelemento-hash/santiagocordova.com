@@ -200,27 +200,65 @@ sale la clave.
 > Bearer token inútil para firma S3). Y la rotación **termina al borrar el
 > token viejo**, no al crear el nuevo.
 
-### 4.2 · Los casilleros sin confirmar — PLATA
+### 4.2 · Los `id` de los casilleros, sin confirmar — pero ya no bloquean
 
-`540` / `550` (compras al 5%), `502` / `512` (sin derecho a crédito), `508` /
-`117` (notas de venta). **Ninguno está en la Biblia.** El usuario miró el
-formulario y el 540/550 **no aparecen**.
+> **Corregido el 06-sep-2026.** Acá decía que el 540 y el 550 «no aparecen en
+> el formulario». **Sí aparecen.** El usuario mandó la captura: la fila
+> «Adquisiciones y pagos locales (excluye activos fijos) gravados con tarifa
+> **5%** (con derecho a crédito tributario)» trae **540 · 550 · 560**, y la de
+> abajo trae **502 · 512 · 522**.
+>
+> Lo que fallaba era `encontrarInputPorCasillero()`: sus cuatro XPath exigen
+> que la casilla sea el `<td>` **inmediatamente siguiente** al número, y el SRI
+> mete una tabla dentro de cada celda. La quinta estrategia mira la **pantalla**
+> —el primer input de texto a la derecha del número y a su misma altura— y los
+> encuentra sin necesitar el `id`.
+>
+> **Lección**: el reporte del bot no es la pantalla. «No se encontró X» quiere
+> decir que el buscador no lo encontró, no que X no exista.
 
-**Qué hacer:** estando en el formulario, HUD → 🧰 → **📐** → *Copiar la tabla*.
-Devuelve todos los casilleros con su `id` real, más una radiografía de lo que
-hay en pantalla. Con esa salida:
+Los `id` reales **siguen sin confirmarse** y **no se cablean por suposición**
+(§5b). Cuando alguien quiera cerrarlo del todo: estando en el formulario,
+HUD → 🧰 → **📐** → *Copiar la tabla*, y con esa salida agregar la entrada a la
+Biblia y cablear el `id` en el `fieldMap` de `05_llenado_formulario.js`. Es más
+rápido y más seguro que buscar por altura, pero ya no es urgente.
 
-- agregar la entrada a la Biblia,
-- cablear el `id` en el `fieldMap` de `05_llenado_formulario.js`.
+**Y si algún día no apareciera, no se inventa nada:** la plata se anota en
+`iva_sin_ubicar` y **el cierre mágico no envía** — pero el lote sigue con el
+próximo contribuyente.
 
-**Mientras tanto no se inventa nada:** si hay plata al 5% y no aparece el
-casillero, se anota en `iva_sin_ubicar` y **el cierre mágico no envía**.
+### 4.3 · El mapa del crédito tributario — CRITERIO CONTABLE
 
-### 4.3 · El mapa CIIU → deducible — CRITERIO CONTABLE
+> **Ampliado el 06-sep-2026 por el usuario.** No es «CIIU → deducible». Son
+> **tres** datos, no uno:
+>
+> «hay iva 5% que es de construcción y hay valores sin derecho tributario, o
+> sea la herramienta tiene que saber de IVA porcentaje **y la actividad** para
+> saber si es crédito tributario, además saber **la actividad del cliente**
+> para que sea compatible»
 
-Es lo único que falta para que el 502/512 funcione. **No lo decide una IA ni
-un programador**: lo pone el contador. La base ya guarda `ciiu`, `actividad` y
-`categoria`; falta la tabla que traduce eso a «da crédito tributario / no da».
+| | Dato | Ya está |
+| :--- | :--- | :---: |
+| 1 | la **tarifa** de la compra | ✅ del cociente, o del XML |
+| 2 | a qué se dedica el **proveedor** | ✅ del catastro |
+| 3 | a qué se dedica el **cliente** | ✅ del catastro, por su RUC |
+| 4 | **el mapa** que los traduce a sí/no | ❌ **esto falta** |
+
+El tercero es el que cambia la respuesta: una compra da crédito cuando alimenta
+una actividad que a su vez está gravada, así que la misma factura da distinto
+resultado para un constructor que para otro rubro.
+
+`Proveedores.porQueDecidir(rucProveedor, rucCliente)` junta los tres y devuelve
+los avisos; **no decide** — `credito` es `null` mientras nadie lo haya decidido.
+El panel 🏷️ muestra arriba la actividad del cliente, pone los del 5% primero y
+le cuelga a cada proveedor las tarifas que se le vieron.
+
+**El mapa lo pone el contador. No lo decide una IA ni un programador.**
+
+> El dato de que **el 5% es del sector construcción** lo dio el usuario, no
+> salió de leer la ley. Está anotado con esas palabras en el código y hay una
+> prueba que lo exige (`tests/proveedores.html`, sección Z). No lo conviertas
+> en doctrina ni lo cites como si fuera una fuente legal.
 
 ### 4.4 · El endpoint del XML, conectado al flujo
 
