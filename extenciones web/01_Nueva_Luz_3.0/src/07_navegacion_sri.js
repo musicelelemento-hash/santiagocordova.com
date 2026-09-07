@@ -3130,8 +3130,14 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         // ELITE FIX: SMART DETECTOR DE DECLARACIÓN SUSTITUTIVA / PREVIA
         // Evita que el asistente intente declarar algo que ya fue declarado (evitando error 404 o wizard roto)
         console.log('🔍 Chequeando alertas de declaración previa/sustitutiva...');
+        await sleep(600); // Pequeña espera para que PrimeFaces termine de actualizar la vista
+        
+        const checkTipo = typeof tipoDeDeclaracionEnPantalla === 'function' ? tipoDeDeclaracionEnPantalla() : { esSustitutiva: false, marca: '' };
+        const marcaDirecta = (document.getElementById('frmFlujoDeclaracion:outMarcaDeclaracion')?.textContent ||
+                              document.querySelector('[id$="outMarcaDeclaracion"]')?.textContent || '').trim().toUpperCase();
+        
         const errorMessages = Array.from(document.querySelectorAll('.ui-messages-error-detail, .ui-messages-warn-detail, .ui-messages-info-detail, .ui-dialog-content, .ui-messages-summary'));
-        let isAlreadyDeclared = errorMessages.some(el => {
+        let isAlreadyDeclared = checkTipo.esSustitutiva || marcaDirecta.includes('SUSTITUTIVA') || errorMessages.some(el => {
             // FIX: Ignorar modales o mensajes ocultos de PrimeFaces
             if (el.offsetWidth === 0 && el.offsetHeight === 0) return false;
 
@@ -3143,21 +3149,38 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         });
 
         if (isAlreadyDeclared) {
-            console.warn('⚠️ DECLARACIÓN PREVIA DETECTADA EN SRI.');
-            safeStatus('⚠️ Declaración ya registrada');
+            console.warn('⚠️ DECLARACIÓN PREVIA / SUSTITUTIVA DETECTADA EN WIZARD SRI.');
+            safeStatus('⚠️ Declaración ya registrada (Sustitutiva)');
             
             if (window.sriAssistant) {
                 window.sriAssistant.showEliteToast({
-                    title: '⚠️ Declaración Previa',
-                    msg: 'El SRI indica que esta declaración ya fue presentada previamente.',
-                    duration: 5000
+                    title: '🛑 Período Ya Declarado',
+                    msg: 'El portal abrió una <b>SUSTITUTIVA</b>: este período ya fue presentado. No se abrirá el formulario.',
+                    duration: 6000
                 });
             }
+
+            try {
+                const af = await SafeStorage.get(['pending_sri_autofill', 'workflowPeriod']);
+                const quien = af.pending_sri_autofill || {};
+                if (quien.ruc) {
+                    if (typeof Omitidos !== 'undefined') {
+                        await Omitidos.anotar(quien.ruc, 'ya_declarada', {
+                            nombre: quien.name,
+                            detalle: 'El wizard marcó SUSTITUTIVA al seleccionar el período: ya estaba declarada.'
+                        });
+                    }
+                    if (typeof SriLoop !== 'undefined' && af.workflowPeriod) {
+                        await SriLoop.marcarDeclarado(quien.ruc, af.workflowPeriod, { nombre: quien.name });
+                    }
+                }
+            } catch (e) { /* no frenar por error de registro */ }
 
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod']);
 
             const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
-            if (autoRes.auto_batch_enabled || autoRes.sri_auto_mode) {
+            const enLote = autoRes.auto_batch_enabled || autoRes.sri_auto_mode || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+            if (enLote) {
                 safeStatus('⏩ Avanzando al siguiente cliente del lote...');
                 await sleep(1500);
                 if (typeof handleBatchNextClient === 'function') {
@@ -3167,7 +3190,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     await cerrarSesionSRI();
                 }
             }
-            return; // Detener flujo sin redirigir a consulta de documentos
+            return; // Detener flujo sin abrir el formulario ni redirigir a ciegas
         }
 
         // PASO 5: PREGUNTAS (Si aparecen - SMART SKIP)
@@ -3205,6 +3228,11 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             findByText('Ver formulario completo'), 8000, 'Botón Ver Formulario');
 
         if (btnVerFormulario) {
+            // Doble candado de seguridad: verificar que no sea sustitutiva antes de abrir
+            if (typeof tipoDeDeclaracionEnPantalla === 'function' && tipoDeDeclaracionEnPantalla().esSustitutiva) {
+                console.warn('🛑 [PASO 6] Sustitutiva detectada antes de abrir formulario. Cancelando apertura.');
+                return;
+            }
             safeStatus('✨ Abriendo Formulario...');
             progress(95);
             const innerClickable = btnVerFormulario.querySelector('a, button, span.ui-button-text') || btnVerFormulario;

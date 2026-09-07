@@ -61,7 +61,7 @@ async function calculateEliteFinancials(targetField) {
 
 async function autoLlenarFormulario(data) {
     // Lo primero, antes de tocar un solo casillero.
-    if (typeof frenarSiEsSustitutiva === 'function' && await frenarSiEsSustitutiva('antes de llenar')) return;
+    if (typeof frenarSiEsSustitutiva === 'function' && await frenarSiEsSustitutiva('antes de llenar')) return false;
 
     console.group('🔥 SRI Llenado Maestro v9.0 ELITE');
     let total = 0;
@@ -132,6 +132,7 @@ async function autoLlenarFormulario(data) {
     } catch (e) {
         console.error('Error en llenado maestro:', e);
         if (window.sriAssistant) window.sriAssistant.log('❌ Error: ' + e.message);
+        return false;
     } finally {
         if (window.sriAssistant) {
             window.sriAssistant.setWorking(false);

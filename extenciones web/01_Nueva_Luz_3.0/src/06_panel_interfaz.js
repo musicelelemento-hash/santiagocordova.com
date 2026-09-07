@@ -3349,6 +3349,14 @@ class SriAssistantPanel {
     }
 
     async avanzarSiguienteFormulario() {
+        if (typeof tipoDeDeclaracionEnPantalla === 'function') {
+            const { esSustitutiva, marca } = tipoDeDeclaracionEnPantalla();
+            if (esSustitutiva) {
+                console.error(`🛑 [BLOQUEO ESTRICTO] Prohibido avanzar al resumen: la declaración es "${marca}".`);
+                this.log(`🛑 Bloqueo estricto: es una ${marca}. No se avanza al resumen.`);
+                return false;
+            }
+        }
         console.log('🚀 [FORMULARIO] Buscando botón "Siguiente" para avanzar al resumen...');
         await SafeStorage.remove('summary_page_clicked');
         await sleep(1500);
@@ -3434,6 +3442,8 @@ class SriAssistantPanel {
                     }
                 } else if (msgTexts.length > 0) {
                     console.warn('⚠️ [ELITE] Hay mensajes en panelMensajes que NO son seguros para ignorar:', msgTexts);
+                    this.log('⚠️ [MENSAJES SRI] Mensajes impiden continuar: ' + msgTexts.slice(0, 2).join(' | '));
+                    return false;
                 }
             }
 
@@ -3466,7 +3476,12 @@ class SriAssistantPanel {
                 storage.retenciones = { totalRetenciones: 0, retIva: 0, retRenta: 0, baseImponible: 0 };
             }
             if (type === 'TODO') {
-                await autoLlenarFormulario(storage);
+                const okLlenado = await autoLlenarFormulario(storage);
+                if (!okLlenado) {
+                    this.log('🛑 Llenado cancelado o frenado (sustitutiva o error). No se avanzará.');
+                    this.setStatus('🛑 Llenado cancelado');
+                    return false;
+                }
                 this.log('✅ Formulario Llenado Exitosamente.');
                 this.setStatus('✅ Avanzando a Siguiente...');
                 this.showEliteToast({

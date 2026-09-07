@@ -361,12 +361,30 @@ async function frenarSiEsSustitutiva(donde = '') {
     });
   }
 
-  // Se detiene el lote entero: si un cliente llegó hasta acá, algo falló antes
-  // y conviene mirarlo antes de seguir con los demás.
-  if (typeof SriLoop !== 'undefined') {
-    await SriLoop.detener('Se abrió una sustitutiva: el período ya estaba declarado');
+  // Si el semáforo del lote está activo, se omite a este cliente ya declarado
+  // y se avanza al siguiente, en vez de congelar a todos los clientes restantes.
+  const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
+  const puedeSeguir = (autoRes.auto_batch_enabled || autoRes.sri_auto_mode) && 
+                      (typeof SriLoop !== 'undefined' ? await SriLoop.puedeAvanzar() : false);
+
+  if (puedeSeguir && typeof handleBatchNextClient === 'function') {
+    console.log('⏩ [SUSTITUTIVA] Cliente ya declarado. Avanzando al siguiente cliente del lote...');
+    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+    setTimeout(async () => {
+      try {
+        const hasNext = await handleBatchNextClient();
+        if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+      } catch (err) {
+        console.warn('⚠️ Error al avanzar al siguiente cliente tras sustitutiva:', err);
+      }
+    }, 2000);
+  } else {
+    // Si era ejecución manual o el lote terminó, se detiene.
+    if (typeof SriLoop !== 'undefined') {
+      await SriLoop.detener('Se abrió una sustitutiva: el período ya estaba declarado');
+    }
+    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
   }
-  await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
   return true;
 }
 
