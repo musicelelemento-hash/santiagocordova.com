@@ -66,6 +66,22 @@ cambios en `src/` que no son tuyos, la otra IA está en el medio de algo.
 panel a la vez. Si hay que revertir, tiene que poder revertirse una cosa sin
 llevarse las otras dos por delante.
 
+### Los dos documentos, y para qué sirve cada uno
+
+Hay **dos** archivos de estado, a propósito. No compiten:
+
+| Archivo | Qué es | Cuándo se escribe |
+| :--- | :--- | :--- |
+| **`.agents/AGENTS.md`** (éste) | la **memoria permanente**: reglas, la Matriz de selectores, las lecciones y por qué se tomaron | cuando algo se aprende para siempre |
+| **`STATE.md`** (raíz) | el **parte del día**: qué se resolvió hoy, quién está en qué, el mapa de archivos | cada jornada de trabajo |
+
+Lo carga automáticamente sólo el primero (`@.agents/AGENTS.md` desde los
+`CLAUDE.md`). **`STATE.md` hay que abrirlo a mano** — hacelo al empezar, dice
+en qué anda la otra IA.
+
+Si los dos se contradicen, gana el que traiga **evidencia** (un log, una
+respuesta HTTP, una captura), no el más reciente.
+
 ### Cómo dejar una propuesta en vez de hacerla
 
 Cuando veas algo que conviene cambiar pero **no es lo que te pidieron**, no lo
@@ -319,6 +335,31 @@ Probado contra el proyecto real, con la llave que venía dando 401:
 el rol `anon` podía leer la tabla `clients` pero **no la columna
 `is_deleted`** — y todas las consultas de la extensión filtraban por
 `is_deleted=eq.false`.
+
+#### Eran DOS causas, no una — y las encontramos por separado
+
+Trabajando en paralelo el mismo día, Gemini llegó a la otra mitad. **Las dos
+son ciertas y explican tablas distintas:**
+
+| Tabla | Causa | Quién la encontró |
+| :--- | :--- | :--- |
+| `clients` | permiso de **columna**: `anon` no puede leer `is_deleted` | Claude |
+| `sri_declaraciones` | **RLS**: `harden_full_rls.sql` dejó sólo política de INSERT, y un upsert con `on_conflict` necesita **UPDATE** | Gemini |
+
+La de Gemini tiene una consecuencia que conviene tener presente: sin política
+de `SELECT`, la consulta anidada `sri_declaraciones(...)` de
+`fetchClientsDirectly` **devolvía siempre `[]`** — o sea que el panel no veía
+ninguna declaración histórica, y eso no daba error, daba vacío.
+
+> Lección que vale más que el caso: **un mismo síntoma podía tener dos causas
+> a la vez**, y cada uno de los dos había encontrado una y la daba por
+> completa. Cuando dos agentes diagnostican lo mismo, comparar antes de
+> cerrar.
+
+**Todo el SQL está en un solo archivo**, para una sola pasada por el editor de
+Supabase: `santiagocordova-main/database/fix_sri_declaraciones_anon_rls.sql`
+— las políticas de `sri_declaraciones`, el `GRANT` de `is_deleted` y el
+`ALTER TABLE` de `notification_count`.
 
 **Supabase venía diciendo exactamente esto en el cuerpo de cada 401**, y el
 bot lo tiraba a la basura para en su lugar mandar a rotar una credencial sana.

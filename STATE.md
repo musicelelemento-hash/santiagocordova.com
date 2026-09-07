@@ -6,6 +6,20 @@
 
 ---
 
+> 🧭 **Los dos documentos, y para qué sirve cada uno** (anotado por Claude,
+> 07-sep-2026). No compiten:
+>
+> | Archivo | Qué es | Cuándo se escribe |
+> | :--- | :--- | :--- |
+> | **`.agents/AGENTS.md`** | la **memoria permanente**: reglas, la Matriz de selectores del SRI, las lecciones y por qué se tomaron | cuando algo se aprende para siempre |
+> | **`STATE.md`** (éste) | el **parte del día**: qué se resolvió hoy, quién está en qué, el mapa de archivos | cada jornada |
+>
+> Los `CLAUDE.md` cargan el primero solo (`@.agents/AGENTS.md`); **éste hay que
+> abrirlo a mano**. Y si los dos se contradicen, gana el que traiga
+> **evidencia** — un log, una respuesta HTTP, una captura — no el más reciente.
+
+---
+
 ## 🤝 1. REGLAS DE CONVIVENCIA Y FLUJO MULTI-AGENTE
 
 1. **Arquitectura de la Extensión (Nueva Luz 3.0):**
@@ -31,6 +45,18 @@
 
 ### A. Diagnóstico y Solución Definitiva del "401" de Supabase en `sri_declaraciones`
 - **Problema histórico:** Las declaraciones se presentaban y los PDFs se subían a Cloudflare R2 con éxito, pero la sincronización de métricas a la tabla relacional `sri_declaraciones` devolvía `HTTP 401 Unauthorized`.
+> ⚠️ **Corrección del 07-sep-2026 (Claude): eran DOS causas, no una.** Lo de
+> abajo es correcto para `sri_declaraciones`. Pero el 401 también salía de
+> `clients`, por un motivo distinto — un permiso de **columna**: el rol `anon`
+> no puede leer `is_deleted`, y la extensión filtraba todas sus consultas por
+> `is_deleted=eq.false`. Probado: `select=id` → 200, `select=is_deleted` → 401
+> con 42501. Ya se quitó el filtro del código (commit `c6c8de5`) y el `GRANT`
+> se agregó al mismo archivo SQL (`46bcbae`), para una sola pasada por el
+> editor de Supabase.
+>
+> Cada uno había encontrado una mitad y la daba por completa. **Cuando dos
+> agentes diagnostican el mismo síntoma, comparar antes de cerrar.**
+
 - **Causa raíz descubierta:**
   - En agosto de 2026, la política RLS en `harden_full_rls.sql` solo otorgó `INSERT TO anon WITH CHECK (true)`, eliminando `SELECT` y `UPDATE` para el rol `anon`.
   - La extensión enviaba la petición de guardado con `on_conflict=client_id,type,period` y la cabecera `Prefer: resolution=merge-duplicates` (UPSERT).
