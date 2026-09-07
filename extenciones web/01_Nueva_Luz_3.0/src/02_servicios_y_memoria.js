@@ -472,6 +472,18 @@ const SriLoop = {
     async prepararCliente(cliente, periodo) {
         anotarBitacora('credenciales listas', cliente.name || cliente.ruc);
 
+        // El contador de rebotes al login es de ESTE intento, no del cliente.
+        // Si quedara pegado de una corrida vieja, el primer rebote de la
+        // próxima lo mandaría derecho a `sesion_caida` sin darle su reintento.
+        // Es la misma trampa que `iva_sin_ubicar` pegada entre clientes.
+        try {
+            const rb = (await SafeStorage.get(['sc_rebotes'])).sc_rebotes || {};
+            if (rb[cliente.ruc] !== undefined) {
+                delete rb[cliente.ruc];
+                await SafeStorage.set({ sc_rebotes: rb });
+            }
+        } catch (e) { /* un contador no puede tumbar el arranque */ }
+
         if (cliente.soloRecuperar) {
             console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
             await SafeStorage.set({
@@ -1211,6 +1223,48 @@ const Chequeo = {
         } catch (e) { /* nada */ }
 
         // ── La subida, que es el objetivo §0 ────────────────────────────
+        // ── La llave de la web ──────────────────────────────────────────
+        // Se prueba contra la red porque una llave puede estar puesta y no
+        // servir: el 06-sep-2026 la anon estaba revocada del lado de Supabase
+        // —no vencida— y TODA la corrida perdió las métricas. Nadie se enteró
+        // hasta leer el log, catorce contribuyentes después.
+        if (incluirSubida) {
+            if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
+                anotar('web', 'Panel web', 'problema',
+                    'No hay llave de Supabase configurada.',
+                    'Pegá la llave anon en Ajustes de la extensión.');
+            } else {
+                try {
+                    const rw = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?select=id&limit=1`, {
+                        headers: {
+                            apikey: SC_SUPABASE_ANON_KEY,
+                            Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`
+                        }
+                    });
+                    const origen = typeof SC_SUPABASE_ORIGEN === 'string' ? SC_SUPABASE_ORIGEN : 'del código';
+                    if (rw.ok) {
+                        anotar('web', 'Panel web', 'ok',
+                            `La llave anon (${origen}) funciona: las declaraciones van a llegar al panel.`);
+                    } else if (rw.status === 401 || rw.status === 403) {
+                        anotar('web', 'Panel web', 'problema',
+                            `Supabase rechaza la llave anon (${origen}): HTTP ${rw.status}.`,
+                            'Copiá la llave nueva del panel de Supabase (Project Settings → API) y ' +
+                            'pegala en Ajustes. Sin esto el bot declara, guarda el comprobante, y ' +
+                            'el panel web no se entera de nada.');
+                    } else {
+                        anotar('web', 'Panel web', 'aviso',
+                            `Supabase contestó HTTP ${rw.status}.`,
+                            'Puede ser pasajero. Si sigue, mirá el panel de Supabase.');
+                    }
+                } catch (e) {
+                    anotar('web', 'Panel web', 'aviso',
+                        `No se pudo llegar a Supabase: ${e.message}`,
+                        'Suele ser la red o un proxy. La declaración igual se hace; lo que se ' +
+                        'pierde son las métricas del panel.');
+                }
+            }
+        }
+
         if (incluirSubida) {
             try {
                 const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
@@ -1275,12 +1329,25 @@ const NotasDeVenta = {
     // es lo que haría inservible al interruptor.
     CEROS_PARA_DEJAR_DE_PREGUNTAR: 3,
 
+    // ENCENDIDO por defecto desde el 06-sep-2026, a pedido del usuario.
+    //
+    // Nació apagado por miedo a trabar un lote de 27, pero ese miedo ya está
+    // resuelto por otras dos piezas: la pregunta se resuelve sola por
+    // temporizador —un silencio vale `null`, que no escribe nada— y tres
+    // períodos en cero apagan la pregunta para ese contribuyente. Apagado, el
+    // 508 y el 117 no se declaraban nunca y nadie se enteraba.
+    ARRANCA_ENCENDIDO: true,
+
     async _estado() {
+        const porOmision = () => ({
+            encendido: this.ARRANCA_ENCENDIDO,
+            segundos: this.SEGUNDOS_POR_DEFECTO,
+            porCliente: {}
+        });
         try {
-            return (await SafeStorage.get([this._KEY]))[this._KEY] ||
-                   { encendido: false, segundos: this.SEGUNDOS_POR_DEFECTO, porCliente: {} };
+            return (await SafeStorage.get([this._KEY]))[this._KEY] || porOmision();
         } catch (e) {
-            return { encendido: false, segundos: this.SEGUNDOS_POR_DEFECTO, porCliente: {} };
+            return porOmision();
         }
     },
 

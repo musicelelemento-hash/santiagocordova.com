@@ -27,11 +27,17 @@
   await SriLoopHUD.montar();
 
   // ══ A · el interruptor ══════════════════════════════════════════════════
-  sec('A · apagado por defecto');
-  push('nace apagado',                  await NotasDeVenta.estaEncendido(), false);
+  sec('A · encendido por defecto');
+  // Cambiado el 06-sep-2026 a pedido del usuario. Nació apagado por miedo a
+  // trabar un lote de 27, pero ese miedo lo resuelven otras dos piezas: la
+  // pregunta se resuelve sola por temporizador (sección B) y tres períodos en
+  // cero la apagan para ese contribuyente (sección E). Apagado, el 508 y el
+  // 117 no se declaraban NUNCA y nadie se enteraba.
+  push('nace encendido',                await NotasDeVenta.estaEncendido(), true);
+  push('y encendido sí pregunta',       await NotasDeVenta.debePreguntar(RUC), true);
+  push('se puede apagar',               await NotasDeVenta.alternar(), false);
   push('y apagado no se pregunta nada', await NotasDeVenta.debePreguntar(RUC), false);
-  push('se enciende',                   await NotasDeVenta.alternar(), true);
-  push('y ahora sí pregunta',           await NotasDeVenta.debePreguntar(RUC), true);
+  push('y se vuelve a encender',        await NotasDeVenta.alternar(), true);
 
   await SriLoopHUD.pintarInterruptorNotas();
   push('el botón lo dice',

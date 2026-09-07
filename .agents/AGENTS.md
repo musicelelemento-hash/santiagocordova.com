@@ -511,7 +511,15 @@ contador.
 | **117** | Total de notas de venta recibidas (cantidad) |
 
 **Construido el 06-sep-2026.** `NotasDeVenta` en `02_servicios_y_memoria.js`,
-interruptor **📒** en la barra flotante — **apagado por defecto**.
+interruptor **📒** en el cajón 🧰 — **encendido por defecto** desde esa misma
+fecha, a pedido del usuario.
+
+> Nació apagado por miedo a trabar un lote de 27. Ese miedo ya lo resuelven
+> otras dos piezas: la pregunta **se resuelve sola por temporizador** (un
+> silencio vale `null` y no escribe nada) y **tres períodos en cero** la apagan
+> para ese contribuyente. Apagado, el 508 y el 117 no se declaraban nunca y
+> nadie se enteraba. `NotasDeVenta.ARRANCA_ENCENDIDO` es el interruptor de
+> fábrica; lo que el usuario elija con 📒 lo pisa.
 
 Cuando está encendido, el **paso 1.2** de `llenarCompras()` —apenas se abre la
 sección COMPRAS, no al final del llenado— pide los dos números en un panel del
@@ -963,7 +971,19 @@ número doce.
 Mira, todo de fuentes que ya existían: la versión · el portal · la cola · **la
 marca `iva_sin_ubicar`** · los omitidos · si hay claves guardadas (sin
 mostrarlas) · el catastro · los proveedores sin clasificar · el interruptor de
-notas de venta · y la subida, contra la red.
+notas de venta · la subida, contra la red · y **la llave anon de Supabase,
+también contra la red**.
+
+> Esa última se agregó el 06-sep-2026 por un caso real: la llave estaba puesta
+> y **revocada del lado de Supabase** —no vencida, vence en 2036—, así que toda
+> la corrida perdió las métricas del panel. El bot declaró bien y guardó los
+> comprobantes, que es justo lo que hace que el fallo pase desapercibido: nadie
+> se enteró hasta leer el log, catorce contribuyentes después. Que una llave
+> esté puesta no quiere decir que sirva; hay que preguntarle a Supabase.
+>
+> Un **401/403 es `problema`**; un 5xx o no llegar es `aviso`, porque puede ser
+> pasajero y la declaración igual se hace. Y el informe **nunca** trae el valor
+> de la llave: sólo si funciona y de dónde salió.
 
 Tres estados y ninguno más — `ok`, `aviso`, `problema` — y **cada uno dice qué
 hacer**: un diagnóstico que no dice qué hacer no sirve de nada. En el panel, lo

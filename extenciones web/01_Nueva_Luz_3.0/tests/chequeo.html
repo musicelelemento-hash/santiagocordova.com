@@ -137,6 +137,59 @@
   push('lo que muerde primero va arriba', orden[0].startsWith('🛑'), true);
   push('y lo que anda queda al final',    orden[orden.length - 1].startsWith('✅'), true);
 
+  // ══ Z · la llave de la web, probada contra la red ═══════════════════════
+  sec('Z · el 401 se caza ANTES del lote');
+  // El 06-sep-2026 la llave anon estaba revocada del lado de Supabase —no
+  // vencida— y TODA la corrida perdió las métricas del panel. Nadie se enteró
+  // hasta leer el log, catorce contribuyentes después. Que una llave esté
+  // puesta no quiere decir que sirva: hay que preguntarle a Supabase.
+  const fetchDeVerdad = window.fetch;
+  const LLAVE_WEB = 'ey-ESTA-LLAVE-NO-DEBE-SALIR-EN-EL-INFORME';
+  SC_SUPABASE_URL = 'https://ejemplo.supabase.co';
+  SC_SUPABASE_ANON_KEY = LLAVE_WEB;
+  SC_SUPABASE_ORIGEN = 'de Ajustes';
+
+  const soloWeb = (lista) => lista.find((x) => x.clave === 'web') || {};
+
+  window.fetch = async () => ({ ok: true, status: 200 });
+  let w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('con la llave buena, en verde',        w.estado, 'ok');
+  push('y dice de dónde salió',               /de Ajustes/.test(w.detalle || ''), true);
+
+  window.fetch = async () => ({ ok: false, status: 401 });
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('un 401 es un problema, no un aviso',  w.estado, 'problema');
+  push('y dice exactamente qué hacer',
+       /Ajustes/.test(w.queHacer || '') && /Supabase/.test(w.queHacer || ''), true);
+  // Lo que se pierde tiene que estar dicho: el bot igual declara y guarda el
+  // comprobante, y por eso el fallo pasa desapercibido.
+  push('nombra lo que se pierde',
+       /panel web no se entera/.test(w.queHacer || ''), true);
+
+  // Y JAMÁS el valor de la llave. Es la misma regla que en el diagnóstico de
+  // subida y en la página de Ajustes.
+  push('el informe no filtra la llave',
+       JSON.stringify(await Chequeo.correr({ incluirSubida: true })).includes(LLAVE_WEB), false);
+
+  // Un 500 de Supabase no es lo mismo que una llave mala: puede ser pasajero.
+  window.fetch = async () => ({ ok: false, status: 503 });
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('un 503 es aviso, no problema',        w.estado, 'aviso');
+
+  // No llegar tampoco condena la llave.
+  window.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('no llegar es aviso',                  w.estado, 'aviso');
+  push('y aclara que la declaración igual se hace',
+       /declaraci[oó]n igual se hace/.test(w.queHacer || ''), true);
+
+  // Sin llave configurada, se dice; no se calla.
+  SC_SUPABASE_ANON_KEY = null;
+  w = soloWeb(await Chequeo.correr({ incluirSubida: true }));
+  push('sin llave, lo dice',                  w.estado, 'problema');
+
+  window.fetch = fetchDeVerdad;
+
   document.getElementById('sri-loop-hud').remove();
 
   const fallos = ok.filter(x=>!x).length;
