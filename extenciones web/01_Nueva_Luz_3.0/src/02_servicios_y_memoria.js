@@ -201,12 +201,37 @@ const SriLoop = {
         console.warn(`🛑 [BUCLE] PARADA DE EMERGENCIA, pedida por ${quien}. No es una falla: el lote se cortó a mano.`);
         if (typeof anotarBitacora === 'function') anotarBitacora('🛑 parada de emergencia', quien);
         await this._set({ estado: 'DETENIDO', motivo: `Parada de emergencia (${quien})` });
+        await this._descartarLoPendiente('la parada de emergencia');
         await this._sincronizarLegado(false);
+    },
+
+    /**
+     * Borra la acción que quedó a medias en el almacén.
+     *
+     * **Parar tiene que parar.** El 07-sep-2026 el semáforo decía DETENIDO por
+     * una parada de emergencia y `recuperar_comprobante` seguía corriendo
+     * igual, recargando la página cada dos segundos. El usuario lo describió
+     * como «una barrera invisible para no poder dar check»: no había barrera
+     * — la página se recargaba antes de que el clic llegara a registrarse.
+     *
+     * Una acción pendiente que sobrevive al botón rojo no es un residuo
+     * inofensivo: deja el navegador inservible hasta que alguien adivine que
+     * hay que limpiar el almacén.
+     */
+    async _descartarLoPendiente(porQue = '') {
+        try {
+            const r = await SafeStorage.get(['pendingAction']);
+            if (!r.pendingAction) return;
+            console.log(`🧹 [BUCLE] Se descarta la acción «${r.pendingAction}» que quedó a medias` +
+                        `${porQue ? ' por ' + porQue : ''}.`);
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'recuperarComprobante', 'bajarTodos']);
+        } catch (e) { /* parar no puede fallar por esto */ }
     },
 
     async detener(motivo = '') {
         console.log('⏹️ [BUCLE] Detenido.', motivo);
         await this._set({ estado: 'DETENIDO', cola: [], indice: 0, motivo });
+        await this._descartarLoPendiente('la detención del lote');
         await this._sincronizarLegado(false);
     },
 
