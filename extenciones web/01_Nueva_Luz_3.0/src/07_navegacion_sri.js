@@ -1852,19 +1852,49 @@ const SriLoopHUD = {
         if (!panel) return Promise.resolve(null);
 
         const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const caja = 'background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.16);' +
+                     'color:#e2e8f0;border-radius:8px;padding:9px 10px;font-family:ui-monospace,monospace;' +
+                     'font-size:15px;font-weight:700;text-align:right';
+        const boton = (fondo, color) => 'border:none;border-radius:9px;padding:10px 14px;min-height:38px;' +
+                     `background:${fondo};color:${color};font-size:12px;font-weight:800;cursor:pointer`;
+
         // En el DOM del portal va sólo lo que hace falta ver. Nunca una clave.
         panel.innerHTML =
-            '<div style="font-size:11px;font-weight:800;margin-bottom:2px">📒 Notas de venta</div>' +
-            `<div style="font-size:11px;opacity:0.8;margin-bottom:8px">${esc(nombre || ruc)} · ${esc(periodo)}</div>` +
-            '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
-            '  <label style="font-size:10px;opacity:0.75">508 · importe' +
-            '    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" style="display:block;width:110px;margin-top:2px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;border-radius:7px;padding:6px 8px;font-family:monospace;font-size:12px"></label>' +
-            '  <label style="font-size:10px;opacity:0.75">117 · cantidad' +
-            '    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" style="display:block;width:82px;margin-top:2px;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.16);color:#e2e8f0;border-radius:7px;padding:6px 8px;font-family:monospace;font-size:12px"></label>' +
-            '  <button id="slh-nv-ok" style="border:none;border-radius:8px;padding:8px 12px;min-height:34px;background:rgba(16,185,129,0.22);color:#5eead4;font-size:11px;font-weight:800;cursor:pointer">Guardar</button>' +
-            '  <button id="slh-nv-no" style="border:none;border-radius:8px;padding:8px 12px;min-height:34px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">No tiene</button>' +
+            '<div style="font-size:12px;font-weight:800;margin-bottom:2px">📒 Notas de venta (papel)</div>' +
+            `<div style="font-size:11px;opacity:0.8;margin-bottom:6px">${esc(nombre || ruc)} · ${esc(periodo)}</div>` +
+
+            // Por qué se pregunta. Sin esto, la pregunta aparece de la nada en
+            // medio de un lote y no se sabe si es importante o se puede ignorar.
+            '<div style="background:rgba(56,189,248,0.10);border-radius:8px;padding:7px 9px;' +
+            'font-size:11px;line-height:1.5;opacity:0.9;margin-bottom:10px">' +
+            'Son las de <b>papel</b>: no están en comprobantes electrónicos y el bot no tiene ' +
+            'de dónde sacarlas. Si no las cargás, el 508 y el 117 quedan <b>vacíos</b> — ' +
+            'no en cero.</div>' +
+
+            '<div style="display:grid;grid-template-columns:1fr 92px;gap:10px;align-items:end">' +
+            '  <label style="font-size:11px;opacity:0.85;font-weight:700">Valor total' +
+            '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 508 · en dólares</span>' +
+            `    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
+            '  <label style="font-size:11px;opacity:0.85;font-weight:700">Cuántas' +
+            '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 117</span>' +
+            `    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" placeholder="0" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
             '</div>' +
-            '<div id="slh-nv-reloj" style="font-size:10px;opacity:0.7;margin-top:8px"></div>';
+
+            // Lo que se va a escribir, en palabras, antes de escribirlo.
+            '<div id="slh-nv-eco" style="font-size:11px;margin-top:8px;min-height:16px;color:#7dd3fc"></div>' +
+
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
+            `  <button id="slh-nv-ok" style="${boton('rgba(16,185,129,0.22)', '#5eead4')};flex:1">✓ Guardar</button>` +
+            `  <button id="slh-nv-no" style="${boton('rgba(148,163,184,0.18)', '#cbd5e1')}">No tuvo</button>` +
+            `  <button id="slh-nv-mas" style="${boton('rgba(148,163,184,0.12)', '#94a3b8')}" title="Otro minuto para buscar el dato">+1 min</button>` +
+            '</div>' +
+
+            // La barra dice cuánto queda de un vistazo; el texto, qué pasa si
+            // se acaba. Las dos cosas, porque una sola no alcanza.
+            '<div style="height:4px;background:rgba(255,255,255,0.10);border-radius:3px;margin-top:12px;overflow:hidden">' +
+            '  <div id="slh-nv-barra" style="height:100%;width:100%;background:#38bdf8;transition:width 0.9s linear"></div>' +
+            '</div>' +
+            '<div id="slh-nv-reloj" style="font-size:10px;opacity:0.7;margin-top:6px;line-height:1.45"></div>';
 
         this.soloUnPanel('slh-notas-panel');
         panel.style.display = 'block';
@@ -1873,9 +1903,16 @@ const SriLoopHUD = {
         const campoMonto = panel.querySelector('#slh-nv-monto');
         setTimeout(() => { try { campoMonto.focus(); } catch (e) { /* nada */ } }, 60);
 
+        const barra = panel.querySelector('#slh-nv-barra');
+        const eco = panel.querySelector('#slh-nv-eco');
+        const campoCant = panel.querySelector('#slh-nv-cant');
+
         return new Promise((resolve) => {
+            const total = segundos;
             let quedan = segundos;
             let terminado = false;
+            // Cuándo se tecleó por última vez. 0 = nunca.
+            let ultimaTecla = 0;
 
             const cerrar = (valor) => {
                 if (terminado) return;
@@ -1887,29 +1924,78 @@ const SriLoopHUD = {
                 resolve(valor);
             };
 
+            const pintarReloj = () => {
+                barra.style.width = `${Math.max(0, (quedan / total) * 100)}%`;
+                barra.style.background = quedan <= 10 ? '#fb923c' : '#38bdf8';
+                reloj.textContent =
+                    `Quedan ${quedan}s. Si no contestás, el lote sigue y el 508 y el 117 ` +
+                    'quedan sin tocar — no en cero.';
+            };
+
             const tic = setInterval(() => {
+                // EL RELOJ NO CORRE MIENTRAS ESCRIBÍS.
+                //
+                // Un temporizador que vence mientras la persona está tipeando
+                // el número castiga justo a quien está contestando.
+                //
+                // Pero el FOCO no alcanza como señal: este panel se autoenfoca
+                // al abrirse, así que «congelar mientras el campo tiene el
+                // foco» congelaba el reloj para siempre y un lote de 27 se
+                // quedaba esperando en el primero. Lo cazó el banco, no la
+                // lectura. Cuenta lo que la persona hizo: algo escrito, o una
+                // tecla en los últimos segundos.
+                const recien = Date.now() - ultimaTecla < 6000;
+                const escribiendo = campoMonto.value !== '' || campoCant.value !== '' || recien;
+                if (escribiendo) {
+                    reloj.textContent = 'El reloj está detenido mientras cargás. Apretá ✓ Guardar o Enter.';
+                    barra.style.background = '#5eead4';
+                    return;
+                }
+
                 quedan--;
                 if (quedan <= 0) {
                     // Se acabó el tiempo: null, que NO es cero. El lote sigue.
                     cerrar(null);
                     return;
                 }
-                reloj.textContent = `Sin respuesta en ${quedan}s el lote sigue y no se toca ni el 508 ni el 117.`;
+                pintarReloj();
             }, 1000);
-            reloj.textContent = `Sin respuesta en ${quedan}s el lote sigue y no se toca ni el 508 ni el 117.`;
+            pintarReloj();
+
+            // Lo que se va a escribir, dicho en palabras antes de escribirlo.
+            const repetir = () => {
+                const m = parseFloat(campoMonto.value);
+                const c = parseInt(campoCant.value, 10);
+                if (!campoMonto.value && !campoCant.value) { eco.textContent = ''; return; }
+                const partes = [];
+                partes.push(m > 0 ? `$${m.toFixed(2)} al casillero 508` : 'nada al 508');
+                partes.push(c > 0 ? `${c} comprobante(s) al 117` : 'nada al 117');
+                eco.textContent = '→ Se va a escribir ' + partes.join(' y ') + '.';
+            };
+            campoMonto.addEventListener('input', repetir);
+            campoCant.addEventListener('input', repetir);
+            panel.querySelectorAll('input').forEach((i) => {
+                i.addEventListener('keydown', () => { ultimaTecla = Date.now(); });
+            });
 
             panel.querySelector('#slh-nv-ok').addEventListener('click', (ev) => {
                 ev.stopPropagation();
                 cerrar({
                     monto: parseFloat(campoMonto.value) || 0,
-                    cantidad: parseInt(panel.querySelector('#slh-nv-cant').value, 10) || 0
+                    cantidad: parseInt(campoCant.value, 10) || 0
                 });
             });
-            // «No tiene» es una respuesta, no un silencio: cuenta para dejar de
+            // «No tuvo» es una respuesta, no un silencio: cuenta para dejar de
             // preguntarle a este cliente en los próximos períodos.
             panel.querySelector('#slh-nv-no').addEventListener('click', (ev) => {
                 ev.stopPropagation();
                 cerrar({ monto: 0, cantidad: 0 });
+            });
+            // Un minuto más, para cuando hay que ir a buscar el dato.
+            panel.querySelector('#slh-nv-mas').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                quedan += 60;
+                pintarReloj();
             });
             // Enter en cualquiera de los dos campos guarda.
             panel.querySelectorAll('input').forEach((i) => {

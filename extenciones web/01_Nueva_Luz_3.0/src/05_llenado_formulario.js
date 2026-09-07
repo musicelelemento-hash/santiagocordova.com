@@ -211,6 +211,15 @@ async function llenarVentas(data) {
 
 async function llenarCompras(data) {
     console.group('🛍️ Llenado de COMPRAS v2.0 (Zero-Touch Elite)');
+
+    // Con qué criterio se reparte. Preguntado por el usuario el 07-sep-2026:
+    // «no vi si clasifica por IVA o por actividad». No lo decía en ningún
+    // lado, y una decisión sobre plata que no se explica no se puede auditar.
+    console.log('   ⚖️ Criterio: se reparte por TARIFA — el cociente IVA/base de cada factura.');
+    console.log('      15% → 500/510   ·   5% → 540/550   ·   0% → 507/517');
+    console.log('      La ACTIVIDAD del proveedor y la del cliente todavía NO deciden nada: el ' +
+                '502/512 (sin derecho a crédito) queda sin usar hasta que exista el mapa, que ' +
+                'es criterio contable. Lo que se sabe de cada proveedor está en 🏷️, en el cajón 🧰.');
     let camposLlenados = 0;
 
     // Robusto: detectamos si nos pasan el objeto raíz o el de facturas
@@ -344,15 +353,31 @@ async function llenarCompras(data) {
         // resto del formulario. Si no aparecen NO se inventa un destino ni se
         // los manda al 500: se anota y el cierre mágico frena el envío.
         console.log('  📝 Casillero 540 (Compras 5% - Bruto)...');
-        if (await llenarCampo('540', base5)) {
+        const input540 = await encontrarInputPorCasillero('540');
+        if (await llenarCampo('540', base5, input540)) {
             camposLlenados++;
             console.log('  ⏳ Pausa para recálculo SRI tras 540...');
             await sleep(1500);
 
             const valor550 = Math.max(0, base5 - nc5);
             console.log(`  📝 Casillero 550 = $${base5.toFixed(2)} - $${nc5.toFixed(2)} (NC) = $${valor550.toFixed(2)}`);
-            if (await llenarCampo('550', valor550)) camposLlenados++;
-            else sinUbicar.push(`no se encontró el casillero 550 (neto 5%): el bruto quedó cargado y el neto no`);
+
+            let ok550 = await llenarCampo('550', valor550);
+
+            // El 550 vive en la misma fila que el 540, a su derecha. Si el
+            // buscador por número no dio con él —pasó el 07-sep-2026, y dejó
+            // el bruto cargado y el neto vacío, que es PEOR que no haber
+            // cargado nada— se lo rescata por vecindad.
+            if (!ok550 && input540) {
+                const vecino = vecinoDeFila(input540);
+                if (vecino) {
+                    console.log(`  🔎 El 550 no salió por número; se toma el vecino de fila del 540: id=${vecino.id || '(sin id)'}`);
+                    ok550 = await llenarCampo('550', valor550, vecino);
+                }
+            }
+
+            if (ok550) camposLlenados++;
+            else sinUbicar.push('no se encontró el casillero 550 (neto 5%): el bruto quedó cargado y el neto no');
             await sleep(800);
         } else {
             sinUbicar.push(`no se encontró el casillero 540: $${base5.toFixed(2)} de compras al 5% quedaron sin declarar`);
@@ -714,8 +739,14 @@ async function toggleSriSection(sectionName, expand = true) {
     }
 }
 
-async function llenarCampo(casillero, valor) {
-    let input = await encontrarInputPorCasillero(casillero);
+/**
+ * @param {string} casillero Número de casillero, para los mensajes.
+ * @param {number} valor
+ * @param {HTMLInputElement} [inputDado] Una casilla ya localizada por otro
+ *   camino — por ejemplo el vecino de fila. Cuando viene, no se busca nada.
+ */
+async function llenarCampo(casillero, valor, inputDado) {
+    let input = inputDado || await encontrarInputPorCasillero(casillero);
     if (!input) {
         input = document.querySelector(`input[id$=":${casillero}"]`) ||
             document.querySelector(`input[name$=":${casillero}"]`) ||
@@ -1039,6 +1070,52 @@ function sriMapaCasilleros(opciones = {}) {
     return mapa;
 }
 
+/**
+ * La casilla que está a la derecha de otra, en su misma línea.
+ *
+ * El formulario del SRI pone bruto y neto uno al lado del otro:
+ *
+ *     540 [ caja ]   550 [ caja ]   560 [ caja ]
+ *
+ * Cuando el bruto se encuentra y el neto no, esto lo rescata. **No es una
+ * suposición sobre los números** —«550 será 1281 porque 540 es 1271»— sino
+ * sobre la estructura que se ve en la pantalla, que es lo que la §5b permite
+ * usar. Inventar un id a partir de un patrón numérico sería darle un destino
+ * a plata ajena sin haberlo visto.
+ *
+ * @param {HTMLElement} referencia La casilla ya encontrada (el bruto).
+ * @returns {HTMLInputElement|null}
+ */
+function vecinoDeFila(referencia) {
+    if (!referencia) return null;
+    const rr = referencia.getBoundingClientRect();
+    if (!rr.width || !rr.height) return null;
+
+    // El ámbito se abre de a poco, igual que en `encontrarInputPorCasillero`.
+    // `closest('tr')` a secas devuelve la fila de la tabla ANIDADA —el SRI mete
+    // una tabla dentro de cada celda— y ahí no hay más que la propia casilla.
+    // El banco cazó este mismo tropiezo dos veces.
+    const ambitos = [];
+    for (let n = referencia.parentElement; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName === 'TR' || n.tagName === 'TABLE') ambitos.push(n);
+    }
+    ambitos.push(document.body);
+
+    for (const ambito of ambitos) {
+        const candidatos = Array.from(ambito.querySelectorAll('input[type="text"]'))
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ el, r }) =>
+                el !== referencia && r.width > 0 && r.height > 0 &&
+                r.left > rr.right - 2 &&
+                Math.abs((r.top + r.height / 2) - (rr.top + rr.height / 2)) < Math.max(12, rr.height * 0.9) &&
+                !el.disabled && !el.readOnly)
+            .sort((a, b) => a.r.left - b.r.left);
+
+        if (candidatos.length) return candidatos[0].el;
+    }
+    return null;
+}
+
 async function encontrarInputPorCasillero(casillero) {
     // 0. PRIMARY: Manual Map & Validated ID pattern
     // MAPA CONFIRMADO: casillero -> id real del DOM del SRI
@@ -1079,6 +1156,16 @@ async function encontrarInputPorCasillero(casillero) {
         '115': 'concepto256',  // Número de comprobantes (Compras) - ELITE MANUAL MAP
         '544': 'concepto1890', // NC por compensar 15% ( Assumption based on pattern )
         '543': 'concepto1900', // NC por compensar 0% ( Confirmado por el usuario )
+        // ── Confirmados en la corrida del 07-sep-2026 ─────────────────────
+        // No salen de suponer un patrón: la estrategia por altura los encontró
+        // y el bot ESCRIBIÓ en ellos con éxito. Eso es evidencia, que es lo que
+        // pide la §5b antes de cablear nada.
+        '540': 'concepto1271', // Compras 5% bruto · escrito: 0.48
+        '508': 'concepto1735', // Notas de venta, valor · escrito: 50.00
+        '117': 'concepto258',  // Notas de venta, cantidad · escrito: 2
+        // El 550 NO está: en esa corrida no apareció. Se lo rescata como vecino
+        // de fila del 540 (ver `vecinoDeFila`). Suponer «concepto1281 porque el
+        // 540 es 1271» sería inventarle un destino a plata ajena.
     };
 
     if (fieldMap[casillero]) {
@@ -1127,11 +1214,17 @@ async function encontrarInputPorCasillero(casillero) {
     //     casilla están en la misma línea, y eso es cierto porque así se ve la
     //     tabla, no porque el DOM lo prometa. Se toma el primer input de texto
     //     que esté a la derecha del número y a su misma altura.
-    const rotulos = [];
-    const paseo = document.evaluate(
-        `//*[normalize-space(text())='${casillero}']`,
-        document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-    for (let i = 0; i < paseo.snapshotLength; i++) rotulos.push(paseo.snapshotItem(i));
+    // El rótulo se busca en JavaScript, no con XPath. `normalize-space()` de
+    // XPath 1.0 no toca el espacio duro (`&nbsp;`, U+00A0), que el SRI mete a
+    // discreción: «550&nbsp;» no coincide con '550' y el casillero se vuelve
+    // invisible para el buscador sin que nada avise.
+    const soloTexto = (el) => {
+        let t = '';
+        for (const n of el.childNodes) if (n.nodeType === 3) t += n.nodeValue;
+        return t.replace(/[\s ]+/g, ' ').trim();
+    };
+    const rotulos = Array.from(document.querySelectorAll('td, th, span, label, div, b, strong'))
+        .filter((el) => soloTexto(el) === String(casillero));
 
     for (const rotulo of rotulos) {
         const rr = rotulo.getBoundingClientRect();
@@ -1157,10 +1250,14 @@ async function encontrarInputPorCasillero(casillero) {
                 .map((el) => ({ el, r: el.getBoundingClientRect() }))
                 // A la derecha del número y a su misma altura. La tolerancia es
                 // media línea: el número y la casilla no comparten line-height.
+                // La tolerancia sale de la altura del propio rótulo, no de un
+                // número fijo: una fila de 30 px y una de 12 px no se miden
+                // igual, y el SRI usa las dos.
                 .filter(({ el, r }) =>
                     r.width > 0 && r.height > 0 &&
                     r.left >= rr.left - 2 &&
-                    Math.abs((r.top + r.height / 2) - (rr.top + rr.height / 2)) < 12 &&
+                    Math.abs((r.top + r.height / 2) - (rr.top + rr.height / 2))
+                        < Math.max(12, rr.height * 0.9) &&
                     !el.disabled && !el.readOnly)
                 .sort((a, b) => a.r.left - b.r.left);
 

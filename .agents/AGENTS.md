@@ -276,7 +276,9 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
 | **Casillero 502 (sin derecho a crédito)** | *id sin confirmar — el casillero EXISTE* | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
 | **Casillero 512 (NC del 502)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 502 |
-| **Casillero 540 (compras 5%)** | *id sin confirmar — EXISTE* (captura 06-sep-2026) | Adquisiciones locales gravadas 5% con crédito · ver §9 |
+| **Casillero 540 (compras 5%)** | `concepto1271` — **CONFIRMADO 07-sep-2026** (se escribió en él) | Adquisiciones locales gravadas 5% con crédito · ver §9 |
+| **Casillero 508 (notas de venta)** | `concepto1735` — **CONFIRMADO 07-sep-2026** | Valor de las notas de venta recibidas |
+| **Casillero 117 (cantidad NV)** | `concepto258` — **CONFIRMADO 07-sep-2026** | Cantidad de notas de venta |
 | **Casillero 550 (NC del 540)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 540 |
 | **Casillero 560 (IVA generado del 540)** | *id sin confirmar — EXISTE* | Impuesto generado de las compras al 5% |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |

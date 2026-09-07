@@ -601,6 +601,31 @@
   // peor que no declararla, porque nadie se entera.
   push('un casillero ausente sigue siendo null',  await halla('508'), null);
 
+  // ── El 550 se rescata por vecindad ──────────────────────────────────────
+  // Corrida real del 07-sep-2026: el 540 apareció (concepto1271) y se llenó;
+  // el 550, que está en la MISMA fila, no. El bruto quedó cargado y el neto
+  // vacío, que es PEOR que no haber cargado nada — el crédito tributario sale
+  // del neto.
+  const i540 = await encontrarInputPorCasillero('540');
+  push('el 540 sale por el fieldMap ahora',  i540 && i540.id, 'conceptoDesconocidoA');
+  // El vecino de fila es el 550, sin suponer nada sobre su id.
+  const v550 = vecinoDeFila(i540);
+  push('y su vecino de fila es el del 550',  v550 && v550.id, 'conceptoDesconocidoB');
+  // No se lleva el de la fila de arriba ni el de la de abajo.
+  push('no agarra el del 500',               !!(v550 && v550.id === 'concepto1270'), false);
+  push('ni el del 502',                      !!(v550 && v550.id === 'conceptoDesconocidoC'), false);
+  // Y el último de la fila no tiene vecino a su derecha: no se inventa uno.
+  push('el último de la fila no tiene vecino', vecinoDeFila(v550), null);
+
+  // ── El espacio duro ya no esconde un casillero ──────────────────────────
+  // `normalize-space()` de XPath no toca el &nbsp;, que el SRI mete a
+  // discreción: «550&nbsp;» no coincidía con '550' y el casillero se volvía
+  // invisible para el buscador sin que nada avisara.
+  P.innerHTML = P.innerHTML.replace('<td>550</td>', '<td>550\u00a0</td>');
+  const conDuro = await encontrarInputPorCasillero('550');
+  push('un rótulo con espacio duro igual se encuentra',
+       conDuro && conDuro.id, 'conceptoDesconocidoB');
+
   P.innerHTML = '';
 
   // ══════════════════════════════════════════════════════════════════════
