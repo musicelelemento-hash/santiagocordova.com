@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los catorce bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **511 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
+scripts). **531 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
 número, algo se rompió; si lo sube, dejá dicho qué agregaste.
 
 ---
@@ -436,6 +436,74 @@ envía** (queda en borrador), igual se sube un PDF de respaldo a R2 y se
 registra. Es un marcador de posición donde va un comprobante. Antes de darlo
 por bueno, revisar que el estado en Supabase diga `por_pagar` /
 `inconsistencia` y no «declarado».
+
+### 0b.3b · El atajo se perdía, y el PDF no llegaba — corregido el 07-sep-2026
+
+Dos fallos encadenados en el camino que **cierra el objetivo de la §0**: traer
+el comprobante de quien **ya declaró**.
+
+#### 1 · La decisión tomada se pisaba sola
+
+El perfil acertó a la primera:
+
+```
+📋 [PERFIL] Veredicto: ya_declarada
+🧾 [RECUPERAR] Buscando el comprobante ... en Consulta de declaraciones...
+```
+
+Y ahí mismo se perdió. El bloque de auto-arranque de `03_ingreso_y_sesion.js`
+corre en **cada carga con sesión abierta**, y terminaba siempre plantando
+`pendingAction = 'turbo_step1_facturas'` sin mirar si ya había algo en curso.
+Al cargar `lista-obligaciones.jsf`, `veredictoDelPerfil()` contestó
+`no_concluyo` — correcto, no estamos en el perfil— y el final del bloque
+borró la recuperación:
+
+```
+📋 [PERFIL] Veredicto: no_concluyo — no estamos en el perfil
+🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1...
+```
+
+Extrajo 19 facturas, buscó retenciones, buscó notas de crédito y navegó el
+wizard entero **para nada**, hasta que el paso 4 le dijo lo que el perfil ya le
+había dicho al principio (`DECLARACIÓN PREVIA / SUSTITUTIVA DETECTADA`) y
+volvió a arrancar la recuperación.
+
+**No rompía nada** — el freno de la sustitutiva agarraba al final— así que
+costaba un minuto largo por cliente sin que se notara. Con los que ya
+declararon, eso es la mayor parte del lote.
+
+`YA_DECIDIDAS = ['recuperar_comprobante', 'bajarTodos']`: esas acciones son
+**decisiones ya tomadas**, no pasos de una secuencia. Quien las puso sabía más
+que este bloque, que llega a esa línea justamente cuando **no supo concluir
+nada**.
+
+#### 2 · El PDF se iba a la carpeta de descargas
+
+```
+🧾 [RECUPERAR] Se pulsó la descarga pero no llegó ningún PDF.
+```
+
+El botón «Comprobante de declaración» es un `submit` de JSF
+(`onclick="PrimeFaces.onPost()"`): manda el formulario entero y el portal
+responde con el PDF y `Content-Disposition: attachment`. **El navegador se lo
+lleva al disco** — ni `fetch` ni `URL.createObjectURL` lo ven, así que el
+interceptor del módulo 01 no tenía forma de agarrarlo. Probablemente el
+archivo sí bajaba, mientras el log decía que no había llegado.
+
+Es el mismo caso de `lnkXml` (§11) y se resuelve igual:
+`traerPdfDelComprobantePresentado()` **reproduce el POST** — todos los campos
+del formulario más el `name` del botón, que es lo que le dice a JSF qué se
+pulsó— y lee la respuesta.
+
+Dos cuidados que el banco vigila:
+
+- **Se comprueba que sea un PDF** (`%PDF` en los primeros bytes). Con la sesión
+  caída el portal contesta HTML, y guardar eso como comprobante es peor que no
+  tener ninguno: el panel diría que está y no estaría.
+- **El botón queda como respaldo.** Si el POST no sale, se pulsa igual y el
+  interceptor tiene su chance.
+
+Banco: `tests/recuperar.html` (20 comprobaciones, verdes el 07-sep-2026).
 
 ### 0b.4 · Los 9 que declararon sin comprobante guardado
 
@@ -1660,15 +1728,15 @@ subida · Panel.
 
 ### Los bancos de prueba, en una sola página
 
-`tests/index.html` corre **los catorce** en iframes y da un veredicto solo:
-**511 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+`tests/index.html` corre **los quince** en iframes y da un veredicto solo:
+**531 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
 `/tests/index.html`. **Hace falta el servidor**: los `file://` no ejecutan
 scripts.
 
-De a uno, no en paralelo: catorce bancos a la vez se pisan el almacenamiento
+De a uno, no en paralelo: quince bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
 cada uno, así que un banco nuevo no necesita saber que esta página existe —
 alcanza con agregarlo a la lista `BANCOS`.
@@ -1689,9 +1757,10 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `login` | que el bot no se lea a sí mismo y crea que lo rechazaron | 11 |
 | `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
+| `recuperar` | que el comprobante de lo ya declarado llegue a la mano | 20 |
 
 > **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
-> catorce se escribió por completitud: cada uno cuida un fallo que ya llegó a
+> quince se escribió por completitud: cada uno cuida un fallo que ya llegó a
 > pantalla y costó un lote. Si arreglás algo que salió de un log real, dejale
 > su comprobación antes de cerrar.
 
