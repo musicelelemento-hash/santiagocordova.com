@@ -159,6 +159,20 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
   4. **Detección exhaustiva de mensajes vacíos del SRI:** Se incorporaron selectores para `.ui-messages-warn-detail`, `#idMensajeConsulta`, "NO EXISTEN COMPROBANTES", "NO SE ENCONTRARON REGISTROS", etc.
   5. **Fallback nativo a TXT (`descargarTxtRecibidos`):** Si el polling finaliza sin tabla ni mensaje de error, el bot dispara la descarga del listado TXT oficial del SRI (`frmPrincipal:lnkTxtlistado`). Si el TXT contiene facturas, las extrae y procesa inmediatamente sin perder ninguna. Solo si el TXT está vacío concluye `noData: true`. Si el TXT falla, recarga la página para reintentar limpiamente en lugar de asumir 0.
 
+### I. Resolución del Casillero 203 y el Falso 5% en Walter Miño (Commit `dacc26f`)
+- **Problema detectado:** Al pulsar "Siguiente" en el formulario de Walter Miño, el SRI bloqueó el avance con:
+  `* Casillero 203. Seleccione el decreto que determina la tarifa reducida a aplicar.`
+  `* Casillero 203. El decreto seleccionado es incorrecto.`
+- **Hallazgos con la radiografía del 📐:**
+  1. El casillero 203 es el desplegable `concepto91` con 17 opciones.
+  2. **Todas las opciones corresponden a Decretos Ejecutivos del 8%** (turismo en feriados). Ninguna es del 5%.
+  3. **¿Por qué se activó el 203?** De las 157 facturas de Walter Miño, una factura minúscula (Fila 6) tenía `Base: $0.10, IVA: $0.02` (cociente 20%). Con holgura de centavos ($0.02), `clasificarTarifaIva()` la clasificaba erróneamente en el 5% por ser la primera del array `TARIFAS_IVA`. Esto escribió $0.10 en el casillero 540, disparando la exigencia del decreto en el casillero 203.
+- **Solución implementada (`src/04_extraccion_datos.js`):**
+  1. Se ajustó `clasificarTarifaIva()`: al 5% nunca se llega por simple holgura de centavos; se exige cercanía porcentual real (<= 1%). Para importes ínfimos (< $1), se asigna la tarifa más cercana (en este caso 15%).
+  2. Al clasificarse al 15%, los $0.10 van al casillero 500/510 y **el casillero 540 queda en 0**, eliminando el reclamo del casillero 203 y permitiendo enviar la declaración de forma transparente.
+  3. Matriz de `.agents/AGENTS.md` actualizada con `Casillero 203 = concepto91`.
+  4. Suite de pruebas en `tests/iva5.html` ampliada a 544 comprobaciones verdes.
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS
