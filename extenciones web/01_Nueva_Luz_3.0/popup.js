@@ -2,7 +2,9 @@ const SC_CONFIG = window.SC_CONFIG || {};
 const SUPABASE_URL = SC_CONFIG.SUPABASE_URL;
 const SUPABASE_KEY = SC_CONFIG.SUPABASE_ANON_KEY;
 
+let allRawClients = [];
 let allClients = [];
+let otrosClients = [];
 let currentMonth = 0;
 let currentYear = 2026;
 let visiblePasswords = {}; // Mapa para recordar qué claves están visibles
@@ -83,6 +85,25 @@ function bindEvents() {
     document.getElementById('btnSyncCloud')?.addEventListener('click', syncHandler);
     document.getElementById('syncBtn')?.addEventListener('click', syncHandler);
 
+    // 📥 Importador masivo de contraseñas desde CSV (Chrome o formato RUC,Clave)
+    document.getElementById('btnImportarCsv')?.addEventListener('click', () => {
+        document.getElementById('inputCsvClaves')?.click();
+    });
+
+    document.getElementById('inputCsvClaves')?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (evt) => {
+            const text = evt.target.result;
+            if (typeof text === 'string') {
+                await importarClavesDesdeCsv(text);
+            }
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    });
+
     // Restaurar estado de Modo Auto Bucle
     chrome.storage.local.get(['auto_batch_enabled', 'sc_loop'], (res) => {
         const chk = document.getElementById('chkAutoBatch');
@@ -125,39 +146,151 @@ function bindEvents() {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             
             e.target.classList.add('active');
-            document.getElementById(e.target.dataset.target).classList.add('active');
+            const targetEl = document.getElementById(e.target.dataset.target);
+            if (targetEl) targetEl.classList.add('active');
         });
     });
 }
 
-function isMensual(c) {
-    if (!c || !c.ruc) return false;
-    if (c.isDeleted || c.is_deleted) return false;
-    if (c.isActive === false || c.is_active === false) return false;
+/**
+ * Evalúa el perfil tributario y régimen del cliente para saber si aplica IVA Mensual
+ * y explica el motivo transparente si no aplica (Popular, Semestral, Inactivo, etc.).
+ */
+function evaluarRegimenCliente(c) {
+    if (!c || !c.ruc) return { esMensual: false, label: 'Sin RUC', motivo: 'invalido' };
+    if (c.force_mensual === true) return { esMensual: true, label: 'IVA Mensual (Forzado)', motivo: 'forzado' };
+    if (c.isDeleted || c.is_deleted) return { esMensual: false, label: 'Eliminado', motivo: 'eliminado' };
+    if (c.isActive === false || c.is_active === false) return { esMensual: false, label: 'Inactivo en BD', motivo: 'inactivo' };
 
     const tp = c.tax_profile || c.taxProfile || {};
     const freq = (tp.ivaFrequency || c.iva_frequency || c.ivaFrequency || '').toLowerCase();
     const reg = (c.regime || '').toLowerCase();
     const type = (c.client_type || c.clientType || tp.clientType || '').toLowerCase();
 
-    // Excluir clientes de solo plan o que no requieren declaraciones
-    if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) return false;
-
-    // Frecuencia mensual explícita
-    if (freq === 'mensual') return true;
-
-    // Excluir frecuencias no mensuales
-    if (freq === 'semestral' || freq === 'ninguno' || freq === 'anual') return false;
-
-    // Excluir RIMPE Negocio Popular (no declara IVA)
-    if (reg.includes('popular')) return false;
-
-    // RIMPE Emprendedor es semestral salvo si expresamente declara mensual
-    if (reg.includes('emprendedor')) {
-        return freq === 'mensual';
+    if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) {
+        return { esMensual: false, label: 'Solo Plan (Sin Declaraciones)', motivo: 'solo_plan' };
     }
 
-    return true;
+    if (freq === 'mensual') {
+        return { esMensual: true, label: 'IVA Mensual', motivo: 'frecuencia_mensual' };
+    }
+
+    if (reg.includes('popular')) {
+        return { esMensual: false, label: 'RIMPE Negocio Popular (No declara IVA)', motivo: 'rimpe_popular' };
+    }
+
+    if (reg.includes('emprendedor')) {
+        const mensual = freq === 'mensual';
+        return {
+            esMensual: mensual,
+            label: mensual ? 'RIMPE Emprendedor (Mensual)' : 'RIMPE Emprendedor (Semestral)',
+            motivo: 'rimpe_emprendedor'
+        };
+    }
+
+    if (freq === 'semestral') {
+        return { esMensual: false, label: 'IVA Semestral', motivo: 'semestral' };
+    }
+    if (freq === 'ninguno' || freq === 'anual') {
+        return { esMensual: false, label: `Frecuencia: ${freq || 'Ninguna'}`, motivo: 'no_mensual' };
+    }
+
+    return { esMensual: true, label: 'Régimen General', motivo: 'general' };
+}
+
+function isMensual(c) {
+    return evaluarRegimenCliente(c).esMensual;
+}
+
+/**
+ * Parsea un CSV de contraseñas de Chrome (name,url,username,password) o un archivo RUC,Clave
+ */
+function parsearCsvClaves(texto) {
+    const lineas = texto.split(/\r?\n/);
+    const entradas = [];
+    for (const linea of lineas) {
+        const l = linea.trim();
+        if (!l) continue;
+
+        let ruc = '';
+        let pass = '';
+
+        if (l.includes('\t')) {
+            const parts = l.split('\t');
+            ruc = parts[0]?.trim();
+            pass = parts[1]?.trim();
+        } else if (l.includes(';')) {
+            const parts = l.split(';');
+            ruc = parts[0]?.trim();
+            pass = parts[1]?.trim();
+        } else {
+            const parts = l.split(',');
+            // Si es export de Google Chrome: name,url,username,password,note
+            if (parts.length >= 4 && parts[1].includes('sri.gob.ec')) {
+                ruc = parts[2]?.trim().replace(/^["']|["']$/g, '');
+                pass = parts[3]?.trim().replace(/^["']|["']$/g, '');
+            } else if (parts.length >= 2) {
+                ruc = parts[0]?.trim().replace(/^["']|["']$/g, '');
+                pass = parts[1]?.trim().replace(/^["']|["']$/g, '');
+            }
+        }
+
+        if (ruc && ruc.length === 13 && /^\d+$/.test(ruc) && pass) {
+            entradas.push({ ruc, password: pass });
+        }
+    }
+    return entradas;
+}
+
+async function importarClavesDesdeCsv(texto) {
+    const entradas = parsearCsvClaves(texto);
+    if (!entradas.length) {
+        alert("⚠️ No se encontraron credenciales válidas con RUC de 13 dígitos en el archivo CSV.");
+        return;
+    }
+
+    const cacheRes = await chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos']);
+    const cacheList = Array.isArray(cacheRes.sc_clients_cache) ? cacheRes.sc_clients_cache : [];
+    const errs = cacheRes.flagged_errors || {};
+    const tried = cacheRes.sri_tried_credentials || {};
+    const omit = cacheRes.sc_omitidos || {};
+
+    const mapNuevas = new Map(entradas.map(e => [e.ruc, e.password]));
+    let actualizadas = 0;
+
+    cacheList.forEach(c => {
+        if (mapNuevas.has(c.ruc)) {
+            const newPass = mapNuevas.get(c.ruc);
+            if (c.password !== newPass) {
+                c.password = newPass;
+                c.sri_password = newPass;
+                actualizadas++;
+            }
+            // Limpiar bloqueos de error si se actualizó la clave
+            delete errs[c.ruc];
+            delete tried[c.ruc];
+            delete omit[c.ruc];
+        }
+    });
+
+    allRawClients.forEach(c => {
+        if (mapNuevas.has(c.ruc)) {
+            const newPass = mapNuevas.get(c.ruc);
+            c.password = newPass;
+            c.sri_password = newPass;
+        }
+    });
+
+    await chrome.storage.local.set({
+        sc_clients_cache: cacheList,
+        flagged_errors: errs,
+        sri_tried_credentials: tried,
+        sc_omitidos: omit
+    });
+
+    flaggedErrors = errs;
+    renderClients();
+    showToast(`✅ ${actualizadas} claves actualizadas de ${entradas.length} encontradas en CSV`);
 }
 
 async function fetchClients(forceSync = false) {
@@ -174,20 +307,28 @@ async function fetchClients(forceSync = false) {
 
         // 🔒 Las claves SRI ya no viajan desde la nube: fusionar con la caché local
         const prevCache = await chrome.storage.local.get(['sc_clients_cache']);
-        const prevPasswords = new Map((Array.isArray(prevCache.sc_clients_cache) ? prevCache.sc_clients_cache : []).map((p) => [p.ruc, p.password || p.sri_password || ""]));
+        const prevList = Array.isArray(prevCache.sc_clients_cache) ? prevCache.sc_clients_cache : [];
+        const prevMap = new Map(prevList.map((p) => [p.ruc, p]));
 
-        allClients = data
-            .filter(isMensual)
-            .map(c => ({
+        allRawClients = data.map(c => {
+            const cached = prevMap.get(c.ruc) || {};
+            return {
                 id: c.id,
                 ruc: c.ruc,
                 name: c.name || 'Cliente SRI',
-                password: prevPasswords.get(c.ruc) || "",
+                regime: c.regime,
+                tax_profile: c.tax_profile,
+                force_mensual: cached.force_mensual || false,
+                password: cached.password || cached.sri_password || "",
                 declarations: Array.isArray(c.declaration_history) ? c.declaration_history : []
-            }));
+            };
+        });
+
+        allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
+        otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
 
         // Guardar en Caché Local para evitar peticiones innecesarias
-        chrome.storage.local.set({ sc_clients_cache: allClients });
+        chrome.storage.local.set({ sc_clients_cache: allRawClients });
             
         renderClients();
     } catch (err) {
@@ -245,7 +386,9 @@ function loadClientsFromCacheOrFetch() {
         flaggedErrors = res.flagged_errors || {};
         if (Array.isArray(res.sc_clients_cache) && res.sc_clients_cache.length > 0) {
             console.log("⚡ [Nueva Luz 3.0] Carga instantánea desde caché local:", res.sc_clients_cache.length, "clientes");
-            allClients = res.sc_clients_cache.filter(isMensual);
+            allRawClients = res.sc_clients_cache;
+            allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
+            otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
             renderClients();
         } else {
             fetchClients();
@@ -256,7 +399,13 @@ function loadClientsFromCacheOrFetch() {
 function renderClients() {
     const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
     
-    const filtered = allClients.filter(c => {
+    const filteredMensuales = allClients.filter(c => {
+        const matchesName = (c.name || '').toLowerCase().includes(searchVal);
+        const matchesRuc = (c.ruc || '').includes(searchVal);
+        return matchesName || matchesRuc;
+    });
+
+    const filteredOtros = otrosClients.filter(c => {
         const matchesName = (c.name || '').toLowerCase().includes(searchVal);
         const matchesRuc = (c.ruc || '').includes(searchVal);
         return matchesName || matchesRuc;
@@ -268,7 +417,7 @@ function renderClients() {
     const completados = [];
     const errores = [];
 
-    filtered.forEach(client => {
+    filteredMensuales.forEach(client => {
         if (flaggedErrors[client.ruc]) {
             errores.push(client);
         } else if (hasPdfForPeriod(client, currentYear, currentMonth)) {
@@ -281,18 +430,23 @@ function renderClients() {
     pendientes.sort(sortBy9th);
     completados.sort(sortBy9th);
     errores.sort(sortBy9th);
+    filteredOtros.sort(sortBy9th);
 
     document.getElementById('countPendientes').innerText = pendientes.length;
     document.getElementById('countCompletados').innerText = completados.length;
     document.getElementById('countErrores').innerText = errores.length;
+    const badgeOtros = document.getElementById('countOtros');
+    if (badgeOtros) badgeOtros.innerText = filteredOtros.length;
 
     const pendientesList = document.getElementById('pendientesList');
     const completadosList = document.getElementById('completadosList');
     const erroresList = document.getElementById('erroresList');
+    const otrosList = document.getElementById('otrosList');
 
     pendientesList.innerHTML = '';
     completadosList.innerHTML = '';
     erroresList.innerHTML = '';
+    if (otrosList) otrosList.innerHTML = '';
 
     if (pendientes.length === 0) {
         pendientesList.innerHTML = `<div class="empty-state">🎉 ¡Todos los clientes al día! No hay pendientes.</div>`;
@@ -310,6 +464,14 @@ function renderClients() {
         erroresList.innerHTML = `<div class="empty-state">No hay clientes marcados con error.</div>`;
     } else {
         errores.forEach(client => erroresList.appendChild(createClientCard(client, 'error')));
+    }
+
+    if (otrosList) {
+        if (filteredOtros.length === 0) {
+            otrosList.innerHTML = `<div class="empty-state">No hay clientes en otros regímenes.</div>`;
+        } else {
+            filteredOtros.forEach(client => otrosList.appendChild(createClientCard(client, 'otro')));
+        }
     }
 }
 
@@ -343,10 +505,27 @@ function createClientCard(client, statusType) {
 
     const isDone = statusType === 'done';
     const isError = statusType === 'error';
+    const isOtro = statusType === 'otro';
 
     let badgeHtml = '<div class="status-badge status-pending" style="margin-top:4px; font-size:10px; font-weight:700; color:#ffb95f; background:rgba(255,185,95,0.1); border:1px solid rgba(255,185,95,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟡 PENDIENTE</div>';
     if (isDone) badgeHtml = '<div class="status-badge status-done" style="margin-top:4px; font-size:10px; font-weight:700; color:#4edea3; background:rgba(78,222,163,0.1); border:1px solid rgba(78,222,163,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟢 COMPLETADO</div>';
-    if (isError) badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(239,68,68,0.12); color:#ff8585; border:1px solid rgba(239,68,68,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔴 ERROR / OMITIDO</div>';
+    if (isError) {
+        const errType = flaggedErrors[client.ruc];
+        if (errType === 'clave_incorrecta' || errType === 'error_credenciales') {
+            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(239,68,68,0.18); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔴 CLAVE RECHAZADA (SRI)</div>';
+        } else if (errType === 'clave_caducada') {
+            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(245,158,11,0.18); color:#fcd34d; border:1px solid rgba(245,158,11,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔑 CLAVE CADUCADA (SRI)</div>';
+        } else if (errType === 'cuenta_bloqueada') {
+            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(220,38,38,0.25); color:#f87171; border:1px solid rgba(220,38,38,0.45); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🚨 CUENTA BLOQUEADA</div>';
+        } else if (errType === 'sesion_caida') {
+            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(147,51,234,0.18); color:#d8b4fe; border:1px solid rgba(147,51,234,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔌 SESIÓN CAÍDA (SRI)</div>';
+        } else {
+            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(239,68,68,0.12); color:#ff8585; border:1px solid rgba(239,68,68,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔴 ERROR / OMITIDO</div>';
+        }
+    } else if (isOtro) {
+        const infoR = evaluarRegimenCliente(client);
+        badgeHtml = `<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(148,163,184,0.15); color:#94a3b8; border:1px solid rgba(148,163,184,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">📋 ${infoR.label}</div>`;
+    }
 
     let actionBtnHtml = `
         <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
@@ -367,9 +546,25 @@ function createClientCard(client, statusType) {
         `;
     } else if (isError) {
         actionBtnHtml = `
-            <button class="btn-start" data-action="reintentar" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #ffb95f, #d97706); color:#2a1700;">
-                🔄 Reintentar
-            </button>
+            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
+                <button class="btn-start" data-action="desbloquear-clave" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #6366f1, #4f46e5); color:white; font-size:10px; padding:4px 8px;" title="Actualizar clave y desbloquear cliente">
+                    ✏️ Nueva Clave
+                </button>
+                <button class="btn-start" data-action="reintentar" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #ffb95f, #d97706); color:#2a1700; font-size:10px; padding:4px 8px;">
+                    🔄 Reintentar
+                </button>
+            </div>
+        `;
+    } else if (isOtro) {
+        actionBtnHtml = `
+            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
+                <button class="btn-start" data-action="forzar-mensual" data-ruc="${client.ruc}" style="background:rgba(99,102,241,0.2); border:1px solid #6366f1; color:#c7d2fe; font-size:10px; padding:5px 8px;" title="Incluir en el lote de IVA Mensual para esta corrida">
+                    ⚡ Forzar Mensual
+                </button>
+                <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="font-size:10px; padding:4px 8px; opacity:0.8;">
+                    ▶ Ingresar
+                </button>
+            </div>
         `;
     }
 
@@ -414,6 +609,42 @@ document.addEventListener('click', async (e) => {
         marcarErrorCliente(ruc);
     } else if (action === 'reintentar') {
         reintentarCliente(ruc);
+    } else if (action === 'desbloquear-clave') {
+        const client = allRawClients.find(c => c.ruc === ruc) || allClients.find(c => c.ruc === ruc);
+        const newPass = prompt(`Ingresa la nueva clave del SRI para ${client ? client.name : ruc}:`, client ? (client.password || '') : '');
+        if (newPass !== null && newPass.trim() !== '') {
+            await actualizarClaveSupabase(client, newPass.trim());
+            const res = await chrome.storage.local.get(['flagged_errors', 'sri_tried_credentials', 'sc_omitidos']);
+            const errs = res.flagged_errors || {};
+            delete errs[ruc];
+            const tried = res.sri_tried_credentials || {};
+            delete tried[ruc];
+            const omit = res.sc_omitidos || {};
+            delete omit[ruc];
+            await chrome.storage.local.set({
+                flagged_errors: errs,
+                sri_tried_credentials: tried,
+                sc_omitidos: omit
+            });
+            flaggedErrors = errs;
+            renderClients();
+            showToast(`✅ Clave actualizada y cliente ${ruc} devuelto a Pendientes`);
+        }
+    } else if (action === 'forzar-mensual') {
+        const client = allRawClients.find(c => c.ruc === ruc) || otrosClients.find(c => c.ruc === ruc);
+        if (client) {
+            client.force_mensual = true;
+            const cacheRes = await chrome.storage.local.get(['sc_clients_cache']);
+            const list = cacheRes.sc_clients_cache || [];
+            const idx = list.findIndex(c => c.ruc === ruc);
+            if (idx !== -1) list[idx].force_mensual = true;
+            await chrome.storage.local.set({ sc_clients_cache: list });
+            
+            allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
+            otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
+            renderClients();
+            showToast(`⚡ ${client.name || ruc} ahora está habilitado como IVA Mensual`);
+        }
     }
 });
 
@@ -507,7 +738,7 @@ async function actualizarClaveSupabase(client, newPass) {
 }
 
 async function iniciarCliente(ruc) {
-    const client = allClients.find(c => c.ruc === ruc);
+    const client = allRawClients.find(c => c.ruc === ruc) || allClients.find(c => c.ruc === ruc);
     if (!client) return;
 
     if (!client.password) {
@@ -516,6 +747,15 @@ async function iniciarCliente(ruc) {
         const ok = await actualizarClaveSupabase(client, newPass);
         if (!ok) return;
     }
+
+    // 🧹 PURGA PREVENTIVA DE COOKIES:
+    // Destruye cualquier cookie residual de sesiones anteriores para que Keycloak entre limpio
+    try {
+        await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ tipo: "SC_LIMPIAR_SESION_SRI" }, () => resolve());
+            setTimeout(resolve, 500);
+        });
+    } catch (e) {}
 
     const isBatchActive = document.getElementById('chkAutoBatch')?.checked || false;
     

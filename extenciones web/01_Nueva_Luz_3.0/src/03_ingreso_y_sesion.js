@@ -248,6 +248,15 @@ SafeStorage.get(null).then(async (items) => {
                          'El SRI no dio un mensaje, así que no se concluye nada: se reintenta una vez.');
             anotarBitacora('↩️ rebote', `${veces}/2 · ${nombreRebote} volvió al login sin mensaje`);
             rebotes[rucRebote] = veces;
+            // 🧹 PURGA PREVENTIVA EN EL REBOTE:
+            // Si el rebote fue por token desfasado o cookie corrupta de Keycloak,
+            // purgamos cookies del SW antes del 2do intento para que arranque fresco.
+            try {
+                await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ tipo: "SC_LIMPIAR_SESION_SRI" }, () => resolve());
+                    setTimeout(resolve, 600);
+                });
+            } catch (e) {}
             await SafeStorage.set({
                 sc_rebotes: rebotes,
                 pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }

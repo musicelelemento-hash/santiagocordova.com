@@ -365,10 +365,16 @@
             <div class="header-title">💎 Nueva Luz 3.0</div>
             <div class="header-subtitle">SRI ENGINE • COCKPIT</div>
         </div>
-        <button id="btnSyncCloud" class="btn-sync" title="Sincronizar datos con la nube de Supabase">
-            🔄 Sincronizar
-        </button>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <button id="btnImportarCsv" class="btn-sync" style="background:rgba(99,102,241,0.15); border-color:rgba(99,102,241,0.3); color:#a5b4fc;" title="Cargar contraseñas masivamente desde CSV de Chrome o formato RUC,Clave">
+                📥 Claves CSV
+            </button>
+            <button id="btnSyncCloud" class="btn-sync" title="Sincronizar datos con la nube de Supabase">
+                🔄 Nube
+            </button>
+        </div>
     </div>
+    <input type="file" id="inputCsvClaves" accept=".csv,.txt" style="display:none">
 
     <div class="auto-bar">
         <div style="display: flex; flex-direction: column;">
@@ -410,6 +416,7 @@
         <button class="tab-btn active" data-target="pendientesList">Pendientes (<span id="countPendientes">0</span>)</button>
         <button class="tab-btn" data-target="completadosList">Completados (<span id="countCompletados">0</span>)</button>
         <button class="tab-btn" data-target="erroresList">⚠️ Error (<span id="countErrores">0</span>)</button>
+        <button class="tab-btn" data-target="otrosList">📋 Otros (<span id="countOtros">0</span>)</button>
     </div>
 
     <div id="pendientesList" class="tab-content active">
@@ -421,6 +428,7 @@
 
     <div id="completadosList" class="tab-content"></div>
     <div id="erroresList" class="tab-content"></div>
+    <div id="otrosList" class="tab-content"></div>
 
     <div style="padding: 8px 18px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <span style="font-size: 9px; color: var(--text-dim); line-height: 1.4;">💡 Selecciona el <b>periodo</b> y pulsa <b>▶ Ingresar</b> en un cliente (o activa <b>⚡ Modo Auto</b> para encadenar).</span>

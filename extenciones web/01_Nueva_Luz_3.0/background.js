@@ -447,22 +447,22 @@ async function limpiarCookiesSri() {
   }
   try {
     let eliminadas = 0;
-    const dominios = ["sri.gob.ec", ".sri.gob.ec", "srienlinea.sri.gob.ec"];
-    for (const domain of dominios) {
-      const cookies = await chrome.cookies.getAll({ domain }).catch(() => []);
-      for (const cookie of cookies) {
-        const protocol = cookie.secure ? "https:" : "http:";
-        const rawDomain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
-        const cookieUrl = `${protocol}//${rawDomain}${cookie.path}`;
-        await chrome.cookies.remove({
-          url: cookieUrl,
-          name: cookie.name,
-          storeId: cookie.storeId,
-        }).catch(() => {});
-        eliminadas++;
-      }
+    // Barrido omnidireccional: obtener todas las cookies y filtrar por cualquier subdominio del SRI
+    const allCookies = await chrome.cookies.getAll({}).catch(() => []);
+    const sriCookies = allCookies.filter(c => c && c.domain && c.domain.toLowerCase().includes('sri.gob.ec'));
+    
+    for (const cookie of sriCookies) {
+      const protocol = cookie.secure ? "https:" : "http:";
+      const rawDomain = cookie.domain.startsWith(".") ? cookie.domain.slice(1) : cookie.domain;
+      const cookieUrl = `${protocol}//${rawDomain}${cookie.path || '/'}`;
+      await chrome.cookies.remove({
+        url: cookieUrl,
+        name: cookie.name,
+        storeId: cookie.storeId,
+      }).catch(() => {});
+      eliminadas++;
     }
-    console.log(`🧹 [SW] Limpieza de sesión SRI: ${eliminadas} cookies eliminadas.`);
+    console.log(`🧹 [SW] Limpieza de sesión SRI omnidireccional: ${eliminadas} cookies eliminadas.`);
     return { ok: true, eliminadas };
   } catch (e) {
     console.warn("⚠️ [SW] Error eliminando cookies SRI:", e);
