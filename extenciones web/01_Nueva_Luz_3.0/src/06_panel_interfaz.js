@@ -592,36 +592,83 @@ class SriAssistantPanel {
         }
     }
 
+    /**
+     * El período fiscal que está declarando esta pantalla.
+     *
+     * **El 07-sep-2026 esto guardó una declaración de agosto de 2026 como si
+     * fuera de agosto de 2023.** Buscaba el año así:
+     *
+     *     headerText.match(/202[0-9]/)
+     *
+     * El primer `202X` del texto de la cabecera — y la cabecera muestra el RUC
+     * del contribuyente. `0706482023001` lleva `2023` adentro.
+     *
+     * Lo peor es que no fallaba siempre: RODRIGUEZ GUTIERREZ (1722764808001)
+     * salió bien porque su RUC no contiene ningún `202X`. Un bug que muerde a
+     * unos clientes y a otros no parece que funciona.
+     *
+     * Y el daño no es cosmético: la ruta de R2 y la clave de Supabase se arman
+     * con este período. El panel sigue diciendo que el mes no tiene
+     * comprobante, y encima se pisa la fila de un período viejo que sí puede
+     * tener uno. Es lo contrario del objetivo de la §0.
+     *
+     * Ahora se pregunta en orden de confiabilidad, y **ninguna de las fuentes
+     * adivina**:
+     *
+     *   1. `frmFlujoDeclaracion:calPeriodo` — el campo del wizard, `mm/yyyy`.
+     *      Es el período que el portal aceptó. Está en la Matriz de la §6.
+     *   2. La cabecera, pero leyendo «MES AÑO» **juntos** y exigiendo que el
+     *      año no venga pegado a otros dígitos.
+     *
+     * Devuelve `null` cuando no puede saberlo. `null` es una respuesta
+     * honesta; un año sacado de un RUC no lo es.
+     */
     extractFormPeriod() {
+        const meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO',
+                       'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
         try {
-            const text = document.body.innerText.toUpperCase();
-            const meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
-
-            // Buscar en selectores específicos de cabecera primero
-            const headerInfo = document.querySelector('.contenido-cabecera') || document.querySelector('#j_idt15_content') || document.body;
-            const headerText = headerInfo.innerText.toUpperCase();
-
-            // Buscar año reciente (2020-2030)
-            const yearMatch = headerText.match(/202[0-9]/);
-            if (!yearMatch) return null;
-            const year = parseInt(yearMatch[0]);
-
-            // Buscar mes cerca del año
-            for (let i = 0; i < meses.length; i++) {
-                if (headerText.includes(meses[i])) {
-                    return { month: i + 1, year: year, monthName: meses[i] };
+            // ── 1 · El campo del wizard. Sin ambigüedad posible ──────────────
+            const cal = document.getElementById('frmFlujoDeclaracion:calPeriodo') ||
+                        document.querySelector('[id$="calPeriodo"]');
+            if (cal) {
+                const crudo = (cal.value || cal.getAttribute('value') || '').trim();
+                const mm = crudo.match(/^(\d{1,2})\s*\/\s*(20\d{2})$/);
+                if (mm) {
+                    const mes = parseInt(mm[1], 10);
+                    if (mes >= 1 && mes <= 12) {
+                        return { month: mes, year: parseInt(mm[2], 10),
+                                 monthName: meses[mes - 1], via: 'calPeriodo' };
+                    }
                 }
             }
 
-            // Fallback (Mes Anterior al actual si solo hay año)
-            const today = new Date();
-            const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-            return {
-                month: lastMonth.getMonth() + 1,
-                year: lastMonth.getFullYear(),
-                monthName: meses[lastMonth.getMonth()]
-            };
+            // ── 2 · La cabecera, leyendo el mes y el año COMO UNA UNIDAD ─────
+            // Nunca un año suelto: eso es lo que agarraba el RUC. Y sin el HUD
+            // de la extensión, que también tiene texto y números propios.
+            const zona = document.querySelector('.contenido-cabecera') ||
+                         document.querySelector('#j_idt15_content') ||
+                         document.body;
+            const limpio = zona.cloneNode(true);
+            limpio.querySelectorAll('[id^="sri-"], [id^="slh-"], [class*="sri-assistant"], [class*="ghost-"]')
+                  .forEach((n) => n.remove());
+            const texto = (limpio.innerText || '').toUpperCase();
 
+            // «AGOSTO 2026», «AGOSTO DE 2026», «AGOSTO - 2026». El año tiene que
+            // terminar ahí: `(?!\d)` impide que `2023001` cuente como 2023.
+            for (let i = 0; i < meses.length; i++) {
+                const re = new RegExp(meses[i] + '\\s*(?:DE\\s*|[-/]\\s*)?(20\\d{2})(?!\\d)');
+                const m = texto.match(re);
+                if (m) {
+                    return { month: i + 1, year: parseInt(m[1], 10),
+                             monthName: meses[i], via: 'cabecera' };
+                }
+            }
+
+            // Antes había acá un tercer camino que devolvía «el mes pasado» con
+            // el año sacado del RUC. Se fue: inventar un período es peor que no
+            // saberlo, porque el comprobante se archiva igual y en el lugar
+            // equivocado. Quien llama sabe qué hacer con un null.
+            return null;
         } catch (e) { return null; }
     }
 
@@ -3717,26 +3764,60 @@ class SriAssistantPanel {
         this.state.isPostSubmitClosing = false;
     }
 
+    /**
+     * El período con el que se archiva el comprobante: `AAAA-MM`.
+     *
+     * De acá salen la ruta en R2 y la clave de Supabase
+     * (`on_conflict=client_id,type,period`). Equivocarlo no pierde el archivo:
+     * lo guarda con el nombre de otro mes y **pisa lo que hubiera ahí**.
+     *
+     * Se cruzan las dos fuentes que existen y, si no coinciden, **se avisa**.
+     * Antes una tapaba a la otra en silencio.
+     */
     async getCanonicalPeriodStr() {
+        const comoTexto = (y, m) => `${y}-${m.toString().padStart(2, '0')}`;
+        let dePantalla = null;
+        let deLote = null;
+
         try {
-            const formPeriod = this.extractFormPeriod();
-            if (formPeriod && formPeriod.year && formPeriod.month) {
-                return `${formPeriod.year}-${formPeriod.month.toString().padStart(2, '0')}`;
+            const fp = this.extractFormPeriod();
+            if (fp && fp.year && fp.month) dePantalla = comoTexto(fp.year, fp.month);
+        } catch (e) { /* extractFormPeriod ya devuelve null si no sabe */ }
+
+        try {
+            const wp = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod;
+            if (wp && wp.year) {
+                const m = typeof wp.monthIndex === 'number' ? wp.monthIndex + 1 : (wp.month || 0);
+                if (m >= 1 && m <= 12) deLote = comoTexto(wp.year, m);
             }
-            const stored = await SafeStorage.get(['workflowPeriod']);
-            if (stored && stored.workflowPeriod && stored.workflowPeriod.year) {
-                const wp = stored.workflowPeriod;
-                const m = typeof wp.monthIndex === 'number' ? wp.monthIndex + 1 : (wp.month || 1);
-                return `${wp.year}-${m.toString().padStart(2, '0')}`;
+        } catch (e) { /* ídem */ }
+
+        // Las dos hablan y dicen cosas distintas: eso es una señal, no un
+        // empate a resolver a ojo. Manda lo que el bot le PIDIÓ al portal
+        // —que es lo que efectivamente se declaró— y queda dicho en el log.
+        if (dePantalla && deLote && dePantalla !== deLote) {
+            console.warn(`⚠️ [PERÍODO] La pantalla dice ${dePantalla} y el lote ${deLote}. ` +
+                         `Se archiva como ${deLote}, que es el período que se navegó. ` +
+                         'Si esto se repite, hay que mirarlo: el comprobante se guarda con esta fecha.');
+            if (typeof anotarBitacora === 'function') {
+                anotarBitacora('⚠️ período discrepante', `pantalla ${dePantalla} · lote ${deLote}`);
             }
-        } catch (e) {
-            console.warn('⚠️ Error resolviendo periodo canónico:', e);
+            return deLote;
         }
+
+        if (deLote) return deLote;
+        if (dePantalla) return dePantalla;
+
+        // Ninguna de las dos supo. El mes anterior es una suposición, y como
+        // tal se dice en voz alta: de este número depende dónde se archiva.
         const now = new Date();
         let cMonth = now.getMonth() - 1;
         let cYear = now.getFullYear();
         if (cMonth < 0) { cMonth = 11; cYear--; }
-        return `${cYear}-${(cMonth + 1).toString().padStart(2, '0')}`;
+        const supuesto = comoTexto(cYear, cMonth + 1);
+        console.warn(`⚠️ [PERÍODO] Ni la pantalla ni el lote dijeron el período. ` +
+                     `Se supone ${supuesto} (el mes anterior). Revisá dónde quedó el comprobante.`);
+        return supuesto;
     }
 
     /**

@@ -248,15 +248,8 @@ SafeStorage.get(null).then(async (items) => {
                          'El SRI no dio un mensaje, así que no se concluye nada: se reintenta una vez.');
             anotarBitacora('↩️ rebote', `${veces}/2 · ${nombreRebote} volvió al login sin mensaje`);
             rebotes[rucRebote] = veces;
-            // 🧹 PURGA PREVENTIVA EN EL REBOTE:
-            // Si el rebote fue por token desfasado o cookie corrupta de Keycloak,
-            // purgamos cookies del SW antes del 2do intento para que arranque fresco.
-            try {
-                await new Promise((resolve) => {
-                    chrome.runtime.sendMessage({ tipo: "SC_LIMPIAR_SESION_SRI" }, () => resolve());
-                    setTimeout(resolve, 600);
-                });
-            } catch (e) {}
+            // No purgar cookies en caliente si ya estamos en la página de Keycloak:
+            // borrar la cookie de sesión mientras el form conserva session_code causa HTTP 400.
             await SafeStorage.set({
                 sc_rebotes: rebotes,
                 pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
@@ -380,6 +373,37 @@ SafeStorage.get(null).then(async (items) => {
 
         console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
         anotarBitacora('auto-login', items.pending_sri_autofill.name || items.pending_sri_autofill.ruc);
+
+        // Si estamos en Keycloak pero no hay campos de login, es una pantalla de error o sesión rota de Keycloak
+        if (window.location.href.includes('/auth/realms/') && !isExplicitlyOutside) {
+            console.warn('⚠️ [LOGIN KEYCLOAK] Pantalla de error o sesión expirada de Keycloak (sin campos de credenciales).');
+            const restartLink = document.querySelector('a#kc-page-back, a.kc-login-restart, a[href*="login"], a[href*="restart"], a[href*="srienlinea"]');
+            if (restartLink && esVisible(restartLink)) {
+                console.log('🔄 Reiniciando flujo de login desde enlace de Keycloak...');
+                restartLink.click();
+                return;
+            }
+            
+            const clientRuc = items.pending_sri_autofill?.ruc;
+            const clientName = items.pending_sri_autofill?.name || clientRuc;
+            console.warn(`🔌 [SESIÓN] Error en Keycloak para ${clientName}. Omitiendo y avanzando al siguiente cliente...`);
+            if (clientRuc) {
+                await Omitidos.anotar(clientRuc, 'sesion_caida', {
+                    nombre: clientName,
+                    detalle: 'Keycloak devolvió pantalla de error (HTTP 400 / sesión caducada)'
+                });
+            }
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+            
+            const esLote = items.auto_batch_enabled || items.pending_sri_autofill?.isBatch ||
+                (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+            if (esLote && typeof handleBatchNextClient === 'function') {
+                setTimeout(() => handleBatchNextClient(), 1500);
+            } else {
+                window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
+            }
+            return;
+        }
 
         // Si estamos en la portada de inicio del SRI (ej. inicio/NAT), hacer clic en "Iniciar sesión" para ir a Keycloak
         if (!isExplicitlyOutside) {
