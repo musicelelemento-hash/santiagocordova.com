@@ -225,7 +225,8 @@ const SriLoop = {
             console.log(`🧹 [BUCLE] Se descarta la acción «${r.pendingAction}» que quedó a medias` +
                         `${porQue ? ' por ' + porQue : ''}.`);
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'recuperarComprobante',
-                                      'bajarTodos', 'accionEnCurso', 'accionVueltas']);
+                                      'bajarTodos', 'accionEnCurso', 'accionVueltas',
+                                      'accionDeQuien']);
         } catch (e) { /* parar no puede fallar por esto */ }
     },
 
@@ -546,6 +547,17 @@ const SriLoop = {
                 isBatch: true
             },
             pendingAction: 'turbo_step1_facturas',
+            // ── De quién es esta acción ──────────────────────────────────
+            //
+            // Una acción pendiente sin dueño se ejecuta para quien sea. El
+            // 07-sep-2026 el cliente 1 de un lote arrancó con
+            // `turbo_step3_retenciones`, que era del contribuyente anterior:
+            // se apretó ▶ mientras su extracción seguía en vuelo, y al
+            // terminar pisó la acción recién preparada.
+            //
+            // Con el RUC pegado, una acción que llega tarde y no es de quien
+            // está en curso se descarta en vez de ejecutarse sobre otro.
+            accionDeQuien: cliente.ruc,
             checkFacturas: true,
             checkRetenciones: true,
             checkNC: true,

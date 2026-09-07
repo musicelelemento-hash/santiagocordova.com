@@ -24,6 +24,23 @@ SafeStorage.get(null).then(async (items) => {
     // al querer marcar declaraciones de IVA, y luego cerré y abrí y siempre
     // así esa ejecución con ese cliente». «Siempre así» es lo que este bloque
     // corta: la acción quedaba pegada en el almacén sin forma de rendirse.
+    // Una acción que NO es de quien está en curso no se ejecuta.
+    //
+    // El 07-sep-2026 el cliente 1 de un lote arrancó con la acción del
+    // contribuyente anterior: se apretó ▶ mientras la extracción de ése seguía
+    // en vuelo, y al terminar pisó la acción recién preparada. Ejecutar el paso
+    // de otro es buscar comprobantes del mes equivocado en la sesión de otro.
+    if (items.pendingAction && items.accionDeQuien &&
+        items.pending_sri_autofill?.ruc &&
+        items.accionDeQuien !== items.pending_sri_autofill.ruc) {
+        console.warn(`🏷️ [ACCIÓN] «${items.pendingAction}» era de ${items.accionDeQuien} y ahora ` +
+                     `está en curso ${items.pending_sri_autofill.ruc}. Se descarta: la acción de ` +
+                     'un contribuyente no se ejecuta sobre otro.');
+        await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionDeQuien',
+                                  'accionEnCurso', 'accionVueltas', 'recuperarComprobante']);
+        items.pendingAction = null;
+    }
+
     const TOPE_DE_VUELTAS = 8;
     if (items.pendingAction) {
         const mismaQueAntes = items.accionEnCurso === items.pendingAction;
