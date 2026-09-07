@@ -67,6 +67,33 @@
   1. **En la extensión (`src/01_utilidades_y_pdf.js`, commit `f6454c1`):** Se implementó fallback inmediato a `INSERT` directo (sin `merge-duplicates`) si el upsert falla con 401 o 42501. Probado en vivo: el `INSERT` directo devuelve `201 Created` y guarda la declaración en `sri_declaraciones`. Si ya existía, responde `409 Conflict (23505 duplicate key)`.
   2. **En la base de datos (`santiagocordova-main/database/fix_sri_declaraciones_anon_rls.sql`, commit `5260014`):** Se creó el script SQL para crear las políticas de `SELECT` y `UPDATE` para `anon`, permitiendo tanto el upsert completo como la lectura de declaraciones históricas.
 
+### A2. El camino de «ya declaró»: el atajo se pisaba y el PDF no llegaba (Claude, commit `a7d7713`)
+
+Los dos fallos están en el camino que **cierra el objetivo de la §0**: traer el
+comprobante de quien ya declaró.
+
+1. **El atajo se perdía.** El perfil acertaba (`Veredicto: ya_declarada`) y
+   arrancaba `recuperar_comprobante`. Pero el bloque de auto-arranque de
+   `03_ingreso_y_sesion.js` corre en cada carga con sesión abierta y terminaba
+   siempre plantando `turbo_step1_facturas` sin mirar si ya había algo en
+   curso: al cargar `lista-obligaciones.jsf` lo borraba. Extraía 19 facturas,
+   retenciones, NC y el wizard entero **para nada**, hasta que el paso 4 decía
+   lo que el perfil ya había dicho. **No rompía nada** — el freno de la
+   sustitutiva agarraba al final— así que costaba un minuto por cliente sin
+   que se notara. Guardia: `YA_DECIDIDAS = ['recuperar_comprobante', 'bajarTodos']`.
+
+2. **El PDF se iba a la carpeta de descargas.** El botón «Comprobante de
+   declaración» es un `submit` de JSF; el portal responde con
+   `Content-Disposition: attachment` y el navegador se lo lleva al disco, donde
+   ni `fetch` ni `createObjectURL` lo ven. El archivo probablemente bajaba
+   mientras el log decía «no llegó ningún PDF». Mismo caso que `lnkXml` (§11):
+   `traerPdfDelComprobantePresentado()` reproduce el POST — todos los campos
+   del form más el `name` del botón— y comprueba que la respuesta empiece con
+   `%PDF`, porque con la sesión caída el portal contesta HTML y guardar eso
+   como comprobante es peor que no tener ninguno.
+
+Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.**
+
 ### B. Prevención de Rebotes y Errores 400 en Keycloak (Commit `820aa95`)
 - Se eliminó la purga de cookies en caliente mientras el navegador está sobre el formulario de Keycloak (`src/03_ingreso_y_sesion.js`).
 - Se añadió interceptor para pantallas de error genéricas de Keycloak (`/auth/realms/` sin campos de login): anota al cliente como `sesion_caida` en `Omitidos` y avanza inmediatamente al siguiente cliente sin esperar 6 segundos en bucle.
