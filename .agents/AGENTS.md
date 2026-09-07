@@ -274,10 +274,11 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 401 (Ventas 15%)** | `concepto401` | Input casillero 401 |
 | **Casillero 411 (Ventas Netas 15%)** | `concepto411` | Input casillero 411 |
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
-| **Casillero 502 (sin derecho a crédito)** | *sin confirmar* | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
-| **Casillero 512 (NC del 502)** | *sin confirmar* | Menos notas de crédito del 502 |
-| **Casillero 540 (compras 5%)** | *sin confirmar* | Adquisiciones locales gravadas 5% con crédito · ver §9 |
-| **Casillero 550 (NC del 540)** | *sin confirmar* | Menos notas de crédito del 540 |
+| **Casillero 502 (sin derecho a crédito)** | *id sin confirmar — el casillero EXISTE* | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
+| **Casillero 512 (NC del 502)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 502 |
+| **Casillero 540 (compras 5%)** | *id sin confirmar — EXISTE* (captura 06-sep-2026) | Adquisiciones locales gravadas 5% con crédito · ver §9 |
+| **Casillero 550 (NC del 540)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 540 |
+| **Casillero 560 (IVA generado del 540)** | *id sin confirmar — EXISTE* | Impuesto generado de las compras al 5% |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |
 | **Casillero 601 (Impuesto Causado)** | `concepto601` | Lectura de impuesto causado |
 | **Casillero 609 (Retenciones IVA)** | `concepto609` | Input retenciones IVA del mes |
@@ -652,15 +653,33 @@ seis puntos donde ya se borraba `declaration_synced_flag` (arranque de
 declaración, siguiente cliente, reset total) — si quedara pegada, el freno de
 un cliente bloquearía al próximo.
 
-> **El 540 y el 550 NO aparecen en el formulario.** Verificado por el usuario
-> el 05-sep-2026 mirando la pantalla real. No se sabe si es porque no existen,
-> porque se llaman distinto, o porque el portal solo los muestra en ciertos
-> períodos u obligaciones.
+> **CORREGIDO el 06-sep-2026: el 540 y el 550 SÍ están en el formulario.**
+> Captura del usuario, con la fila resaltada:
 >
-> **No se cablearon en el `fieldMap`** y no se van a cablear por suposición. Se
-> buscan por número de casillero con el XPath que ya usa el resto del
-> formulario; si no aparecen, la plata **no** se manda al 500 por las dudas —
-> se anota y se frena. Lo mismo vale para el 502 y el 512.
+> > «Adquisiciones y pagos locales (excluye activos fijos) gravados con tarifa
+> > **5%** (con derecho a crédito tributario)» → **540** · **550** · **560**
+>
+> Y en la fila de abajo, también presentes: **502 · 512 · 522** («Otras
+> adquisiciones y pagos gravados tarifa diferente de cero, **sin** derecho a
+> crédito tributario»).
+>
+> Lo que decía esta nota antes —«NO aparecen»— salió de que el bot reportó
+> `no se encontró el casillero 540` y se tomó ese reporte como si fuera la
+> pantalla. **El formulario estaba bien; el buscador estaba mal.**
+>
+> Las cuatro XPath de `encontrarInputPorCasillero()` exigían que la casilla
+> fuera el `<td>` **inmediatamente siguiente** al número, y el SRI mete una
+> tabla dentro de cada celda: ahí se corta el parentesco. Desde el 06-sep-2026
+> hay una quinta estrategia que **no mira el HTML sino la pantalla**: toma el
+> primer input de texto que esté a la derecha del número y a su misma altura,
+> abriendo el ámbito de a poco (fila anidada → fila real → tabla → documento).
+> Probada contra la estructura anidada real en `tests/iva5.html`, sección Z.
+>
+> **Los `id` siguen sin confirmarse y no se cablean en el `fieldMap`.** La
+> estrategia por altura los encuentra sin necesitarlos; cuando el 📐 devuelva
+> los `id` reales, entran acá y al `fieldMap`, que es más rápido y más seguro.
+> Si aun así no apareciera, la plata **no** se manda al 500 por las dudas: se
+> anota y se frena.
 
 #### Cómo se sale de la duda: el botón 📐
 

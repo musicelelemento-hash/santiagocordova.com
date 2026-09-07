@@ -1095,6 +1095,62 @@ async function encontrarInputPorCasillero(casillero) {
         } catch (e) { }
     }
 
+    // 2.5 A LA MISMA ALTURA. La red que atrapa lo que las de arriba dejan pasar.
+    //
+    //     Las cuatro XPath de arriba exigen parentesco: que la casilla sea el
+    //     `<td>` inmediatamente siguiente al número. El SRI anida tablas por
+    //     celda y ahí la cadena se corta — el 540 estaba en pantalla y el bot
+    //     reportó «no se encontró el casillero 540» (corrida del 06-sep-2026).
+    //
+    //     Esto no mira el HTML: mira la pantalla. El número de casillero y su
+    //     casilla están en la misma línea, y eso es cierto porque así se ve la
+    //     tabla, no porque el DOM lo prometa. Se toma el primer input de texto
+    //     que esté a la derecha del número y a su misma altura.
+    const rotulos = [];
+    const paseo = document.evaluate(
+        `//*[normalize-space(text())='${casillero}']`,
+        document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    for (let i = 0; i < paseo.snapshotLength; i++) rotulos.push(paseo.snapshotItem(i));
+
+    for (const rotulo of rotulos) {
+        const rr = rotulo.getBoundingClientRect();
+        if (!rr.height) continue;   // no está pintado: no dice dónde está nada
+
+        // El ámbito se abre de a poco, de lo más cercano hacia afuera.
+        //
+        // Empezar por `closest('tr')` no alcanza: en el SRI cada celda lleva
+        // una tabla adentro, así que la fila más cercana al número es la de esa
+        // tabla anidada — y ahí no hay ningún input. Se sube fila por fila y
+        // tabla por tabla hasta encontrar algo, en vez de mirar todo el
+        // documento de una, que es como se termina agarrando el casillero de
+        // otro renglón.
+        const ambitos = [];
+        for (let n = rotulo.parentElement; n && n !== document.body; n = n.parentElement) {
+            const t = n.tagName;
+            if (t === 'TR' || t === 'TABLE') ambitos.push(n);
+        }
+        ambitos.push(document.body);
+
+        for (const ambito of ambitos) {
+            const candidatos = Array.from(ambito.querySelectorAll('input[type="text"]'))
+                .map((el) => ({ el, r: el.getBoundingClientRect() }))
+                // A la derecha del número y a su misma altura. La tolerancia es
+                // media línea: el número y la casilla no comparten line-height.
+                .filter(({ el, r }) =>
+                    r.width > 0 && r.height > 0 &&
+                    r.left >= rr.left - 2 &&
+                    Math.abs((r.top + r.height / 2) - (rr.top + rr.height / 2)) < 12 &&
+                    !el.disabled && !el.readOnly)
+                .sort((a, b) => a.r.left - b.r.left);
+
+            if (candidatos.length) {
+                const el = candidatos[0].el;
+                console.log(`   ✅ Encontrado a la misma altura (${casillero}): id=${el.id || '(sin id)'}`);
+                return el;
+            }
+        }
+    }
+
     // 3. Fallback Regex ID loop (solo inputs type=text — jamás hidden)
     const inputs = document.querySelectorAll('input[type="text"]');
     const regex = new RegExp(`(\\D|^)${casillero}$`);

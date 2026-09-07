@@ -504,6 +504,61 @@
 
   hud.remove();
 
+  // ══ Z · encontrar el 540 en la tabla real del SRI ═══════════════════════
+  sec('Z · el 540 existe y hay que saber encontrarlo');
+  // Captura del usuario del 06-sep-2026: el formulario TIENE la fila
+  // «Adquisiciones y pagos locales (excluye activos fijos) gravados con tarifa
+  // 5% (con derecho a crédito tributario)» con sus casilleros 540, 550 y 560.
+  // El bot igual reportó «no se encontró el casillero 540»: las cuatro XPath
+  // exigían que la casilla fuera el <td> inmediatamente siguiente al número, y
+  // el SRI anida una tabla dentro de cada celda. La estructura de abajo es esa.
+  const P = document.getElementById('portal');
+  P.innerHTML = `
+    <table><tbody>
+      <tr>
+        <td>Adquisiciones y pagos (excluye activos fijos) gravados tarifa diferente de cero (con derecho a crédito tributario)</td>
+        <td><table><tbody><tr><td>500</td></tr></tbody></table></td>
+        <td><table><tbody><tr><td><input type="text" id="concepto1270" value="0.00"></td></tr></tbody></table></td>
+        <td><table><tbody><tr><td>510</td></tr></tbody></table></td>
+        <td><table><tbody><tr><td><input type="text" id="concepto1280" value="0.00"></td></tr></tbody></table></td>
+      </tr>
+      <tr>
+        <td>Adquisiciones y pagos locales (excluye activos fijos) gravados con tarifa 5% (con derecho a crédito tributario)</td>
+        <td><table><tbody><tr><td>540</td></tr></tbody></table></td>
+        <td><table><tbody><tr><td><input type="text" id="conceptoDesconocidoA" value="0.00"></td></tr></tbody></table></td>
+        <td><table><tbody><tr><td>550</td></tr></tbody></table></td>
+        <td><table><tbody><tr><td><input type="text" id="conceptoDesconocidoB" value="0.00"></td></tr></tbody></table></td>
+      </tr>
+      <tr>
+        <td>Otras adquisiciones y pagos gravados tarifa diferente de cero (sin derecho a crédito tributario)</td>
+        <td><table><tbody><tr><td>502</td></tr></tbody></table></td>
+        <td><table><tbody><tr><td><input type="text" id="conceptoDesconocidoC" value="0.00"></td></tr></tbody></table></td>
+      </tr>
+    </tbody></table>`;
+
+  const halla = async (n) => { const el = await encontrarInputPorCasillero(n); return el ? el.id : null; };
+
+  // Los que ya están en el fieldMap siguen saliendo por ahí: la red nueva no
+  // puede cambiar lo que ya funcionaba.
+  push('el 500 sigue saliendo por el fieldMap',   await halla('500'), 'concepto1270');
+  push('y el 510 también',                        await halla('510'), 'concepto1280');
+
+  // Y los que NO están en el fieldMap ahora aparecen igual.
+  push('el 540 se encuentra sin estar mapeado',   await halla('540'), 'conceptoDesconocidoA');
+  push('el 550, que es su nota de crédito',       await halla('550'), 'conceptoDesconocidoB');
+  push('el 502, el de sin derecho a crédito',     await halla('502'), 'conceptoDesconocidoC');
+
+  // Cada uno con SU casilla: dos filas seguidas de la misma tabla no se mezclan.
+  push('el 540 no se lleva la casilla del 500',
+       (await halla('540')) !== (await halla('500')), true);
+
+  // Un casillero que de verdad no está sigue devolviendo null. Si esta red
+  // atrapara cualquier cosa, la plata iría a un casillero equivocado — que es
+  // peor que no declararla, porque nadie se entera.
+  push('un casillero ausente sigue siendo null',  await halla('508'), null);
+
+  P.innerHTML = '';
+
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =
