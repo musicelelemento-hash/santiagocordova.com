@@ -628,6 +628,78 @@
 
   P.innerHTML = '';
 
+  // ══ Ñ · lo que el formulario reclama, dicho con sus palabras ══════════
+  sec('Ñ · el casillero 203: el decreto del 5%');
+  // Corrida real del 07-sep-2026. Dos contribuyentes con compras al 5%
+  // llenaron el 540 y el 550 bien, y el portal NO los dejó pasar al resumen:
+  //
+  //   «casillero 203. seleccione el decreto que determina la tarifa reducida
+  //    a aplicar.»
+  //
+  // El cierre mágico, al no encontrar el resumen, los anotó a los dos como
+  // `saldo_a_pagar` — con saldo $0.00. Un motivo equivocado manda al contador
+  // a buscar plata que no existe, y el campo que falta sigue faltando.
+  const pintarMensajes = (html) => {
+    P.innerHTML = '<div id="frmFlujoDeclaracion:panelMensajes" ' +
+                  'style="display:block;width:400px;height:80px">' + html + '</div>';
+  };
+
+  pintarMensajes(
+    '<ul><li class="estiloItemsMensajes">Casillero 203. Seleccione el decreto que determina la tarifa reducida a aplicar.</li>' +
+    '<li class="estiloItemsMensajes">Casillero 203. El decreto seleccionado es incorrecto.</li></ul>');
+  const pide = loQuePideElFormulario();
+  push('se leen los dos reclamos',           pide.textos.length, 2);
+  push('y se nombra el casillero, una vez',  pide.casilleros, ['203']);
+  push('el resumen dice qué mirar',          /casillero 203/.test(pide.resumen), true);
+
+  // Los del 625 son informativos y el flujo ya los saltea: si contaran acá,
+  // cada declaración sana quedaría anotada como formulario incompleto.
+  pintarMensajes(
+    '<ul><li class="estiloItemsMensajes">El casillero 625 se registra sin perjuicio de la facultad determinadora.</li></ul>');
+  push('un aviso del 625 no frena nada',     loQuePideElFormulario().textos.length, 0);
+
+  // Mezclados: el informativo se descarta y el que frena queda.
+  pintarMensajes(
+    '<ul><li class="estiloItemsMensajes">El casillero 625 se registra sin perjuicio de la facultad determinadora.</li>' +
+    '<li class="estiloItemsMensajes">Casillero 203. Seleccione el decreto que determina la tarifa reducida a aplicar.</li></ul>');
+  const mezcla203 = loQuePideElFormulario();
+  push('mezclados: sobrevive sólo el que frena', mezcla203.textos.length, 1);
+  push('y sigue nombrando el 203',           mezcla203.casilleros, ['203']);
+
+  // Panel vacío, y panel que no existe: ninguno inventa un reclamo.
+  pintarMensajes('<ul></ul>');
+  push('un panel vacío no reclama nada',     loQuePideElFormulario().textos.length, 0);
+  P.innerHTML = '';
+  push('sin panel tampoco',                  loQuePideElFormulario().textos.length, 0);
+
+  // Un panel escondido no cuenta: el SRI lo deja en el DOM entre pasos.
+  P.innerHTML = '<div id="frmFlujoDeclaracion:panelMensajes" style="display:none">' +
+                '<ul><li class="estiloItemsMensajes">Casillero 203. Seleccione el decreto.</li></ul></div>';
+  push('un panel oculto no frena',           loQuePideElFormulario().textos.length, 0);
+
+  // Varios casilleros distintos se listan todos, sin repetir.
+  pintarMensajes(
+    '<ul><li class="estiloItemsMensajes">Casillero 203. Seleccione el decreto.</li>' +
+    '<li class="estiloItemsMensajes">Casillero 203. El decreto es incorrecto.</li>' +
+    '<li class="estiloItemsMensajes">Casillero 111. Valor no permitido.</li></ul>');
+  push('dos casilleros distintos, sin repetidos',
+       loQuePideElFormulario().casilleros, ['203', '111']);
+
+  P.innerHTML = '';
+
+  // ══ O · el 550 y el 518 ya no dependen de la vecindad ════════════════
+  sec('O · el 550 y el 518, cableados con evidencia');
+  // La vecindad los rescataba, pero depende de que la sección esté abierta
+  // — y con la sección cerrada se rindió en silencio: REYES MARQUEZ quedó sin
+  // declarar con $4507.72 al 5%. El `id` no depende de nada.
+  P.innerHTML = '<input id="concepto1281"><input id="concepto1740">';
+  const i550 = await encontrarInputPorCasillero('550');
+  push('el 550 sale directo por el fieldMap', i550 && i550.id, 'concepto1281');
+  const i518 = await encontrarInputPorCasillero('518');
+  push('y el 518 también',                    i518 && i518.id, 'concepto1740');
+  P.innerHTML = '';
+
+
   // ══════════════════════════════════════════════════════════════════════
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =

@@ -1599,8 +1599,22 @@ class SriAssistantPanel {
                     this.log('⚠️ No se encontró el botón Finalizar/Aceptar. Por favor finalice manualmente.');
                 }
             } else {
+                // Lo primero es preguntarle al formulario qué le falta. Si el
+                // portal está reclamando un campo, NO llegamos al resumen por
+                // eso — y todo lo demás (saldo, selectores) es ruido.
+                //
+                // El 07-sep-2026 dos contribuyentes al 5% quedaron anotados
+                // como `saldo_a_pagar` con saldo $0.00. No había saldo: el SRI
+                // pedía el casillero 203, el decreto de la tarifa reducida.
+                // Un motivo equivocado manda al contador a buscar plata que no
+                // existe, y el campo que falta sigue faltando.
+                const pide = (typeof loQuePideElFormulario === 'function')
+                    ? loQuePideElFormulario() : { textos: [], casilleros: [], resumen: '' };
+
                 let motivo;
-                if (saldoConocido && totalValor > 0) {
+                if (pide.textos.length > 0) {
+                    motivo = 'El SRI ' + pide.resumen;
+                } else if (saldoConocido && totalValor > 0) {
                     motivo = `Saldo a pagar: ${totalValor.toFixed(2)}`;
                 } else if (estadoMensajes === 'con_inconsistencias') {
                     motivo = 'El SRI reporta inconsistencias';
@@ -1611,7 +1625,21 @@ class SriAssistantPanel {
                 }
                 this.log(`🛑 Bloqueo Seguro: ${motivo}. NUNCA se intenta pagar automáticamente.`);
                 anotarBitacora('⛔ NO se envió', motivo);
-                if (!saldoConocido || estadoMensajes === 'desconocido') {
+
+                if (pide.textos.length > 0) {
+                    console.warn('📋 [FORMULARIO] Lo que el SRI reclama, con sus palabras:');
+                    pide.textos.forEach((t) => console.warn('   · ' + t));
+                    if (pide.casilleros.indexOf('203') !== -1) {
+                        console.warn('   → El 203 es el DECRETO que habilita la tarifa reducida del 5%. ' +
+                                     'Es una elección legal: la hace el contador, el bot no la adivina.');
+                    }
+                    this.showEliteToast({
+                        title: '🛑 Falta un campo del formulario',
+                        msg: pide.textos.map((t) => escapeHtml(String(t))).join('<br>· ') +
+                             '<br><br>El borrador queda guardado. Elegí ese campo y enviá a mano.',
+                        duration: 20000
+                    });
+                } else if (!saldoConocido || estadoMensajes === 'desconocido') {
                     this.log('🔎 Corré window.sriAssistant.verDiagnosticoResumen() y pasá la salida para calibrar los selectores.');
                 }
                 
@@ -1641,10 +1669,23 @@ class SriAssistantPanel {
                 // MODO AUTO BUCLE CHECK: Si hay saldo a pagar pero estamos automático, SALTAMOS al siguiente
                 const sigueElLote = await loteDebeContinuar();
                 if (sigueElLote) {
-                    this.log(`🔄 [MODO AUTO BUCLE] Cliente con saldo a pagar ($${totalValor}). Guardado en la nube. Avanzando al siguiente...`);
-                    await Omitidos.anotar(info.ruc, 'saldo_a_pagar', {
-                        nombre: info.name, detalle: `saldo $${totalValor}` });
-                    this.showEliteToast({ title: '⏩ Omitiendo (Por Pagar)', msg: 'Impuestos detectados. Cerrando sesión...', duration: 3500 });
+                    // El motivo que se anota tiene que ser el de verdad: es lo
+                    // único que el contador va a leer en el botón ⚠, y de ahí
+                    // sale qué hacer con este contribuyente.
+                    const faltaCampo = pide.textos.length > 0;
+                    const motivoOmision = faltaCampo ? 'formulario_incompleto' : 'saldo_a_pagar';
+                    const detalleOmision = faltaCampo
+                        ? (pide.casilleros.length ? 'casillero ' + pide.casilleros.join(', ') : 'campos sin completar')
+                        : `saldo $${totalValor}`;
+
+                    this.log(`🔄 [MODO AUTO BUCLE] ${info.name || info.ruc}: ${motivo}. Borrador guardado. Avanzando al siguiente...`);
+                    await Omitidos.anotar(info.ruc, motivoOmision, {
+                        nombre: info.name, detalle: detalleOmision });
+                    this.showEliteToast({
+                        title: faltaCampo ? '⏩ Omitiendo (falta un campo)' : '⏩ Omitiendo (Por Pagar)',
+                        msg: faltaCampo ? escapeHtml(detalleOmision) + ' — se guardó borrador. Cerrando sesión...'
+                                        : 'Impuestos detectados. Cerrando sesión...',
+                        duration: 3500 });
                     
                     setTimeout(async () => {
                         await GhostMemory.clearCurrent();

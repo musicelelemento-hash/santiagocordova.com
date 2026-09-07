@@ -149,9 +149,30 @@ function escapeHtml(str) {
 // 4. Bloqueo preventivo: nunca se tocan inputs ni se pulsa login si la clave ya falló.
 // 5. Exclusión automática del bucle ferrocarril para no frenar el lote.
 const SriCredentialVault = {
+  /**
+   * Una marca para saber si la clave cambió — sin que la marca sea la clave.
+   *
+   * Acá decía `largo_primeras2_últimas2`. Eso alcanzaba para comparar, y
+   * alcanzaba también para reconstruir buena parte de una contraseña del SRI:
+   * el largo exacto, el principio y el final. Y se imprimía en la consola,
+   * que es justo lo que se copia y se pega en un chat cuando algo falla.
+   *
+   * Ahora es un resumen que no se puede desandar (FNV-1a de 32 bits). Sirve
+   * igual para lo único que hace falta — ¿es la misma de antes, sí o no— y
+   * no dice nada de la clave si se filtra.
+   *
+   * Las marcas viejas no coinciden con las nuevas: la primera vez, cada
+   * contribuyente cuenta como «clave cambiada» y se le concede un intento.
+   * Es exactamente lo que hay que hacer con una clave que no se sabe si sirve.
+   */
   getSignature(password) {
     if (!password) return '';
-    return `${password.length}_${password.slice(0, 2)}_${password.slice(-2)}`;
+    let h = 0x811c9dc5;
+    for (let i = 0; i < password.length; i++) {
+      h ^= password.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return 'h' + h.toString(36);
   },
 
   async getRegistry() {
@@ -184,7 +205,9 @@ const SriCredentialVault = {
         };
       }
       // Si la clave cambió en la base/caché, conceder 1 intento para la nueva clave
-      console.log(`🔑 [VAULT] Nueva clave detectada para ${ruc} (firma anterior: ${entry.signature}, nueva: ${currentSig}). Concediendo 1 intento.`);
+      // La marca NO se imprime, ni la vieja ni la nueva. Un log se pega en un
+      // chat, en un ticket o en un correo; que ahí no haya nada de la clave.
+      console.log(`🔑 [VAULT] La clave guardada de ${ruc} cambió desde el último rechazo. Concediendo 1 intento.`);
     }
 
     return { allowed: true };

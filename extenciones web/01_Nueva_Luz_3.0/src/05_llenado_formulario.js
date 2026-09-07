@@ -1220,9 +1220,15 @@ async function encontrarInputPorCasillero(casillero) {
         '540': 'concepto1271', // Compras 5% bruto · escrito: 0.48
         '508': 'concepto1735', // Notas de venta, valor · escrito: 50.00
         '117': 'concepto258',  // Notas de venta, cantidad · escrito: 2
-        // El 550 NO está: en esa corrida no apareció. Se lo rescata como vecino
-        // de fila del 540 (ver `vecinoDeFila`). Suponer «concepto1281 porque el
-        // 540 es 1271» sería inventarle un destino a plata ajena.
+        // ── Confirmados en la corrida del 07-sep-2026, segunda vuelta ─────
+        // El rescate por vecindad los encontró y el bot ESCRIBIÓ en ellos, en
+        // dos contribuyentes distintos. Ya no son una suposición de patrón:
+        //   550 → ORTIZ AMAYA $0.48 · REYES MARQUEZ $4507.72
+        //   518 → ORTIZ AMAYA $50.00 (por altura, no por vecindad)
+        // Cablearlos ahorra el rodeo, que es dónde se rompe: la vecindad
+        // depende de que la sección esté abierta y el `id` no depende de nada.
+        '550': 'concepto1281', // Compras 5% neto (menos NC)
+        '518': 'concepto1740', // Notas de venta neto (menos NC)
     };
 
     if (fieldMap[casillero]) {

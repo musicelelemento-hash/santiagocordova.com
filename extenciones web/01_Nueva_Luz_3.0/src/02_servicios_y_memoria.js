@@ -798,6 +798,7 @@ const Omitidos = {
         omitido_manual:     'Lo omitiste vos. Reintentá cuando quieras.',
         saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',
         compras_sin_casillero: 'Quedaron compras sin casillero (5% sin 540, o facturas que no se pudieron repartir). El formulario quedó lleno y sin enviar.',
+        formulario_incompleto: 'El SRI pide un campo que el bot no puede elegir por vos — típicamente el casillero 203, el decreto que habilita la tarifa reducida del 5%. Abrí el borrador, elegí el decreto y enviá a mano.',
         identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
         sin_datos:          'No se pudieron extraer comprobantes.',
         no_declara_iva:     'Este contribuyente no tiene obligacion de IVA. Revisar su regimen en la ficha.',
@@ -2153,6 +2154,88 @@ async function frenarSiHayIvaSinUbicar(donde = '') {
         });
     }
     return true;
+}
+
+/**
+ * Lo que el formulario del SRI reclama y todavía no está puesto.
+ *
+ * El portal escribe sus reclamos en `panelMensajes` y **se queda en el
+ * formulario** hasta que se resuelvan: no hay resumen, no hay botón Aceptar,
+ * no hay saldo que leer. Eso importa porque el cierre mágico, al no llegar al
+ * resumen, echaba la culpa al selector del saldo y anotaba al contribuyente
+ * como `saldo_a_pagar`. **No había ningún saldo**: faltaba un campo.
+ *
+ * Pasó de verdad el 07-sep-2026, con dos contribuyentes al 5%:
+ *
+ *   «casillero 203. seleccione el decreto que determina la tarifa reducida
+ *    a aplicar.»
+ *
+ * Declarar al 5% en el 540/550 obliga a decir **qué decreto** habilita esa
+ * tarifa reducida, y eso es una elección legal: la pone el contador, no se
+ * adivina. Lo que sí corresponde es decirlo con esas palabras en vez de
+ * inventar un saldo.
+ *
+ * Los del casillero 625 son informativos y el flujo ya los saltea; se los
+ * excluye acá para no cambiar ese comportamiento.
+ *
+ * @returns {{textos: string[], casilleros: string[], resumen: string}}
+ *          `textos` vacío = el formulario no reclama nada.
+ */
+function loQuePideElFormulario() {
+    const vacio = { textos: [], casilleros: [], resumen: '' };
+
+    // Informativos conocidos: no frenan nada y ya se saltean río arriba.
+    const INFORMATIVOS = [
+        'casillero 625',
+        'facultad determinadora',
+        'código tributario',
+        'crédito tributario no haya superado los 5 años',
+        'artículo 68'
+    ];
+
+    let panel;
+    try {
+        panel = document.getElementById('frmFlujoDeclaracion:panelMensajes') ||
+                document.querySelector('[id*="panelMensajes"]');
+    } catch (e) { return vacio; }
+    if (!panel) return vacio;
+
+    // `offsetParent` no sirve acá tampoco: ver la nota del AGENTS.md.
+    if (typeof esVisible === 'function' && !esVisible(panel)) return vacio;
+
+    let items;
+    try {
+        items = Array.from(panel.querySelectorAll(
+            'li.estiloItemsMensajes, li[class*="Mensajes"], .ui-messages-warn li, ' +
+            '.ui-messages-error li, .ui-messages-info li'));
+    } catch (e) { return vacio; }
+
+    const textos = [];
+    items.forEach((li) => {
+        const t = (li.innerText || '').trim();
+        if (!t) return;
+        const bajo = t.toLowerCase();
+        if (INFORMATIVOS.some((p) => bajo.includes(p))) return;
+        if (textos.indexOf(t) === -1) textos.push(t);
+    });
+    if (textos.length === 0) return vacio;
+
+    // El número de casillero es lo único accionable del mensaje: dice dónde
+    // mirar. Se sacan del texto, sin suponer ninguno.
+    const casilleros = [];
+    textos.forEach((t) => {
+        const m = t.match(/casillero\s+(\d{3})/gi) || [];
+        m.forEach((c) => {
+            const n = c.replace(/\D/g, '');
+            if (n && casilleros.indexOf(n) === -1) casilleros.push(n);
+        });
+    });
+
+    const resumen = casilleros.length
+        ? `el formulario reclama el casillero ${casilleros.join(', ')}`
+        : 'el formulario reclama campos sin completar';
+
+    return { textos, casilleros, resumen };
 }
 
 function anotarBitacora(evento, detalle = '') {

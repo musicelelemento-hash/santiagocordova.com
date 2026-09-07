@@ -293,7 +293,9 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 540 (compras 5%)** | `concepto1271` — **CONFIRMADO 07-sep-2026** (se escribió en él) | Adquisiciones locales gravadas 5% con crédito · ver §9 |
 | **Casillero 508 (notas de venta)** | `concepto1735` — **CONFIRMADO 07-sep-2026** | Valor de las notas de venta recibidas |
 | **Casillero 117 (cantidad NV)** | `concepto258` — **CONFIRMADO 07-sep-2026** | Cantidad de notas de venta |
-| **Casillero 550 (NC del 540)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 540 |
+| **Casillero 550 (NC del 540)** | `concepto1281` — **CONFIRMADO 07-sep-2026** (escrito en dos contribuyentes) | Menos notas de crédito del 540 |
+| **Casillero 518 (NC de notas de venta)** | `concepto1740` — **CONFIRMADO 07-sep-2026** | Neto de notas de venta (508 menos NC) |
+| **Casillero 203 (decreto de tarifa reducida)** | *id sin confirmar — el campo EXISTE y es OBLIGATORIO al declarar 5%* | Sin él el portal no deja pasar al resumen · ver §9d |
 | **Casillero 560 (IVA generado del 540)** | *id sin confirmar — EXISTE* | Impuesto generado de las compras al 5% |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |
 | **Casillero 601 (Impuesto Causado)** | `concepto601` | Lectura de impuesto causado |
@@ -762,6 +764,42 @@ un cliente bloquearía al próximo.
 > Si aun así no apareciera, la plata **no** se manda al 500 por las dudas: se
 > anota y se frena.
 
+### 9d. El casillero 203 — declarar al 5% obliga a decir con qué decreto
+
+> Descubierto el 07-sep-2026, en la primera corrida en que el 540 y el 550 se
+> llenaron de verdad. Sin el 550 nunca se había llegado tan lejos.
+
+Llenar el 5% no alcanza. El portal **no deja pasar al resumen** y escribe en
+`panelMensajes`:
+
+> «Casillero 203. Seleccione el decreto que determina la tarifa reducida a
+> aplicar.»
+> «Casillero 203. El decreto seleccionado es incorrecto.»
+
+La tarifa del 5% la habilita un **decreto ejecutivo**, y el formulario pide
+cuál. **Eso es una elección legal: la hace el contador.** El bot no la adivina,
+por la misma regla de siempre — elegir el decreto equivocado es declarar mal.
+
+#### El daño no era el campo que faltaba: era el motivo inventado
+
+`ejecutarCierreMagico()` no llegaba al resumen, no encontraba el saldo, y
+anotaba a los dos contribuyentes como **`saldo_a_pagar`** — con saldo $0.00.
+Un motivo equivocado manda al contador a buscar plata que no existe, y el campo
+que falta sigue faltando.
+
+`loQuePideElFormulario()` en `02_servicios_y_memoria.js` lee `panelMensajes`,
+descarta los informativos del 625 (que el flujo ya saltea) y devuelve los
+reclamos con sus palabras más los números de casillero que nombran. El cierre
+lo consulta **antes** que al saldo: si el formulario reclama algo, esa es la
+causa y todo lo demás es ruido. El motivo de omisión pasó a ser
+**`formulario_incompleto`**, que dice qué abrir y qué elegir.
+
+**Pendiente**: el `id` del 203 y los decretos que ofrece. Salen de una pasada
+del botón 📐 con la sección del 5% en pantalla — y los decretos, de la lista
+del propio `<select>`, no de la memoria de una IA.
+
+Banco: `tests/iva5.html`, sección Ñ.
+
 #### Cómo se sale de la duda: el botón 📐
 
 En el HUD, entre 📜 y 🗔. **Siempre visible.** Abre un panel con
@@ -1006,7 +1044,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los ocho** en iframes y da un veredicto solo:
-**271 comprobaciones, verdes el 06-sep-2026**, en unos 16 segundos.
+**467 comprobaciones, verdes el 07-sep-2026**, en unos 16 segundos.
 
 De a uno, no en paralelo: ocho bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
@@ -1115,6 +1153,23 @@ Reglas de la ventana, probadas en `tests/claves.html`:
 
 > Una clave pegada en un chat, un correo o un ticket ya está comprometida:
 > hay que anularla y generar otra, aunque nunca se haya escrito en un archivo.
+
+### La marca de la clave del SRI — corregido el 07-sep-2026
+
+`SriCredentialVault.getSignature()` sirve para una sola cosa: saber si la clave
+guardada cambió desde el último rechazo. La armaba como
+`largo_primeras2_últimas2` **y la imprimía en la consola**:
+
+    🔑 [VAULT] Nueva clave detectada para … (firma anterior: NN_xx_yy, …)
+
+Eso es el largo exacto, el principio y el final de una contraseña del SRI, en
+el log que uno copia y pega en un chat cuando algo falla. Ahora la marca es un
+resumen que no se puede desandar (FNV-1a de 32 bits) y **no se imprime nunca**:
+el log dice que la clave cambió, y nada más.
+
+Las marcas viejas no coinciden con las nuevas, así que la primera vez cada
+contribuyente cuenta como «clave cambiada» y se le concede un intento. Es
+exactamente lo que corresponde con una clave que no se sabe si sirve.
 
 ### Rotar la de R2 — el camino, que no es el obvio
 
