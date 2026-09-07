@@ -506,12 +506,26 @@ async function ejecutarRecuperacionComprobante() {
     await syncDeclarationToSupabase(st.ruc, st.per, null, st.nombre, null, 'completado');
     await SafeStorage.remove(['recuperarComprobante', 'pendingAction', 'actionTimestamp']);
 
+    if (typeof SriLoop !== 'undefined') {
+        await SriLoop.marcarDeclarado(st.ruc, st.periodo, { nombre: st.nombre, cep, pdfSubido: true });
+    }
+
     if (window.sriAssistant?.showEliteToast) {
         window.sriAssistant.showEliteToast({
-            title: '🧾 Comprobante recuperado',
-            msg: `${st.nombre || st.ruc} · ${st.per}. No hizo falta volver a declarar.`,
+            title: '🧾 Comprobante recuperado y guardado',
+            msg: `${st.nombre || st.ruc} · ${st.per}. Subido a Supabase exitosamente.`,
             duration: 7000
         });
+    }
+
+    // Si el lote o auto-batch está activo, pasar al siguiente cliente
+    const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
+    const enLote = autoRes.auto_batch_enabled || autoRes.sri_auto_mode || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+    if (enLote && typeof handleBatchNextClient === 'function') {
+        console.log('⏩ [RECUPERAR] Comprobante subido a Supabase. Pasando al siguiente cliente del lote...');
+        await sleep(2000);
+        const hasNext = await handleBatchNextClient();
+        if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
     }
     return true;
 }
@@ -3160,21 +3174,39 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 });
             }
 
+            const af = await SafeStorage.get(['pending_sri_autofill', 'workflowPeriod']);
+            const quien = af.pending_sri_autofill || {};
+            const periodo = af.workflowPeriod;
+
             try {
-                const af = await SafeStorage.get(['pending_sri_autofill', 'workflowPeriod']);
-                const quien = af.pending_sri_autofill || {};
                 if (quien.ruc) {
                     if (typeof Omitidos !== 'undefined') {
                         await Omitidos.anotar(quien.ruc, 'ya_declarada', {
                             nombre: quien.name,
-                            detalle: 'El wizard marcó SUSTITUTIVA al seleccionar el período: ya estaba declarada.'
+                            detalle: 'El wizard marcó SUSTITUTIVA al seleccionar el período: ya estaba declarada. Recuperando comprobante.'
                         });
                     }
-                    if (typeof SriLoop !== 'undefined' && af.workflowPeriod) {
-                        await SriLoop.marcarDeclarado(quien.ruc, af.workflowPeriod, { nombre: quien.name });
+                    if (typeof SriLoop !== 'undefined' && periodo) {
+                        await SriLoop.marcarDeclarado(quien.ruc, periodo, { nombre: quien.name });
                     }
                 }
             } catch (e) { /* no frenar por error de registro */ }
+
+            // Si tenemos el contribuyente y el período, vamos DIRECTO a recuperar el comprobante
+            if (quien.ruc && periodo && typeof irARecuperarComprobante === 'function') {
+                safeStatus('🧾 Ya declarada (Sustitutiva) · Recuperando comprobante...');
+                if (window.sriAssistant) {
+                    window.sriAssistant.showEliteToast({
+                        title: '🧾 Redirigiendo a Consulta',
+                        msg: 'Este período ya fue declarado (SUSTITUTIVA). Yendo a Consulta de declaraciones para descargar el comprobante oficial y subirlo a Supabase...',
+                        duration: 6000
+                    });
+                }
+                console.log(`🧾 [WIZARD] Redirigiendo a Consulta de declaraciones para traer el comprobante de ${quien.name || quien.ruc}...`);
+                await sleep(1200);
+                await irARecuperarComprobante(quien.ruc, periodo, quien.name || '');
+                return; // Redirección en marcha
+            }
 
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod']);
 

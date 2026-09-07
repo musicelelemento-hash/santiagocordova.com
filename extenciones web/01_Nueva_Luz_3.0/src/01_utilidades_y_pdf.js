@@ -342,12 +342,27 @@ async function frenarSiEsSustitutiva(donde = '') {
       if (typeof Omitidos !== 'undefined') {
         await Omitidos.anotar(quien.ruc, 'ya_declarada', {
           nombre: quien.name,
-          detalle: 'El portal abrió una SUSTITUTIVA: el período ya estaba declarado'
+          detalle: 'El portal abrió una SUSTITUTIVA: el período ya estaba declarado. Recuperando comprobante.'
         });
       }
       // Constancia local para que el lote no vuelva a intentarlo.
       if (typeof SriLoop !== 'undefined' && af.workflowPeriod) {
         await SriLoop.marcarDeclarado(quien.ruc, af.workflowPeriod, { nombre: quien.name });
+      }
+
+      // 🧾 Si tenemos el periodo, vamos a Consulta de declaraciones a traer el comprobante oficial
+      if (af.workflowPeriod && typeof irARecuperarComprobante === 'function') {
+        console.log(`🧾 [SUSTITUTIVA] Redirigiendo a Consulta de declaraciones para recuperar el comprobante de ${quien.name || quien.ruc}...`);
+        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+          window.sriAssistant.showEliteToast({
+            title: '🧾 Redirigiendo a Consulta',
+            msg: 'Este período ya fue declarado. Yendo a descargar el comprobante oficial y guardarlo en Supabase...',
+            duration: 6000
+          });
+        }
+        await sleep(1200);
+        await irARecuperarComprobante(quien.ruc, af.workflowPeriod, quien.name || '');
+        return true;
       }
     }
   } catch (e) { /* registrar nunca puede impedir el freno */ }
