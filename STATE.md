@@ -211,18 +211,22 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 ## 📁 5. MAPA DE ARCHIVOS CLAVE
 
 ```text
-├── extenciones web/01_Nueva_Luz_3.0/
-│   ├── src/
-│   │   ├── 01_utilidades_y_pdf.js    <- Sincronización Supabase, subida R2, tokens
-│   │   ├── 02_servicios_y_memoria.js  <- SafeStorage, GhostMemory, semáforo SriLoop, Proveedores
-│   │   ├── 03_ingreso_y_sesion.js     <- Keycloak SSO, control de cookies, auto-login
-│   │   ├── 04_extraccion_datos.js     <- Extracción de facturas, retenciones y NC
-│   │   ├── 05_llenado_formulario.js   <- Matemática tributaria, casilleros, mapaCasilleros
-│   │   ├── 06_panel_interfaz.js       <- Interfaz HUD, extracción de período, control de lote
-│   │   └── 07_navegacion_sri.js       <- Wizard de declaraciones, detección de sustitutiva
-│   ├── build/content.js               <- BUNDLE GENERADO POR VITE (NO EDITAR DIRECTAMENTE)
-│   ├── shared_config.js               <- Credenciales públicas (Supabase URL, R2 endpoints)
-│   └── tests/                         <- Suites de validación HTML (periodo, login, iva5, etc.)
+├── extenciones web/
+│   ├── _EVIDENCIA_SRI/
+│   │   ├── BIBLIA_FORMULARIO_IVA_2011.md <- ESPECIFICACIÓN CANÓNICA CASILLEROS IVA 2011
+│   │   └── BIBLIA_PANTALLAS_SRI.md       <- CATÁLOGO DE CAPTURAS REALES DEL PORTAL
+│   └── 01_Nueva_Luz_3.0/
+│       ├── src/
+│       │   ├── 01_utilidades_y_pdf.js    <- Sincronización Supabase, subida R2, tokens
+│       │   ├── 02_servicios_y_memoria.js  <- SafeStorage, GhostMemory, semáforo SriLoop, Proveedores
+│       │   ├── 03_ingreso_y_sesion.js     <- Keycloak SSO, control de cookies, auto-login
+│       │   ├── 04_extraccion_datos.js     <- Extracción de facturas, retenciones y NC
+│       │   ├── 05_llenado_formulario.js   <- Matemática tributaria, casilleros, mapaCasilleros
+│       │   ├── 06_panel_interfaz.js       <- Interfaz HUD, extracción de período, control de lote
+│       │   └── 07_navegacion_sri.js       <- Wizard de declaraciones, detección de sustitutiva
+│       ├── build/content.js               <- BUNDLE GENERADO POR VITE (NO EDITAR DIRECTAMENTE)
+│       ├── shared_config.js               <- Credenciales públicas (Supabase URL, R2 endpoints)
+│       └── tests/                         <- Suites de validación HTML (periodo, login, iva5, etc.)
 │
 ├── santiagocordova-main/              <- REPO INDEPENDIENTE (APP WEB)
 │   ├── database/

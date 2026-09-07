@@ -894,10 +894,10 @@ La bandera `declaration_synced_flag` en `SafeStorage` es el candado que evita qu
 
 ---
 
-## 5b. Biblia de Pantallas (evidencia real del portal)
+## 5b. Biblia de Pantallas y del Formulario de IVA (evidencia real del portal)
 
-`extenciones web/_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md` es el catálogo de
-capturas reales del SRI que respalda la Matriz Tatuada de abajo.
+- `extenciones web/_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`: catálogo de capturas reales del SRI que respalda la Matriz Tatuada de abajo.
+- `extenciones web/_EVIDENCIA_SRI/BIBLIA_FORMULARIO_IVA_2011.md`: **especificación canónica del Formulario 2011** (todas las casillas de Ventas 401-499, Compras 500-565, Resumen 601-699, Retenciones 721-801, Totales 859-902, fórmulas oficiales, IDs DOM `conceptoNNN` y reglas de llenado).
 
 **Regla**: si un selector de la §6 no tiene entrada en la Biblia, es una
 suposición, no un hecho — trátalo como frágil y no construyas lógica de envío
