@@ -1364,12 +1364,54 @@ function clasificarTarifaIva(base, iva) {
     // puntos porcentuales: en una factura de $5 un centavo son 0,2 puntos.
     const holgura = Math.max(0.02, base * 0.001);
 
-    for (const t of TARIFAS_IVA) {
-        if (Math.abs(iva - base * t / 100) <= holgura) return { tarifa: t, motivo: 'cociente' };
+    // ── La MÁS CERCANA, no la primera que entre ─────────────────────────────
+    // Acá había un `for` que devolvía la primera tarifa dentro de la holgura, y
+    // `TARIFAS_IVA` empieza por el 5. En facturas de centavos eso es fatal: con
+    // base $0.10 la holgura ($0.02) es el 20% de la base y **todas** las
+    // tarifas caen dentro, así que ganaba siempre el 5% — el que manda plata a
+    // un casillero aparte y obliga a elegir un decreto.
+    //
+    // El 07-sep-2026 una factura de $0.10 (cociente real: 20%) se declaró al
+    // 5% y dejó a MIÑO GOMEZ sin poder enviar, con 157 facturas correctas
+    // detrás. Diez centavos.
+    const candidatas = TARIFAS_IVA
+        .map((t) => ({ t, dif: Math.abs(iva - base * t / 100) }))
+        .filter((c) => c.dif <= holgura)
+        .sort((a, b) => a.dif - b.dif);
+
+    const pct = (iva / base) * 100;
+
+    if (candidatas.length) {
+        let elegida = candidatas[0];
+
+        // **Al 5% no se llega por holgura.** Es la tarifa con consecuencias:
+        // casillero propio, decreto obligatorio y freno del envío. Se exige que
+        // el cociente esté de verdad cerca del 5%, no que quepa por centavos.
+        if (elegida.t === 5 && Math.abs(pct - 5) > 1) {
+            const otra = candidatas.find((c) => c.t !== 5);
+            if (!otra) {
+                return { tarifa: null,
+                         motivo: `el IVA es el ${pct.toFixed(1)}% de la base: cabe en el 5% sólo por ` +
+                                 'redondeo, y al 5% no se llega por holgura' };
+            }
+            elegida = otra;
+        }
+
+        // Cuando el monto es tan chico que el redondeo a dos decimales hace
+        // ambiguas varias tarifas, la respuesta honesta es «no se puede saber».
+        // Pero frenar un lote de 500 contribuyentes por diez centavos es
+        // desproporcionado: la plata no alcanza para mover ninguna aguja. Va a
+        // la tarifa más cercana y **queda dicho** que fue una aproximación.
+        if (candidatas.length > 1 && base < 1) {
+            return { tarifa: elegida.t,
+                     motivo: `monto ínfimo ($${base.toFixed(2)}): el redondeo hace ` +
+                             `indistinguibles ${candidatas.length} tarifas. Se toma la más ` +
+                             `cercana (${elegida.t}%), que en esta plata no cambia nada` };
+        }
+        return { tarifa: elegida.t, motivo: 'cociente' };
     }
 
-    const pct = (100 * iva / base).toFixed(2);
-    return { tarifa: null, motivo: `el IVA es el ${pct}% de la base y no coincide con ninguna tarifa (¿factura de tarifas mezcladas?)` };
+    return { tarifa: null, motivo: `el IVA es el ${pct.toFixed(2)}% de la base y no coincide con ninguna tarifa (¿factura de tarifas mezcladas?)` };
 }
 
 /**

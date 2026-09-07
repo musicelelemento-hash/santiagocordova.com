@@ -758,6 +758,48 @@
 
 
   // ══════════════════════════════════════════════════════════════════════
+
+  // ══ Q · diez centavos que frenaron una declaración ════════════════
+  sec('Q · al 5% no se llega por holgura');
+  // MIÑO GOMEZ, 07-sep-2026: de 157 facturas, una decía base $0.10 · IVA $0.02.
+  // Cociente real 20%, que no es ninguna tarifa. La holgura es
+  // `max($0.02, base×0.001)` — con base $0.10 eso es el 20% de la base, así
+  // que las CINCO tarifas caían dentro y ganaba la primera del array: el 5%.
+  //
+  //   🟡 [Factura 7] Leída al 5%: base $0.1, IVA $0.02. Va al 540/550.
+  //
+  // Ese centavo en el 540 hizo que el portal exigiera el casillero 203 (el
+  // decreto) y la declaración no se pudo enviar. Diez centavos, 157 facturas
+  // correctas detrás.
+  const c010 = clasificarTarifaIva(0.10, 0.02);
+  push('$0.10 con IVA $0.02 ya NO es 5%',    c010.tarifa === 5, false);
+  push('se toma la más cercana (15%)',       c010.tarifa, 15);
+  push('y dice que fue una aproximación',    /monto ínfimo/.test(c010.motivo), true);
+
+  // El 5% de verdad sigue siendo 5%: el arreglo no puede romper el caso real
+  // que hizo falta construir todo esto (REYES MARQUEZ, $3.438,10 al 5%).
+  push('un 5% legítimo sigue siendo 5%',      clasificarTarifaIva(3438.10, 171.91).tarifa, 5);
+  push('y por cociente, no por holgura',      clasificarTarifaIva(3438.10, 171.91).motivo, 'cociente');
+  push('otro 5% real (149.14 / 7.46)',        clasificarTarifaIva(149.14, 7.46).tarifa, 5);
+
+  // Y las tarifas normales no se movieron.
+  push('15% de siempre',                      clasificarTarifaIva(100, 15).tarifa, 15);
+  push('0% de siempre',                       clasificarTarifaIva(66, 0).tarifa, 0);
+  push('12% histórico',                       clasificarTarifaIva(100, 12).tarifa, 12);
+
+  // Un monto chico que cabe SOLO en el 5% sí puede ser 5%: la regla mira si el
+  // cociente está de verdad cerca del 5%, no el tamaño de la factura.
+  const chico5 = clasificarTarifaIva(20, 1);
+  push('$20 con IVA $1 sí es 5%',             chico5.tarifa, 5);
+  push('y por cociente',                      chico5.motivo, 'cociente');
+
+  // Una base grande con un cociente imposible sigue siendo «no sé»: ahí la
+  // plata sí alcanza para mover una aguja y hay que mirarla.
+  const raro = clasificarTarifaIva(1000, 200);
+  push('base grande y cociente imposible → null', raro.tarifa, null);
+  push('y lo explica',                        /no coincide con ninguna tarifa/.test(raro.motivo), true);
+
+
   const fallos = ok.filter(x=>!x).length;
   document.getElementById('out').textContent =
     L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'

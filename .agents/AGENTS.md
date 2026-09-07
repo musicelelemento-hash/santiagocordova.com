@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los catorce bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **531 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
+scripts). **544 comprobaciones, verdes el 07-sep-2026.** Si tu cambio baja ese
 número, algo se rompió; si lo sube, dejá dicho qué agregaste.
 
 ---
@@ -972,7 +972,7 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 117 (cantidad NV)** | `concepto258` — **CONFIRMADO 07-sep-2026** | Cantidad de notas de venta |
 | **Casillero 550 (NC del 540)** | `concepto1281` — **CONFIRMADO 07-sep-2026** (escrito en dos contribuyentes) | Menos notas de crédito del 540 |
 | **Casillero 518 (NC de notas de venta)** | `concepto1740` — **CONFIRMADO 07-sep-2026** | Neto de notas de venta (508 menos NC) |
-| **Casillero 203 (decreto de tarifa reducida)** | *id sin confirmar — el campo EXISTE y es OBLIGATORIO al declarar 5%* | Sin él el portal no deja pasar al resumen · ver §9d |
+| **Casillero 203 (decreto de tarifa reducida)** | `concepto91` — **CONFIRMADO 07-sep-2026** (📐, único `<select>` del formulario) | 17 opciones, **todas del 8%** · ver §9d |
 | **Casillero 560 (IVA generado del 540)** | *id sin confirmar — EXISTE* | Impuesto generado de las compras al 5% |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |
 | **Casillero 601 (Impuesto Causado)** | `concepto601` | Lectura de impuesto causado |
@@ -1461,9 +1461,43 @@ Llenar el 5% no alcanza. El portal **no deja pasar al resumen** y escribe en
 > aplicar.»
 > «Casillero 203. El decreto seleccionado es incorrecto.»
 
-La tarifa del 5% la habilita un **decreto ejecutivo**, y el formulario pide
-cuál. **Eso es una elección legal: la hace el contador.** El bot no la adivina,
-por la misma regla de siempre — elegir el decreto equivocado es declarar mal.
+#### ⚠️ CORRECCIÓN del 07-sep-2026: los decretos son del **8%**, no del 5%
+
+Esta sección decía «el decreto que habilita el 5%». **Era una suposición mía, y
+la evidencia dice otra cosa.** El 📐 leyó el desplegable real:
+
+```
+🔽 concepto91 · 17 opciones
+   [0]  Seleccione el decreto que aplique   ← elegida
+   [1]  Decreto ejecutivo 339 (8%)
+   [2]  Decreto ejecutivo 644 (8%)
+   [3]  Decreto ejecutivo 190 (8%)
+   … y así las dieciséis, TODAS con (8%)
+```
+
+**Ninguna dice 5%.** El 8% es la tarifa reducida de los **feriados** (los
+decretos de descuento de IVA por turismo). Así que el 203 no es «el decreto
+del 5%»: es el decreto de una tarifa reducida distinta.
+
+Queda **sin resolver** por qué el portal lo exigió al cargar el 540. Dos
+hipótesis, ninguna comprobada:
+
+- que el 540 sea «tarifa reducida» en general y el porcentaje lo fije el
+  decreto — en cuyo caso el rótulo «5%» de la captura y estos decretos son la
+  misma fila y falta entender cómo se relacionan;
+- o que el portal valide el 203 apenas hay algo en esa fila, sea lo que sea.
+
+**Hasta saberlo, el bot no elige ningún decreto.** Elegir el equivocado es
+declarar mal, y acá ni siquiera está claro cuál correspondería.
+
+#### Lo que SÍ quedó resuelto: por qué se disparó
+
+**Por diez centavos.** De las 157 facturas de MIÑO GOMEZ, una decía
+base $0.10 · IVA $0.02 — cociente 20%, que no es ninguna tarifa. El
+clasificador la mandó al 540 y eso hizo que el portal exigiera el 203. Ver la
+corrección de la holgura, abajo.
+
+Sin ese centavo mal clasificado, MIÑO GOMEZ se declaraba normal.
 
 #### El daño no era el campo que faltaba: era el motivo inventado
 
@@ -1479,9 +1513,39 @@ lo consulta **antes** que al saldo: si el formulario reclama algo, esa es la
 causa y todo lo demás es ruido. El motivo de omisión pasó a ser
 **`formulario_incompleto`**, que dice qué abrir y qué elegir.
 
-**Pendiente**: el `id` del 203 y los decretos que ofrece. Salen de una pasada
-del botón 📐 con la sección del 5% en pantalla — y los decretos, de la lista
-del propio `<select>`, no de la memoria de una IA.
+#### El agujero de la holgura — al 5% no se llega por centavos
+
+`clasificarTarifaIva()` tenía un `for` que devolvía **la primera tarifa dentro
+de la holgura**, y `TARIFAS_IVA` empieza por el 5. La holgura es
+`max($0.02, base × 0.001)`; con base $0.10 eso es el **20% de la base**, así
+que las cinco tarifas caían dentro y ganaba siempre el 5%:
+
+```
+ 5% -> IVA sería $0.0050  dif $0.0150  ✓ cae dentro
+12% -> IVA sería $0.0120  dif $0.0080  ✓ cae dentro
+13% -> IVA sería $0.0130  dif $0.0070  ✓ cae dentro
+14% -> IVA sería $0.0140  dif $0.0060  ✓ cae dentro
+15% -> IVA sería $0.0150  dif $0.0050  ✓ cae dentro
+```
+
+Tres reglas nuevas:
+
+1. **La más cercana**, no la primera del array.
+2. **Al 5% no se llega por holgura.** Es la tarifa con consecuencias —
+   casillero propio, decreto obligatorio, freno del envío— así que se exige
+   que el cociente esté a menos de un punto del 5%, no que quepa por centavos.
+3. Cuando el monto es tan chico que el redondeo hace ambiguas varias tarifas
+   (base < $1), va a la más cercana **y se dice que fue una aproximación**.
+   Frenar un lote de 500 por diez centavos es desproporcionado: esa plata no
+   mueve ninguna aguja. Con una base grande y un cociente imposible sigue
+   siendo `null`, porque ahí sí hay que mirarlo.
+
+Banco: `tests/iva5.html`, sección Q — con la factura real que lo destapó y con
+los dos 5% legítimos de REYES MARQUEZ, para que el arreglo no rompa el caso que
+hizo falta construir todo esto.
+
+**Pendiente**: entender la relación entre el 540 y el 203. Hace falta ver la
+pantalla del formulario con la fila del 540 y la del 203 juntas.
 
 Banco: `tests/iva5.html`, sección Ñ.
 
@@ -1729,7 +1793,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los quince** en iframes y da un veredicto solo:
-**531 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+**544 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -1743,7 +1807,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 
 | Banco | Qué cuida | ✓ |
 | :--- | :--- | --: |
-| `iva5` | el 5%, el XML, el casillero 203, los desplegables, la botonera | 160 |
+| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 173 |
 | `catastro` | la bisección, sobre todo en los bordes | 31 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
 | `notasventa` | que un silencio no se convierta en un cero | 35 |
