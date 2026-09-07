@@ -435,6 +435,16 @@ function parseImporteEstricto(texto) {
 function avisoLlaveWeb(status) {
   if (status !== 401 && status !== 403) return '';
 
+  // Antes que nada: ¿HAY una llave? Si `shared_config.js` no cargó, la
+  // petición sale sin `apikey` y Supabase contesta 401 igual — pero decir «la
+  // rechaza» manda a rotar una credencial que está sana. Un diagnóstico
+  // equivocado cuesta más que no dar ninguno.
+  if (!SC_SUPABASE_ANON_KEY) {
+    return ' · pero NO hay ninguna llave cargada: la petición salió sin `apikey`. ' +
+           'No es que Supabase la rechace, es que no había qué mandar. ' +
+           'Revisá que shared_config.js se cargue antes del content script, o pegá una en Ajustes.';
+  }
+
   // Si la llave salió de Ajustes, lo primero que hay que probar NO es buscar
   // otra: es BORRAR la de Ajustes. Pisa a la del código, y la del código puede
   // estar perfectamente sana — pasó el 07-sep-2026 y costó una corrida entera

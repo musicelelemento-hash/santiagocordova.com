@@ -551,6 +551,21 @@ SafeStorage.get(null).then(async (items) => {
                 const cont = rr.sc_rescates || {};
                 const veces = (cont[cliente.ruc] || 0) + 1;
 
+                // Un lote TERMINADO no se rescata. El 07-sep-2026 el log
+                // cerró con tres rescates sobre un contribuyente ya omitido y
+                // un «se detiene el lote — algo borra las credenciales»,
+                // DESPUÉS de haber anunciado «¡Lote completado!». Un lote que
+                // terminó bien no puede despedirse con un mensaje de falla:
+                // el que lo lee mañana cree que se rompió.
+                // Estar en el último de la cola y sin credenciales significa
+                // que ya se lo procesó (u omitió) y el lote se acabó.
+                if ((sem.indice || 0) >= (sem.cola || []).length - 1) {
+                    console.log('🏁 [BUCLE] El lote ya terminó y este contribuyente quedó omitido. ' +
+                                'No hay nada que rescatar.');
+                    await SriLoop.detener('Lote terminado');
+                    return;
+                }
+
                 if (veces > 2) {
                     console.error(`🚑 [RESCATE] ${cliente.name || cliente.ruc} ya se rescató 2 veces y sigue sin credenciales. Se detiene el lote.`);
                     anotarBitacora('⛔ lote detenido', `rescate agotado en ${cliente.name || cliente.ruc}`);

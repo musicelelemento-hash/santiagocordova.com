@@ -368,11 +368,19 @@ async function llenarCompras(data) {
             // buscador por número no dio con él —pasó el 07-sep-2026, y dejó
             // el bruto cargado y el neto vacío, que es PEOR que no haber
             // cargado nada— se lo rescata por vecindad.
-            if (!ok550 && input540) {
-                const vecino = vecinoDeFila(input540);
+            //
+            // La referencia se vuelve a pedir ACÁ y no se reusa la de arriba:
+            // cuando se buscó el 540 la sección todavía estaba colapsada («540
+            // encontrado pero OCULTO»), así que aquel elemento no tenía
+            // tamaño y no servía para medir nada.
+            const ref540 = (await encontrarInputPorCasillero('540')) || input540;
+            if (!ok550 && ref540) {
+                const vecino = vecinoDeFila(ref540);
                 if (vecino) {
                     console.log(`  🔎 El 550 no salió por número; se toma el vecino de fila del 540: id=${vecino.id || '(sin id)'}`);
                     ok550 = await llenarCampo('550', valor550, vecino);
+                } else {
+                    console.warn('  ⚠️ El 550 tampoco salió por vecindad. Se anota y NO se envía.');
                 }
             }
 
@@ -436,9 +444,12 @@ async function llenarCompras(data) {
 
             let ok518 = await llenarCampo('518', valor518);
             // Y si no sale por número, es el vecino de fila del 508. Misma
-            // lección que el 550: la estructura de la pantalla es un dato.
-            if (!ok518 && input508) {
-                const vecino = vecinoDeFila(input508);
+            // lección que el 550, incluida la de pedir la referencia de nuevo:
+            // un elemento que se buscó con la sección colapsada no tiene
+            // tamaño y no sirve para medir.
+            const ref508 = (await encontrarInputPorCasillero('508')) || input508;
+            if (!ok518 && ref508) {
+                const vecino = vecinoDeFila(ref508);
                 if (vecino) {
                     console.log(`  🔎 El 518 no salió por número; se toma el vecino de fila del 508: id=${vecino.id || '(sin id)'}`);
                     ok518 = await llenarCampo('518', valor518, vecino);
@@ -1112,7 +1123,30 @@ function sriMapaCasilleros(opciones = {}) {
 function vecinoDeFila(referencia) {
     if (!referencia) return null;
     const rr = referencia.getBoundingClientRect();
-    if (!rr.width || !rr.height) return null;
+
+    // Sin geometría no se puede medir «la misma altura» — pasa cuando la
+    // sección todavía está colapsada. Antes se devolvía null y el rescate se
+    // rendía en la primera línea, EN SILENCIO: el 07-sep-2026 dejó $4.507,72
+    // al 5% con el bruto cargado y el neto vacío.
+    //
+    // Se cae al orden del DOM dentro de la fila real: el neto es el próximo
+    // input de texto después del bruto. Menos preciso que medir, pero
+    // infinitamente mejor que rendirse sin decir nada.
+    if (!rr.width || !rr.height) {
+        const fila = referencia.closest('tr') && referencia.closest('tr').closest('table')
+            ? referencia.closest('table').closest('tr') || referencia.closest('tr')
+            : referencia.closest('tr');
+        const ambito = fila || referencia.closest('table') || document.body;
+        const todos = Array.from(ambito.querySelectorAll('input[type="text"]'))
+            .filter((el) => !el.disabled && !el.readOnly);
+        const i = todos.indexOf(referencia);
+        const siguiente = (i >= 0 && i + 1 < todos.length) ? todos[i + 1] : null;
+        if (siguiente) {
+            console.log('   📐 Sin geometría (¿sección colapsada?): se toma el siguiente ' +
+                        'input de la fila por orden del DOM.');
+        }
+        return siguiente;
+    }
 
     // El ámbito se abre de a poco, igual que en `encontrarInputPorCasillero`.
     // `closest('tr')` a secas devuelve la fila de la tabla ANIDADA —el SRI mete
