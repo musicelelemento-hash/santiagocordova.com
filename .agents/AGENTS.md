@@ -34,6 +34,241 @@ edad, que preguntan lo mismo sobre el mismo RUC.
 
 ---
 
+## 0b. TABLERO DE PENDIENTES — empezá por acá
+
+> Actualizado el **07-sep-2026**. Este documento pasa las 1.400 líneas y sus
+> secciones **no están en orden** (la §9c vive después de la §10, la §9b
+> después de la §9d). Esta sección es el índice de lo que falta, con el
+> puntero a dónde está contado en detalle.
+>
+> **La regla que gobierna todo lo de abajo**: cuando algo depende de criterio
+> contable o legal, el bot **junta los datos y los muestra; no decide**. Una
+> suposición presentada como dato es lo único que este proyecto no perdona —
+> la declaración lleva la firma del contador, no la del software.
+
+### Lo que está mordiendo AHORA
+
+| # | Qué | A quién frena | Detalle |
+| :-: | :--- | :--- | :--- |
+| 1 | **Casillero 203 · el decreto del 5%** | **todo contribuyente con compras al 5%** — no se puede enviar | §9d |
+| 2 | **Supabase rechaza la llave (401)** | las métricas del panel web, de todos | §0b.2 |
+| 3 | **jsPDF nunca carga** (CSP `unsafe-eval`) | el PDF de respaldo sale simple, siempre | §0b.3 |
+| 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
+| 5 | **La clave de R2 sigue en el repositorio** | seguridad, ya | §10a |
+
+### Lo que falta construir, por tamaño
+
+| Qué | Estado | Quién lo cierra | Dónde |
+| :--- | :--- | :--- | :--- |
+| Laboratorio de proveedores · el mapa CIIU → crédito | cimiento hecho, falta el mapa | **el contador** | §7 · §9b · §0b.1 |
+| Casilleros 502 / 512 (sin derecho a crédito) | `id` sin confirmar | 📐 + Biblia | §9a · §0b.5 |
+| Casillero 560 (IVA generado del 540) | `id` sin confirmar | 📐 + Biblia | §6 C |
+| Notificar declaraciones por WhatsApp | sala de envío lista, falta el automático | código + cuenta Meta | §0b.6 |
+| Email automático con el PDF adjunto | decidido, no empezado | código | §0b.6 |
+| Tipos de comprobante que faltan (ND, liquidación) | códigos sin leer del portal | una consulta al `<select>` | §8a |
+| Empresas fantasmas | dataset sin bajar | código | §10 |
+| El XML, cableado al flujo automático | parser y descarga hechos, no se disparan solos | código | §11 · §0b.7 |
+| Cambio de clave por lote | traza guardada, nada construido | código | §8c |
+| Botones de un clic desde la ficha del cliente | ideas anotadas | código | web §6 |
+
+---
+
+### 0b.1 · El laboratorio de proveedores — qué falta exactamente
+
+**Lo que YA funciona** (§7, no hace falta reconstruirlo):
+
+- `Proveedores` en `02_servicios_y_memoria.js`, marca `sc_proveedores`.
+- Se aprende **mirando**: cada factura y cada NC deja anotado a su proveedor,
+  desde el TXT de recibidos, la tabla del portal y las notas de crédito. Las
+  retenciones **no** entran: las emite el cliente que te retuvo.
+- `registrarLote()` cuenta **a qué tarifa factura cada proveedor**
+  (`tarifas: {'15':n,'5':n,'0':n,'?':n}`). Eso es lo que resuelve la
+  ambigüedad de las mezcladas que caben de dos maneras (§9a): un supermercado
+  no puede facturar al 5%, y eso no hay que preguntárselo a nadie.
+- El catastro de El Oro adentro (`vendor/catastro_eloro.txt`, 283.879 RUC,
+  ancho fijo y ordenado, bisección sobre el texto) completa la **actividad**.
+- `sugerirDesdeIA()` para los que ni el catastro cubre, por el service worker,
+  mandando **sólo nombre y actividad pública** — nunca RUC ni importes.
+- La cascada: **decisión del contador ≫ catastro ≫ IA**, y una sugerencia
+  nunca pisa un `origen: 'usuario'`.
+- El panel **🏷️** (cajón 🧰) muestra la actividad del cliente arriba, los del
+  5% primero, chapas con las tarifas vistas, y bandera roja al proveedor
+  SUSPENDIDO que sigue emitiendo.
+- Bancos: `tests/proveedores.html` (58) y `tests/catastro.html` (31).
+
+**Lo que falta, y NO lo puede poner una IA:**
+
+1. **El mapa (tarifa · actividad del proveedor · actividad del cliente) →
+   ¿da crédito tributario?** Son los **tres** datos juntos, dicho por el
+   usuario el 06-sep-2026: *«la herramienta tiene que saber de IVA porcentaje
+   y la actividad para saber si es crédito tributario, además saber la
+   actividad del cliente para que sea compatible»*. Una compra da crédito
+   cuando alimenta una actividad que a su vez está gravada: la misma factura
+   da distinta respuesta para un constructor que para otro rubro.
+   `Proveedores.porQueDecidir(rucProveedor, rucCliente)` ya junta los tres y
+   devuelve `credito: null` mientras nadie haya decidido. **`null` no es «no
+   da crédito».**
+2. **El casillero donde va lo no deducible** (502/512) — ver §0b.5.
+3. **El interruptor preguntar / seguir** para los desconocidos. Hoy rige el
+   modo «seguir» de hecho: un proveedor sin clasificar va donde va hoy y queda
+   en la lista de pendientes. **Nunca al 502 por las dudas** — mandarlo ahí le
+   quita al contribuyente un crédito que quizá le corresponde.
+
+**Y no se olvide**: esta base es de **tres** proyectos, no de uno (§7). El
+mismo dato responde al IVA, al Anexo de Gastos Personales y a la devolución de
+IVA de tercera edad. Por eso se guardan `actividad` y `ciiu` **además** de
+`deducible`, y por eso `exportar()` los saca en TSV. Cuando se arme el
+proyecto de tercera edad, la parte cara ya va a estar hecha.
+
+### 0b.2 · Supabase: el 401 que se lleva las métricas
+
+La declaración se hace bien y el comprobante se guarda — por eso el fallo pasa
+desapercibido. Lo que se pierde son las métricas del panel web.
+
+Lo que ya se sabe, para no volver a empezar de cero:
+
+- La llave del código (`SC_SUPABASE_ANON_KEY` en `01_utilidades_y_pdf.js`)
+  **devolvió HTTP 200** al probarla desde Node el 07-sep-2026.
+- Una llave guardada en **Ajustes pisa a la del código**. Una llave de repuesto
+  rota tapa a la buena en silencio: el arreglo suele ser **borrar la de
+  Ajustes**, no salir a buscar una nueva. 🩺 prueba las dos y lo dice.
+- `avisoLlaveWeb()` distingue tres casos: no hay ninguna llave cargada (la
+  petición sale sin `apikey`), la rechazada es la de Ajustes, o es la del
+  código.
+- En la corrida del 07-sep también hubo **HTTP 500**, **HTTP 521** (Cloudflare:
+  origen caído) y un error de **CORS**. Eso apunta al proyecto de Supabase, no
+  a la llave. **Verificar el estado del proyecto antes de tocar credenciales.**
+
+> Vale como regla general, y costó media tarde descubrirla: **una credencial
+> de repuesto que no anda es peor que no tener repuesto.**
+
+### 0b.3 · jsPDF no puede cargar, y no es un bug del código
+
+```
+⚠️ [jsPDF] No disponible; se usará el PDF de respaldo simple:
+Evaluating a string as JavaScript violates … 'unsafe-eval' is not an allowed source
+```
+
+La CSP de MV3 prohíbe `unsafe-eval` y jsPDF lo usa. **No afecta al PDF oficial
+del SRI**, que se captura por `fetch` y funciona (113.276 bytes medidos el
+07-sep-2026). Sólo afecta al respaldo maquetado: `generateValidPdfBase64()`
+arma igual un PDF válido a mano, así que nunca es fatal.
+
+Cuidado con una consecuencia que sí importa: cuando la declaración **no se
+envía** (queda en borrador), igual se sube un PDF de respaldo a R2 y se
+registra. Es un marcador de posición donde va un comprobante. Antes de darlo
+por bueno, revisar que el estado en Supabase diga `por_pagar` /
+`inconsistencia` y no «declarado».
+
+### 0b.4 · Los 9 que declararon sin comprobante guardado
+
+El propio lote los lista al terminar y dice qué hacer:
+
+```
+🧾 [BUCLE] 9 declararon pero su comprobante NO quedó guardado: …
+   Se recuperan desde Consulta de declaraciones, sin volver a declarar.
+```
+
+Es exactamente el objetivo del §0. Se disparan con el botón **🧾** del cajón
+🧰 (`bajarTodosLosComprobantes()`) o `sriTraerComprobantes()` en consola.
+**No hay que volver a declarar nada.**
+
+### 0b.5 · Los `id` que faltan — cómo se consiguen, y cómo NO
+
+Faltan: **502 / 512** (sin derecho a crédito), **560** (IVA generado del 540) y
+**203** (el decreto de la tarifa reducida).
+
+**El único camino legítimo es el botón 📐** del cajón 🧰, con el formulario
+abierto: lista todos los casilleros reales con su `id`, rótulo y si son
+editables, resalta los del 5% y los del 502/512, y copia una tabla en Markdown
+lista para pegar en la Biblia (`_EVIDENCIA_SRI/BIBLIA_PANTALLAS_SRI.md`).
+Desde consola es `sriMapaCasilleros({ desde, hasta })`.
+
+Es un botón y no un comando a propósito: **Chrome bloquea el pegado en la
+consola** (protección contra self-XSS, que pide escribir `allow pasting`), y un
+dato que sólo se saca escribiendo a mano es un dato que no se saca.
+
+> ⛔ **Prohibido suponer un `id` por patrón.** El 550 resultó ser
+> `concepto1281` y el 540 `concepto1271` — el patrón existía, y aun así sólo
+> se cablearon **después** de que el bot escribiera en ellos, en dos
+> contribuyentes reales. Eso es lo que pide la §5b: evidencia, no simetría.
+
+### 0b.6 · Notificar las declaraciones — dónde está y qué falta
+
+> El detalle vive en **`santiagocordova-main/.agents/AGENTS.md` §5**. Acá va lo
+> justo para saber que existe y no reconstruirlo.
+
+**Hecho (07-sep-2026)**: `components/features/SalaDeEnvio.tsx`. El botón
+«💬 Notificar WhatsApp» de la matriz la abre con los clientes seleccionados.
+Una pestaña por vez, dos teclas por cliente (Enter abre, Enter confirma, S
+saltea), y **el mensaje lleva el enlace al comprobante** firmado por 30 días
+(`linkDelComprobante` en `services/fileService.ts`).
+
+Nació porque el envío masivo llamaba a `window.open` una vez por cliente en el
+mismo tick: el navegador dejaba pasar dos o tres y **bloqueaba el resto sin
+avisar**, y el código marcaba a los 27 como notificados igual. Clientes
+registrados como avisados sin haber recibido nada.
+
+**Falta, en este orden:**
+
+1. **Email automático con el PDF adjunto** — elegido por el usuario como lo
+   siguiente. Lo caro ya está hecho: `telegram-bot/src/gmail.ts:100` envía por
+   la API de Gmail y `telegram-bot/src/database_ops.ts` ya lee
+   `sri_declaraciones`. Gmail da 500 envíos por día, de sobra para 500
+   contribuyentes una vez al mes. Es el único canal donde el comprobante viaja
+   **adjunto** y sin que nadie haga clic.
+2. **WhatsApp Cloud API (Meta)** — el único camino oficial a «un botón y
+   salieron los 500», y el único que adjunta el PDF por WhatsApp. Necesita
+   cuenta de Meta Business, número dedicado y plantilla aprobada. Meta cobra
+   por mensaje y sus condiciones se mueven seguido: **verificar el precio
+   actual antes de comprometerse**, no confiar en lo que recuerde una IA.
+3. **Verificar la sala en pantalla con datos reales** — nunca se hizo, porque
+   llegar a la matriz necesita sesión.
+
+> ⚠️ **`whatsapp-web.js` / Baileys están DESCARTADOS.** Son clientes no
+> oficiales que se hacen pasar por WhatsApp Web. Funcionan, son gratis, y son
+> lo que contesta cualquier tutorial. Pero violan los términos y el número que
+> se banea es **el del estudio**, por donde escriben 500 contribuyentes. No
+> construir esto salvo pedido explícito del usuario sabiendo el riesgo.
+
+### 0b.7 · El XML: construido, no cableado
+
+`parsearXmlComprobante()`, `repartirXmlEnResumen()`, `descargarXmlComprobante(N)`
+y `traerXmlDeComprobantes([…])` funcionan y están probados (§11). Lo que falta
+es **dispararlos solos** para los pocos casos que los necesitan:
+
+- las facturas que quedaron **sin tarifa reconocible** (`resumen.ambiguas`),
+- las que el cociente leyó como **5%**, para confirmar que no son mezcladas,
+- las candidatas a **activo fijo**, donde además se quiere ver qué se compró.
+
+Son unas pocas peticiones por cliente, no 27. `traerXmlDeComprobantes()` ya
+pausa 700 ms entre una y otra y corta a las 40, para no despertar al WAF.
+
+### 0b.8 · Cosas chicas anotadas, para que no se pierdan
+
+- **`corsproxy.io` dejó de ser gratuito.** `fetchSRIPublicData()` en
+  `services/sri.ts` lo sigue usando y devuelve **HTTP 403**
+  (`keyless_legacy_url`). Autocompletar al crear un cliente y validar un RUC
+  están fallando en producción.
+- **El endpoint `movil-servicios/api/v1.0/contribuyente/{RUC}`** está detrás de
+  un WAF. Falló desde curl con cabeceras completas y por proxy. Falta probarlo
+  **desde el content script con la sesión del usuario** — el único contexto
+  donde tiene chance de pasar.
+- **R2**: rotar la clave (§10a: el token nuevo se crea en *R2 Object Storage →
+  Manage R2 API Tokens*, **no** en *Mi Perfil → API Tokens*, y la rotación
+  **termina al borrar el viejo**, no al crear el nuevo), sacar
+  `R2_SECRET_ACCESS_KEY` de `shared_config.js`, y **deshabilitar el dominio
+  público `pub-*.r2.dev`** — las rutas nuevas ya no se deducen del RUC, pero
+  los comprobantes subidos antes del 07-sep-2026 sí.
+- **A vigilar**: en la corrida del 07-sep apareció un `🔑 [VAULT] … para
+  1103034052001` seguido en la línea siguiente de `⏭️ [OMITIDO] APOLO PALACIOS`
+  (RUC `0704789205001`). Dos contribuyentes pegados. Puede ser coincidencia de
+  dos flujos corriendo juntos; si vuelve a verse, es contaminación entre
+  clientes y hay que buscarla igual que se buscó la que resolvió
+  `accionDeQuien` (§2).
+
+---
+
 ## 1. Arquitectura de la Extensión (Nueva Luz 3.0)
 
 La extensión dejó de ser un solo archivo monolítico (`content.js`). Ahora utiliza **Vite** para concatenar ordenadamente múltiples archivos `.js` ubicados en `src/`.
@@ -416,11 +651,15 @@ gasto y lo decide el contador.
 
 ### Lo que falta
 
-- El **mapa CIIU → deducible**: criterio contable, lo pone el contador.
+- El **mapa CIIU → deducible**: criterio contable, lo pone el contador. Y no
+  es sólo el CIIU del proveedor: son **tres** datos juntos (§9b).
 - El **casillero** donde va lo no deducible (502/512) — sin confirmar (§9a).
 - El interruptor **preguntar / seguir** para los desconocidos. Hoy rige el modo
   por defecto de hecho: un proveedor sin clasificar va donde va hoy y queda en
   la lista, **nunca al 502 por las dudas**.
+
+> 🧭 Esto está resumido, con el estado de cada pieza, en el tablero de la
+> **§0b.1**. Si vas a retomar el laboratorio de proveedores, empezá por ahí.
 
 ---
 
@@ -583,11 +822,15 @@ automatización.
 de venta es justo lo que haría inservible el interruptor. Un período con datos
 lo despierta solo, y `volverAPreguntar(ruc)` lo despierta a mano.
 
-Los `id` del 508 y el 117 **no están confirmados**: se buscan por número de
-casillero. Si hay dato y el casillero no aparece, la plata **no** se manda a
-otro lado — se anota en `iva_sin_ubicar` y el cierre mágico frena (§9a).
+**Los tres `id` quedaron confirmados el 07-sep-2026** — el bot escribió en
+ellos: `508 → concepto1735`, `518 → concepto1740`, `117 → concepto258`. Están
+en el `fieldMap` y en la Matriz de la §6.
 
-Banco: `tests/notasventa.html` (23 comprobaciones, verdes el 06-sep-2026).
+Igual se conserva la búsqueda por número de casillero como respaldo: si hay
+dato y el casillero no aparece, la plata **no** se manda a otro lado — se
+anota en `iva_sin_ubicar` y el cierre mágico frena (§9a).
+
+Banco: `tests/notasventa.html` (35 comprobaciones, verdes el 07-sep-2026).
 
 ### 8c. Cambio de clave por lote
 
@@ -1043,24 +1286,39 @@ subida · Panel.
 
 ### Los bancos de prueba, en una sola página
 
-`tests/index.html` corre **los ocho** en iframes y da un veredicto solo:
-**467 comprobaciones, verdes el 07-sep-2026**, en unos 16 segundos.
+`tests/index.html` corre **los trece** en iframes y da un veredicto solo:
+**467 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
-De a uno, no en paralelo: ocho bancos a la vez se pisan el almacenamiento
+Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
+levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
+`/tests/index.html`. **Hace falta el servidor**: los `file://` no ejecutan
+scripts.
+
+De a uno, no en paralelo: trece bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
 cada uno, así que un banco nuevo no necesita saber que esta página existe —
 alcanza con agregarlo a la lista `BANCOS`.
 
-| Banco | Qué cuida |
-| :--- | :--- |
-| `iva5` | que una compra al 5% no se declare como 15%, el XML, la botonera |
-| `catastro` | la bisección, sobre todo en los bordes |
-| `proveedores` | que una sugerencia no pise al contador |
-| `notasventa` | que un silencio no se convierta en un cero |
-| `chequeo` | que avise de lo que va a morder, sin filtrar claves |
-| `esperas` | que se siga apenas el portal contesta |
-| `subidas` | que «Failed to fetch» diga algo accionable |
-| `claves` | que la pantalla nunca muestre el valor guardado |
+| Banco | Qué cuida | ✓ |
+| :--- | :--- | --: |
+| `iva5` | el 5%, el XML, el casillero 203, los `id` cableados, la botonera | 149 |
+| `catastro` | la bisección, sobre todo en los bordes | 31 |
+| `proveedores` | que una sugerencia no pise al contador | 58 |
+| `notasventa` | que un silencio no se convierta en un cero | 35 |
+| `chequeo` | que avise de lo que va a morder, sin filtrar claves | 45 |
+| `esperas` | que se siga apenas el portal contesta | 20 |
+| `subidas` | que «Failed to fetch» diga algo accionable | 27 |
+| `clavevencida` | que se detecte antes de navegar, sin cambiar la clave | 19 |
+| `claves` | que la pantalla nunca muestre el valor guardado | 28 |
+| `resumen` | que «Pendiente por cubrir» le gane al total en cero | 15 |
+| `rutas` | que con una cédula ajena no se baje la declaración de nadie | 14 |
+| `login` | que el bot no se lea a sí mismo y crea que lo rechazaron | 11 |
+| `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
+
+> **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
+> trece se escribió por completitud: cada uno cuida un fallo que ya llegó a
+> pantalla y costó un lote. Si arreglás algo que salió de un log real, dejale
+> su comprobación antes de cerrar.
 
 ### 🩺 El chequeo
 
