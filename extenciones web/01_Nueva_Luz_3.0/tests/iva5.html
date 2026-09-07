@@ -504,6 +504,50 @@
 
   hud.remove();
 
+  // ══ Y · una mezclada de un proveedor del 5% no se reparte a ojo ═════════
+  sec('Y · cuando el reparto cabe de DOS maneras');
+  // El 5% abrió un agujero nuevo. `repartirMezclada` supone «tarifa plena +
+  // 0%», que es cierto en un supermercado. Pero si el emisor factura al 5%
+  // —construcción—, la misma factura admite dos cuentas muy distintas:
+  //
+  //   base $61, IVA $1,83  ->  15% + 0%  =  $12,20 gravado
+  //                        ->   5% + 0%  =  $36,60 gravado
+  //
+  // El crédito tributario sale de esa base: elegir mal declara tres veces más
+  // o tres veces menos. El número no distingue los dos casos; quien emitió, sí.
+  const OBRERO = '0790000000001', MERCADO = '0791111111001';
+  const mez = (ruc) => ({ numero: 1, rucRazon: ruc + ' PROVEEDOR', rucEmisor: ruc,
+    valorSinImpuestos: 61, iva: 1.83, importeTotal: 62.83, tieneIva: true });
+
+  // Sin saber nada del emisor se reparte, como siempre: es el caso Supermaxi y
+  // NO puede volver a frenarse, que fue justo el bug del 06-sep-2026.
+  let rz = calcularResumen([mez(MERCADO)]);
+  push('sin datos del emisor, se reparte',         rz.mezcladas.length, 1);
+  push('y no queda ambigua',                       rz.ambiguas.length, 0);
+  push('con $12.20 al 15%',                        rz.mezcladas[0].basePlena, 12.2);
+
+  // Pero si a ESE emisor ya se le vio un comprobante al 5%, el reparto cabe de
+  // dos maneras, y eso no se resuelve adivinando.
+  rz = calcularResumen([mez(OBRERO)], { rucsAl5: new Set([OBRERO]) });
+  push('con un emisor que factura al 5%, ambigua', rz.ambiguas.length, 1);
+  push('y NO se reparte',                          rz.mezcladas.length, 0);
+  push('el motivo nombra las dos cuentas',
+       /12\.2 al 15%/.test(rz.ambiguas[0].motivo) && /36\.6 al 5%/.test(rz.ambiguas[0].motivo), true);
+
+  // La lista es por RUC, no un interruptor global: el supermercado de la misma
+  // corrida se sigue repartiendo bien.
+  rz = calcularResumen([mez(MERCADO), mez(OBRERO)], { rucsAl5: new Set([OBRERO]) });
+  push('cada emisor por su cuenta · repartidas',   rz.mezcladas.length, 1);
+  push('cada emisor por su cuenta · ambiguas',     rz.ambiguas.length, 1);
+
+  // Y cuando el reparto al 5% NO cabe, no hay ambigüedad aunque el emisor
+  // facture al 5%: con IVA del 10% de la base, al 5% haría falta el doble de
+  // base que la factura entera.
+  rz = calcularResumen([{ numero: 1, rucRazon: OBRERO + ' P', rucEmisor: OBRERO,
+    valorSinImpuestos: 100, iva: 10, importeTotal: 110, tieneIva: true }],
+    { rucsAl5: new Set([OBRERO]) });
+  push('si el 5% no cabe, no hay ambigüedad',      rz.mezcladas.length, 1);
+
   // ══ Z · encontrar el 540 en la tabla real del SRI ═══════════════════════
   sec('Z · el 540 existe y hay que saber encontrarlo');
   // Captura del usuario del 06-sep-2026: el formulario TIENE la fila

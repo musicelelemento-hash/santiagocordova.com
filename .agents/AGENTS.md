@@ -634,6 +634,36 @@ pasarle 12, 13 o 14: el reparto depende de ella.
 $100 con un tercio al 15% da 4,95% y se lee como **5%**. Está medido en el
 banco, no supuesto. Eso sólo lo resuelve el XML (§11).
 
+#### El agujero gemelo: una mezclada que cabe de dos maneras
+
+> Cerrado el 06-sep-2026, después de que el usuario avisara que **el 5% es del
+> sector construcción**.
+
+`repartirMezclada()` supone que la mezcla es «tarifa plena + 0%». Es cierto en
+un supermercado. Pero si quien emitió también factura al 5%, la misma factura
+admite dos cuentas, y las dos caben:
+
+| base $61 · IVA $1,83 | gravado | al 0% |
+| :--- | ---: | ---: |
+| reparto 15% + 0% | **$12,20** | $48,80 |
+| reparto 5% + 0% | **$36,60** | $24,40 |
+
+El crédito tributario sale del 520, que se calcula sobre esa base: elegir mal
+declara **tres veces más o tres veces menos**.
+
+**El número no distingue los dos casos; quien emitió, sí.** Un supermercado no
+puede facturar al 5%, y eso ya se sabe porque `registrarLote()` cuenta a qué
+tarifa factura cada proveedor mirando sus comprobantes (§9b).
+
+`calcularResumen(facturas, { rucsAl5 })` recibe el conjunto que da
+`Proveedores.losQueFacturanAl5()` —pedido **después** de anotar, así un 5% que
+aparezca en esta misma extracción ya cuenta para sus propias mezcladas—. Si el
+emisor está en esa lista **y** el reparto al 5% también cabe, la factura queda
+**ambigua** y el motivo dice las dos cuentas posibles. Si no está, se reparte
+como siempre: el caso Supermaxi no puede volver a frenar un lote.
+
+Banco: `tests/iva5.html`, sección Y.
+
 No es un bug que haya que «arreglar»: rechazar todo lo que caiga en 5% frenaría
 cada lote con compras legítimas al 5%. Es el límite del método, y la razón por
 la que hace falta el XML (§11).

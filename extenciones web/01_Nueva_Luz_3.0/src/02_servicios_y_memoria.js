@@ -1767,6 +1767,20 @@ const Proveedores = {
         };
     },
 
+    /**
+     * Los RUC a los que ya se les vio un comprobante al 5%.
+     *
+     * Sirve para no repartir a ojo una factura mezclada suya: si el emisor
+     * factura al 5%, «$61 con IVA $1,83» puede ser $12,20 al 15% o $36,60 al
+     * 5%, y las dos cuentas caben. Ver `calcularResumen()` en el 04.
+     *
+     * @returns {Promise<Set<string>>}
+     */
+    async losQueFacturanAl5() {
+        const base = await this._todos();
+        return new Set(Object.keys(base).filter((r) => base[r].tarifas && base[r].tarifas['5']));
+    },
+
     /** Lo que se sabe de un RUC, o null si nunca se lo vio. */
     async saber(ruc) {
         const limpio = String(ruc || '').replace(/\D/g, '');

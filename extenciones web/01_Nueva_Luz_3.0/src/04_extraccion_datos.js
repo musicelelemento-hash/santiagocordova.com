@@ -166,13 +166,17 @@ async function extraerTodasLasFacturas() {
     // §7 · Cada proveedor que aparece queda anotado. No se le pregunta nada a
     // nadie: se aprende mirando, y lo aprendido sirve para todos los clientes
     // que le compren. Anotar nunca puede romper una extracción.
+    let rucsAl5 = new Set();
     if (typeof Proveedores !== 'undefined') {
         try {
             await Proveedores.registrarLote(todasLasFacturas, await rucDelClienteActual());
+            // Se pide DESPUÉS de anotar, así el 5% que aparezca en esta misma
+            // extracción ya cuenta para las mezcladas de esta misma extracción.
+            rucsAl5 = await Proveedores.losQueFacturanAl5();
         } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
     }
 
-    const resumen = calcularResumen(todasLasFacturas);
+    const resumen = calcularResumen(todasLasFacturas, { rucsAl5 });
     return resumen;
 }
 
@@ -1368,7 +1372,32 @@ function clasificarTarifaIva(base, iva) {
     return { tarifa: null, motivo: `el IVA es el ${pct}% de la base y no coincide con ninguna tarifa (¿factura de tarifas mezcladas?)` };
 }
 
-function calcularResumen(facturas) {
+/**
+ * El RUC de quien emitió una factura, venga como venga.
+ *
+ * El TXT los da separados; la tabla del portal los da pegados en una celda.
+ * Es la misma lectura que hace `Proveedores.registrarLote()`.
+ *
+ * @param {object} f Una factura de `extraerFacturasPaginaActual`.
+ * @returns {string} El RUC de 13 dígitos, o cadena vacía.
+ */
+function rucDeFactura(f) {
+    let ruc = String((f && (f.rucEmisor || f.ruc)) || '').replace(/\D/g, '');
+    if (ruc.length !== 13 && f && f.rucRazon) {
+        const m = String(f.rucRazon).match(/\b(\d{13})\b/);
+        if (m) ruc = m[1];
+    }
+    return ruc.length === 13 ? ruc : '';
+}
+
+/**
+ * @param {Array<object>} facturas
+ * @param {{rucsAl5?: Set<string>}} opciones `rucsAl5` son los proveedores a los
+ *   que YA se les vio un comprobante al 5%. Con ellos, una factura mezclada no
+ *   se reparte a ojo: ver el bloque de mezcladas más abajo.
+ */
+function calcularResumen(facturas, opciones = {}) {
+    const rucsAl5 = opciones.rucsAl5 instanceof Set ? opciones.rucsAl5 : new Set();
     let periodo = "Desconocido";
     if (facturas.length > 0) {
         // Asumimos formato fecha dd/mm/yyyy o yyyy-mm-dd en propiedad algun lado?
@@ -1411,7 +1440,25 @@ function calcularResumen(facturas) {
             // supermercado, con parte al 15% y parte al 0%. Eso NO se adivina,
             // se calcula — y si el reparto cabe en la factura, se declara bien.
             const partes = repartirMezclada(factura.valorSinImpuestos, factura.iva);
-            if (partes) {
+
+            // …salvo que quien la emitió también facture al 5%.
+            //
+            // Con base $61 e IVA $1,83, el reparto «15% + 0%» da $12,20
+            // gravados y el reparto «5% + 0%» da $36,60. Los dos caben en la
+            // factura, y el crédito tributario sale de esa base: elegir mal es
+            // declarar tres veces más o tres veces menos.
+            //
+            // El número no distingue los dos casos; quien emitió, sí. Un
+            // supermercado no puede facturar al 5% —es la tarifa del sector
+            // construcción— y eso ya lo sabemos, porque se cuenta a qué tarifa
+            // factura cada proveedor mirando sus comprobantes. Si al emisor se
+            // le vio un 5% y el reparto al 5% también cabe, el reparto es
+            // ambiguo y lo mira el contador.
+            const emisor = rucDeFactura(factura);
+            const tambienCabeAl5 = emisor && rucsAl5.has(emisor) &&
+                repartirMezclada(factura.valorSinImpuestos, factura.iva, 5) !== null;
+
+            if (partes && !tambienCabeAl5) {
                 resumen.iva15.cantidad++;
                 resumen.iva15.baseImponible += partes.basePlena;
                 resumen.iva15.montoIva += factura.iva;
@@ -1435,15 +1482,19 @@ function calcularResumen(facturas) {
                 return;   // ya quedó repartida; no cae en ningún balde único
             }
 
-            // El reparto NO cabe en la factura: hay una tercera tarifa de por
-            // medio y eso sí lo tiene que mirar el contador.
+            // O el reparto no cabe —hay una tercera tarifa de por medio— o cabe
+            // de dos maneras distintas. Las dos cosas las mira el contador.
             destino = resumen.iva15;
             resumen.ambiguas.push({
                 numero: factura.numero || i + 1,
                 rucRazon: factura.rucRazon || 'S/N',
                 base: redondear(factura.valorSinImpuestos),
                 iva: redondear(factura.iva),
-                motivo: motivo + ' — y el reparto entre tarifa plena y 0% no cierra'
+                motivo: motivo + (tambienCabeAl5
+                    ? ` — y este proveedor factura al 5%, así que el reparto cabe de dos maneras: ` +
+                      `$${repartirMezclada(factura.valorSinImpuestos, factura.iva).basePlena} al ${TARIFA_PLENA}% ` +
+                      `o $${repartirMezclada(factura.valorSinImpuestos, factura.iva, 5).basePlena} al 5%`
+                    : ' — y el reparto entre tarifa plena y 0% no cierra')
             });
             console.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);
         }
