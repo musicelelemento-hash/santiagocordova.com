@@ -100,6 +100,38 @@ async function guardar() {
     avisar('🔑 Guardada fuera del código');
 }
 
+/**
+ * Borra UNA credencial y deja las demás en paz.
+ *
+ * @param {'ia'|'r2'|'idR2'|'web'} cual
+ */
+async function borrarUna(cual) {
+    if (cual === 'ia') {
+        await chrome.storage.local.remove([CLAVE_IA]);
+        $('claveIa').value = '';
+        avisar('🗑️ Borrada la clave de IA. Las demás quedan como estaban.');
+    } else if (cual === 'web') {
+        await chrome.storage.local.remove([CLAVE_WEB]);
+        $('claveWeb').value = '';
+        avisar('🗑️ Borrada la llave de Supabase. Vuelve a usarse la del código.');
+    } else {
+        // Las dos de R2 viven en la misma llave del almacén, así que se saca
+        // sólo el campo pedido y se conserva el otro: rotar el secreto sin
+        // perder el Access Key ID es un caso normal.
+        const previo = (await chrome.storage.local.get([CLAVE_R2]))[CLAVE_R2] || {};
+        const campo = cual === 'idR2' ? 'R2_ACCESS_KEY_ID' : 'R2_SECRET_ACCESS_KEY';
+        delete previo[campo];
+        const quedaAlgo = previo.R2_ACCESS_KEY_ID || previo.R2_SECRET_ACCESS_KEY;
+        if (quedaAlgo) await chrome.storage.local.set({ [CLAVE_R2]: previo });
+        else await chrome.storage.local.remove([CLAVE_R2]);
+        $(cual === 'idR2' ? 'idR2' : 'claveR2').value = '';
+        avisar(cual === 'idR2'
+            ? '🗑️ Borrado el Access Key ID de R2. La clave secreta queda.'
+            : '🗑️ Borrada la clave secreta de R2. El Access Key ID queda.');
+    }
+    await pintarEstado();
+}
+
 async function borrar() {
     await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2, CLAVE_WEB]);
     $('claveIa').value = '';
@@ -155,6 +187,17 @@ async function probarSubida() {
 document.addEventListener('DOMContentLoaded', () => {
     $('btnGuardarClaves').addEventListener('click', guardar);
     $('btnBorrarClaves').addEventListener('click', borrar);
+
+    // Cada credencial se borra sola.
+    //
+    // Antes el único camino era «Borrar todas», y arreglar una cosa se llevaba
+    // puestas las otras: borrar la llave de Supabase se llevaba las de R2, que
+    // son las que hacen funcionar la subida. El usuario lo cazó preguntando
+    // «¿borrar todas?» antes de apretar, que es justo lo que no hay que
+    // depender de que alguien haga.
+    document.querySelectorAll('.b-borrar-uno').forEach((b) => {
+        b.addEventListener('click', () => borrarUna(b.getAttribute('data-borra')));
+    });
     $('btnProbarSubida').addEventListener('click', probarSubida);
 
     // Enter en cualquiera de los dos campos guarda: es lo que espera cualquiera

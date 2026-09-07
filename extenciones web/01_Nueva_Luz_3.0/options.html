@@ -201,6 +201,7 @@ footer {
         <label for="claveIa">Clave de IA</label>
         <span class="para-que">Para clasificar proveedores por lo que facturan. Opcional.</span>
         <div class="estado" id="estadoIa">—</div>
+        <button class="b-borrar-uno" data-borra="ia" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
         <input type="password" id="claveIa" autocomplete="off" spellcheck="false"
                placeholder="pegá la clave acá">
     </div>
@@ -209,6 +210,7 @@ footer {
         <label for="idR2">Access Key ID de R2</label>
         <span class="para-que">Al rotar el token de Cloudflare cambian los dos: el ID y la clave.</span>
         <div class="estado" id="estadoIdR2">—</div>
+        <button class="b-borrar-uno" data-borra="idR2" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
         <input type="text" id="idR2" autocomplete="off" spellcheck="false"
                placeholder="pegá el Access Key ID acá">
     </div>
@@ -217,6 +219,7 @@ footer {
         <label for="claveR2">Clave secreta de R2</label>
         <span class="para-que">Se muestra una sola vez en Cloudflare. Si la perdés, hay que crear otro token.</span>
         <div class="estado" id="estadoR2">—</div>
+        <button class="b-borrar-uno" data-borra="r2" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
         <input type="password" id="claveR2" autocomplete="off" spellcheck="false"
                placeholder="pegá la clave acá">
     </div>
@@ -229,13 +232,14 @@ footer {
             (Project Settings → API) y pegala acá.
         </span>
         <div class="estado" id="estadoWeb">—</div>
+        <button class="b-borrar-uno" data-borra="web" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
         <input type="password" id="claveWeb" autocomplete="off" spellcheck="false"
                placeholder="pegá la llave anon acá">
     </div>
 
     <div class="botones">
         <button class="b-guardar" id="btnGuardarClaves">Guardar</button>
-        <button class="b-borrar" id="btnBorrarClaves">Borrar todas</button>
+        <button class="b-borrar" id="btnBorrarClaves">Borrar TODAS</button>
     </div>
 
     <p class="bajada" style="margin: 16px 0 0;">

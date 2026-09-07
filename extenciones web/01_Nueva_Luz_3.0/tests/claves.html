@@ -42,7 +42,10 @@
   };
 
   // ── El markup de verdad, sacado de la página que se distribuye ──────────
-  const html = await (await fetch('../options.html')).text();
+  // Con `?v=` para saltear la caché del navegador. Sin esto el banco monta la
+  // versión que quedó guardada de una corrida anterior y comprueba markup que
+  // ya no existe — que es peor que no comprobar nada, porque sale en verde.
+  const html = await (await fetch('../options.html?v=' + Date.now())).text();
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const panel = doc.querySelector('.hoja');
 
@@ -75,7 +78,7 @@
   // a mano después de cargarlo, sobre el markup real recién insertado.
   await new Promise((r) => {
     const sc = document.createElement('script');
-    sc.src = '../options.js';
+    sc.src = '../options.js?v=' + Date.now();   // ídem: nada de caché
     sc.onload = r; sc.onerror = r;
     document.body.appendChild(sc);
   });
@@ -115,7 +118,40 @@
   push('y la de R2 se guardó aparte',
        (store.sc_r2_credenciales || {}).R2_SECRET_ACCESS_KEY, 'r2-de-mentira');
 
-  sec('E · borrar es un botón aparte, y borra de verdad');
+  sec('E · borrar UNA no se lleva las demás');
+  // El usuario, 07-sep-2026, cuando le dije que borrara la llave de Supabase:
+  // «¿borrar todas?». Tenía razón en preguntar: el único botón era «Borrar
+  // todas» y se llevaba puestas las de R2, que son las que hacen funcionar la
+  // subida. Arreglar una cosa rompiendo otra no es arreglar — y no puede
+  // depender de que alguien pregunte antes de apretar.
+  store.sc_ia_credenciales  = { apiKey: 'ia-que-se-queda' };
+  store.sc_web_placeholder  = 1;   // testigo: nada más debe tocarse
+  store.sc_supabase_credenciales = { SUPABASE_ANON_KEY: 'web-que-se-va' };
+  store.sc_r2_credenciales  = { R2_ACCESS_KEY_ID: 'id-que-se-queda',
+                                R2_SECRET_ACCESS_KEY: 'secreto-que-se-queda' };
+
+  document.querySelector('[data-borra="web"]').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('se fue la de Supabase',        'sc_supabase_credenciales' in store, false);
+  push('la de IA sigue',               (store.sc_ia_credenciales || {}).apiKey, 'ia-que-se-queda');
+  push('el Access Key ID de R2 sigue', (store.sc_r2_credenciales || {}).R2_ACCESS_KEY_ID, 'id-que-se-queda');
+  push('y la clave secreta también',   (store.sc_r2_credenciales || {}).R2_SECRET_ACCESS_KEY, 'secreto-que-se-queda');
+
+  // Las dos de R2 comparten una sola llave del almacén: sacar una tiene que
+  // conservar la otra. Rotar el secreto sin perder el ID es lo normal.
+  document.querySelector('[data-borra="r2"]').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('se fue sólo la clave secreta', (store.sc_r2_credenciales || {}).R2_SECRET_ACCESS_KEY, undefined);
+  push('y el ID quedó',                (store.sc_r2_credenciales || {}).R2_ACCESS_KEY_ID, 'id-que-se-queda');
+
+  // Y cuando se saca lo último de R2, la llave entera se va: no queda un
+  // objeto vacío que después parezca «hay algo guardado».
+  document.querySelector('[data-borra="idR2"]').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('sin nada de R2, no queda cáscara', 'sc_r2_credenciales' in store, false);
+  push('y lo ajeno nunca se tocó',         store.sc_web_placeholder, 1);
+
+  sec('F · borrar TODAS sigue borrando todas');
   document.getElementById('btnBorrarClaves').click();
   await new Promise(r => setTimeout(r, 60));
   push('no queda la de IA',  'sc_ia_credenciales' in store, false);
