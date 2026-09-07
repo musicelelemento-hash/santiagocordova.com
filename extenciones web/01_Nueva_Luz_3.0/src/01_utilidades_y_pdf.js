@@ -703,6 +703,19 @@ async function cerrarSesionSRI(force = false) {
     hallado || soloDelPortal(document.querySelectorAll(sel))[0] || null, null);
   if (logoutIcon) {
     try {
+      // El icono del SRI lleva `href="javascript:..."`, y una navegación
+      // `javascript:` la bloquea la CSP de la extensión: el clic no hace nada
+      // y deja dos violaciones en la consola por cliente. Con 25 clientes son
+      // 50 líneas de ruido tapando lo que importa. Enseguida se cae al
+      // endpoint canónico, que es el que de verdad cierra la sesión, así que
+      // ni siquiera hay que intentarlo.
+      const enlaceDelIcono = logoutIcon.closest('a, button, li');
+      const hrefDelIcono = (enlaceDelIcono && enlaceDelIcono.getAttribute('href')) || '';
+      if (hrefDelIcono.toLowerCase().startsWith('javascript:')) {
+        console.log('🚪 [LOGOUT] El icono del portal usa una URL «javascript:», que la CSP bloquea. ' +
+                    'Se va directo al endpoint de cierre.');
+        throw new Error('icono con javascript: — se usa el endpoint canónico');
+      }
       console.log("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
       clickElement(logoutIcon, "Icono Cerrar Sesión SRI");
       const parentLink = logoutIcon.closest("a, button, li");
@@ -2150,19 +2163,41 @@ function encontrarCamposLogin() {
 function loQueDiceElFormularioDeAcceso() {
   const campos = typeof encontrarCamposLogin === 'function' ? encontrarCamposLogin() : null;
   const ancla = campos && (campos.pass || campos.ruc);
-  const zona = ancla
-    ? (ancla.closest('form') || ancla.closest('div.card, div.login, main') || ancla.parentElement)
-    : null;
+  if (!ancla) return { aviso: '', texto: '' };
+
+  // El ámbito NO es el `<form>`.
+  //
+  // En Keycloak —que es lo que usa el SRI— el cartel de error es HERMANO del
+  // formulario, no hijo: vive en `#kc-content-wrapper`, encima del form. Al
+  // restringir la lectura al `<form>` para no leerme a mí mismo me quedé
+  // corto, y el motivo real del rechazo quedaba invisible: tres contribuyentes
+  // salieron como «sesión caída» el 07-sep-2026 sin que el bot pudiera decir
+  // por qué.
+  //
+  // Se sube al contenedor de login del portal, y los nodos de la extensión se
+  // quitan explícitamente. Ni todo el body —donde me leo a mí mismo— ni sólo
+  // el form, donde no veo lo que dice el portal.
+  const zona = ancla.closest('#kc-content-wrapper, #kc-content, .login-pf-page, .card-pf') ||
+               ancla.closest('form') ||
+               ancla.closest('div.card, div.login, main') ||
+               ancla.parentElement;
   if (!zona) return { aviso: '', texto: '' };
 
+  // Una copia sin la barra flotante ni los avisos de la extensión. El clon no
+  // se inserta en ningún lado: sólo se lo lee.
+  const limpio = zona.cloneNode(true);
+  limpio.querySelectorAll('[id^="sri-"], [id^="slh-"], [class*="sri-assistant"], [class*="ghost-"]')
+        .forEach((n) => n.remove());
+
   // `.alert` a secas agarra cualquier caja informativa de una página hecha con
-  // Bootstrap. Se exige que esté DENTRO del formulario y a la vista.
+  // Bootstrap, y Keycloak está hecho con Bootstrap. Se exige que esté a la
+  // vista: un cartel oculto es un cartel que el portal decidió no mostrar.
   const cartel = zona.querySelector(
-    '.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, .alert');
+    '.alert-error, .alert-danger, .kc-feedback-text, .ui-messages-error, #input-error, .alert');
   const aviso = (cartel && (typeof esVisible !== 'function' || esVisible(cartel)))
     ? (cartel.innerText || cartel.textContent || '').trim() : '';
 
-  return { aviso, texto: zona.innerText || zona.textContent || '' };
+  return { aviso, texto: limpio.innerText || limpio.textContent || '' };
 }
 
 /** Escribe en un input avisando al framework que lo maneja. */

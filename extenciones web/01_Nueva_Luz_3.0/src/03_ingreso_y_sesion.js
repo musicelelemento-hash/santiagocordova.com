@@ -164,8 +164,18 @@ SafeStorage.get(null).then(async (items) => {
         const veces = (rebotes[rucRebote] || 0) + 1;
 
         if (veces <= 1) {
-            console.warn(`↩️ [REBOTE ${veces}/2] ${nombreRebote} volvió al login y el SRI no dijo por qué. ` +
-                         'No se concluye que la clave esté mal: se reintenta una vez.');
+            // DÓNDE rebotó es la pista. Keycloak devuelve
+            // `login-actions/authenticate` cuando procesó un intento y no lo
+            // dejó pasar; una vuelta a `openid-connect/auth` o a la portada es
+            // otra cosa —sesión perdida, token del puente vencido—. La
+            // decisión no cambia (sigue siendo un rebote, no una condena),
+            // pero el contador necesita saber por dónde empezar a mirar.
+            const dondeReboto = /login-actions\/authenticate/.test(location.href)
+                ? 'Keycloak procesó el intento y no lo dejó pasar (login-actions/authenticate). ' +
+                  'Si se repite en las próximas corridas, mirá esa clave.'
+                : 'volvió a la pantalla de acceso sin pasar por la validación.';
+            console.warn(`↩️ [REBOTE ${veces}/2] ${nombreRebote}: ${dondeReboto} ` +
+                         'El SRI no dio un mensaje, así que no se concluye nada: se reintenta una vez.');
             anotarBitacora('↩️ rebote', `${veces}/2 · ${nombreRebote} volvió al login sin mensaje`);
             rebotes[rucRebote] = veces;
             await SafeStorage.set({
