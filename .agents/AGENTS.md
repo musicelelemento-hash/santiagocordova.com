@@ -1793,7 +1793,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los quince** en iframes y da un veredicto solo:
-**544 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+**546 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -1821,7 +1821,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `login` | que el bot no se lea a sí mismo y crea que lo rechazaron | 11 |
 | `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
-| `recuperar` | que el comprobante de lo ya declarado llegue a la mano | 20 |
+| `recuperar` | que el comprobante de lo ya declarado llegue a la mano | 22 |
 
 > **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
 > quince se escribió por completitud: cada uno cuida un fallo que ya llegó a
