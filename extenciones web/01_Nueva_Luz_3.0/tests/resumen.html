@@ -1,0 +1,127 @@
+<!doctype html><meta charset="utf-8"><title>El resumen de pago y el saldo que manda</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>«USD 0.00» y «Pendiente por cubrir: USD 9.60» estaban en la misma pantalla</h3>
+<p style="max-width:78ch;line-height:1.6;color:#9fb4d4">
+  Corrida real del 06-sep-2026, un contribuyente del lote. El diagnóstico del
+  resumen trajo <code>totalAPagar → "USD 0.00"</code> y, tres nodos más abajo,
+  <code>divSaldosMediosPago → "Pendiente por cubrir: USD 9.60"</code>. No se
+  contradicen: el total ya estaba cubierto por retenciones <b>salvo</b> esos
+  $9.60. Quedarse con el cero de arriba es declarar que no hay nada que pagar
+  cuando sí lo hay — justo lo que la §4 del AGENTS.md prohíbe.
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(64)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const portal=document.getElementById('portal');
+  // Arma una pantalla del portal con los nodos que se le pasen.
+  const pantalla=(nodos)=>{
+    portal.innerHTML=Object.entries(nodos).map(([id,txt])=>
+      `<div id="${id.replace(/"/g,'')}">${txt}</div>`).join('');
+  };
+  const saldo=()=>SriAssistantPanel.prototype.detectarSaldo.call({});
+
+  // ══ A · reconocer que estamos en el resumen ═════════════════════════════
+  sec('A · estaEnResumenDeclaracion()');
+
+  portal.innerHTML='';
+  push('en el formulario, no es el resumen', estaEnResumenDeclaracion(), false);
+
+  pantalla({'frmFlujoDeclaracion:totalAPagar':'USD 0.00'});
+  push('con el total a pagar, sí lo es',     estaEnResumenDeclaracion(), true);
+
+  pantalla({'frmFlujoDeclaracion:pagValoresRemision':'…'});
+  push('con los valores de remisión también',estaEnResumenDeclaracion(), true);
+
+  // ÉSTE era el falso negativo. Cuando la declaración deja algo por cubrir, el
+  // portal muestra los medios de pago y esconde las otras tres marcas. El bot
+  // dijo «todavía no estamos en el resumen» estando parado en él, y el motivo
+  // real del bloqueo —$9.60 sin cubrir— nunca se nombró en el log.
+  pantalla({'frmFlujoDeclaracion:divSaldosMediosPago':'Pendiente por cubrir: USD 9.60'});
+  push('el resumen CON saldo también es resumen', estaEnResumenDeclaracion(), true);
+
+  // ══ B · qué saldo manda ═════════════════════════════════════════════════
+  sec('B · detectarSaldo(): lo que falta cubrir gana');
+
+  pantalla({'frmFlujoDeclaracion:outTotalPagarSinRemision':'USD 0.00'});
+  push('sin nada pendiente, el resumen manda',   saldo(), 0);
+
+  // La pantalla del 06-sep-2026, tal cual salió en el diagnóstico.
+  pantalla({
+    'frmFlujoDeclaracion:outTotalPagarSinRemision':'USD 0.00',
+    'frmFlujoDeclaracion:totalAPagar':'USD 0.00',
+    'frmFlujoDeclaracion:divSaldosMediosPago':'Formas de pago Pendiente por cubrir: USD 9.60 Anterior'
+  });
+  push('con $9.60 pendientes, NO es cero',       saldo(), 9.6);
+
+  // Y con eso el contrato de envío se cae solo, que es lo que tiene que pasar.
+  push('y entonces no se puede enviar',          saldo()===0, false);
+
+  // Un pendiente en cero no tapa la lectura normal: es el caso feliz, no una
+  // excepción. Si tapara, ninguna declaración se enviaría nunca.
+  pantalla({
+    'frmFlujoDeclaracion:outTotalPagarSinRemision':'USD 0.00',
+    'frmFlujoDeclaracion:divSaldosMediosPago':'Pendiente por cubrir: USD 0.00'
+  });
+  push('pendiente en cero deja seguir',          saldo(), 0);
+
+  // Se lee con o sin «USD», con dos puntos o sin ellos: el portal no promete
+  // un formato y este panel no está en la Biblia todavía.
+  pantalla({'frmFlujoDeclaracion:divSaldosMediosPago':'PENDIENTE POR CUBRIR 12.34'});
+  push('sin «USD» ni dos puntos, igual se lee',  saldo(), 12.34);
+
+  // El separador de miles no tiene que comerse la cifra.
+  pantalla({'frmFlujoDeclaracion:divSaldosMediosPago':'Pendiente por cubrir: USD 1,250.00'});
+  push('mil doscientos cincuenta, no uno',       saldo(), 1250);
+
+  // Si el panel está pero no dice nada de pendientes, no se inventa un saldo:
+  // se sigue con las lecturas de siempre.
+  pantalla({
+    'frmFlujoDeclaracion:divSaldosMediosPago':'Formas de pago disponibles',
+    'frmFlujoDeclaracion:totalAPagar':'USD 0.00'
+  });
+  push('un panel sin la frase no cambia nada',   saldo(), 0);
+
+  // Y cuando no hay NADA que leer, el saldo es null y no cero. Es la regla que
+  // más veces salvó a este proyecto: null no es cero.
+  portal.innerHTML='';
+  push('sin pantalla, el saldo es null',         saldo(), null);
+
+  // ══ C · el catálogo de omitidos nombra la sesión caída ══════════════════
+  sec('C · un rebote al login no es una clave mala');
+  // El log del 06-sep-2026 marcó `clave_incorrecta` a contribuyentes que HABÍAN
+  // entrado —se los vio en /contribuyente/perfil— y a los que el portal
+  // devolvió al login sin decir una palabra. Esa marca escribe en la bóveda y
+  // en la ficha web: deja al cliente afuera hasta que alguien la borre a mano.
+  push('«sesion_caida» existe y dice qué hacer',
+       typeof Omitidos.ARREGLO.sesion_caida==='string' && Omitidos.ARREGLO.sesion_caida.length>20, true);
+  push('y aclara que la clave NO quedó marcada',
+       /NO está marcada|NO está mala|clave NO/i.test(Omitidos.ARREGLO.sesion_caida), true);
+  push('«clave_incorrecta» sigue existiendo aparte',
+       typeof Omitidos.ARREGLO.clave_incorrecta==='string', true);
+
+  portal.innerHTML='';
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

@@ -14,12 +14,38 @@ if (typeof window !== "undefined") window.sriBuild = () => SC_BUILD;
 // ── Configuración central (ver shared_config.js) ──────────────────────
 // La URL y la llave `anon` viven en UN solo lugar: shared_config.js.
 // Este módulo (01) las expone como globales para 02..07 (modo concatenación).
-const SC_SUPABASE_URL = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.SUPABASE_URL)
+// `let`, no `const`: lo que esté guardado en Ajustes pisa a lo del código.
+// shared_config.js está versionado, así que una llave ahí es una llave
+// publicada — y rotarla no debería exigir editar código y reconstruir.
+let SC_SUPABASE_URL = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.SUPABASE_URL)
   ? window.SC_CONFIG.SUPABASE_URL
   : null;
-const SC_SUPABASE_ANON_KEY = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.SUPABASE_ANON_KEY)
+let SC_SUPABASE_ANON_KEY = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.SUPABASE_ANON_KEY)
   ? window.SC_CONFIG.SUPABASE_ANON_KEY
   : null;
+
+/** De dónde salió la llave que se está usando. Sólo el nombre, nunca el valor. */
+let SC_SUPABASE_ORIGEN = 'del código';
+
+/**
+ * Aplica las credenciales de Supabase guardadas en Ajustes, si las hay.
+ *
+ * Se llama una vez al arrancar, con el volcado de storage que 03 ya pide.
+ * Todos los usos leen la global dentro de una función, así que el reemplazo
+ * llega a tiempo: las llamadas a la web pasan mucho después del arranque.
+ *
+ * @param {object} items Volcado de `SafeStorage.get(null)`.
+ */
+function aplicarCredencialesSupabaseGuardadas(items) {
+  const g = (items || {}).sc_supabase_credenciales;
+  if (!g) return;
+  if (g.SUPABASE_URL) SC_SUPABASE_URL = g.SUPABASE_URL;
+  if (g.SUPABASE_ANON_KEY) {
+    SC_SUPABASE_ANON_KEY = g.SUPABASE_ANON_KEY;
+    SC_SUPABASE_ORIGEN = 'de Ajustes';
+    console.log('🔑 [WEB] Usando la llave de Supabase guardada en Ajustes, no la del código.');
+  }
+}
 const SC_R2_UPLOAD_ENDPOINT = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT)
   ? window.SC_CONFIG.R2_UPLOAD_ENDPOINT
   : null;
@@ -250,7 +276,12 @@ function estaEnResumenDeclaracion() {
   const marcas = [
     'frmFlujoDeclaracion:pagValoresRemision',
     'frmFlujoDeclaracion:outTotalPagarSinRemision',
-    'frmFlujoDeclaracion:totalAPagar'
+    'frmFlujoDeclaracion:totalAPagar',
+    // Agregado el 06-sep-2026: cuando la declaración deja algo por cubrir, el
+    // resumen muestra los medios de pago y las tres marcas de arriba quedaron
+    // ocultas. El bot dijo «todavía no estamos en el resumen» estando en él, y
+    // el verdadero motivo del bloqueo —$9.60 sin cubrir— nunca se nombró.
+    'frmFlujoDeclaracion:divSaldosMediosPago'
   ];
   for (const id of marcas) {
     const el = document.getElementById(id);
@@ -389,6 +420,22 @@ function parseImporteEstricto(texto) {
   if (!/\d/.test(crudo)) return null;
   const n = parseDecimal(crudo);
   return (typeof n === 'number' && !isNaN(n)) ? n : null;
+}
+
+/**
+ * Traduce un HTTP de Supabase a algo que se pueda arreglar.
+ *
+ * Un 401 con una llave que no está vencida significa una sola cosa: la
+ * revocaron del lado de Supabase. Pasó el 06-sep-2026 y el log sólo decía
+ * «HTTP 401», que no le dice a nadie dónde ir.
+ *
+ * @param {number} status Código HTTP.
+ * @returns {string} Texto para pegar al final del aviso, o cadena vacía.
+ */
+function avisoLlaveWeb(status) {
+  if (status !== 401 && status !== 403) return '';
+  return ` · la llave anon (${SC_SUPABASE_ORIGEN}) no la acepta Supabase. ` +
+         'Copiá la nueva desde el panel de Supabase y pegala en Ajustes de la extensión.';
 }
 
 function redondear(numero) {
@@ -1301,7 +1348,10 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
       `${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&is_deleted=eq.false&select=id,tax_profile`,
       { headers: cab }
     );
-    if (!r.ok) { console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}`); return false; }
+    if (!r.ok) {
+      console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}${avisoLlaveWeb(r.status)}`);
+      return false;
+    }
 
     const filas = await r.json();
     if (!filas.length) { console.warn(`⚠️ [WEB] ${ruc} no está en la base web; no se marca nada.`); return false; }

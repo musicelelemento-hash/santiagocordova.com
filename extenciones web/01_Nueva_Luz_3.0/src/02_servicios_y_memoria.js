@@ -190,10 +190,17 @@ const SriLoop = {
         }
     },
 
-    /** Corte inmediato: no se da un paso más, aunque quede algo a medias. */
-    async emergencia() {
-        console.warn('🛑 [BUCLE] PARADA DE EMERGENCIA.');
-        await this._set({ estado: 'DETENIDO', motivo: 'Parada de emergencia' });
+    /**
+     * Corte inmediato: no se da un paso más, aunque quede algo a medias.
+     *
+     * El único que llama acá es el botón 🛑 del HUD. Se dice en el log porque
+     * leyendo una corrida larga, un «PARADA DE EMERGENCIA» suelto parece una
+     * falla del bot cuando en realidad es alguien apretando el botón.
+     */
+    async emergencia(quien = 'el botón 🛑 del panel') {
+        console.warn(`🛑 [BUCLE] PARADA DE EMERGENCIA, pedida por ${quien}. No es una falla: el lote se cortó a mano.`);
+        if (typeof anotarBitacora === 'function') anotarBitacora('🛑 parada de emergencia', quien);
+        await this._set({ estado: 'DETENIDO', motivo: `Parada de emergencia (${quien})` });
         await this._sincronizarLegado(false);
     },
 
@@ -736,6 +743,7 @@ const Omitidos = {
         sin_clave:          'Cargar la clave del SRI en la ficha del cliente.',
         clave_caducada:     'El SRI pide cambiar la clave. Cambiala a mano y reintentá.',
         clave_incorrecta:   'Revisar la clave guardada: el SRI la rechazó.',
+        sesion_caida:       'Entró bien y el portal lo devolvió al login, sin decir por qué. La clave NO está marcada como mala: volvé a intentarlo.',
         cuenta_bloqueada:   'Cuenta bloqueada en el SRI. Hay que desbloquearla en el portal.',
         omitido_manual:     'Lo omitiste vos. Reintentá cuando quieras.',
         saldo_a_pagar:      'La declaración da saldo a pagar: se guardó borrador y no se envió. Requiere decisión tuya.',

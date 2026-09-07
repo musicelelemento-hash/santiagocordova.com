@@ -61,7 +61,13 @@
     font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--rojo);
     white-space: pre-wrap; margin-top: 6px;
   }
-  iframe { display: none; }
+  /* Fuera de la vista, pero CON layout.
+     Con `display: none` nada de adentro tiene alto ni ancho, y `esVisible()`
+     —que mide `getBoundingClientRect()`— da false para todo. Un banco que
+     compruebe si algo está a la vista fallaba acá y pasaba abierto solo, que
+     es la peor forma de fallar. Y la visibilidad no es un detalle en este
+     proyecto: `offsetParent` ya nos mintió una vez con los modales del SRI. */
+  iframe { position: fixed; left: -20000px; top: 0; width: 1200px; height: 900px; border: 0; }
   .pie { color: var(--tenue); font-size: 12px; margin-top: 24px; line-height: 1.6; }
 </style>
 
@@ -119,7 +125,9 @@ const BANCOS = [
   ['clavevencida.html','La clave que el SRI pide cambiar',
                        'Que se detecte ANTES de navegar, y que el bot marque al cliente en vez de cambiar la contraseña.'],
   ['claves.html',      'Las claves, fuera del código',
-                       'Que se guarden en el almacén y que la pantalla nunca muestre el valor.']
+                       'Que se guarden en el almacén y que la pantalla nunca muestre el valor.'],
+  ['resumen.html',     'El resumen de pago y el saldo',
+                       'Que «Pendiente por cubrir» le gane al total en cero, y que un rebote al login no marque la clave como mala.']
 ];
 
 const $ = (id) => document.getElementById(id);

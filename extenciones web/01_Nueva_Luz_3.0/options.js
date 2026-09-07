@@ -15,6 +15,7 @@
 
 const CLAVE_IA = 'sc_ia_credenciales';
 const CLAVE_R2 = 'sc_r2_credenciales';
+const CLAVE_WEB = 'sc_supabase_credenciales';
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,7 +32,7 @@ function comoTermina(valor) {
 }
 
 async function pintarEstado() {
-    const g = await chrome.storage.local.get([CLAVE_IA, CLAVE_R2]);
+    const g = await chrome.storage.local.get([CLAVE_IA, CLAVE_R2, CLAVE_WEB]);
     const ia = (g[CLAVE_IA] || {}).apiKey;
     const r2 = (g[CLAVE_R2] || {}).R2_SECRET_ACCESS_KEY;
 
@@ -45,6 +46,10 @@ async function pintarEstado() {
     const id = (g[CLAVE_R2] || {}).R2_ACCESS_KEY_ID;
     $('estadoIdR2').textContent = id || 'no hay ninguno guardado (se usa el del código)';
     $('estadoIdR2').dataset.hay = id ? 'si' : 'no';
+
+    const web = (g[CLAVE_WEB] || {}).SUPABASE_ANON_KEY;
+    $('estadoWeb').textContent = web ? comoTermina(web) : 'no hay ninguna guardada (se usa la del código)';
+    $('estadoWeb').dataset.hay = web ? 'si' : 'no';
 }
 
 function avisar(texto) {
@@ -78,6 +83,11 @@ async function guardar() {
         cambios[CLAVE_R2] = nuevo;
     }
 
+    const campoWeb = $('claveWeb');
+    if (campoWeb.value.trim()) {
+        cambios[CLAVE_WEB] = { SUPABASE_ANON_KEY: campoWeb.value.trim(), cuando: Date.now() };
+    }
+
     if (!Object.keys(cambios).length) { avisar('No escribiste ninguna clave'); return; }
 
     await chrome.storage.local.set(cambios);
@@ -85,15 +95,17 @@ async function guardar() {
     campoIa.value = '';
     campoR2.value = '';
     campoIdR2.value = '';
+    campoWeb.value = '';
     await pintarEstado();
     avisar('🔑 Guardada fuera del código');
 }
 
 async function borrar() {
-    await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2]);
+    await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2, CLAVE_WEB]);
     $('claveIa').value = '';
     $('claveR2').value = '';
     $('idR2').value = '';
+    $('claveWeb').value = '';
     await pintarEstado();
     avisar('🗑️ Borradas del almacén');
 }

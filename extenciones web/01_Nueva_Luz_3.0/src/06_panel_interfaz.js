@@ -3689,7 +3689,30 @@ class SriAssistantPanel {
      * null NO es 0: de esa distinción depende que el bot envíe o frene.
      */
     detectarSaldo() {
-            // 0) Resumen de pago. IDs CONFIRMADOS en el diagnóstico del
+            // 0a) LO QUE FALTA CUBRIR. Manda sobre todo lo demás.
+            //
+            //     CONFIRMADO 06-sep-2026 en una corrida real: el mismo resumen
+            //     mostraba `totalAPagar` en "USD 0.00" mientras este panel decía
+            //     "Pendiente por cubrir: USD 9.60". No se contradicen: el total
+            //     ya está cubierto por notas de crédito o retenciones EXCEPTO
+            //     esos $9.60, que siguen debiéndose.
+            //
+            //     Quedarse con el cero de arriba es declarar que no hay nada que
+            //     pagar cuando sí lo hay. Si este panel dice un número mayor a
+            //     cero, ése ES el saldo y no se mira nada más.
+            const panelMedios = document.getElementById('frmFlujoDeclaracion:divSaldosMediosPago');
+            if (panelMedios && (typeof esVisible !== 'function' || esVisible(panelMedios))) {
+                const texto = (panelMedios.innerText || panelMedios.textContent || '');
+                const m = texto.match(/pendiente\s+por\s+cubrir\s*:?\s*(?:USD)?\s*([\d.,]+)/i);
+                const pendiente = m ? parseImporteEstricto(m[1]) : null;
+                if (pendiente !== null && pendiente > 0) {
+                    console.warn(`💰 [SALDO] "Pendiente por cubrir" = ${pendiente}. ` +
+                                 'Manda sobre el total a pagar: hay plata sin cubrir.');
+                    return pendiente;
+                }
+            }
+
+            // 0b) Resumen de pago. IDs CONFIRMADOS en el diagnóstico del
             //    04-sep-2026. Vienen como "USD 0.00" y son DOS columnas: sin
             //    remisión y con remisión. Se toma la mayor, que es la lectura
             //    prudente: si cualquiera de las dos tiene saldo, hay saldo.

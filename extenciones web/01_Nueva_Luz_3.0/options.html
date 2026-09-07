@@ -221,9 +221,21 @@ footer {
                placeholder="pegá la clave acá">
     </div>
 
+    <div class="campo">
+        <label for="claveWeb">Llave <code>anon</code> de Supabase</label>
+        <span class="para-que">
+            Es la que usa la extensión para mandar cada declaración al panel web.
+            Si el log dice <b>HTTP 401</b>, es ésta: copiala del panel de Supabase
+            (Project Settings → API) y pegala acá.
+        </span>
+        <div class="estado" id="estadoWeb">—</div>
+        <input type="password" id="claveWeb" autocomplete="off" spellcheck="false"
+               placeholder="pegá la llave anon acá">
+    </div>
+
     <div class="botones">
         <button class="b-guardar" id="btnGuardarClaves">Guardar</button>
-        <button class="b-borrar" id="btnBorrarClaves">Borrar las dos</button>
+        <button class="b-borrar" id="btnBorrarClaves">Borrar todas</button>
     </div>
 
     <p class="bajada" style="margin: 16px 0 0;">

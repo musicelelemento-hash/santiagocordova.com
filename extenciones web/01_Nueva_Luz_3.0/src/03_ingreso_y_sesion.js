@@ -1,4 +1,11 @@
 SafeStorage.get(null).then(async (items) => {
+    // Antes que nada: si hay credenciales de Supabase en Ajustes, mandan ellas.
+    // Va acá porque es el primer volcado completo del storage y todo lo que
+    // habla con la web pasa mucho después.
+    if (typeof aplicarCredencialesSupabaseGuardadas === 'function') {
+        aplicarCredencialesSupabaseGuardadas(items);
+    }
+
     const isLoginPage = isSRILoginPage();
 
     // ── Radiografía de arranque ────────────────────────────────────────────
@@ -104,8 +111,10 @@ SafeStorage.get(null).then(async (items) => {
     const yaIntentoLogin = isLoginPage && isExplicitlyOutside && !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
     const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || document.body.innerText) ||
         /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || document.body.innerText);
-    const hasLoginError = isLoginPage && (
-        yaIntentoLogin ||
+    // El portal DIJO que la credencial no sirve. Es lo único que autoriza a
+    // anotar `clave_incorrecta`: esa marca escribe en la bóveda y en la ficha
+    // web del cliente, y lo deja afuera hasta que alguien la borre a mano.
+    const elSriLoRechazo = isLoginPage && (
         isAccountLocked ||
         (feedbackText.length > 0 && /error|inv[aá]lid|incorrect|bloquead|no registrad|superado|fallid/i.test(feedbackText)) ||
         /usuario o contrase[ñn]a (inv[aá]lid|invalid|incorrect)/i.test(document.body.innerText) ||
@@ -113,7 +122,67 @@ SafeStorage.get(null).then(async (items) => {
         /identificaci[oó]n no registrada/i.test(document.body.innerText)
     );
 
-    if (hasLoginError) {
+    // ── Volvimos al login sin que el portal dijera una palabra ─────────────
+    // Pasó de verdad el 06-sep-2026: tres contribuyentes entraron —se los vio
+    // en /contribuyente/perfil— y al saltar al puente SSO el portal los devolvió
+    // a la pantalla de acceso. El bot leyó ese rebote como «clave rechazada» y
+    // los marcó a los tres. Un rebote NO es un rechazo: puede ser la sesión que
+    // se cayó, el token del puente vencido, o el portal con hipo.
+    //
+    // Se le da UN segundo intento (dos siguen lejos del bloqueo por intentos) y,
+    // si vuelve a rebotar, el cliente queda omitido como `sesion_caida`: sin
+    // tocar la bóveda y sin marcarle la clave en la web, porque la clave no
+    // tiene por qué estar mal.
+    if (yaIntentoLogin && !elSriLoRechazo) {
+        const rucRebote = items.pending_sri_autofill?.ruc;
+        const nombreRebote = items.pending_sri_autofill?.name || rucRebote || 'este cliente';
+        const rb = await SafeStorage.get(['sc_rebotes']);
+        const rebotes = rb.sc_rebotes || {};
+        const veces = (rebotes[rucRebote] || 0) + 1;
+
+        if (veces <= 1) {
+            console.warn(`↩️ [REBOTE ${veces}/2] ${nombreRebote} volvió al login y el SRI no dijo por qué. ` +
+                         'No se concluye que la clave esté mal: se reintenta una vez.');
+            anotarBitacora('↩️ rebote', `${veces}/2 · ${nombreRebote} volvió al login sin mensaje`);
+            rebotes[rucRebote] = veces;
+            await SafeStorage.set({
+                sc_rebotes: rebotes,
+                pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
+            });
+            items.pending_sri_autofill = { ...items.pending_sri_autofill, loginAttempted: false };
+            // Y se sigue de largo: el auto-login de más abajo vuelve a inyectar.
+        } else {
+            console.error(`🔌 [SESIÓN] ${nombreRebote} rebotó al login dos veces sin mensaje del SRI. ` +
+                          'Se lo omite SIN marcarle la clave: no hay nada que diga que esté mal.');
+            anotarBitacora('🔌 sesión caída', nombreRebote);
+            delete rebotes[rucRebote];
+            await SafeStorage.set({ sc_rebotes: rebotes });
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+
+            if (rucRebote) {
+                await Omitidos.anotar(rucRebote, 'sesion_caida', {
+                    nombre: nombreRebote,
+                    detalle: 'Entró y el portal lo devolvió al login, sin mensaje de error'
+                });
+            }
+            if (window.sriAssistant?.showEliteToast) {
+                window.sriAssistant.showEliteToast({
+                    title: '🔌 Sesión caída',
+                    msg: `${nombreRebote} volvió al login sin aviso del SRI. Su clave NO se marcó como mala.`,
+                    duration: 8000
+                });
+            }
+
+            const esLote = items.auto_batch_enabled || items.pending_sri_autofill?.isBatch ||
+                (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+            if (esLote && typeof handleBatchNextClient === 'function') {
+                setTimeout(() => handleBatchNextClient(), 2000);
+            }
+            return;
+        }
+    }
+
+    if (elSriLoRechazo) {
         console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o reintento bloqueado. Deteniendo para blindar la cuenta contra bloqueos.');
         const clientRuc = items.pending_sri_autofill?.ruc;
         const clientPass = items.pending_sri_autofill?.password;
@@ -410,6 +479,15 @@ SafeStorage.get(null).then(async (items) => {
         // Entró bien: si había un aviso de clave en la web, ya no corresponde.
         if (items.pending_sri_autofill?.ruc) {
             marcarCredencialEnLaWeb(items.pending_sri_autofill.ruc, 'ok').catch(() => {});
+        }
+        // Entró: si venía rebotando, el rebote era del portal y no de la clave.
+        if (items.pending_sri_autofill?.ruc) {
+            SafeStorage.get(['sc_rebotes']).then((rb) => {
+                const rebotes = rb.sc_rebotes || {};
+                if (rebotes[items.pending_sri_autofill.ruc] === undefined) return;
+                delete rebotes[items.pending_sri_autofill.ruc];
+                return SafeStorage.set({ sc_rebotes: rebotes });
+            }).catch(() => {});
         }
         // Entró: el rescate (si lo hubo) cumplió. Contador a cero.
         if (items.pending_sri_autofill?.ruc && items.sc_rescates?.[items.pending_sri_autofill.ruc]) {
