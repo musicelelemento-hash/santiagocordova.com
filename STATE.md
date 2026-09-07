@@ -135,6 +135,30 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
   3. **Banco de pruebas:** `tests/recuperar.html` (añadido a `tests/index.html`).
 
 
+### G. Visualización de Declaraciones en santiagocordova.com (`services/supabaseClientService.ts`)
+- **Problema detectado:** El comprobante de Guido Chávez (`0706482023001`) se subió exitosamente a Cloudflare R2 y se registró en `sri_declaraciones` y `clients.declaration_history`, pero la interfaz web en `santiagocordova.com` ("Gestión Interna -> Declaraciones") no reflejaba al cliente ni sus comprobantes.
+- **Causas raíz descubiertas:**
+  1. **Relación inexistente `billing_plans`:** `getClients()` y `getFacturadoresPaginated()` solicitaban `.select('*, sri_declaraciones(*), billing_plans(*)')`. La relación `billing_plans` no existe en la base de datos de Supabase, provocando que PostgREST rechace la consulta con `PGRST200 (Could not find relationship between clients and billing_plans)`.
+  2. **Permisos de columnas para rol `anon`:** La consulta `clients` con `is_deleted=eq.false` o `*` arrojaba error `401 / 42501` (permisos insuficientes sobre columnas protegidas como `is_deleted`).
+  3. **Consecuencia:** Al fallar `getClients()`, la capa de sincronización en `useAppStore` caía en el caché local obsoleto de IndexedDB/Firestore, sin refrescar nunca los nuevos datos de Supabase.
+- **Solución implementada:**
+  1. Se eliminó `billing_plans(*)` de `getClients()` y `getFacturadoresPaginated()`.
+  2. Se agregó fallback automático en `getClients()`: si la consulta completa falla con error de columnas/RLS, consulta exclusivamente las columnas públicas permitidas (`id, ruc, name, regime, tax_profile, declaration_history, updated_at, sri_declaraciones(*)`).
+  3. Se canonizó el estado a `DeclarationStatus.Enviada` (`'Enviada'`) en `src/01_utilidades_y_pdf.js` y se actualizó el registro en Supabase.
+  4. Probado en vivo: la consulta responde HTTP 200 con 157 clientes y sus declaraciones completas.
+
+### H. Blindaje de Búsqueda de Facturas Recibidas y Prevención de Falsos Ceros (`src/03_ingreso_y_sesion.js`)
+- **Problema detectado (Walter Miño, RUC `0801048844001`):**
+  - En el Paso 1 (`turbo_step1_facturas`), el bot configuró año, mes y tipo "Factura", y procedió a pulsar "Consultar".
+  - Sin embargo, los eventos `change` en los `<select>` de PrimeFaces activaron peticiones AJAX en curso (`#popStatusPrime`, `.ui-blockui`), lo que ocasionó que el clic en `btnConsultar` fuera ignorado o bloqueado por el portal.
+  - El bot esperó 30 segundos en polling; al no detectar la tabla ni un mensaje de "no existen datos", asumió erróneamente `noData: true` (0 facturas), pasando al paso de retenciones y dejando la base imponible de compras en blanco.
+- **Solución implementada:**
+  1. **Espera activa de AJAX:** Antes de pulsar "Consultar", el bot verifica y espera a que `#popStatusPrime`, `.ui-blockui` y `.ui-widget-overlay` desaparezcan.
+  2. **Clic reforzado:** Se aplica `.focus()` y clic directo tanto al elemento `<button>` como al `span.ui-button-text`.
+  3. **Reintentos inteligentes:** Si transcurren 3.5s o 7.5s de polling sin tabla, sin overlays y sin mensajes del SRI, se relanza el clic de búsqueda.
+  4. **Detección exhaustiva de mensajes vacíos del SRI:** Se incorporaron selectores para `.ui-messages-warn-detail`, `#idMensajeConsulta`, "NO EXISTEN COMPROBANTES", "NO SE ENCONTRARON REGISTROS", etc.
+  5. **Fallback nativo a TXT (`descargarTxtRecibidos`):** Si el polling finaliza sin tabla ni mensaje de error, el bot dispara la descarga del listado TXT oficial del SRI (`frmPrincipal:lnkTxtlistado`). Si el TXT contiene facturas, las extrae y procesa inmediatamente sin perder ninguna. Solo si el TXT está vacío concluye `noData: true`. Si el TXT falla, recarga la página para reintentar limpiamente en lugar de asumir 0.
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS

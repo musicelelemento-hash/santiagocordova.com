@@ -1878,11 +1878,15 @@ async function syncDeclarationToSupabase(
     };
 
     const decType = canonicalPeriod.length === 7 ? 'IVA' : (canonicalPeriod.includes('ANEXO') ? 'ANEXO' : 'RENTA');
+    // Canónico de estado: 'Enviada' es el enum estándar DeclarationStatus.Enviada en la app web y matriz
+    const finalStatus = (customStatus === 'completado' || customStatus === 'Realizada' || !customStatus)
+      ? 'Enviada'
+      : customStatus;
     const declarationToUpsert = {
       client_id: client.id,
       type: decType,
       period: canonicalPeriod,
-      status: customStatus || 'Realizada',
+      status: finalStatus,
       proof_file: proofFileObj,
       updated_at: new Date().toISOString()
     };
@@ -1939,7 +1943,7 @@ async function syncDeclarationToSupabase(
         {
           period: canonicalPeriod,
           type: decType,
-          status: customStatus || 'Realizada',
+          status: finalStatus,
           proof_file: proofFileObj,
           updated_at: new Date().toISOString()
         }

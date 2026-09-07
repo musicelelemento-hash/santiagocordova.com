@@ -1152,7 +1152,7 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ No hay Facturas para este periodo.');
+                console.log('ℹ️ Confirmado: No hay Facturas para este periodo.');
                 await GhostMemory.set('facturas', { totalFacturas: 0, iva15: { cantidad: 0 }, iva0: { cantidad: 0 } });
                 const nextAction = getNextTurboStep('turbo_step2_extraer_facturas', items);
                 if (nextAction === 'FIN_TURBO') {
@@ -1162,6 +1162,37 @@ async function ejecutarAccionPendiente(items) {
                     window.location.reload();
                     return;
                 }
+            } else if (searchRes.tableFound && searchRes.desdeTxt && Array.isArray(searchRes.filasTxt)) {
+                console.log(`📊 [TXT OFICIAL] Procesando ${searchRes.filasTxt.length} facturas recuperadas directamente desde el listado TXT del SRI...`);
+                let rucsAl5 = new Set();
+                if (typeof Proveedores !== 'undefined') {
+                    try {
+                        await Proveedores.registrarLote(searchRes.filasTxt, await rucDelClienteActual());
+                        rucsAl5 = await Proveedores.losQueFacturanAl5();
+                    } catch (e) { console.warn('🏷️ [PROVEEDORES] Error anotando desde TXT:', e.message); }
+                }
+                const res = (typeof calcularResumen === 'function')
+                    ? calcularResumen(searchRes.filasTxt, { rucsAl5 })
+                    : { totalFacturas: searchRes.filasTxt.length };
+                await GhostMemory.set('facturas', res);
+                console.log(`✅ [TXT OFICIAL] Facturas procesadas y guardadas: ${res.totalFacturas || searchRes.filasTxt.length}`);
+
+                const nextAction = getNextTurboStep('turbo_step2_extraer_facturas', items);
+                await SafeStorage.set({
+                    pendingAction: nextAction,
+                    actionTimestamp: Date.now()
+                });
+                if (nextAction === 'FIN_TURBO') {
+                    currentAction = 'FIN_TURBO';
+                } else {
+                    window.location.reload();
+                    return;
+                }
+            } else if (!searchRes.tableFound && searchRes.error) {
+                console.warn('⚠️ [ALERTA] La búsqueda de facturas no concluyó en el portal SRI. Reintentando consulta...');
+                await sleep(1500);
+                window.location.reload();
+                return;
             } else {
                 currentAction = 'turbo_step2_extraer_facturas';
             }
@@ -1754,22 +1785,36 @@ async function autoLlenarBusqueda(data) {
 
         // ELITE v12.6: Esperar reCAPTCHA antes de disparar el evento si existe widget
         await waitForRecaptchaReady();
-        await sleep(300); // Margen de seguridad extra
+
+        // Esperar que PrimeFaces termine cualquier AJAX previo (actualizaciones en cascada de mes/día)
+        for (let w = 0; w < 12; w++) {
+            const statusDialog = document.getElementById('popStatusPrime') || document.querySelector('.ui-dialog[id*="popStatusPrime"]');
+            const overlay = document.querySelector('.ui-widget-overlay, .ui-blockui');
+            const isStatusActive = (statusDialog && statusDialog.style.display !== 'none' && esVisible(statusDialog)) ||
+                                   (overlay && overlay.style.display !== 'none' && esVisible(overlay));
+            if (!isStatusActive) break;
+            await sleep(300);
+        }
+        await sleep(500); // Margen de estabilidad JSF
 
         // ELITE v12.7: Limpiar mensajes de growl previos para evitar falsos positivos de "no hay datos"
         const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn');
         oldMessages.forEach(m => m.remove());
 
-        console.log('✅ Click en Consultar', btnConsultar);
-        btnConsultar.click();
-        // Nota: El SRI a veces requiere el click en el span interno o en el botón padre, 
-        // pero disparar ambos simultáneamente puede causar race conditions en reCAPTCHA.
-        // Solo disparamos el padre si el actual no es el botón principal.
-        if (btnConsultar.tagName !== 'BUTTON' && btnConsultar.parentElement && btnConsultar.parentElement.tagName === 'BUTTON') {
-            btnConsultar.parentElement.click();
-        }
+        const dispararClicConsultar = () => {
+            console.log('✅ Click en Consultar', btnConsultar);
+            btnConsultar.focus();
+            btnConsultar.click();
+            const span = btnConsultar.querySelector('.ui-button-text');
+            if (span) span.click();
+            if (btnConsultar.tagName !== 'BUTTON' && btnConsultar.parentElement && btnConsultar.parentElement.tagName === 'BUTTON') {
+                btnConsultar.parentElement.click();
+            }
+        };
 
-        // ESPERAR Y VERIFICAR SI CARGA LA TABLA (SKIP CAPTCHA) - Lógica de Polling Mejora
+        dispararClicConsultar();
+
+        // ESPERAR Y VERIFICAR SI CARGA LA TABLA (SKIP CAPTCHA) - Lógica de Polling con Reintento
         console.log('⏳ Esperando posible carga de tabla (Polling)...');
         let tableFound = false;
 
@@ -1777,12 +1822,26 @@ async function autoLlenarBusqueda(data) {
         for (let i = 0; i < 60; i++) {
             await sleep(500);
 
-            // FAST-FAIL: Verificar si el SRI responde con "No hay datos"
-            const msgError = document.querySelector('.ui-messages-warn-detail, .ui-growl-item, #idMensajeConsulta');
+            // REINTENTO INTELIGENTE: Si en 3.5s o 7.5s no hay ni tabla, ni diálogo de carga, ni mensajes, el clic se perdió
+            if ((i === 7 || i === 15) && !tableFound) {
+                const hayMensaje = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail, .ui-messages-error-detail, .ui-growl-item, #idMensajeConsulta, .ui-messages-warn, .ui-messages-info');
+                const hayOverlay = document.querySelector('.ui-widget-overlay, [id*="popStatusPrime"]');
+                const hayFilas = document.querySelector('.ui-datatable-data tr, .ui-datatable-empty-message');
+                if (!hayMensaje && !hayOverlay && !hayFilas) {
+                    console.log(`🔄 Reintentando clic en Consultar (intento ${i === 7 ? 2 : 3})...`);
+                    dispararClicConsultar();
+                }
+            }
+
+            // FAST-FAIL: Verificar si el SRI responde explícitamente con "No hay datos"
+            const msgError = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail, .ui-messages-error-detail, .ui-growl-item, #idMensajeConsulta, .ui-messages-warn, .ui-messages-info');
             const textoMensaje = (msgError?.textContent || document.body.innerText).toUpperCase();
-            if (textoMensaje.includes('NO EXISTEN DATOS') || textoMensaje.includes('NO SE ENCONTRARON')) {
+            if (textoMensaje.includes('NO EXISTEN DATOS') ||
+                textoMensaje.includes('NO SE ENCONTRARON') ||
+                textoMensaje.includes('NO EXISTEN COMPROBANTES') ||
+                textoMensaje.includes('NO SE ENCONTRARON REGISTROS') ||
+                textoMensaje.includes('NO SE ENCONTRARON COMPROBANTES')) {
                 console.warn('⚡ [Fast-Fail] El SRI reporta que no hay datos. Abortando polling.');
-                // ELITE v12.9: NO removemos pendingAction aquí, dejamos que el flujo Turbo decida el siguiente paso.
                 return { tableFound: false, noData: true };
             }
 
@@ -1822,9 +1881,29 @@ async function autoLlenarBusqueda(data) {
         console.warn('⚠️ No se encontró el botón Consultar');
     }
 
-    // Si llegamos aquí después del polling, asumimos que no hubo resultados para no trabar el Turbo
-    console.warn('⌛ Polling finalizado sin detectar tabla. Asumiendo que no hay datos para continuar.');
-    return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: false, noData: true };
+    // FALLBACK DE SEGURIDAD NATIVO: Si el polling finalizó sin tabla ni mensaje explícito,
+    // consultar directamente vía POST al endpoint de TXT oficial del SRI (lnkTxtlistado)
+    if (typeof descargarTxtRecibidos === 'function') {
+        console.log('🔎 Polling visual sin tabla. Consultando listado TXT oficial del SRI (lnkTxtlistado)...');
+        try {
+            const codTipo = data.tipoComprobante === 'Retencion' ? '6' : (data.tipoComprobante === 'Nota de Crédito' ? '3' : '1');
+            const filasTxt = await descargarTxtRecibidos(codTipo);
+            if (Array.isArray(filasTxt)) {
+                if (filasTxt.length > 0) {
+                    console.log(`✅ [TXT Oficial] Se recuperaron ${filasTxt.length} comprobantes directamente del portal SRI.`);
+                    return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: true, desdeTxt: true, filasTxt };
+                } else {
+                    console.log('ℹ️ [TXT Oficial] Confirmado por respuesta del SRI: 0 comprobantes en este periodo.');
+                    return { tableFound: false, noData: true };
+                }
+            }
+        } catch (eTxt) {
+            console.warn('⚠️ Falló verificación TXT de respaldo:', eTxt.message);
+        }
+    }
+
+    console.warn('⚠️ Polling finalizado sin confirmación fehaciente del SRI. No se asumirá 0 a ciegas.');
+    return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: false, error: 'timeout_sin_respuesta' };
 }
 
 // ============================================================
