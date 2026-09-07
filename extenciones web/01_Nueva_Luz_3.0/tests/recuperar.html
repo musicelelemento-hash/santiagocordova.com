@@ -134,8 +134,18 @@
   const fuente = await (await fetch('../src/03_ingreso_y_sesion.js')).text();
   push('el auto-arranque respeta lo ya decidido',
        /YA_DECIDIDAS[\s\S]{0,200}recuperar_comprobante/.test(fuente), true);
-  push('y frena antes de plantar la extracción',
-       /YA_DECIDIDAS\.includes\(items\.pendingAction\)[\s\S]{0,320}return;[\s\S]{0,320}pendingAction = 'turbo_step1_facturas'/.test(fuente), true);
+  // Se mira la ESTRUCTURA, no la distancia en caracteres: el bloque puede
+  // crecer — Gemini le agregó el despacho de la acción el 07-sep-2026— y un
+  // test que cuenta caracteres se pone rojo por un cambio que está bien.
+  const iGuardia = fuente.indexOf('YA_DECIDIDAS.includes(items.pendingAction)');
+  const iPlanta  = fuente.indexOf("pendingAction = 'turbo_step1_facturas'");
+  push('la guardia va ANTES de plantar la extracción',
+       iGuardia > -1 && iPlanta > -1 && iGuardia < iPlanta, true);
+  push('y corta el paso con un return',
+       /return;/.test(fuente.slice(iGuardia, iPlanta)), true);
+  // Y la acción decidida no queda colgada: se despacha en esta misma carga.
+  push('además despacha la acción en curso',
+       /ejecutarAccionPendiente/.test(fuente.slice(iGuardia, iPlanta)), true);
   push('también cuida `bajarTodos`',
        /YA_DECIDIDAS[\s\S]{0,200}bajarTodos/.test(fuente), true);
 
