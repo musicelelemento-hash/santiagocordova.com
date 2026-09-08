@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8"><title>Detección Verídica de Comprobantes Recibidos y No Datos SRI</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Validación de detección verídica de "No existen datos" en PrimeFaces SRI</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(60)+JSON.stringify(v)+(b?'':'  ESPERADO: '+(typeof e==='function'?'(condición)':JSON.stringify(e))));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const P=document.getElementById('portal');
+
+  sec('detectarMensajeNoDatosSRI');
+  push('función existe en scope global', typeof detectarMensajeNoDatosSRI, 'function');
+
+  // Caso 1: Sin mensajes
+  P.innerHTML = '<div><button id="frmPrincipal:btnConsultarSinRe">Consultar</button></div>';
+  let res = detectarMensajeNoDatosSRI();
+  push('sin mensajes devuelve encontrado:false', res.encontrado, false);
+
+  // Caso 2: Mensaje exacto reportado por usuario (.ui-messages-warn-summary)
+  P.innerHTML = `
+    <div id="formMessages:messages" class="ui-messages ui-widget">
+      <div class="ui-messages-warn ui-corner-all">
+        <span class="ui-messages-warn-icon"></span>
+        <ul>
+          <li>
+            <span class="ui-messages-warn-summary">No existen datos para los parámetros  ingresados </span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  `;
+  res = detectarMensajeNoDatosSRI();
+  push('detecta .ui-messages-warn-summary con espacios', res.encontrado, true);
+  push('selector detectado incluye warn-summary', res.selector, '.ui-messages-warn-summary');
+
+  // Caso 3: Mensaje viejo marcado con data-sri-old no debe ser detectado
+  const elemViejo = P.querySelector('.ui-messages-warn-summary');
+  elemViejo.setAttribute('data-sri-old', 'true');
+  res = detectarMensajeNoDatosSRI();
+  push('ignora mensajes marcados como antiguos', res.encontrado, false);
+
+  // Caso 4: Mensaje en .ui-datatable-empty-message
+  P.innerHTML = `
+    <div class="ui-datatable">
+      <table>
+        <tbody>
+          <tr class="ui-datatable-empty-message">
+            <td colspan="5">No se encontraron registros.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+  res = detectarMensajeNoDatosSRI();
+  push('detecta empty message de datatable', res.encontrado, true);
+
+  // Caso 5: Mensaje de éxito o informativo distinto no debe confundirse con noData
+  P.innerHTML = `
+    <div class="ui-messages-info">
+      <span class="ui-messages-info-summary">Consulta ejecutada correctamente</span>
+    </div>
+  `;
+  res = detectarMensajeNoDatosSRI();
+  push('no confunde mensaje de éxito con noData', res.encontrado, false);
+
+  sec('Resumen final');
+  const total = ok.length;
+  const passed = ok.filter(Boolean).length;
+  L.push(`\nTotal: ${passed}/${total} comprobaciones en verde.`);
+  document.getElementById('out').textContent = L.join('\n');
+})();
+</script>
+</body>
+</html>

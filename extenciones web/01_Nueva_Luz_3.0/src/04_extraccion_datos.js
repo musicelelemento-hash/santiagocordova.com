@@ -409,10 +409,13 @@ async function extraerTodasLasRetenciones() {
         tabla = document.querySelector('table[id*="dtComprobantes"]');
     }
 
-    // FAST-FAIL: Verificar si hay mensaje de "No existen datos" antes de rendirse o esperar
-    const msgWarn = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail');
-    if (msgWarn && (msgWarn.textContent.includes('No existen datos') || msgWarn.textContent.includes('No se encontraron'))) {
-        console.warn('⚡ [Fast-Fail] Confirmado: No existen retenciones en este periodo.');
+    // FAST-FAIL: Verificar si hay mensaje fehaciente de "No existen datos" del SRI
+    const noDataWarn = typeof detectarMensajeNoDatosSRI === 'function'
+        ? detectarMensajeNoDatosSRI()
+        : { encontrado: false };
+
+    if (noDataWarn.encontrado) {
+        console.warn(`⚡ [Fast-Fail Verídico] Confirmado por SRI: ${noDataWarn.texto}`);
         return { totalRetenciones: 0, ivaRetenido: { cantidad: 0, total: 0 }, rentaRetenida: { cantidad: 0, total: 0 } };
     }
 
@@ -1645,9 +1648,12 @@ async function extraerTodasLasNotasCredito() {
 
         if (ncPagina.length === 0 && paginaActual === 1) {
             // Check if "No existen datos" message is present
-            const msgError = document.querySelector('.ui-messages-warn-detail, .ui-growl-item');
-            if (msgError && msgError.textContent.includes('No existen datos')) {
-                console.log('ℹ️ No hay notas de crédito.');
+            const noDataNC = typeof detectarMensajeNoDatosSRI === 'function'
+                ? detectarMensajeNoDatosSRI()
+                : { encontrado: false };
+
+            if (noDataNC.encontrado) {
+                console.log(`ℹ️ [Fast-Fail Verídico] Confirmado por SRI: ${noDataNC.texto}`);
                 break;
             }
         }

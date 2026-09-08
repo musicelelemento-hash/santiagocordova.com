@@ -1243,7 +1243,7 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ No hay retenciones para este periodo.');
+                console.log('ℹ️ Confirmado fehacientemente: No hay retenciones para este periodo.');
                 await GhostMemory.set('retenciones', { totalRetenciones: 0, ivaRetenido: { total: 0 }, rentaRetenida: { total: 0 }, listaNumeros: [] });
 
                 const nextAction = getNextTurboStep('turbo_step4_extraer_retenciones', items);
@@ -1255,6 +1255,12 @@ async function ejecutarAccionPendiente(items) {
                     window.location.reload();
                     return;
                 }
+            } else if (!searchRes.tableFound && searchRes.error) {
+                console.warn('⚠️ [ALERTA] La búsqueda de retenciones no concluyó de forma fehaciente en el portal SRI. Reintentando consulta...');
+                if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de retenciones (sin respuesta del SRI)...');
+                await sleep(1500);
+                window.location.reload();
+                return;
             } else {
                 currentAction = 'turbo_step4_extraer_retenciones';
             }
@@ -1291,9 +1297,15 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ No hay Notas de Crédito para este periodo.');
+                console.log('ℹ️ Confirmado fehacientemente: No hay Notas de Crédito para este periodo.');
                 await GhostMemory.set('notasCredito', { totalNotas: 0, iva: { total: 0 }, totalGeneral: 0 });
                 currentAction = 'FIN_TURBO';
+            } else if (!searchRes.tableFound && searchRes.error) {
+                console.warn('⚠️ [ALERTA] La búsqueda de notas de crédito no concluyó fehacientemente. Reintentando...');
+                if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de notas de crédito...');
+                await sleep(1500);
+                window.location.reload();
+                return;
             } else {
                 currentAction = 'turbo_step6_extraer_notas_credito';
             }
@@ -1797,78 +1809,90 @@ async function autoLlenarBusqueda(data) {
         }
         await sleep(500); // Margen de estabilidad JSF
 
-        // ELITE v12.7: Limpiar mensajes de growl previos para evitar falsos positivos de "no hay datos"
-        const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn');
-        oldMessages.forEach(m => m.remove());
+        // ELITE v12.7: Marcar mensajes previos como antiguos sin borrar nodos del DOM
+        // (Borrar nodos de PrimeFaces con .remove() rompe los updates Ajax del servidor)
+        const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn, #formMessages\\:messages');
+        oldMessages.forEach(m => {
+            m.setAttribute('data-sri-old', 'true');
+            m.style.opacity = '0.35';
+        });
 
         const dispararClicConsultar = () => {
-            console.log('✅ Click en Consultar', btnConsultar);
-            btnConsultar.focus();
-            btnConsultar.click();
-            const span = btnConsultar.querySelector('.ui-button-text');
-            if (span) span.click();
-            if (btnConsultar.tagName !== 'BUTTON' && btnConsultar.parentElement && btnConsultar.parentElement.tagName === 'BUTTON') {
-                btnConsultar.parentElement.click();
+            console.log('🎯 [SRI] Clic certero en Consultar:', btnConsultar.id || btnConsultar);
+            if (window.sriAssistant) {
+                window.sriAssistant.log(`🔎 Consultando ${data.tipoComprobante || 'comprobantes'} en el portal SRI...`);
             }
+            btnConsultar.focus();
+            btnConsultar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            btnConsultar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            btnConsultar.click();
         };
 
         dispararClicConsultar();
 
-        // ESPERAR Y VERIFICAR SI CARGA LA TABLA (SKIP CAPTCHA) - Lógica de Polling con Reintento
-        console.log('⏳ Esperando posible carga de tabla (Polling)...');
+        // ESPERAR Y VERIFICAR SI CARGA LA TABLA O MENSAJE VERÍDICO (Skip Captcha)
+        console.log('⏳ Esperando respuesta del SRI (Polling fehaciente)...');
         let tableFound = false;
 
         // Intentar detectar durante 30 segundos (60 intentos x 500ms)
         for (let i = 0; i < 60; i++) {
             await sleep(500);
 
-            // REINTENTO INTELIGENTE: Si en 3.5s o 7.5s no hay ni tabla, ni diálogo de carga, ni mensajes, el clic se perdió
-            if ((i === 7 || i === 15) && !tableFound) {
-                const hayMensaje = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail, .ui-messages-error-detail, .ui-growl-item, #idMensajeConsulta, .ui-messages-warn, .ui-messages-info');
-                const hayOverlay = document.querySelector('.ui-widget-overlay, [id*="popStatusPrime"]');
-                const hayFilas = document.querySelector('.ui-datatable-data tr, .ui-datatable-empty-message');
-                if (!hayMensaje && !hayOverlay && !hayFilas) {
-                    console.log(`🔄 Reintentando clic en Consultar (intento ${i === 7 ? 2 : 3})...`);
-                    dispararClicConsultar();
-                }
-            }
+            // 1. FAST-FAIL VERÍDICO: Verificar si el SRI responde explícitamente con "No existen datos"
+            const noDataVerificado = typeof detectarMensajeNoDatosSRI === 'function'
+                ? detectarMensajeNoDatosSRI()
+                : { encontrado: false };
 
-            // FAST-FAIL: Verificar si el SRI responde explícitamente con "No hay datos"
-            const msgError = document.querySelector('.ui-messages-warn-detail, .ui-messages-info-detail, .ui-messages-error-detail, .ui-growl-item, #idMensajeConsulta, .ui-messages-warn, .ui-messages-info');
-            const textoMensaje = (msgError?.textContent || document.body.innerText).toUpperCase();
-            if (textoMensaje.includes('NO EXISTEN DATOS') ||
-                textoMensaje.includes('NO SE ENCONTRARON') ||
-                textoMensaje.includes('NO EXISTEN COMPROBANTES') ||
-                textoMensaje.includes('NO SE ENCONTRARON REGISTROS') ||
-                textoMensaje.includes('NO SE ENCONTRARON COMPROBANTES')) {
-                console.warn('⚡ [Fast-Fail] El SRI reporta que no hay datos. Abortando polling.');
+            if (noDataVerificado.encontrado) {
+                console.warn(`⚡ [Fast-Fail Verídico] Mensaje confirmado del SRI: "${noDataVerificado.texto}"`);
+                if (window.sriAssistant) {
+                    window.sriAssistant.log(`ℹ️ Confirmado por SRI: No existen comprobantes.`);
+                }
                 return { tableFound: false, noData: true };
             }
 
-            // Estrategia 3: Heurística "Bruta" (Texto y celdas)
-            const numeroCeldas = document.querySelectorAll('td').length;
-            const textoBody = document.body.innerText;
-            const tieneEncabezados = textoBody.includes('RUC') && (textoBody.includes('Razón social') || textoBody.includes('Clave de Acceso'));
-
-            // Detección de Tabla Vacía (PrimeFaces empty message)
+            // Detección de Tabla Vacía (PrimeFaces empty message visible)
             const emptyTable = document.querySelector('.ui-datatable-empty-message');
             if (emptyTable && esVisible(emptyTable)) {
-                console.warn('⚡ [Fast-Fail] Tabla vacía encontrada.');
+                console.warn('⚡ [Fast-Fail Verídico] Tabla vacía de PrimeFaces encontrada.');
                 return { tableFound: false, noData: true };
             }
 
-            // Si hay muchas celdas (>10) y texto de encabezado, O filas específicas
-            if ((numeroCeldas > 10 && tieneEncabezados) ||
-                document.querySelector('.ui-datatable-data tr:not(.ui-datatable-empty-message)') ||
-                document.querySelector('tr[role="row"]:not(.ui-datatable-empty-message)')) {
+            // 2. DETECCIÓN DE DATOS: Filas reales con información
+            const filasConDatos = document.querySelectorAll(
+                'table[id*="tablaCompRecibidos"] tbody tr:not(.ui-datatable-empty-message), ' +
+                '.ui-datatable-data tr:not(.ui-datatable-empty-message)'
+            );
+            const numeroCeldas = document.querySelectorAll('td').length;
+            const tieneFilasReales = filasConDatos.length > 0 && Array.from(filasConDatos).some(r => r.querySelectorAll('td').length >= 3);
 
-                console.log(`✅ Tabla detectada por heurística (Celdas: ${numeroCeldas}).`);
-
-                // ELITE v13.0: Intentar maximizar tamaño de página para velocidad rayo
+            if (tieneFilasReales || (numeroCeldas > 10 && document.body.innerText.includes('Clave de Acceso'))) {
+                console.log(`✅ [SRI] Tabla con datos detectada (Filas: ${filasConDatos.length}, Celdas: ${numeroCeldas}).`);
+                if (window.sriAssistant) {
+                    window.sriAssistant.log(`✅ Comprobantes encontrados en el portal SRI.`);
+                }
                 await optimizarTamanoPagina();
-
                 tableFound = true;
                 break;
+            }
+
+            // 3. REINTENTO INTELIGENTE: Si en 3.5s (i=7), 7.5s (i=15) o 13s (i=26) no hay tabla, ni diálogo de carga, ni mensajes:
+            if ((i === 7 || i === 15 || i === 26) && !tableFound) {
+                const statusDialog = document.getElementById('popStatusPrime') || document.querySelector('.ui-dialog[id*="popStatusPrime"]');
+                const overlay = document.querySelector('.ui-widget-overlay, .ui-blockui');
+                const isStatusActive = (statusDialog && statusDialog.style.display !== 'none' && esVisible(statusDialog)) ||
+                                       (overlay && overlay.style.display !== 'none' && esVisible(overlay));
+
+                if (!isStatusActive) {
+                    const intentoNum = i <= 7 ? 2 : (i <= 15 ? 3 : 4);
+                    console.log(`🔄 Reintentando clic en Consultar (intento ${intentoNum})...`);
+                    if (window.sriAssistant) {
+                        window.sriAssistant.log(`🔄 Reintentando clic en Consultar (${data.tipoComprobante || 'comprobantes'} - intento ${intentoNum})...`);
+                    }
+                    dispararClicConsultar();
+                } else {
+                    console.log('⏳ Portal SRI procesando consulta (diálogo de espera activo)...');
+                }
             }
         }
 

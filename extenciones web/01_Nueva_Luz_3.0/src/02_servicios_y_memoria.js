@@ -2453,6 +2453,46 @@ async function waitForRecaptchaReady(timeout = 4000) {
     }, timeout, 'reCAPTCHA Ready');
 }
 
+/**
+ * Detecta de forma verídica y fehaciente si el portal del SRI ha emitido
+ * un mensaje oficial confirmando que no existen comprobantes para la consulta.
+ * Busca tanto en .ui-messages-warn-summary (donde el SRI inyecta el texto)
+ * como en -detail, contenedores PrimeFaces, growl y datatable empty message.
+ */
+function detectarMensajeNoDatosSRI() {
+    const selectors = [
+        '.ui-messages-warn-summary',
+        '.ui-messages-warn-detail',
+        '.ui-messages-warn',
+        '.ui-messages-info-summary',
+        '.ui-messages-info-detail',
+        '.ui-messages-info',
+        '.ui-messages-error-summary',
+        '.ui-messages-error-detail',
+        '.ui-growl-title',
+        '.ui-growl-message',
+        '.ui-datatable-empty-message',
+        '#formMessages\\:messages',
+        '#idMensajeConsulta'
+    ];
+
+    for (const sel of selectors) {
+        const elems = document.querySelectorAll(sel);
+        for (const el of elems) {
+            if (el.getAttribute('data-sri-old') === 'true') continue;
+            const txt = (el.textContent || '').toUpperCase().trim();
+            if (txt.includes('NO EXISTEN DATOS') ||
+                txt.includes('NO SE ENCONTRARON') ||
+                txt.includes('NO EXISTEN COMPROBANTES') ||
+                txt.includes('NO SE ENCONTRARON REGISTROS') ||
+                txt.includes('NO SE ENCONTRARON COMPROBANTES')) {
+                return { encontrado: true, texto: el.textContent.trim(), selector: sel };
+            }
+        }
+    }
+    return { encontrado: false };
+}
+
 // ============================================================
 // GHOST MEMORY ENGINE (v1.0) - MULTI-USER PROTECTION
 // ============================================================
