@@ -187,6 +187,19 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 
 ---
 
+### E. Despliegue a producción de `santiagocordova-main` y visibilidad de comprobantes (07-sep-2026)
+- **Problema reportado:** El PDF de Walter Miño (`0801048844001`, `2026-08`) no aparecía en `santiagocordova.com` en "Gestión Interna -> Menú Declaraciones".
+- **Verificación en infra:**
+  - En Cloudflare R2: el archivo `Declaracion_IVA_0801048844001_2026-08.pdf` (85,935 bytes) existe y responde `HTTP 200 OK`.
+  - En Supabase: Walter Miño tiene registrada la declaración `2026-08` en `declaration_history` con estado `Enviada`, compras 15% ($4,317.46), compras 0% ($79.05), retenciones y la URL pública de R2.
+- **Causa raíz en la web:**
+  - El sub-repositorio `santiagocordova-main` estaba 5 commits por delante de `origin/main`.
+  - La versión vieja en Vercel llamaba en `getClients()` a `billing_plans(*)` (tabla inexistente) y `is_deleted` (columna denegada a `anon`), arrojando `HTTP 401 / 42501 permission denied`.
+  - La web en Vercel abortaba el refresco de Supabase y mantenía en memoria el caché previo de IndexedDB.
+- **Acción ejecutada:**
+  - Se verificó el build (`tsc --noEmit && vite build`) en verde (`✓ built in 1m 16s`).
+  - Se hizo `git push origin main` en `santiagocordova-main` (commits `a0ce6d9..9afe3c7`). Vercel re-despliega con el fallback de 7 columnas públicas que recupera a los 157 clientes y todas sus declaraciones.
+
 ## 💡 4. PROPUESTAS TÉCNICAS Y DISEÑO DE SOLUCIONES
 
 ### 4.1. Propuesta: Automatización del Casillero 203 (Tarifa 5% - Decreto)
