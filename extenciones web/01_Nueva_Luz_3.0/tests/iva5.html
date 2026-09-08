@@ -49,6 +49,7 @@
   push('base 1234.56 con IVA 185.18 sigue siendo 15%', T(1234.56,185.18), 15);
   push('base 3.00 con IVA 0.45 es 15% aunque sea chica', T(3,0.45), 15);
   push('base 3.00 con IVA 0.15 es 5% aunque sea chica',  T(3,0.15),  5);
+  push('base 3.56 con IVA 0.16 (Cabrera) es mezclada, NO 5%', T(3.56,0.16), null);
 
   // Colas binarias de la reconciliación: medio centavo no es IVA.
   push('una cola de 0.004 no convierte una exenta en gravada', T(100,0.004), 0);

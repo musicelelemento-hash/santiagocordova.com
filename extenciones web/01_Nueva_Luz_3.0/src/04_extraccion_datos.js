@@ -1388,16 +1388,27 @@ function clasificarTarifaIva(base, iva) {
         let elegida = candidatas[0];
 
         // **Al 5% no se llega por holgura.** Es la tarifa con consecuencias:
-        // casillero propio, decreto obligatorio y freno del envío. Se exige que
-        // el cociente esté de verdad cerca del 5%, no que quepa por centavos.
-        if (elegida.t === 5 && Math.abs(pct - 5) > 1) {
-            const otra = candidatas.find((c) => c.t !== 5);
-            if (!otra) {
-                return { tarifa: null,
-                         motivo: `el IVA es el ${pct.toFixed(1)}% de la base: cabe en el 5% sólo por ` +
-                                 'redondeo, y al 5% no se llega por holgura' };
+        // casillero propio (540/550), decreto obligatorio (203) y freno del envío.
+        // En una factura al 5% pura, el IVA es exactamente base * 0.05 (diferencia <= 1 centavo).
+        // Si la diferencia excede 1 centavo (ej. $3.56 con $0.16 de IVA, dif 0.02) y se
+        // reparte de forma mucho más exacta como tarifa plena + 0% (ej. $1.07 al 15% + $2.49 al 0%),
+        // es una factura mezclada de comercio minorista, NO una compra de construcción al 5%.
+        if (elegida.t === 5) {
+            const dif5 = redondear(Math.abs(iva - base * 0.05));
+            const mezcla = typeof repartirMezclada === 'function' ? repartirMezclada(base, iva, 15) : null;
+            const difMezcla = mezcla ? redondear(Math.abs(iva - redondear(mezcla.basePlena * 0.15))) : 999;
+
+            if (dif5 > 0.01 || (mezcla && difMezcla < dif5 && mezcla.base0 >= 0.10) || Math.abs(pct - 5) > 1) {
+                const otra = candidatas.find((c) => c.t !== 5);
+                if (!otra) {
+                    return {
+                        tarifa: null,
+                        motivo: `el IVA es el ${pct.toFixed(1)}% de la base: cabe en el 5% sólo por holgura, ` +
+                                `pero no es 5% exacto (dif $${dif5.toFixed(2)})`
+                    };
+                }
+                elegida = otra;
             }
-            elegida = otra;
         }
 
         // Cuando el monto es tan chico que el redondeo a dos decimales hace
