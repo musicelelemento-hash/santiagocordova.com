@@ -203,6 +203,21 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
   2. Al cambiar `selTipo`, se espera `waitForPortal(3000)` para que JSF termine su actualización antes de buscar y pulsar "Consultar".
   3. En caso de error o recarga, se restablece explícitamente `pendingAction: 'turbo_stepX'` para reintentar la búsqueda limpia.
 
+### L. Eliminación del Falso 5% en Facturas Mezcladas y Desbloqueo del Casillero 203 (Commit `a3deba6`, Build `3.1.0+20260907.2132`)
+- **Problema detectado (Cabrera Berónica María, RUC `1103034052001`):**
+  - Al presionar "Siguiente" en el formulario, el SRI bloqueó el avance con:
+    `* casillero 203. seleccione el decreto que determina la tarifa reducida a aplicar.`
+    `* casillero 203. el decreto seleccionado es incorrecto.`
+- **Causa raíz analizada:**
+  - De las 12 facturas de Cabrera, una factura de comercio minorista tenía `Base: $3.56, IVA: $0.16` (cociente 4.49%).
+  - La holgura previa de `clasificarTarifaIva()` admitía 2 centavos de diferencia ($0.16 vs $0.178), clasificándola erróneamente en el balde del 5% (`resumen.iva5`) antes de evaluar el reparto de tarifas mezcladas.
+  - Esto inyectó $3.56 en los casilleros 540 y 550, disparando el reclamo de decreto en el casillero 203.
+  - En realidad, dicha factura es 100% una compra mezclada: **$1.07 al 15% ($0.16 de IVA exacto, error residual $0.0005) + $2.49 al 0%**.
+- **Solución implementada (`src/04_extraccion_datos.js`):**
+  - Se blindó `clasificarTarifaIva()`: para clasificar una factura al 5%, la diferencia debe ser $\le 0.01$ y no debe existir un reparto como factura mezclada (15% + 0%) con menor residuo.
+  - Al reclasificarse como mezclada, los $1.07 van al 500/510 y $2.49 al 507/517. **Los casilleros 540 y 550 quedan en 0.00**, eliminando la exigencia del casillero 203 y permitiendo enviar la declaración sin bloqueos.
+  - Suite `tests/iva5.html` ampliada con comprobación específica del caso Cabrera.
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS
