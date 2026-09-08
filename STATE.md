@@ -173,6 +173,25 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
   3. Matriz de `.agents/AGENTS.md` actualizada con `Casillero 203 = concepto91`.
   4. Suite de pruebas en `tests/iva5.html` ampliada a 544 comprobaciones verdes.
 
+### J. Búsqueda Certera y Detección Verídica de "No existen datos" en Comprobantes Recibidos (Retenciones / NC)
+- **Problema reportado:** Durante la extracción en `comprobantesRecibidos.jsf` (paso de retenciones o facturas), el bot no llegaba a disparar la consulta o se quedaba congelado esperando el mensaje oficial:
+  `<span class="ui-messages-warn-summary">No existen datos para los parámetros  ingresados </span>`
+- **Causas raíz detectadas en `src/03_ingreso_y_sesion.js` y `src/04_extraccion_datos.js`:**
+  1. **Selector incompleto:** El bot solo buscaba `.ui-messages-warn-detail` y `.ui-messages-info-detail`. PrimeFaces inyecta el aviso "No existen datos..." dentro de `.ui-messages-warn-summary`, por lo que el mensaje existía en pantalla pero el bot no lo leía.
+  2. **Destrucción de elementos en el DOM:** `oldMessages.forEach(m => m.remove())` eliminaba físicamente el contenedor `#formMessages:messages`. En la siguiente respuesta AJAX de JSF, PrimeFaces intentaba inyectar el nuevo mensaje en un elemento destruido, provocando fallos silenciosos.
+  3. **Colisión de clics concurrentes:** `dispararClicConsultar()` disparaba `btnConsultar.click()` y una fracción de milisegundo después `span.click()`. En PrimeFaces, dos clics seguidos sobre el mismo botón disparan dos peticiones AJAX encoladas, cancelando la primera y congelando el ciclo.
+  4. **Fallback ciego a 0:** En el Paso 3 (retenciones) y Paso 5 (notas de crédito), si el polling terminaba sin tabla ni `noData`, el bot asumía 0 retenciones/NC sin verificar el mensaje oficial de advertencia.
+- **Solución implementada (Commit `e31220d`, Build `3.1.0+20260907.2105`):**
+  1. **Detector Universal y Canónico (`detectarMensajeNoDatosSRI` en `src/02_servicios_y_memoria.js`):**
+     - Inspecciona `.ui-messages-warn-summary`, `.ui-messages-warn-detail`, `.ui-messages-warn`, `.ui-messages-info-summary`, `.ui-datatable-empty-message`, `#formMessages:messages` y tolera los espacios dobles del SRI (`NO EXISTEN DATOS PARA LOS PARÁMETROS  INGRESADOS`).
+     - Ignora mensajes obsoletos de consultas previas mediante atributo `data-sri-old="true"` sin alterar la estructura DOM.
+  2. **Clic Certero y Reintentos Automáticos:**
+     - Secuencia limpia de eventos (`mousedown` -> `mouseup` -> `click`) exclusiva sobre el botón de PrimeFaces (`frmPrincipal:btnConsultarSinRe`).
+     - Si tras 3.5s, 7.5s o 13s no hay respuesta, ni spinner activo, ni mensaje oficial, el bot re-dispara el clic automáticamente.
+  3. **Seguridad contra falsos ceros:**
+     - Si tras 30 segundos no hay tabla de retenciones ni mensaje verídico de "No existen datos", el bot NO asume 0; recarga la página de comprobantes y reintenta limpiamente.
+  4. **Banco de pruebas:** Creado `tests/recibidos_nodata.html` (6 comprobaciones automáticas añadidas a `tests/index.html`).
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS
