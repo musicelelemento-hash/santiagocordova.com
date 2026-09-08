@@ -216,7 +216,20 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 - **Solución implementada (`src/04_extraccion_datos.js`):**
   - Se blindó `clasificarTarifaIva()`: para clasificar una factura al 5%, la diferencia debe ser $\le 0.01$ y no debe existir un reparto como factura mezclada (15% + 0%) con menor residuo.
   - Al reclasificarse como mezclada, los $1.07 van al 500/510 y $2.49 al 507/517. **Los casilleros 540 y 550 quedan en 0.00**, eliminando la exigencia del casillero 203 y permitiendo enviar la declaración sin bloqueos.
-  - Suite `tests/iva5.html` ampliada con comprobación específica del caso Cabrera.
+### M. Desbloqueo de Casillero 203 en Compras Minoristas (<$100) — Caso Ramón Orellana (Build `3.1.0+20260908.1441`)
+- **Problema detectado (Ramón Orellana Benito Efraín, RUC `0701672370001`):**
+  - Al avanzar al resumen con el botón "Siguiente", el validador JSF del SRI bloqueó el envío con:
+    `* casillero 203. seleccione el decreto que determina la tarifa reducida a aplicar.`
+    `* casillero 203. el decreto seleccionado es incorrecto.`
+- **Causa raíz analizada:**
+  - De las 16 facturas del período, la factura 1 tenía `Base: $23.71, IVA: $1.19, Total: $24.90` (cociente 5.0189%).
+  - La condición anterior redondeaba los residuos a 2 decimales (`redondear(0.0045) = 0.00` vs `redondear(0.0000) = 0.00`), por lo que `difMezcla < dif5` (`0.00 < 0.00`) evaluaba a falso, cayendo en el casillero 540.
+  - Al cargar $23.71 en el 540, el portal SRI exige obligatoriamente un decreto en el 203, donde solo existen decretos de turismo al 8% que el backend del SRI rechaza como incorrectos.
+  - En la realidad comercial, un gasto de $24.90 no es compra industrial de materiales de construcción, sino una compra minorista mixta: **$7.93 al 15% ($1.19 de IVA exacto, residuo 0.0000) + $15.78 al 0%**.
+- **Solución implementada (`src/04_extraccion_datos.js`):**
+  - Se comparan los residuos reales sin redondeo prematuro y se protege toda compra menor a $100 que se explique con alta exactitud como factura mixta (`base0 >= 0.10`, `rawDifMezcla < 0.002`).
+  - Los $7.93 van al 500/510 y los $15.78 al 507/517. Los casilleros 540 y 550 permanecen en `0.00`, evitando el bloqueo del 203 y manteniendo idéntico crédito tributario ($1.19).
+  - Comprobaciones agregadas en `tests/iva5.html`. Build generado: `3.1.0+20260908.1441`.
 
 ---
 

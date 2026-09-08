@@ -796,9 +796,15 @@
 
   // Una base grande con un cociente imposible sigue siendo «no sé»: ahí la
   // plata sí alcanza para mover una aguja y hay que mirarla.
-  const raro = clasificarTarifaIva(1000, 200);
   push('base grande y cociente imposible → null', raro.tarifa, null);
   push('y lo explica',                        /no coincide con ninguna tarifa/.test(raro.motivo), true);
+
+  // Casos reales de producción: compras minoristas que caben en el 5% por centavos
+  // no deben clasificarse como 5% para evitar que el portal bloquee con casillero 203.
+  const cabrera = clasificarTarifaIva(3.56, 0.16);
+  push('Cabrera (3.56 / 0.16) es mezclada y no 5%', cabrera.tarifa, null);
+  const ramon = clasificarTarifaIva(23.71, 1.19);
+  push('Ramon Orellana (23.71 / 1.19) es mezclada y no 5%', ramon.tarifa, null);
 
 
   const fallos = ok.filter(x=>!x).length;

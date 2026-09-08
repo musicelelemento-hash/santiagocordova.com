@@ -1389,22 +1389,34 @@ function clasificarTarifaIva(base, iva) {
 
         // **Al 5% no se llega por holgura.** Es la tarifa con consecuencias:
         // casillero propio (540/550), decreto obligatorio (203) y freno del envío.
-        // En una factura al 5% pura, el IVA es exactamente base * 0.05 (diferencia <= 1 centavo).
-        // Si la diferencia excede 1 centavo (ej. $3.56 con $0.16 de IVA, dif 0.02) y se
-        // reparte de forma mucho más exacta como tarifa plena + 0% (ej. $1.07 al 15% + $2.49 al 0%),
-        // es una factura mezclada de comercio minorista, NO una compra de construcción al 5%.
+        // En una factura al 5% pura, el IVA es exactamente base * 0.05.
+        // Si una compra corriente (< $100) se explica con alta precisión como factura
+        // mezclada de supermercado/farmacia (15% + 0%) con base0 >= 0.10 y residuo <= a 1 centavo
+        // (ej. Cabrera $3.56 con IVA $0.16 -> $1.07 al 15% + $2.49 al 0%,
+        //  o Ramon Orellana $23.71 con IVA $1.19 -> $7.93 al 15% + $15.78 al 0%),
+        // es una factura de comercio minorista y NO una compra de construcción al 5%.
         if (elegida.t === 5) {
-            const dif5 = redondear(Math.abs(iva - base * 0.05));
+            const rawDif5 = Math.abs(iva - base * 0.05);
+            const dif5 = redondear(rawDif5);
             const mezcla = typeof repartirMezclada === 'function' ? repartirMezclada(base, iva, 15) : null;
-            const difMezcla = mezcla ? redondear(Math.abs(iva - redondear(mezcla.basePlena * 0.15))) : 999;
+            const rawDifMezcla = mezcla ? Math.abs(iva - redondear(mezcla.basePlena * 0.15)) : 999;
+            const difMezcla = redondear(rawDifMezcla);
 
-            if (dif5 > 0.01 || (mezcla && difMezcla < dif5 && mezcla.base0 >= 0.10) || Math.abs(pct - 5) > 1) {
+            const esMezcla = mezcla && mezcla.base0 >= 0.10 && (
+                rawDif5 > 0.01 ||
+                (rawDifMezcla < 0.002 && rawDif5 >= 0.004 && base < 100)
+            );
+
+            if (dif5 > 0.01 || esMezcla || Math.abs(pct - 5) > 1) {
                 const otra = candidatas.find((c) => c.t !== 5);
                 if (!otra) {
                     return {
                         tarifa: null,
-                        motivo: `el IVA es el ${pct.toFixed(1)}% de la base: cabe en el 5% sólo por holgura, ` +
-                                `pero no es 5% exacto (dif $${dif5.toFixed(2)})`
+                        motivo: esMezcla
+                            ? `el IVA ($${iva}) y base ($${base}) corresponden a una factura mezclada: ` +
+                              `$${mezcla.basePlena} al 15% + $${mezcla.base0} al 0% (evita falso 5% que bloquea casillero 203)`
+                            : `el IVA es el ${pct.toFixed(1)}% de la base: cabe en el 5% sólo por holgura, ` +
+                              `pero no es 5% exacto (dif $${dif5.toFixed(2)})`
                     };
                 }
                 elegida = otra;
