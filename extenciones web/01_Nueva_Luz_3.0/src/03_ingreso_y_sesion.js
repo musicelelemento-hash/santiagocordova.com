@@ -1190,6 +1190,7 @@ async function ejecutarAccionPendiente(items) {
                 }
             } else if (!searchRes.tableFound && searchRes.error) {
                 console.warn('⚠️ [ALERTA] La búsqueda de facturas no concluyó en el portal SRI. Reintentando consulta...');
+                await SafeStorage.set({ pendingAction: 'turbo_step1_facturas' });
                 await sleep(1500);
                 window.location.reload();
                 return;
@@ -1258,6 +1259,7 @@ async function ejecutarAccionPendiente(items) {
             } else if (!searchRes.tableFound && searchRes.error) {
                 console.warn('⚠️ [ALERTA] La búsqueda de retenciones no concluyó de forma fehaciente en el portal SRI. Reintentando consulta...');
                 if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de retenciones (sin respuesta del SRI)...');
+                await SafeStorage.set({ pendingAction: 'turbo_step3_retenciones' });
                 await sleep(1500);
                 window.location.reload();
                 return;
@@ -1303,6 +1305,7 @@ async function ejecutarAccionPendiente(items) {
             } else if (!searchRes.tableFound && searchRes.error) {
                 console.warn('⚠️ [ALERTA] La búsqueda de notas de crédito no concluyó fehacientemente. Reintentando...');
                 if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de notas de crédito...');
+                await SafeStorage.set({ pendingAction: 'turbo_step5_notas_credito' });
                 await sleep(1500);
                 window.location.reload();
                 return;
@@ -1758,8 +1761,14 @@ async function autoLlenarBusqueda(data) {
 
         if (opcion) {
             console.log(`✅ Tipo documento: ${opcion.text}`);
-            selTipo.value = opcion.value;
-            selTipo.dispatchEvent(new Event('change', { bubbles: true }));
+            if (selTipo.value !== opcion.value) {
+                selTipo.value = opcion.value;
+                selTipo.dispatchEvent(new Event('change', { bubbles: true }));
+                await sleep(800);
+                if (typeof waitForPortal === 'function') {
+                    await waitForPortal(3000);
+                }
+            }
         }
     }
 
@@ -1811,21 +1820,35 @@ async function autoLlenarBusqueda(data) {
 
         // ELITE v12.7: Marcar mensajes previos como antiguos sin borrar nodos del DOM
         // (Borrar nodos de PrimeFaces con .remove() rompe los updates Ajax del servidor)
-        const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn, #formMessages\\:messages');
+        // IMPORTANTE: NO marcar el contenedor raíz #formMessages:messages porque bloquearía sus futuros hijos
+        const oldMessages = document.querySelectorAll('.ui-growl-item-container, .ui-messages-info, .ui-messages-warn, .ui-messages-error');
         oldMessages.forEach(m => {
             m.setAttribute('data-sri-old', 'true');
             m.style.opacity = '0.35';
         });
 
         const dispararClicConsultar = () => {
-            console.log('🎯 [SRI] Clic certero en Consultar:', btnConsultar.id || btnConsultar);
+            const btnActual = document.getElementById('frmPrincipal:btnConsultarSinRe') ||
+                              document.getElementById('frmPrincipal:btnConsultar') ||
+                              document.querySelector('button[id*="btnConsultar"]') ||
+                              soloDelPortal(document.querySelectorAll('button, input[type="submit"]')).find(b =>
+                                  (b.innerText || b.value || '').toUpperCase().includes('CONSULTAR') && esVisible(b)
+                              ) ||
+                              btnConsultar;
+
+            if (!btnActual) {
+                console.warn('⚠️ No se encontró botón Consultar en el DOM.');
+                return;
+            }
+
+            console.log('🎯 [SRI] Clic certero en Consultar:', btnActual.id || btnActual);
             if (window.sriAssistant) {
                 window.sriAssistant.log(`🔎 Consultando ${data.tipoComprobante || 'comprobantes'} en el portal SRI...`);
             }
-            btnConsultar.focus();
-            btnConsultar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            btnConsultar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-            btnConsultar.click();
+            btnActual.focus();
+            btnActual.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            btnActual.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            btnActual.click();
         };
 
         dispararClicConsultar();
