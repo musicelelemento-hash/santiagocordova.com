@@ -192,6 +192,17 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
      - Si tras 30 segundos no hay tabla de retenciones ni mensaje verídico de "No existen datos", el bot NO asume 0; recarga la página de comprobantes y reintenta limpiamente.
   4. **Banco de pruebas:** Creado `tests/recibidos_nodata.html` (6 comprobaciones automáticas añadidas a `tests/index.html`).
 
+### K. Prevención de Botones Huérfanos y Timing de AJAX en Cambio de Tipo de Comprobante (Commit `78647af`, Build `3.1.0+20260907.2127`)
+- **Problema reportado:** Durante la corrida automática (ej. en Notas de Crédito con Cárdenas Pesantes), el bot se detuvo ~40s en la consulta de recibidos con múltiples reintentos y fallback a TXT.
+- **Causas raíz:**
+  1. **Botón huérfano en reintentos:** `btnConsultar` se capturaba una sola vez por referencia antes de consultar. Si el evento `change` en `<select id="frmPrincipal:cmbTipoComprobante">` refrescaba el formulario vía JSF AJAX, el botón original quedaba desconectado del DOM (`isConnected === false`). Los reintentos (intento 2, 3, 4) hacían clic sobre un nodo muerto.
+  2. **Colisión de eventos:** Se enviaba `btnConsultar.click()` a los 600ms de cambiar el combo, cuando la petición AJAX del combo aún estaba en tránsito o re-renderizando.
+  3. **Salto prematuro de pendingAction en recarga:** Si la consulta fallaba, el estado en storage conservaba `nextStep` (ej. paso 6 extraer) en vez del paso de búsqueda (paso 5), forzando un timeout de 10s tras la recarga.
+- **Solución implementada (`src/03_ingreso_y_sesion.js`):**
+  1. `dispararClicConsultar()` ahora consulta `document.getElementById('frmPrincipal:btnConsultarSinRe')` fresco en el DOM en cada intento.
+  2. Al cambiar `selTipo`, se espera `waitForPortal(3000)` para que JSF termine su actualización antes de buscar y pulsar "Consultar".
+  3. En caso de error o recarga, se restablece explícitamente `pendingAction: 'turbo_stepX'` para reintentar la búsqueda limpia.
+
 ---
 
 ## 🎯 3. TABLERO DE PENDIENTES Y PRÓXIMAS TAREAS
