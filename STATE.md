@@ -1,5 +1,5 @@
 # ESTADO DEL PROYECTO — COLABORACIÓN ANTIGRAVITY & CLAUDE CODE
-> **Fecha de actualización:** 07-sep-2026  
+> **Fecha de actualización:** 09-sep-2026  
 > **Entorno de trabajo:** Multi-agente (Antigravity IDE + Claude Code en paralelo)  
 > **Rama activa en repositorio raíz:** `extension/nueva-luz-control-bucle`  
 > **Sub-repositorio web (`santiagocordova-main`):** `main`
@@ -41,7 +41,35 @@
 
 ---
 
-## 🏆 2. HITOS Y BUGS CRÍTICOS RESUELTOS HOY (08-SEP-2026)
+## 🏆 2. HITOS Y BUGS CRÍTICOS RESUELTOS HOY (09-SEP-2026)
+
+### 2.0 · La suite decía «544 en verde» sobre dos bancos que no corrían — 561 reales, 3 bugs destapados
+
+> Verificación con Chrome headless (CDP) sobre los **16 bancos** de
+> `tests/index.html`, cargando el `build/content.js` de verdad. Lo que se creía
+> «544 comprobaciones, 14-15 bancos» venía de corridas parciales o
+> documentación desincronizada. La corrida completa del 09-sep destapó que dos
+> bancos estaban **rotos y mudos**, y que debajo había tres fallos reales:
+
+| Qué | Estado antes | Qué pasaba de verdad |
+| :--- | :--- | :--- |
+| `tests/iva5.html` | «en verde» (104) | Roto desde el 08-sep (commit `523f407` borró `const raro`): moría con `ReferenceError` y no pintaba veredicto. Los fixes anti-falso-5% del 08-sep se commitearon sin que este banco corriera. |
+| `tests/recibidos_nodata.html` | «agregado» | Nunca corrió en el runner: escribía `Total: X/Y en verde`, que no matchea el contrato (`✓ N…todas bien` / `✗ N de M fallaron`) → timeout de 90s siempre. |
+| `detectarMensajeNoDatosSRI()` | bug real | Un «No existen datos» de una consulta previa volvía a detectarse como nuevo cuando la marca `data-sri-old` estaba en el contenedor `.ui-messages-warn` y no en el span (o al revés). Lo destapó `recibidos_nodata` al poder correr. Corregido: se ignora el elemento marcado, el que cuelga de un contenedor marcado (`closest`), y el texto de un clon sin nodos viejos. |
+| `iva5.html` · Heineken con ICE | esperaba 234.80 | El fixture trae total 270.01: la base que cabe es `total − IVA` = 234.79 (234.80+35.22 = 270.02 > 270.01). El código respetaba el total; el test esperaba lo imposible. |
+| `iva5.html` · cociente 4,95% | esperaba 5% | La mezclada exacta 33/67 (un tercio al 15%) ya no se confunde con 5% desde el blindaje del 08-sep (Cabrera, Ramón Orellana, Walter Miño): devuelve `null`, no 5. Test desactualizado, no código. |
+
+**Estado final:** 561 comprobaciones, **todas verdes, 16 bancos** (09-sep-2026).
+Commits: `4296a7b` (fix detector), `f769ae7` (bancos y expectativas), `7794e80`
+(AGENTS.md con cifra real). Detalle en `extenciones web/01_Nueva_Luz_3.0/HANDOFF.md §4.11`.
+
+**Lección anotada para siempre (también en HANDOFF §5):** un banco que no pinta
+veredicto no es un banco en verde — es un banco mudo, y todo lo que cuidaba
+queda sin vigilar.
+
+---
+
+## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
 
 ### 2.1. Diagnóstico de «richfaces.js.jsf:746 [Violation] unload is not allowed»
 - **Origen:** Advertencia nativa del motor Chromium (Chrome 117+) informando la depreciación del evento `unload` en la Permissions-Policy del navegador, disparada por el script legacy de RichFaces 4.3.7 del portal del SRI.
@@ -267,6 +295,7 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 | Prioridad | Tarea / Asunto | Estado | Responsable / Acción Inmediata |
 | :-: | :--- | :--- | :--- |
 | **P1** | **Casillero 203 (Decreto del 5%)** | Scanner de `<select>` listo; falta automatizar la selección del decreto | Ver propuesta §4.1 abajo |
+| **P1** | **Rotar la clave de R2 (sigue en `shared_config.js`)** | Verificado 09-sep-2026: `R2_SECRET_ACCESS_KEY` sigue en el código (64 chars). El mecanismo de Ajustes está completo y probado (campos Access Key ID + secreto + botón "Probar ahora"; banco `tests/claves.html` 28 verdes). | **El usuario**: rotar el token en Cloudflare (R2 → *Manage R2 API Tokens*, no Mi Perfil → API Tokens), cargar **las dos** partes en Ajustes, correr 🔌 «Probar ahora» hasta que diga "del almacén", y recién ahí vaciar `shared_config.js` (HANDOFF §4.1 — no vaciarlo antes o se rompe la subida). |
 | **P1** | **Ejecutar migración RLS en Supabase** | Archivo SQL listo en `database/fix_sri_declaraciones_anon_rls.sql` | Ejecutar en SQL Editor de Supabase |
 | **P2** | **Notificaciones Automáticas (WhatsApp / Email)** | `SalaDeEnvio.tsx` construida; falta automatizar envío vía Gmail API o Meta Cloud API | Ver propuesta §4.2 abajo |
 | **P2** | **Laboratorio de Proveedores (CIIU → Crédito)** | Módulo base listo; falta mapear compatibilidad actividad cliente vs proveedor | Mantener criterio: el bot sugiere, no fuerza deducibilidad |

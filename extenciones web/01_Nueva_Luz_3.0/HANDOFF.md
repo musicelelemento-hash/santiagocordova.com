@@ -1,8 +1,8 @@
 # 🤝 Handoff — Nueva Luz 3.0
 
 Para quien siga el trabajo sobre la extensión de declaración automática de IVA
-del SRI (Ecuador). Escrito el **06-sep-2026**, manifest `3.1.0`, bundle 509 KB,
-`src/` 18.567 líneas.
+del SRI (Ecuador). Escrito el **06-sep-2026**, manifest `3.1.0`, bundle 556 KB,
+`src/` ~20.800 líneas. Revisado el **09-sep-2026** (cifras de la suite, §4.11).
 
 **Leé primero, en este orden:**
 
@@ -30,21 +30,32 @@ Y para las pruebas, **una sola página**:
 → http://localhost:8791/tests/   →  botón «Correr todos»
 ```
 
-**319 comprobaciones, todas verdes al 06-sep-2026**, en ~20 segundos. Cada
-banco carga el `build/content.js` de verdad, el mismo que se inyecta en el
-portal. **Si algo sale en rojo, la extensión tiene un problema real.**
+**561 comprobaciones, todas verdes al 09-sep-2026**, en los 16 bancos de
+`tests/index.html`. Cada banco carga el `build/content.js` de verdad, el mismo
+que se inyecta en el portal. **Si algo sale en rojo, la extensión tiene un
+problema real.** (Cifras anteriores —319/06-sep, 544/14 bancos 07-sep— eran de
+corridas parciales: el banco `iva5` estuvo roto desde el 08-sep sin que se
+notara porque no pintaba veredicto, y `recibidos_nodata` usaba un formato que
+el runner no leía. Arreglados el 09-sep-2026, ver §4.11.)
 
-| Banco | Qué cuida | # |
+| Banco | Qué cuida | # real |
 | :--- | :--- | ---: |
-| `iva5.html` | tarifas de IVA, el XML, la botonera | 104 |
-| `proveedores.html` | la base y la cascada de sugerencias | 43 |
+| `iva5.html` | tarifas de IVA, ICE, el XML, la botonera, falso 5% | 181 |
+| `proveedores.html` | la base y la cascada de sugerencias | 58 |
+| `chequeo.html` | el diagnóstico previo | 56 |
+| `notasventa.html` | el 508 y el 117 con temporizador | 35 |
 | `catastro.html` | la bisección sobre 283.879 RUC | 31 |
-| `chequeo.html` | el diagnóstico previo | 32 |
+| `claves.html` | las claves fuera del código | 28 |
 | `subidas.html` | por qué falla la subida, el cortacircuitos | 27 |
-| `notasventa.html` | el 508 y el 117 con temporizador | 23 |
+| `periodo.html` | el año que salía del RUC | 22 |
+| `recuperar.html` | el comprobante de lo ya declarado | 22 |
 | `esperas.html` | esperar al portal en vez de contar | 20 |
 | `clavevencida.html` | la clave que el SRI pide cambiar | 19 |
-| `claves.html` | las claves fuera del código | 20 |
+| `resumen.html` | el resumen de pago y el saldo | 15 |
+| `bucles.html` | el cortacircuitos de los bucles | 15 |
+| `rutas.html` | la ruta del comprobante | 14 |
+| `login.html` | el bot leyéndose a sí mismo | 11 |
+| `recibidos_nodata.html` | detección verídica de no datos | 7 |
 
 Los `file://` **no ejecutan scripts** en el panel: hace falta el servidor.
 
@@ -309,6 +320,40 @@ portar la más chica (`02_Cambio_Claves`, 600 líneas) como prueba, y recién ah
 seguir. **`02_Cambio_Claves` conviene dejarla separada**: mete código que
 cambia contraseñas en la misma extensión que el bot de IVA.
 
+### 4.11 · Dos bancos estaban rotos y ocultaban fallos reales — corregido 09-sep-2026
+
+> La lección vale más que los tres bugs que destapó: **un banco que no pinta
+> veredicto no es un banco en verde — es un banco mudo.** La suite «544 en
+> verde» del 07-sep se sostuvo dos días sobre dos bancos que no estaban
+> corriendo.
+
+Corrida headless de los 16 bancos (Chrome CDP sobre el `build/content.js` de
+verdad, 09-sep-2026):
+
+- **`iva5.html` estaba roto desde el 08-sep** (commit `523f407`): borró
+  `const raro = clasificarTarifaIva(1000, 200);` y dejó dos `push()` usándola.
+  El banco moría con `ReferenceError` antes de pintar el veredicto — o sea, los
+  fixes anti-falso-5% de ese mismo día se commitearon **sin que el banco
+  corriera**. Restaurada la definición.
+- **`recibidos_nodata.html` nunca corrió en el runner**: escribía
+  `Total: X/Y en verde`, que no matchea el contrato (`✓ N comprobaciones,
+  todas bien` / `✗ N de M fallaron`). En `tests/index.html` daba timeout de
+  90s siempre, aunque pasara. Formato canónico restaurado. Al correrlo de
+  verdad destapó un bug real de `detectarMensajeNoDatosSRI()` (un «No existen
+  datos» de una consulta previa volvía a detectarse como nuevo cuando la marca
+  `data-sri-old` estaba en el contenedor y no en el span; corregido en
+  `02_servicios_y_memoria.js`, commit `4296a7b`).
+- Dos expectativas de `iva5.html` quedaron desactualizadas por el blindaje del
+  08-sep (verificado en producción: Cabrera, Ramón Orellana, Walter Miño):
+  la base de Heineken con ICE es `total − IVA` = 234.79 (no 234.80, que no
+  cabe en el total 270.01 del fixture), y la mezclada exacta 33/67 (cociente
+  4,95%) ya no se confunde con 5% — devuelve `null`, no 5.
+
+Resultado: **561 comprobaciones, verdes, 16 bancos.** Si un día una corrida
+dice menos o «no termina» un banco, es un problema real — y si un banco
+«no termina», lo primero es abrir la consola de ese banco: quizá no está
+corriendo, no que esté fallando.
+
 ---
 
 ## 5. ⚠️ Trampas que ya costaron tiempo
@@ -324,6 +369,7 @@ cambia contraseñas en la misma extensión que el bot de IVA.
 | **`parseDecimal` devuelve `0`** | Tanto para «cero» como para «no pude leer». Para decidir plata: `parseImporteEstricto`, que devuelve `null`. |
 | **Medir milisegundos en una prueba** | El navegador frena los temporizadores en pestañas de fondo y todavía más dentro de un iframe. `esperas.html` se recalibra en cada tramo por eso. |
 | **Scripts de Python que escriben al final** | Si revientan a mitad, se pierde todo. Escribir sólo cuando todos los reemplazos salieron. |
+| **Un banco que no pinta veredicto** | No es un banco en verde, es un banco mudo: un `ReferenceError` o un formato de salida distinto del contrato hace que el runner espere 90s y dé timeout — y todo lo que ese banco cuidaba queda sin vigilar. Dos días de «544 verdes» vivieron sobre dos bancos rotos (09-sep-2026, §4.11). |
 
 ---
 
