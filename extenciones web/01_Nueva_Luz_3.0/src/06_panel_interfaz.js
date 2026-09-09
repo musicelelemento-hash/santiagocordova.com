@@ -4231,6 +4231,19 @@ class SriAssistantPanel {
             return;
         }
 
+        // 🚦 Si hay un bucle vivo (semáforo en CORRIENDO/PAUSANDO/PAUSADO), la
+        // parada se hace en el semáforo: emergencia() pone sc_loop en DETENIDO,
+        // descarta la acción pendiente y apaga las banderas viejas. Antes esto
+        // solo apagaba banderas y el bucle seguía — mismo bug que la barra roja.
+        if (typeof SriLoop !== 'undefined') {
+            try {
+                const sem = await SriLoop.get();
+                if (sem.estado === 'CORRIENDO' || sem.estado === 'PAUSANDO' || sem.estado === 'PAUSADO') {
+                    await SriLoop.emergencia('el botón ⏹ Detener del panel');
+                }
+            } catch (e) { /* si el semáforo no se puede leer, seguir con la limpieza legacy */ }
+        }
+
         await SafeStorage.set({
             sriAutomationPaused: true,
             autoDeclaration: false,

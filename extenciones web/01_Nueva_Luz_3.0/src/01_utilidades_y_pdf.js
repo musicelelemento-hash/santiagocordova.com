@@ -715,15 +715,32 @@ const GhostBlackBox = {
 // ============================================================
 async function detenerBucleSRI() {
   console.log('🛑 [DETENER BUCLE] Solicitud de parada de emergencia recibida.');
-  await SafeStorage.set({
-    sri_master_switch_on: false,
-    auto_batch_enabled: false,
-    sri_auto_mode: false,
-    autoDeclaration: false,
-    sriAutomationPaused: true,
-    ghost_manual_mode: true
-  });
-  await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'auto_batch_queue', 'auto_batch_index']);
+
+  // 🚦 El semáforo es la ÚNICA autoridad del bucle (AGENTS §2): puedeAvanzar()
+  // pregunta por sc_loop.estado, no por banderas sueltas. Antes esta función
+  // solo apagaba las banderas viejas: la barra roja desaparecía pero sc_loop
+  // seguía CORRIENDO y el bucle continuaba — «no se puede detener la extensión».
+  // Parar de verdad = SriLoop.emergencia(), el mismo camino del 🛑 del HUD.
+  if (typeof SriLoop !== 'undefined') {
+    await SriLoop.emergencia('la barra roja flotante');
+    // emergencia() sincroniza las banderas viejas apagadas y descarta la acción
+    // pendiente; ghost_manual_mode queda de nuestra cuenta y la cola legacy se
+    // barre como antes (sc_loop.cola es la de verdad, DETENIDO la inmoviliza).
+    await SafeStorage.set({ ghost_manual_mode: true });
+    await SafeStorage.remove(['auto_batch_queue', 'auto_batch_index']);
+  } else {
+    // Red de seguridad si el semáforo no llegó a cargar (no debería pasar en
+    // un clic: 02 ya cargó). Parar no puede fallar por esto.
+    await SafeStorage.set({
+      sri_master_switch_on: false,
+      auto_batch_enabled: false,
+      sri_auto_mode: false,
+      autoDeclaration: false,
+      sriAutomationPaused: true,
+      ghost_manual_mode: true
+    });
+    await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'auto_batch_queue', 'auto_batch_index']);
+  }
   
   const stopBar = document.getElementById('sri-emergency-stop-bar');
   if (stopBar) stopBar.remove();
@@ -749,8 +766,14 @@ window.detenerBucleSRI = detenerBucleSRI;
 
 function renderEmergencyStopBar() {
   if (typeof isSRILoginPage === 'function' && isSRILoginPage()) return;
-  SafeStorage.get(['auto_batch_enabled', 'autoDeclaration', 'sri_master_switch_on', 'pendingAction']).then(st => {
-    const isRunning = (st.auto_batch_enabled || st.autoDeclaration || st.pendingAction) && st.sri_master_switch_on !== false;
+  SafeStorage.get(['auto_batch_enabled', 'autoDeclaration', 'sri_master_switch_on', 'pendingAction', 'sc_loop']).then(st => {
+    // La autoridad es el semáforo (AGENTS §2): si sc_loop está CORRIENDO hay
+    // bucle aunque las banderas viejas digan lo contrario (estados varados que
+    // dejó el bug «no se puede detener»: master en false con bucle vivo).
+    const sem = st.sc_loop || {};
+    const semaforoCorriendo = sem.estado === 'CORRIENDO';
+    const isRunning = semaforoCorriendo ||
+        ((st.auto_batch_enabled || st.autoDeclaration || st.pendingAction) && st.sri_master_switch_on !== false);
     let bar = document.getElementById('sri-emergency-stop-bar');
     if (isRunning) {
       if (!bar) {

@@ -1,0 +1,135 @@
+<!doctype html><meta charset="utf-8"><title>La parada que de verdad para</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>«No se puede detener la extensión»</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  El usuario, 09-sep-2026, con un bucle vivo: <i>«no se pude deter la extencion»</i>.
+  <br><br>
+  Desde el 07-sep el semáforo <code>sc_loop</code> es la ÚNICA autoridad del
+  bucle (<code>puedeAvanzar()</code>), pero dos botones de parada seguían
+  apagando <b>banderas viejas</b> sin tocar el semáforo: la barra roja
+  flotante (<code>detenerBucleSRI</code>) y el ⏹ del panel
+  (<code>stopAutomation</code>). Resultado: la barra desaparecía (banderas
+  apagadas), <code>sc_loop</code> seguía <code>CORRIENDO</code> y el bucle
+  continuaba. Peor: con las banderas apagadas la barra ni siquiera volvía a
+  aparecer, así que no quedaba forma visible de frenar.
+  <br><br>
+  Parar tiene que parar: la barra y el ⏹ deben dejar <code>sc_loop</code> en
+  <code>DETENIDO</code>, y la barra debe reaparecer mientras el semáforo diga
+  <code>CORRIENDO</code>, aunque las banderas viejas digan lo contrario.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+
+  const semaforo = async (estado, cola = [{ ruc: '0704789205001', password: 'x', name: 'APOLO' }]) => {
+    await SafeStorage.set({ sc_loop: { estado, cola, indice: 0,
+      periodo: { year: 2026, monthIndex: 8 }, latido: Date.now(), motivo: '' } });
+  };
+  const flagsLote = async (on) => await SafeStorage.set({
+    sri_master_switch_on: on, auto_batch_enabled: on, sri_auto_mode: on,
+    autoDeclaration: on, sriAutomationPaused: !on, ghost_manual_mode: !on
+  });
+  const hayBarra = () => !!document.getElementById('sri-emergency-stop-bar');
+
+  // ══ A · la barra roja para de verdad ═════════════════════════════════════
+  sec('A · la barra roja apaga el semáforo');
+  await semaforo('CORRIENDO');
+  await flagsLote(true);
+  await SafeStorage.set({ pendingAction: 'turbo_step1_facturas', actionTimestamp: Date.now(),
+                          auto_batch_queue: [{ ruc: '0704789205001' }], auto_batch_index: 0 });
+
+  if (typeof renderEmergencyStopBar === 'function') renderEmergencyStopBar();
+  await sleep(150);
+  push('con el bucle vivo la barra se muestra', hayBarra(), true);
+
+  // El usuario hace CLIC en la barra: es el camino completo, no la función suelta.
+  const barra = document.getElementById('sri-emergency-stop-bar');
+  if (barra) barra.click();
+  await sleep(300);
+
+  push('el semáforo queda DETENIDO',        (await SafeStorage.get(['sc_loop'])).sc_loop.estado, 'DETENIDO');
+  push('puedeAvanzar() ya no deja seguir',  await SriLoop.puedeAvanzar(), false);
+  push('la acción pendiente se descartó',   (await SafeStorage.get(['pendingAction'])).pendingAction, undefined);
+  push('la cola legacy se barrió',          (await SafeStorage.get(['auto_batch_queue'])).auto_batch_queue, undefined);
+  push('las banderas viejas quedan apagadas',
+       (await SafeStorage.get(['auto_batch_enabled'])).auto_batch_enabled, false);
+  push('y la maestra también',              (await SafeStorage.get(['sri_master_switch_on'])).sri_master_switch_on, false);
+  push('modo manual restaurado',            (await SafeStorage.get(['ghost_manual_mode'])).ghost_manual_mode, true);
+  push('la barra desaparece al parar',      hayBarra(), false);
+
+  // ══ B · estado varado: semáforo vivo con banderas apagadas ══════════════
+  sec('B · barra viva aunque las banderas digan apagado');
+  // Éste es el estado que dejaba el bug: sc_loop CORRIENDO pero las banderas
+  // viejas en false. Antes la barra no aparecía y no había forma de frenar.
+  await semaforo('CORRIENDO');
+  await flagsLote(false);
+  if (typeof renderEmergencyStopBar === 'function') renderEmergencyStopBar();
+  await sleep(150);
+  push('el semáforo manda: la barra se muestra igual', hayBarra(), true);
+
+  // Y esa barra sí frena.
+  const barra2 = document.getElementById('sri-emergency-stop-bar');
+  if (barra2) barra2.click();
+  await sleep(300);
+  push('y apagarla deja DETENIDO',
+       (await SafeStorage.get(['sc_loop'])).sc_loop.estado, 'DETENIDO');
+
+  // ══ C · el ⏹ del panel también pasa por el semáforo ═════════════════════
+  sec('C · stopAutomation (⏹ del panel)');
+  await semaforo('CORRIENDO');
+  await flagsLote(true);
+  await SafeStorage.set({ pendingAction: 'turbo_step1_facturas', actionTimestamp: Date.now() });
+
+  const panel = window.sriAssistant;
+  push('el panel del asistente está vivo', typeof panel === 'object' && typeof panel.stopAutomation === 'function', true);
+  if (panel && typeof panel.stopAutomation === 'function') {
+    await panel.stopAutomation(false); // false = sin confirmar
+    await sleep(150);
+    push('el ⏹ deja el semáforo DETENIDO',
+         (await SafeStorage.get(['sc_loop'])).sc_loop.estado, 'DETENIDO');
+    push('puedeAvanzar() frena de verdad', await SriLoop.puedeAvanzar(), false);
+    push('y el modo manual queda activo',
+         (await SafeStorage.get(['ghost_manual_mode'])).ghost_manual_mode, true);
+  }
+
+  // ══ D · parar no rompe el arranque siguiente ════════════════════════════
+  sec('D · después de parar se puede volver a iniciar');
+  await SriLoop.iniciar([{ ruc: '0704789205001', password: 'x', name: 'APOLO' }],
+                        { year: 2026, monthIndex: 8 });
+  push('un lote nuevo arranca', await SriLoop.puedeAvanzar(), true);
+  await SriLoop.detener('fin del banco');
+  push('y se detiene con limpieza',
+       (await SafeStorage.get(['sc_loop'])).sc_loop.estado, 'DETENIDO');
+
+  // ══ E · el bundle trae el arreglo de verdad ═════════════════════════════
+  sec('E · el bundle está reconstruido');
+  const bundle = await (await fetch('../build/content.js')).text();
+  push('detenerBucleSRI delega en emergencia',
+       /SriLoop\.emergencia\(["']la barra roja flotante/.test(bundle), true);
+  push('y la barra mira el semáforo (sc_loop)',
+       /sc_loop/.test(bundle) && /CORRIENDO/.test(bundle), true);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>
