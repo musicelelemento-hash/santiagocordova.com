@@ -351,6 +351,26 @@ pendiente de confirmación: cabe como mezclada ($32.13 al 15% + $64.30 al 0%)
 
 **Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
 
+### 2.0k · REYES MARQUEZ: el 203 ya no es solo de APOLO — y el bot ahora baja el XML de las candidatas al 5% (09-sep, noche)
+
+> Corrida real REYES MARQUEZ HUGO LUCIANO (`0704368604001`): extracción de 72
+> facturas **cuadró** (72 = 72), y **4 facturas leídas al 5% por el cociente**
+> (Facturas 7, 13, 31, 39 — base total **$4.507,49**, IVA $225,38) frenaron el
+> envío en el casillero 203 con el pre-vuelo, igual que APOLO con la de
+> $96,43. Los cocientes exactos 5% también caben como mezcladas 15%+0%
+> ($3.438,10 puede ser $1.146,07 al 15% + $2.292,03 al 0%, etc.) — solo el XML
+> distingue.
+
+**Fix** (commit `906472d`, build `3.1.0+20260909.1544`): cuando la extracción
+de facturas queda en una sola página, el bot **baja el XML de las candidatas
+al 5%** con `traerXmlDeComprobantes()` (pausa 700 ms, tope 10, solo lectura) y
+guarda en `SafeStorage.sri_revision_5p` — y en el log — el veredicto por
+factura: **«5 REAL: necesita el decreto del 203»** vs **«mezclada/otra: NO
+lleva decreto»**, con emisor y montos. Es la cableada de la §0b.7 para el caso
+5%, con la infraestructura que ya existía.
+
+**Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
