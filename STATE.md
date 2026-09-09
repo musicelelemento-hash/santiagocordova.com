@@ -287,6 +287,32 @@ F: la compuerta responde a memoria / semáforo / pausa y no corta sin pedido).
 
 **Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
 
+### 2.0i · El que rearmaba el bucle era el DESPERTADOR, no el llenado (09-sep, noche)
+
+> Log real: el semáforo decía `DETENIDO` y el bot seguía igual — auto-login,
+> «Redirigiendo DIRECTO al Paso 1», `autoDeclaration:true` de nuevo,
+> Consultar… «nadie lo detiene». La compuerta del 2.0h frenaba los bucles que
+> ya corrían en la página, pero el bucle de este log **cruzaba páginas**: se
+> paraba, y el `pending_sri_autofill` [manual] de APOLO que quedaba hacía que
+> el **despertador del auto-arranque** (03) volviera a prender el master, se
+> logueara y re-armara `turbo_step1` en cada carga. Ese era el «sin fin».
+
+**Fix** (commit `4f5e909`, build `3.1.0+20260909.1451`):
+1. El despertador consulta la compuerta de parada: **si se pidió parar, NO
+   despierta** — descarta `pending_sri_autofill`/acción y queda en reposo.
+   (Antes solo se descartaban restos de lote; el autofill suelto revivía solo.)
+2. **Un autofill suelto es de un solo uso**: vale lo que dura su orden
+   (`actionTimestamp`, 5 min). Vencido tampoco despierta — correr de nuevo es
+   ordenar de nuevo (popup/cockpit), no resucitar solo.
+3. Candado extra antes de replantar `turbo_step1` en el perfil y antes de
+   `ejecutarAccionPendiente`: parado → se descarta, no se ejecuta.
+
+Con esto, un cliente bendito corre **una vez** cuando lo ordenás (detector o
+popup) y registra el comprobante si el flujo llega a destino; si algo lo frena
+(el 203), se queda como borrador con su radiografía y **no vuelve solo**.
+
+**Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
