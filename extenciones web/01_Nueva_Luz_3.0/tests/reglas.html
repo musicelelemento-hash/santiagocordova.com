@@ -1,0 +1,89 @@
+<!doctype html><meta charset="utf-8"><title>Reglamento SRI: las reglas no se rompen</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>El Reglamento: ids únicos, severidad válida, cobertura que existe</h3>
+<pre id="out">…</pre>
+<script>
+  window.__errors = [];
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  window.chrome = { runtime: { getURL: p => p, onMessage: { addListener() {} }, id: 's' },
+    storage: { local: { get: () => Promise.resolve({}), set: () => Promise.resolve() }, onChanged: { addListener() {} } } };
+</script>
+<script src="../reglas_sri.js"></script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(58) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+  };
+
+  const R = window.REGLAMENTO_SRI;
+  const SEVERIDADES = ['critica', 'aviso'];
+  const ESTADOS = ['vigente', 'requiere_contador', 'pendiente_evidencia'];
+  const BANCOS = ['iva5.html','catastro.html','proveedores.html','notasventa.html',
+    'chequeo.html','esperas.html','subidas.html','clavevencida.html','claves.html',
+    'resumen.html','rutas.html','login.html','bucles.html','periodo.html',
+    'recuperar.html','recibidos_nodata.html','bendita.html'];
+
+  sec('A · el archivo carga y expone');
+  push('REGLAMENTO_SRI existe',            typeof R === 'object' && !!R, true);
+  push('tiene versión',                    !!R.version, true);
+  push('y al menos una regla',             Array.isArray(R.reglas) && R.reglas.length > 0, true);
+
+  sec('B · integridad de cada regla');
+  push('todas tienen id no vacío',         R.reglas.every(r => typeof r.id === 'string' && r.id.length > 3), true);
+  push('ids únicos (porId no repite)',     new Set(R.reglas.map(r => r.id)).size === R.reglas.length, true);
+  push('todas tienen severidad válida',    R.reglas.every(r => SEVERIDADES.includes(r.severidad)), true);
+  push('todas tienen tipo válido',         R.reglas.every(r => ['ley','portal','bot'].includes(r.tipo)), true);
+  push('todas tienen estado válido',       R.reglas.every(r => ESTADOS.includes(r.estado)), true);
+  push('todas tienen regla (mandato)',
+       R.reglas.every(r => typeof r.regla === 'string' && r.regla.length > 10), true);
+  push('todas tienen "porque" (la historia)',
+       R.reglas.every(r => typeof r.porque === 'string' && r.porque.length > 10), true);
+
+  sec('C · cobertura apunta a bancos que existen');
+  const conCob = R.reglas.filter(r => Array.isArray(r.cobertura) && r.cobertura.length > 0);
+  push('hay reglas con cobertura',         conCob.length > 0, true);
+  push('toda cobertura nombra un banco existente',
+       conCob.every(r => r.cobertura.every(b => BANCOS.includes(b))), true);
+  // Las coberturas declaradas deben ser reales: un banco que "cubre" una regla
+  // pero no existe es peor que ninguna cobertura.
+  const duplicadas = conCob.some(r => new Set(r.cobertura).size !== r.cobertura.length);
+  push('sin bancos repetidos en una cobertura', !duplicadas, true);
+
+  sec('D · reglas críticas y su acción');
+  const criticas = R.criticas();
+  push('hay reglas críticas',              criticas.length >= 10, true);
+  push('las críticas declaran una acción',
+       criticas.every(r => typeof r.accion === 'string' && r.accion.length > 5), true);
+  push('las de severidad aviso no frenan (estado no vigente o accion informativa)',
+       R.reglas.filter(r => r.severidad === 'aviso')
+         .every(r => r.estado !== 'vigente' || /informa|avisa|documenta|📐/.test(r.accion)), true);
+
+  sec('E · las reglas de oro del proyecto están presentes');
+  const ids = R.reglas.map(r => r.id).join(' ');
+  push('nunca sustitutiva está',           ids.includes('R-BOT-NUNCA-SUSTITUTIVA'), true);
+  push('nunca pagar está',                 ids.includes('R-BOT-NUNCA-PAGA'), true);
+  push('id solo con evidencia está',       ids.includes('R-PORTAL-ID-SOLO-CON-EVIDENCIA'), true);
+  push('null≠0 está',                      ids.includes('R-BOT-NULL-NO-ES-CERO'), true);
+  push('el 203 sin decreto inventado está', ids.includes('R-PORTAL-203-SIN-DECRETO-INVENTADO'), true);
+  push('claves fuera del DOM está',        ids.includes('R-BOT-SIN-CLAVES-EN-DOM'), true);
+
+  sec('F · el contador tiene huecos declarados (no reglas inventadas)');
+  const huecos = R.porEstado('requiere_contador');
+  push('hay reglas que esperan al contador', huecos.length >= 3, true);
+  push('y pendientes de evidencia',        R.porEstado('pendiente_evidencia').length >= 1, true);
+
+  pintar();
+})();
+</script>
+</body>
+</html>
