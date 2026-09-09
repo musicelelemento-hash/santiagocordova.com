@@ -343,20 +343,25 @@ function extraerFacturasPaginaActual() {
                 return;
             }
 
-            // ── Reconciliación: total = base + IVA ──────────────────────────
-            // Vale para las tres estrategias de arriba, porque las tres eligen
-            // celdas por índice y ninguna sabe si acertó. parseDecimal devuelve
-            // 0 tanto para «cero» como para «no pude leer», así que un IVA en 0
-            // puede ser una factura exenta o una columna mal leída; de ahí
-            // depende que la factura vaya al casillero de 15% o al de 0%.
-            //
-            // La resta no depende de ningún índice: es la identidad que el
-            // portal cumple siempre.
+            // ── Reconciliación / Detección de ICE y otros tributos ──────────
+            // En Ecuador, Importe Total = Base + IVA + ICE + propinas/otros.
+            // Para productos gravados con ICE (cervezas Heineken, gaseosas
+            // Arcador / Coca-Cola, Big Cola / Ajecuador, etc.), la diferencia
+            // `total - base` incluye el ICE (Art. 65 LRTI).
+            // La columna «IVA» del portal SRI contiene el IVA oficial y NUNCA
+            // debe ser pisada por `total - base` si ya traía un valor positivo.
             if (importeTotal > 0 && valorSinImpuestos > 0) {
                 const ivaSegunResta = redondear(importeTotal - valorSinImpuestos);
-                if (ivaSegunResta >= 0 && Math.abs(ivaSegunResta - iva) > 0.02) {
-                    console.warn(`   ⚠️ [Factura ${idx + 1}] La columna del IVA da $${iva} y total - base da $${ivaSegunResta}. ` +
-                                 `Mando la resta: de esto depende si va al 15% o al 0%.`);
+                if (iva > 0.005) {
+                    if (Math.abs(ivaSegunResta - iva) > 0.02) {
+                        const otrosTrib = redondear(ivaSegunResta - iva);
+                        if (otrosTrib > 0) {
+                            console.log(`   🍺 [Factura ${idx + 1}] Detectado ICE/otros tributos ($${otrosTrib}). Se conserva el IVA oficial del SRI: $${iva}.`);
+                        }
+                    }
+                } else if (ivaSegunResta > 0.005 && ivaSegunResta <= redondear(valorSinImpuestos * 0.16)) {
+                    // Solo si la columna no traía IVA legible y la resta cabe en una tarifa de IVA válida (<= 16%)
+                    console.warn(`   ⚠️ [Factura ${idx + 1}] Columna IVA en 0 pero total - base da $${ivaSegunResta} (<= 16%). Se adopta la resta como fallback.`);
                     iva = ivaSegunResta;
                 }
             }
@@ -1343,15 +1348,34 @@ const TARIFA_PLENA = 15;
  * @param {number} plena Tarifa plena del período (15 desde abril de 2024).
  * @returns {{basePlena: number, base0: number}|null} null si no cabe.
  */
-function repartirMezclada(base, iva, plena = TARIFA_PLENA) {
+function repartirMezclada(base, iva, plena = TARIFA_PLENA, totalFactura = null) {
     if (!(base > 0) || !(iva > 0) || !(plena > 0)) return null;
 
-    const basePlena = redondear(iva / (plena / 100));
-    const base0 = redondear(base - basePlena);
+    let basePlena = redondear(iva / (plena / 100));
 
-    // Un centavo de holgura por el redondeo del portal. Si la parte gravada no
-    // entra en la factura, la mezcla incluye una tarifa que no es 0% ni plena.
-    if (basePlena < 0 || base0 < -0.01) return null;
+    // Si la factura tiene ICE / otros tributos (Art. 65 LRTI: la base del IVA incluye el ICE),
+    // la base gravada del IVA puede superar el `valorSinImpuestos` neto que muestra el portal,
+    // pero nunca el `totalFactura - iva`.
+    const tieneIceOTributos = totalFactura && totalFactura > base;
+    const baseTotalDisponible = tieneIceOTributos
+        ? redondear(totalFactura - iva)
+        : base;
+
+    let base0 = redondear(baseTotalDisponible - basePlena);
+
+    // En facturas con ICE o múltiples ítems (ej. bebidas, gaseosas, licores), el redondeo
+    // acumulado de centavos por línea puede diferir hasta 4-5 centavos del producto global.
+    // Si la diferencia es de unos centavos por debajo de 0, significa que la factura es 100% gravada
+    // (sin parte 0%) y que el total disponible absorbe la base plena.
+    const holguraMinima = tieneIceOTributos ? -0.06 : -0.02;
+    if (basePlena < 0 || base0 < holguraMinima) return null;
+
+    if (base0 < 0) {
+        base0 = 0;
+        if (tieneIceOTributos) {
+            basePlena = Math.min(basePlena, baseTotalDisponible);
+        }
+    }
 
     return { basePlena, base0: Math.max(0, base0) };
 }
@@ -1505,9 +1529,10 @@ function calcularResumen(facturas, opciones = {}) {
             destino = resumen.iva15;
         } else {
             // No coincide con una tarifa sola: casi siempre es una factura de
-            // supermercado, con parte al 15% y parte al 0%. Eso NO se adivina,
-            // se calcula — y si el reparto cabe en la factura, se declara bien.
-            const partes = repartirMezclada(factura.valorSinImpuestos, factura.iva);
+            // supermercado, con parte al 15% y parte al 0%, o una compra con ICE
+            // (cervezas, gaseosas) cuya base imponible de IVA incluye el ICE (Art. 65 LRTI).
+            // Eso NO se adivina, se calcula — y si el reparto cabe en la factura, se declara bien.
+            const partes = repartirMezclada(factura.valorSinImpuestos, factura.iva, TARIFA_PLENA, factura.importeTotal);
 
             // …salvo que quien la emitió también facture al 5%.
             //
@@ -1516,15 +1541,15 @@ function calcularResumen(facturas, opciones = {}) {
             // factura, y el crédito tributario sale de esa base: elegir mal es
             // declarar tres veces más o tres veces menos.
             //
-            // El número no distingue los dos casos; quien emitió, sí. Un
-            // supermercado no puede facturar al 5% —es la tarifa del sector
-            // construcción— y eso ya lo sabemos, porque se cuenta a qué tarifa
-            // factura cada proveedor mirando sus comprobantes. Si al emisor se
-            // le vio un 5% y el reparto al 5% también cabe, el reparto es
-            // ambiguo y lo mira el contador.
+            // Un comercio minorista o farmacia NO factura al 5% de la construcción.
+            // Tampoco hay ambigüedad en compras corrientes (< $30) o donde el cociente
+            // ya fue identificado como mezcla minorista para evitar falso 5%.
             const emisor = rucDeFactura(factura);
-            const tambienCabeAl5 = emisor && rucsAl5.has(emisor) &&
-                repartirMezclada(factura.valorSinImpuestos, factura.iva, 5) !== null;
+            const rucRazon = String(factura.rucRazon || '');
+            const esMinorista = /farma|farmacia|medicity|economica|supermaxi|favorita|tia\b|coral\b|megamaxi|supermercado|comisariato|botica|minimarket|tienda/i.test(rucRazon);
+            const tambienCabeAl5 = !esMinorista && factura.valorSinImpuestos >= 30 &&
+                emisor && rucsAl5.has(emisor) &&
+                repartirMezclada(factura.valorSinImpuestos, factura.iva, 5, factura.importeTotal) !== null;
 
             if (partes && !tambienCabeAl5) {
                 resumen.iva15.cantidad++;
@@ -1560,8 +1585,8 @@ function calcularResumen(facturas, opciones = {}) {
                 iva: redondear(factura.iva),
                 motivo: motivo + (tambienCabeAl5
                     ? ` — y este proveedor factura al 5%, así que el reparto cabe de dos maneras: ` +
-                      `$${repartirMezclada(factura.valorSinImpuestos, factura.iva).basePlena} al ${TARIFA_PLENA}% ` +
-                      `o $${repartirMezclada(factura.valorSinImpuestos, factura.iva, 5).basePlena} al 5%`
+                      `$${repartirMezclada(factura.valorSinImpuestos, factura.iva, TARIFA_PLENA, factura.importeTotal).basePlena} al ${TARIFA_PLENA}% ` +
+                      `o $${repartirMezclada(factura.valorSinImpuestos, factura.iva, 5, factura.importeTotal).basePlena} al 5%`
                     : ' — y el reparto entre tarifa plena y 0% no cierra')
             });
             console.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);

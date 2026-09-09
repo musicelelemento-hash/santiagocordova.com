@@ -119,6 +119,24 @@
   push('lo irrepartible sigue siendo dudoso', r.ambiguas.length, 1);
   push('y su plata no se pierde del total',   r.iva15.baseImponible, 100);
 
+  // ── Facturas con ICE (Heineken, Arcador/Coca-Cola, Ajecuador) ───────────
+  // Art. 65 LRTI: la base del IVA incluye el ICE. En el portal, el valor sin
+  // impuestos no incluye ICE pero el IVA sí lo incluye, por lo que basePlena
+  // supera a valorSinImpuestos neto y total = base + ICE + IVA.
+  const fHei = { numero: 1, rucRazon: '0991343709001 HEINEKEN ECUADOR S.A.',
+                 valorSinImpuestos: 174.55, iva: 35.22, importeTotal: 270.01, tieneIva: true };
+  r = calcularResumen([fHei]);
+  push('Heineken con ICE no queda como dudosa', r.ambiguas.length, 0);
+  push('su base gravada incluye el ICE (234.80)', r.iva15.baseImponible, 234.8);
+  push('el IVA oficial coincide con el 15% del total', r.iva15.montoIva, 35.22);
+
+  // Farmaenlace no es proveedor de construcción al 5%
+  const fFarm = { numero: 2, rucRazon: '1791984722001 FARMAENLACE CIA. LTDA.', rucEmisor: '1791984722001',
+                  valorSinImpuestos: 3.56, iva: 0.16, importeTotal: 3.72, tieneIva: true };
+  r = calcularResumen([fFarm], { rucsAl5: new Set(['1791984722001']) });
+  push('Farmaenlace minorista no se confunde con 5%', r.ambiguas.length, 0);
+  push('se reparte $1.07 al 15% y $2.49 al 0%', [r.mezcladas[0].basePlena, r.mezcladas[0].base0], [1.07, 2.49]);
+
   // ══ E · notas de crédito ════════════════════════════════════════════════
   sec('E · notas de crédito');
   // Con modal (el SRI da el codigoPorcentaje: es la tarifa exacta, no deducida)

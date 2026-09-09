@@ -1740,6 +1740,11 @@ const Proveedores = {
                 let t;
                 try { t = clasificarTarifaIva(f.valorSinImpuestos, f.iva || 0).tarifa; }
                 catch (e) { t = undefined; }
+                const nomFila = String(f.razonSocial || f.nombre || f.rucRazon || '');
+                const esMinorista = /farma|farmacia|medicity|economica|supermaxi|favorita|tia\b|coral\b|megamaxi|supermercado|comisariato|botica|minimarket|tienda/i.test(nomFila);
+                if (t === 5 && (f.valorSinImpuestos < 5 || esMinorista)) {
+                    t = null; // No registrar como 5%
+                }
                 const clave = (t === null || t === undefined) ? '?' : String(t);
                 previo.tarifas = previo.tarifas || {};
                 previo.tarifas[clave] = (previo.tarifas[clave] || 0) + 1;
@@ -1845,7 +1850,15 @@ const Proveedores = {
      */
     async losQueFacturanAl5() {
         const base = await this._todos();
-        return new Set(Object.keys(base).filter((r) => base[r].tarifas && base[r].tarifas['5']));
+        return new Set(Object.keys(base).filter((r) => {
+            const p = base[r];
+            if (!p || !p.tarifas || !p.tarifas['5']) return false;
+            const nom = String(p.nombre || '');
+            if (/farma|farmacia|medicity|economica|supermaxi|favorita|tia\b|coral\b|megamaxi|supermercado|comisariato|botica|minimarket|tienda/i.test(nom)) {
+                return false;
+            }
+            return true;
+        }));
     },
 
     /** Lo que se sabe de un RUC, o null si nunca se lo vio. */

@@ -41,7 +41,36 @@
 
 ---
 
-## 🏆 2. HITOS Y BUGS CRÍTICOS RESUELTOS HOY (07-SEP-2026)
+## 🏆 2. HITOS Y BUGS CRÍTICOS RESUELTOS HOY (08-SEP-2026)
+
+### 2.1. Diagnóstico de «richfaces.js.jsf:746 [Violation] unload is not allowed»
+- **Origen:** Advertencia nativa del motor Chromium (Chrome 117+) informando la depreciación del evento `unload` en la Permissions-Policy del navegador, disparada por el script legacy de RichFaces 4.3.7 del portal del SRI.
+- **Impacto:** Es ruido informativo del navegador, no un error de JavaScript de la extensión ni una excepción fatal. La causa real que detenía las declaraciones estaba en dos bugs tributarios y de extracción abajo detallados.
+
+### 2.2. Farmaenlace CIA. LTDA. ($3.56) detenía a CABRERA BERONICA MARIA como «ambigua 5%»
+- **Causa raíz:** En una sesión previa, una factura ínfima de Farmaenlace se había clasificado erróneamente en `tarifas['5']` en `sc_proveedores`. La función `losQueFacturanAl5()` devolvía a Farmaenlace en `rucsAl5`. Como $3.56 con $0.16 de IVA cabe aritméticamente tanto en $1.07 al 15% + $2.49 al 0% como en $3.20 al 5% + $0.36 al 0%, el bot lo marcó como ambiguo y activó `anotarIvaSinUbicar`, impidiendo el envío.
+- **Corrección:**
+  1. Las farmacias y cadenas de retail/supermercados (`FARMAENLACE`, `SUPERMAXI`, `TIA`, etc.) nunca comercializan materiales de construcción al 5%. Se filtran explícitamente en `losQueFacturanAl5()` y en `registrarLote()`.
+  2. En `calcularResumen()`, las compras menores a $30 o de emisores minoristas nunca se marcan como ambiguas frente al 5% de la construcción. Farmaenlace se reparte limpiamente como $1.07 al 15% y $2.49 al 0%.
+
+### 2.3. Facturas con ICE (Heineken, Arcador/Coca-Cola, Ajecuador) corrompían 27 facturas en CARDENAS PESANTES
+- **Causa raíz:** En `extraerFacturasPaginaActual()`, una reconciliación forzaba `iva = importeTotal - valorSinImpuestos` cuando la resta difería de la columna. En Ecuador, para bienes con ICE (cervezas, licores, gaseosas azucaradas), `total - base = IVA + ICE`. Además, bajo el Art. 65 de la LRTI, la base imponible del IVA **incluye el ICE**. La columna «IVA» del SRI ya traía el IVA oficial exacto ($35.22 en Heineken). Al pisarlo con `95.46` ($35.22 IVA + $60.24 ICE), la tarifa calculada saltaba a 54.69%, arrojando 27 facturas sin tarifa reconocible.
+- **Corrección:**
+  1. En `extraerFacturasPaginaActual()`, la columna oficial «IVA» del SRI se respeta y **nunca** se sobreescribe cuando trae un importe positivo. La diferencia con `total - base` se reconoce y registra como ICE/otros tributos.
+  2. `repartirMezclada(base, iva, plena, totalFactura)` ahora recibe el `importeTotal` de la factura, permitiendo que la base imponible del 15% contemple el ICE (e.g. $234.80 de base para los $35.22 de IVA), asignando la compra íntegramente al casillero 500/510 y garantizando el 100% del crédito tributario.
+
+### 2.4. Reconocimiento Rápido de Clientes (Alias) y Cifras de Declaraciones en Bóveda y Perfil (Web)
+- **Problema:** Al usar la aplicación web no se disponía de un mecanismo ágil para poner notas/alias de reconocimiento ("Mecánica El Chino", "Don Pepe", etc.), y al recargar la página la consulta a Supabase con rol `anon` sobreescribía con `undefined` los campos locales de IndexedDB. Además, en la Bóveda y Perfil no se reflejaban ni podían copiarse los valores financieros de las declaraciones.
+- **Solución implementada:**
+  1. **Protección de Estado Local (`useAppStore.ts`):** `loadFromDB` preserva estrictamente notas, alias, tradeName, contraseñas SRI y firmas frente a consultas cloud restringidas por permisos de columna PostgreSQL.
+  2. **Alias Inline:** Badge interactivo `🏷️ Alias / Reconocimiento` en `ClientHeader.tsx` con edición instantánea, además de visualización en tarjetas (`ClientCard.tsx`), tablas (`VirtualClientTable.tsx`) y drawer de edición.
+  3. **Cifras y Copia en Bóveda (`VaultTab.tsx`)**: Nueva sección Obsidian con desglose completo (Ventas 15/0, Compras 15/5/0, IVA Compras, Retenciones IVA/Renta, Pagar, Saldo a Favor). Botones `[Copiar Cifras]` (WhatsApp), `[Copiar CEP]`, `[Ver PDF]` y `[Editar Cifras]` con modal y auto-cálculo de impuestos.
+  4. **Cifras en Perfil (`ExecutiveObligationsTable.tsx`)**: Barra de resumen financiero con botones de copia rápida para declaraciones enviadas.
+  5. **Verificación:** `npm run build` en `santiagocordova-main` (`tsc --noEmit && vite build`) completado con código de salida 0.
+
+---
+
+## 🏆 2b. HITOS PREVIOS (07-SEP-2026)
 
 ### A. Diagnóstico y Solución Definitiva del "401" de Supabase en `sri_declaraciones`
 - **Problema histórico:** Las declaraciones se presentaban y los PDFs se subían a Cloudflare R2 con éxito, pero la sincronización de métricas a la tabla relacional `sri_declaraciones` devolvía `HTTP 401 Unauthorized`.
