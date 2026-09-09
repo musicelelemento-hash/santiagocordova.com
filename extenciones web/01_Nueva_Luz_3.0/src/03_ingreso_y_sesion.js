@@ -139,6 +139,28 @@ SafeStorage.get(null).then(async (items) => {
         const esLoteSinPermiso = !!(autofill && autofill.isBatch) && !enPausa && !(await SriLoop.puedeAvanzar());
 
         if (autofill && autofill.manual && !esLoteSinPermiso) {
+            // 🛑 Si el usuario acaba de parar (DETENER/🛑/⏸), el autofill que
+            // quedó NO despierta la extensión. El 09-sep-2026 eso era el bucle
+            // sin fin: se paraba, y en la próxima página el autofill manual
+            // volvía a prender el master, se logueaba y re-armaba la corrida.
+            // Parado, se descarta el autofill suelto y queda en reposo; para
+            // volver a correr, el usuario lo pide (popup/cockpit) y se rearma.
+            //
+            // Y aunque NO se haya parado, un autofill suelto es de UN SOLO uso:
+            // vale lo que dura su orden (actionTimestamp). Después de 5 minutos
+            // ya nadie lo ordena — es un resto, no una corrida — y tampoco
+            // despierta. Correr de nuevo = ordenar de nuevo.
+            const parado = await sePidioParar();
+            const viejo = !!items.actionTimestamp && (Date.now() - items.actionTimestamp > 300000);
+            if (parado || viejo) {
+                console.warn(`🛑 [PARADA] Autofill suelto de ${autofill.name || autofill.ruc} ` +
+                             (parado ? 'pero se pidió parar' : 'pero es viejo (>5 min)') +
+                             '. No se despierta; se descarta lo que quedó.');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp',
+                                          'auto_batch_queue', 'auto_batch_index']);
+                console.log('💤 [SRI ELITE] Modo Reposo: no se rearma nada solo.');
+                return;
+            }
             console.log('🔓 [SRI ELITE] Login manual solicitado. Despertando extensión...');
             await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
             items.sri_master_switch_on = true;
@@ -833,6 +855,14 @@ SafeStorage.get(null).then(async (items) => {
             return;
         }
 
+        // 🛑 Parado, la sesión activa NO replanta la corrida sola: sin este
+        // candado, después de un DETENER el perfil volvía a plantar
+        // turbo_step1_facturas y el bucle seguía (09-sep-2026).
+        if (await sePidioParar()) {
+            console.warn('🛑 [PARADA] Sesión activa pero se pidió parar: no se replanta turbo_step1.');
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+            return;
+        }
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
@@ -882,6 +912,15 @@ SafeStorage.get(null).then(async (items) => {
             } else {
                 console.log('🛑 SRI Assistant: Detectado Login sin credenciales. Esperando a que el usuario ingrese...');
             }
+            return;
+        }
+
+        // 🛑 Última red: si quedó una acción pendiente pero se pidió parar, no
+        // se ejecuta — se descarta (carrera entre el clic de DETENER y la
+        // escritura del storage en la página que se está cerrando).
+        if (await sePidioParar()) {
+            console.warn(`🛑 [PARADA] Acción «${items.pendingAction}» pendiente pero se pidió parar. Se descarta.`);
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionEnCurso', 'accionVueltas']);
             return;
         }
 
