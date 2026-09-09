@@ -538,10 +538,6 @@ function pendientesSinBenditaFilter() {
         !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth));
 }
 
-function benditosCount() {
-    return benditaActiva() ? listaBendita.length : allClients.length;
-}
-
 /** Cantidad de benditos que además faltan declarar el período (los que va a correr el lote). */
 function benditosPendientesCount() {
     return clientesPendientesDelPeriodo().length;
