@@ -72,18 +72,21 @@ async function autoLlenarFormulario(data) {
 
 
         // 1. VENTAS
+        if (await cortarSiPidieronParar('llenado (FASE 1 · ventas)')) return false;
         console.log('--- FASE 1: VENTAS ---');
         safeStatus('📊 Llenando Ventas...');
         total += await llenarVentas(data);
         await sleep(800);
 
         // 2. COMPRAS
+        if (await cortarSiPidieronParar('llenado (FASE 2 · compras)')) return false;
         console.log('--- FASE 2: COMPRAS ---');
         safeStatus('🛍️ Llenando Compras...');
         total += await llenarCompras(data);
         await sleep(800);
 
         // 3. RETENCIONES / RESUMEN
+        if (await cortarSiPidieronParar('llenado (FASE 3 · retenciones)')) return false;
         console.group('📋 Resumen Impositivo (Elite Engine)');
         safeStatus('💎 Aplicando Sugeridos y Retenciones...');
         total += await llenarRetenciones(data);
@@ -98,6 +101,7 @@ async function autoLlenarFormulario(data) {
         // cambiar el crédito que el SRI sugiere.
         const eliteFields = ['615', '617', '619', '564', '565'];
         for (const f of eliteFields) {
+            if (await cortarSiPidieronParar('campos sugeridos del resumen')) return false;
             // Aseguramos sección abierta
             if (['615', '617', '619'].includes(f)) await toggleSriSection('RESUMEN', true);
             else if (['564', '565'].includes(f)) await toggleSriSection('COMPRAS', true);

@@ -715,6 +715,7 @@ const GhostBlackBox = {
 // ============================================================
 async function detenerBucleSRI() {
   console.log('🛑 [DETENER BUCLE] Solicitud de parada de emergencia recibida.');
+  marcarParadaPedida();
 
   // 🚦 El semáforo es la ÚNICA autoridad del bucle (AGENTS §2): puedeAvanzar()
   // pregunta por sc_loop.estado, no por banderas sueltas. Antes esta función
@@ -763,6 +764,48 @@ async function detenerBucleSRI() {
   }
 }
 window.detenerBucleSRI = detenerBucleSRI;
+
+// ============================================================
+// 🛑 COMPUERTA ÚNICA DE PARADA PARA EL TRABAJO EN CURSO
+// ============================================================
+// «Parar tiene que parar» (AGENTS §2). El 09-sep-2026 el usuario pulsó 🛑 y el
+// bot SIGUIÓ: terminó el llenado, clickeó «Siguiente» y entró al bucle de
+// «desmissear advertencias» de 20 s. Los botones de parada marcaban el
+// almacén y el semáforo, pero los bucles que ya estaban corriendo en la página
+// no los miraban — seguían con lo mismo hasta el final.
+//
+// Todo bucle de la página que repita una acción consulta sePidioParar() y
+// corta en seco. En memoria (lo que se pulsó en ESTA página) + el semáforo
+// (un lote vivo parado) + el almacén (pausa/stop). La marca en memoria expira
+// a los 3 minutos o la limpia un arranque nuevo (SriLoop.iniciar/reanudar).
+let paradaPedidaEnMemoria = 0;
+function marcarParadaPedida() { paradaPedidaEnMemoria = Date.now(); }
+function limpiarParadaPedida() { paradaPedidaEnMemoria = 0; }
+
+async function sePidioParar() {
+    if (paradaPedidaEnMemoria && Date.now() - paradaPedidaEnMemoria < 180000) return true;
+    try {
+        const sem = await SriLoop.get();
+        if (sem && Array.isArray(sem.cola) && sem.cola.length > 0) {
+            // Lote de verdad: la autoridad es el semáforo. Si dejó de estar
+            // CORRIENDO (DETENIDO/PAUSADO/PAUSANDO), se pidió parar.
+            return sem.estado !== 'CORRIENDO';
+        }
+    } catch (e) { /* si no se puede leer, seguir con el resto de la compuerta */ }
+    try {
+        const r = await SafeStorage.get(['sriAutomationPaused']);
+        if (r.sriAutomationPaused === true) return true;
+    } catch (e) { /* lo mismo */ }
+    return false;
+}
+
+/** Devuelve true si se pidió parar y deja constancia en la consola. */
+async function cortarSiPidieronParar(rotulo = '') {
+    if (!(await sePidioParar())) return false;
+    console.warn('🛑 [PARADA] ' + (rotulo || 'Trabajo en curso') +
+                 ' cortado: el usuario pidió detener.');
+    return true;
+}
 
 function renderEmergencyStopBar() {
   if (typeof isSRILoginPage === 'function' && isSRILoginPage()) return;

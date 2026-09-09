@@ -3468,6 +3468,10 @@ class SriAssistantPanel {
                 }
             }
             console.log('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
+            // 🛑 Si el usuario pidió parar (DETENER/🛑/⏸) mientras se llenaba,
+            // NO se clickea Siguiente: el formulario queda como borrador y el
+            // bot no sigue tocando nada. (09-sep-2026: seguía hasta el final.)
+            if (await cortarSiPidieronParar('avance al resumen')) return false;
             if (typeof clickElement === 'function') clickElement(btnSiguiente, 'Siguiente Formulario');
             else btnSiguiente.click();
 
@@ -3475,6 +3479,7 @@ class SriAssistantPanel {
             console.log('🛡️ Verificando y desmisseando advertencias normales de validación SRI (Bucle extendido para conexiones lentas)...');
             let reachedSummary = false;
             for (let i = 0; i < 25; i++) {
+                if (await cortarSiPidieronParar('espera de advertencias del SRI')) return false;
                 await sleep(800);
                 await autoDismissSriWarnings();
 
@@ -3529,6 +3534,7 @@ class SriAssistantPanel {
 
                         // Bucle activo para esperar resumen o dismissar diálogo Aceptar
                         for (let k = 0; k < 15; k++) {
+                            if (await cortarSiPidieronParar('reintento tras advertencias 625')) return false;
                             await sleep(1000);
                             await autoDismissSriWarnings();
                             
@@ -3581,6 +3587,9 @@ class SriAssistantPanel {
             await sleep(1500);
             const autoItems = await SafeStorage.get(['autoDeclaration', 'sri_auto_mode']);
             if (autoItems.autoDeclaration || autoItems.sri_auto_mode) {
+                // 🛑 Si se pidió parar, no se invoca el Cierre Mágico: ese
+                // camino valida y PUEDE ENVIAR. Parado, no se envía nada.
+                if (await cortarSiPidieronParar('cierre mágico')) return false;
                 console.log('🚀 [FORMULARIO] Invocando Cierre Mágico Automático de forma segura (verificando saldos)...');
                 if (typeof this.ejecutarCierreMagico === 'function') {
                     await this.ejecutarCierreMagico();
@@ -3597,6 +3606,8 @@ class SriAssistantPanel {
     }
 
     async handleFillForm(type) {
+        // Acción deliberada del usuario: levanta una parada vieja de esta página.
+        if (typeof limpiarParadaPedida === 'function') limpiarParadaPedida();
         this.log('⏳ Ejecutando acción...');
         try {
             const storage = (await GhostMemory.getData()) || {};
@@ -3671,6 +3682,8 @@ class SriAssistantPanel {
     }
 
     async runUnifiedWorkflow(workType, context = {}) {
+        // Acción deliberada del usuario: levanta una parada vieja de esta página.
+        if (typeof limpiarParadaPedida === 'function') limpiarParadaPedida();
         this.setWorking(true);
         this.isExpanded = false;
         this.render();
@@ -4283,6 +4296,7 @@ class SriAssistantPanel {
         if (requireConfirm && !confirm('¿Desea detener la automatización?')) {
             return;
         }
+        if (typeof marcarParadaPedida === 'function') marcarParadaPedida();
 
         // 🚦 Si hay un bucle vivo (semáforo en CORRIENDO/PAUSANDO/PAUSADO), la
         // parada se hace en el semáforo: emergencia() pone sc_loop en DETENIDO,

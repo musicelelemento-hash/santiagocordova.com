@@ -147,6 +147,8 @@ const SriLoop = {
         console.log(`▶️ [BUCLE] Iniciando lote: ${cola.length} clientes.`);
         await this._set({ estado: 'CORRIENDO', cola, indice, periodo, latido: Date.now(), motivo: '' });
         await this._sincronizarLegado(true);
+        // Un arranque deliberado levanta la parada pedida en esta página.
+        if (typeof limpiarParadaPedida === 'function') limpiarParadaPedida();
     },
 
     /**
@@ -160,6 +162,7 @@ const SriLoop = {
         if (faseAhora) patch.ultimaFase = faseAhora;
         await this._set(patch);
         await this._sincronizarLegado(true);
+        if (typeof limpiarParadaPedida === 'function') limpiarParadaPedida();
     },
 
     /** Enciende o apaga el modo paso a paso. Devuelve cómo quedó. */
@@ -233,6 +236,7 @@ const SriLoop = {
      */
     async emergencia(quien = 'el botón 🛑 del panel') {
         console.warn(`🛑 [BUCLE] PARADA DE EMERGENCIA, pedida por ${quien}. No es una falla: el lote se cortó a mano.`);
+        if (typeof marcarParadaPedida === 'function') marcarParadaPedida();
         if (typeof anotarBitacora === 'function') anotarBitacora('🛑 parada de emergencia', quien);
         await this._set({ estado: 'DETENIDO', motivo: `Parada de emergencia (${quien})` });
         await this._descartarLoPendiente('la parada de emergencia');

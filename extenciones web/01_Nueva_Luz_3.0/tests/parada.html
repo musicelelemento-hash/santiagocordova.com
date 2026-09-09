@@ -126,6 +126,31 @@
   push('y la barra mira el semáforo (sc_loop)',
        /sc_loop/.test(bundle) && /CORRIENDO/.test(bundle), true);
 
+  // ══ F · la compuerta corta el trabajo EN CURSO ══════════════════════════
+  sec('F · la compuerta de parada en curso');
+  // El 09-sep-2026 el usuario pulsó 🛑 y el bot SIGUIÓ hasta el final: los
+  // botones marcaban el almacén pero los bucles que ya corrían no lo miraban.
+  // sePidioParar() es la compuerta única que consultan todos los bucles.
+  const per = { year: 2026, monthIndex: 8 };
+  const cli = [{ ruc: '0704789205001', password: 'x', name: 'APOLO' }];
+  await SriLoop.iniciar(cli, per);           // limpia memoria + pausa + CORRIENDO
+  push('lote CORRIENDO → no se pidió parar',  await sePidioParar(), false);
+  marcarParadaPedida();                       // lo que hace DETENER/🛑/⏹
+  push('marca en memoria (apretaron DETENER)', await sePidioParar(), true);
+  limpiarParadaPedida();
+  push('un arranque nuevo la levanta',        await sePidioParar(), false);
+  await SriLoop.emergencia('banco compuerta');
+  push('lote DETENIDO → parar',               await sePidioParar(), true);
+  limpiarParadaPedida();                       // = el usuario arranca de nuevo
+  await SriLoop.detener('banco compuerta');    // sin lote vivo
+  await SafeStorage.set({ sriAutomationPaused: true });
+  push('pausa pedida (flujo suelto) → parar', await sePidioParar(), true);
+  await SafeStorage.set({ sriAutomationPaused: false });
+  push('sin parada pedida → seguir',          await sePidioParar(), false);
+  push('cortarSiPidieronParar no corta sin pedido',
+       await cortarSiPidieronParar('prueba'), false);
+  await SriLoop.detener('fin del banco');
+
   const fallos=ok.filter(x=>!x).length;
   document.getElementById('out').textContent=
     L.join('\n')+'\n\n'+

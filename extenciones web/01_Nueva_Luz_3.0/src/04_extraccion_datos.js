@@ -138,6 +138,7 @@ async function extraerTodasLasFacturas() {
 
     while (true) {
         console.log('Procesando página ' + paginaActual);
+        if (await cortarSiPidieronParar('extracción de facturas')) break;
         await esperarTabla();
 
         // ELITE v13.1: Feedback de progreso en tiempo real
@@ -466,6 +467,7 @@ async function extraerTodasLasRetenciones() {
 
     while (true) {
         console.log(`📄 Procesando página ${paginaActual} de retenciones`);
+        if (await cortarSiPidieronParar('extracción de retenciones')) break;
         await esperarTabla();
 
         // ELITE v13.1: Feedback de progreso en tiempo real
@@ -1684,6 +1686,7 @@ async function extraerTodasLasNotasCredito() {
 
     while (true) {
         console.log('Procesando página ' + paginaActual + ' de NC');
+        if (await cortarSiPidieronParar('extracción de notas de crédito')) break;
         await esperarTabla();
 
         // ELITE v13.1: Feedback de progreso en tiempo real

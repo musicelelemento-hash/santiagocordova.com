@@ -2868,6 +2868,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         // Bucle de reintento para selección de obligación (SRI suele ignorar el 1er click)
         for (let attempt = 0; attempt < 3; attempt++) {
+            if (await cortarSiPidieronParar('selección de la obligación')) return;
             await dismissSridialogs();
             let labelActual = getLabelObligacion();
             if (labelActual && labelActual.textContent.includes('2011')) {
@@ -2958,6 +2959,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 if (isCalendarVisible()) return true;
 
                 for (let i = 0; i < 3; i++) {
+                    if (await cortarSiPidieronParar('apertura del calendario')) return false;
                     console.log(`🎯 Abriendo calendario (Intento ${i + 1})...`);
                     calendarInput.focus();
                     await sleep(350);
@@ -2988,6 +2990,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const adjustYear = async (targetYear) => {
                 const maxIntents = 20;
                 for (let i = 0; i < maxIntents; i++) {
+                    if (await cortarSiPidieronParar('ajuste del año en el calendario')) return false;
                     let datepickerDiv = document.getElementById('ui-datepicker-div') ||
                         document.querySelector('.ui-datepicker:not(.ui-helper-hidden)') ||
                         document.querySelector('.ui-datepicker-inline');
