@@ -223,6 +223,38 @@ semáforo de verdad, reaparece en el estado varado, el ⏹ también deja
 
 **Estado final: 648 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
 
+### 2.0g · El 203 otra vez en corrida real — frenar ANTES del Siguiente (09-sep, tarde)
+
+> Corrida real APOLO PALACIOS (build `3.1.0+20260909.1311`, cliente suelto):
+> el 🛑 del panel **sí paró el lote** (log: `PARADA DE EMERGENCIA … Arranque
+> cancelado por el usuario` — el fix del semáforo anda). Pero el bot llenó
+> las compras al 5% (`540`/`550` = $96.43), clickeó «Siguiente» y el SRI
+> devolvió los **dos** errores del 203: *«Seleccione el decreto…»* y *«El
+> decreto seleccionado es incorrecto»*.
+>
+> Dos huecos destapados: (1) el bot nunca toca el 203 (`concepto91`, el único
+> `<select>` del formulario) — elegir el decreto es del contador (AGENTS §9d),
+> así que con 5% neto y el decreto vacío, avanzar era chocar contra la pared;
+> (2) el 📐 automático no cubría el camino `Siguiente` del formulario (solo el
+> del Cierre Mágico), así que el reclamo no dejaba radiografía.
+
+**Fix** (commit `f6d1e39`):
+1. `frenarSiFaltaDecreto203()` en el 05: lee el formulario ya llenado; si
+   `550 > 0` y `concepto91` está vacío, **frena ANTES del clic**, deja la
+   radiografía con las opciones (`sri_radiografias_reclamo`) y avisa. Si no
+   puede afirmar nada (sin 550, sin select, decreto ya elegido), **no frena**
+   — que lo diga el SRI.
+2. `avanzarSiguienteFormulario()` (06) llama al pre-vuelo antes del clic.
+3. La rama de «mensajes no seguros» del post-clic ahora corre
+   `loQuePideElFormulario()` + `radiografiarReclamo()`: cualquier reclamo del
+   SRI en este camino deja evidencia y aviso, igual que en el Cierre Mágico.
+
+Banco `tests/radiografia203.html`: 18 → **27 comprobaciones** (secciones F–I:
+frena con 5% neto y 203 vacío, no frena con decreto elegido, no frena si no se
+puede afirmar, cableado verificado contra fuentes + bundle).
+
+**Estado final: 657 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
