@@ -109,6 +109,33 @@ que no puede leer.
 
 **Estado final: 587 comprobaciones, todas verdes, 17 bancos** (09-sep-2026).
 
+### 2.0c · Criterio del usuario sobre ND, liquidaciones y excedentes de NC — DOCUMENTADO, no cableado
+
+> El usuario describió el manejo de los tipos de comprobante que faltan
+> (notas de débito, liquidaciones de compra, excedentes de notas de crédito).
+> **Se anotó en `.agents/AGENTS.md §8a` como criterio pendiente de validar** —
+> no se tocó código ni diccionario (decisión del usuario: "solo documentar").
+
+**Lo que dijo (criterio contable):**
+- **Liquidaciones de compra**: sustentan crédito tributario solo si se retuvo y
+  depositó el 100% del IVA; van a los casilleros de compras locales según
+  tarifa; la retención se reporta aparte (103/retenciones); cuentan en el
+  casillero **119** (DOM `concepto260`, ya en la Biblia).
+- **Notas de crédito recibidas**: reducen base imponible E IVA en el período
+  recibido (el bot ya resta NC del 510/517/550). Hay excedentes por compensar
+  (543 NC 0% · 544/554 NC 15% en la Biblia) que hoy no se usan.
+- **Notas de débito recibidas**: incrementan el bruto del tipo de compra del
+  período. Nunca se barrió una ND — es el tipo que falta construir.
+
+**⚠️ Discrepancia de numeración que quedó anotada para resolver con el 📐:**
+el usuario describió la sección compras con **501/511/521 corriente 15%**,
+**502 como activo fijo** y **553/554 proporcionalidad**; la Biblia del 2011
+(armada con capturas y escrituras reales) dice **500/510/520 corriente**,
+**501/511/521 activo fijo**, **502/512/522 sin derecho**, **563/564/565
+proporcionalidad**. Puede ser el Formulario 104 histórico vs el 2011 del
+wizard, o un error de la Biblia. **No se resuelve discutiendo: se resuelve con
+el 📐 sobre la fila real** (AGENTS §8a / §9d / §0b.5).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
