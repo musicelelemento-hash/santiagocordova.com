@@ -340,7 +340,18 @@ function extraerFacturasPaginaActual() {
 
             // Validar que los valores sean razonables
             if ((!importeTotal && !valorSinImpuestos) || (importeTotal === 0 && valorSinImpuestos === 0)) {
-                // console.warn(`   ⚠️ Fila ${idx} descartada: valores en 0`);
+                // APOLO 09-sep-2026: la auditoría decía «portal=44 · leídos=43» y
+                // no había forma de saber QUÉ fila faltaba: esta rama descartaba
+                // en silencio. Ahora se identifica la fila — puede ser una fila
+                // de totales del propio tbody, un comprobante anulado sin montos
+                // o una estructura distinta — para que la auditoría sea útil.
+                const quien = celdas[1] ? celdas[1].textContent.trim().slice(0, 90)
+                             : (celdas[0] ? celdas[0].textContent.trim().slice(0, 90) : '');
+                const pareceTotal = /total|subtotal|suma/i.test(textoCompleto.slice(0, 200));
+                console.warn(`   ⚠️ [AUDITORÍA] Fila ${idx} sin montos leíbles ` +
+                             `(SinImp=${valorSinImpuestos}, Total=${importeTotal})` +
+                             (pareceTotal ? ' — parece fila de TOTALES' : '') +
+                             ` — ${quien || 'sin identificación'}. Cuenta en el total del portal, no en lo declarado.`);
                 return;
             }
 
