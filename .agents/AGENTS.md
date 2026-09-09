@@ -116,12 +116,11 @@ IA la vuelve a proponer y se vuelve a descartar.
 node --check src/0*.js && npm run build
 ```
 
-y los dieciséis bancos en `tests/index.html` (hace falta el servidor:
+y los dieciocho bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **561 comprobaciones, verdes el 09-sep-2026** (16 bancos; antes de
-esa fecha los docs decían 544/14, 531/15 o 319/9 — descontando los dos bancos
-rotos que se arreglaron ese día, ver §0c). Si tu cambio baja ese número, algo
-se rompió; si lo sube, dejá dicho qué agregaste.
+scripts). **611 comprobaciones, verdes el 09-sep-2026** (18 bancos, los dos
+últimos agregados ese día: `bendita` y `reglas`). Si tu cambio baja ese número,
+algo se rompió; si lo sube, dejá dicho qué agregaste.
 
 ---
 
