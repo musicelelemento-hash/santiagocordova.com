@@ -313,6 +313,44 @@ popup) y registra el comprobante si el flujo llega a destino; si algo lo frena
 
 **Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
 
+### 2.0j · Corrida real masiva: 5 declaradas con comprobante + el 203 con sus 16 decretos reales (09-sep, madrugada→noche)
+
+> Bitácora de una jornada larga (lotes de 16 y corridas sueltas), build
+> `3.1.0+20260909.1451`:
+
+**Lo que funcionó — y es la prueba del objetivo de la §0:**
+`CARDENAS PESANTES ROSA HELA`, `RAMON ORELLANA BENITO EFRAIN`,
+`ORDOÑEZ SALAZAR BRITANY CAROLINA`, `QUEZADA CEDILLO CERAFIN EMITERIO` y
+`ARIAS VALLE NARDA ALEXANDRA` → **DECLARADA 2026-08 · PDF SUBIDO (r2-directo) ·
+comprobante guardado (cloudflare_r2)**. `RODRIGUEZ VALVERDE BORIS ANDRE` ya
+tenía declarado el mes → el perfil lo detectó (`ya_declarada`) y **recuperó el
+comprobante** en vez de volver a declarar. El cierre mágico de ARIAS VALLE
+mostró el contrato cumplido (saldo `USD 0.00`, sin inconsistencias, PDF oficial
+113.256 bytes).
+
+**El stop y la corrida de un solo uso, verificados en el tramo final:** la
+corrida suelta de APOLO `[1/1]` (15:23) extrajo (43 facturas · 5 retenciones ·
+4 NC), navegó el wizard, llenó 16 campos y el **pre-vuelo del 203 la frenó en
+seco** con el aviso y la 📐 guardada — **sin volver a entrar sola**. El usuario
+puso ⏸ y ▶ una vez; el bot quedó quieto en el borrador. (Los bucles de las
+horas previas en la misma bitácora son de builds anteriores.)
+
+**La 📐 capturó la lista REAL de decretos del 203 (`concepto91`)**: opción
+`[0]` = «Seleccione el decreto que aplique» (la que venía elegida → por eso el
+SRI decía «El decreto seleccionado es incorrecto») y **16 decretos ejecutivos,
+todos (8%)**: 339, 644, 190, 259, 429, 482, 542, 594, 179, 196, 271, 304, 348,
+368, 391 y 465. Elegir cuál corresponde a la compra del 5% ($96.43) es decisión
+del contador (AGENTS §9d).
+
+**44 vs 43 explicado:** la fila que faltaba se descartaba **en silencio**
+(rama con `console.warn` comentado). Ahora (commit `89d69c8`, build
+`3.1.0+20260909.1527`) la fila sin montos legibles se identifica en el log
+(emisor, o si parece fila de TOTALES). La factura de $96.43 al 5% sigue
+pendiente de confirmación: cabe como mezclada ($32.13 al 15% + $64.30 al 0%)
+— solo el XML decide.
+
+**Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
