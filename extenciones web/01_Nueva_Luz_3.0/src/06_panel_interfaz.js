@@ -3444,6 +3444,29 @@ class SriAssistantPanel {
                              soloDelPortal(document.querySelectorAll('button, a, span.ui-button-text')).find(el => (el.innerText || '').trim() === 'Siguiente')?.closest('button, a');
 
         if (btnSiguiente) {
+            // 🛑 PRE-VUELO 203: si el formulario quedó con compras al 5% netas
+            // (550 > 0) y el decreto del 203 vacío, el SRI va a rechazar el
+            // avance («Seleccione el decreto…»). Elegir el decreto es del
+            // contador: se frena ANTES del clic y el 📐 deja las opciones.
+            // Si el chequeo no puede afirmar nada, no frena (que lo diga el SRI).
+            if (typeof frenarSiFaltaDecreto203 === 'function') {
+                const pre203 = await frenarSiFaltaDecreto203();
+                if (!pre203.ok) {
+                    console.warn('🛑 [203] No se avanza: ' + pre203.motivo);
+                    this.log('🛑 No se avanza al resumen: ' + pre203.motivo +
+                             ' Elegí el decreto en el formulario y recién ahí Siguiente.');
+                    if (typeof this.showEliteToast === 'function') {
+                        this.showEliteToast({
+                            title: '🛑 Falta el decreto del casillero 203',
+                            msg: escapeHtml(String(pre203.motivo)) +
+                                 '<br><br>Elegilo en el formulario (📐 guardó las opciones; se leen con ' +
+                                 'window.sriAssistant.verRadiografiaReclamo()) y recién ahí pulsá Siguiente.',
+                            duration: 20000
+                        });
+                    }
+                    return false;
+                }
+            }
             console.log('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
             if (typeof clickElement === 'function') clickElement(btnSiguiente, 'Siguiente Formulario');
             else btnSiguiente.click();
@@ -3519,7 +3542,37 @@ class SriAssistantPanel {
                     }
                 } else if (msgTexts.length > 0) {
                     console.warn('⚠️ [ELITE] Hay mensajes en panelMensajes que NO son seguros para ignorar:', msgTexts);
-                    this.log('⚠️ [MENSAJES SRI] Mensajes impiden continuar: ' + msgTexts.slice(0, 2).join(' | '));
+                    // 📐 AUTOMÁTICO (AGENTS §0c): el SRI acaba de reclamar un
+                    // casillero en este camino («Siguiente» del formulario, p.
+                    // ej. el 203 del 09-sep-2026). Igual que en el bloqueo del
+                    // Cierre Mágico, la radiografía se toma sola y queda
+                    // guardada para resolver después. Solo lee — no toca nada.
+                    let pide = null;
+                    if (typeof loQuePideElFormulario === 'function') {
+                        try { pide = loQuePideElFormulario(); } catch (e) { pide = null; }
+                    }
+                    const detalle = (pide && pide.textos && pide.textos.length)
+                        ? pide.textos.join(' | ')
+                        : msgTexts.slice(0, 2).join(' | ');
+                    this.log('🛑 El SRI no deja continuar: ' + detalle.slice(0, 160) +
+                             '. Borrador guardado; se completa y envía a mano.');
+                    if (pide && pide.casilleros && pide.casilleros.length &&
+                        typeof radiografiarReclamo === 'function') {
+                        radiografiarReclamo(pide.casilleros)
+                            .then((okR) => {
+                                if (okR) this.log('📐 [AUTO] Radiografía guardada. Se lee con ' +
+                                    'window.sriAssistant.verRadiografiaReclamo().');
+                            })
+                            .catch(() => { /* el freno sigue igual */ });
+                    }
+                    if (typeof this.showEliteToast === 'function' && pide && pide.textos.length) {
+                        this.showEliteToast({
+                            title: '🛑 El SRI reclama campos',
+                            msg: pide.textos.map((t) => escapeHtml(String(t))).join('<br>· ') +
+                                 '<br><br>El borrador queda guardado. Completá lo que pide y enviá a mano.',
+                            duration: 20000
+                        });
+                    }
                     return false;
                 }
             }

@@ -1275,6 +1275,56 @@ async function radiografiarReclamo(casilleros = []) {
 }
 
 /**
+ * 🛑 PRE-VUELO DEL 203 — el decreto de la tarifa reducida no se adivina.
+ *
+ * Corrida real APOLO (09-sep-2026, build 3.1.0+20260909.1311): el bot llenó
+ * las compras al 5% (540/550), clickeó «Siguiente» y el SRI devolvió los DOS
+ * errores del 203 —«Seleccione el decreto…» y «El decreto seleccionado es
+ * incorrecto»— porque nadie eligió el decreto (concepto91, el único
+ * `<select>` del formulario). Elegir el decreto es decisión del contador
+ * (AGENTS §9d): el bot no adivina.
+ *
+ * Con una compra al 5% neta (550 > 0) y el 203 vacío, avanzar es ir a chocar
+ * contra la pared. Este chequeo lee el formulario ya llenado y, si hace falta
+ * el decreto, frena ANTES del clic, deja la radiografía con las opciones y
+ * avisa. Solo lee. Si algo no se puede afirmar (sin 550, sin select, con
+ * decreto ya elegido) NO frena: que lo diga el SRI, y el 📐 del post-clic
+ * queda igual.
+ *
+ * @returns {Promise<{ok: boolean, motivo: string}>} ok=false = hay que frenar.
+ */
+async function frenarSiFaltaDecreto203() {
+    try {
+        const neto550 = document.getElementById('concepto1281') ||
+                        document.querySelector('input[id*="concepto1281"]');
+        if (!neto550) return { ok: true, motivo: '' };
+        const neto = parseImporteEstricto(neto550.value !== undefined ? neto550.value : neto550.getAttribute('value'));
+        if (!neto || neto <= 0) return { ok: true, motivo: '' };
+
+        const sel203 = document.getElementById('concepto91') ||
+                       document.querySelector('select[id*="concepto91"]');
+        if (!sel203 || !sel203.options || sel203.options.length === 0) return { ok: true, motivo: '' };
+
+        const elegido = sel203.selectedIndex > 0 &&
+                        sel203.options[sel203.selectedIndex] &&
+                        String(sel203.options[sel203.selectedIndex].value || '').trim() !== '';
+        if (elegido) return { ok: true, motivo: '' };
+
+        const motivo = 'Hay compras al 5% netas por $' + neto.toFixed(2) +
+                       ' (casillero 550) y el 203 —el decreto que habilita la ' +
+                       'tarifa reducida— está vacío.';
+        console.warn('🛑 [203] ' + motivo + ' El decreto lo elige el contador; el bot no adivina.');
+        try {
+            await radiografiarReclamo(['203']);
+        } catch (e) { /* frenar no puede fallar por el 📐 */ }
+        return { ok: false, motivo };
+    } catch (e) {
+        // No afirmar nada que no se leyó: que lo diga el SRI.
+        return { ok: true, motivo: '' };
+    }
+}
+
+/**
  * La casilla que está a la derecha de otra, en su misma línea.
  *
  * El formulario del SRI pone bruto y neto uno al lado del otro:
