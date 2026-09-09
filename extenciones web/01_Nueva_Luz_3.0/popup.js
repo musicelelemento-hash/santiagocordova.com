@@ -2,13 +2,22 @@ const SC_CONFIG = window.SC_CONFIG || {};
 const SUPABASE_URL = SC_CONFIG.SUPABASE_URL;
 const SUPABASE_KEY = SC_CONFIG.SUPABASE_ANON_KEY;
 
+const SC_BENDITA_KEY = 'sc_lista_bendita';      // null = inactiva (corre todo, como siempre)
+const SC_CACHE_TS_KEY = 'sc_clients_cache_ts';  // cuándo se sincronizó la caché por última vez
+const SC_BAJAS_KEY = 'sc_clientes_baja';        // dados de baja (clave aparte: la caché común
+                                                // alimenta el lote y NO debe llevar bajas)
+
 let allRawClients = [];
 let allClients = [];
 let otrosClients = [];
+let clientesBaja = [];        // is_deleted === true (solo legible con el GRANT de Supabase)
 let currentMonth = 0;
 let currentYear = 2026;
 let visiblePasswords = {}; // Mapa para recordar qué claves están visibles
 let flaggedErrors = {}; // Mapa de contribuyentes con error
+let listaBendita = null;   // null = Bendita inactiva · array de RUC = activa
+let syncBajasBloqueado = false; // true si Supabase rechazó leer is_deleted (falta el GRANT)
+let syncUltimoTs = null;   // timestamp de la última sincronización exitosa
 document.addEventListener('DOMContentLoaded', () => {
     initSelectors();
     bindEvents();
@@ -131,6 +140,7 @@ function bindEvents() {
             }
 
             chrome.storage.local.set(cambios);
+            if (!hayLote && isChecked) pintarPanelModoAuto();
             showToast(
                 !hayLote ? (isChecked ? '⚡ Bucle ACTIVADO para el próximo lote' : '⏸️ Bucle DESACTIVADO')
                 : isChecked ? '▶️ Bucle REANUDADO'
@@ -294,43 +304,48 @@ async function importarClavesDesdeCsv(texto) {
 }
 
 async function fetchClients(forceSync = false) {
+    const FIELDS = 'id,ruc,name,regime,tax_profile,declaration_history';
     try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=id,ruc,name,regime,tax_profile,declaration_history`, {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': `Bearer ${SUPABASE_KEY}`
-            }
+        // Intento 1: filtrar bajas en el servidor. Requiere que el rol `anon`
+        // pueda leer `is_deleted` (GRANT SELECT (is_deleted) ON clients TO anon;
+        // ver grant_is_deleted_anon.sql). Sin ese permiso el SRI de la web marca
+        // la baja y acá no nos enteramos: HTTP 401 / 42501.
+        let res = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=${FIELDS}`, {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
         });
 
-        if (!res.ok) throw new Error("Error fetching clients");
-        const data = await res.json();
-
-        // 🔒 Las claves SRI ya no viajan desde la nube: fusionar con la caché local
-        const prevCache = await chrome.storage.local.get(['sc_clients_cache']);
-        const prevList = Array.isArray(prevCache.sc_clients_cache) ? prevCache.sc_clients_cache : [];
-        const prevMap = new Map(prevList.map((p) => [p.ruc, p]));
-
-        allRawClients = data.map(c => {
-            const cached = prevMap.get(c.ruc) || {};
-            return {
-                id: c.id,
-                ruc: c.ruc,
-                name: c.name || 'Cliente SRI',
-                regime: c.regime,
-                tax_profile: c.tax_profile,
-                force_mensual: cached.force_mensual || false,
-                password: cached.password || cached.sri_password || "",
-                declarations: Array.isArray(c.declaration_history) ? c.declaration_history : []
-            };
-        });
-
-        allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
-        otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
-
-        // Guardar en Caché Local para evitar peticiones innecesarias
-        chrome.storage.local.set({ sc_clients_cache: allRawClients });
-            
-        renderClients();
+        // Intento 2 (degradado): el GRANT no se corrió todavía. Traemos todo lo
+        // legible y avisamos: la lista puede incluir bajas hasta que corra el
+        // GRANT. NO machacamos la caché con esto si ya hay una sana, pero sí
+        // dejamos que la lista se refresque para que no quede congelada.
+        if (!res.ok) {
+            syncBajasBloqueado = true;
+            const degradado = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=${FIELDS}`, {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            });
+            if (!degradado.ok) throw new Error("Error fetching clients (" + degradado.status + ")");
+            const dataDegradada = await degradado.json();
+            await fusionarClientes(dataDegradada, /*conFiltroBajas*/ false);
+        } else {
+            syncBajasBloqueado = false;
+            const data = await res.json();
+            await fusionarClientes(data, /*conFiltroBajas*/ true);
+            // La consulta con is_deleted=eq.false EXCLUYE a las bajas del
+            // servidor: sin una consulta aparte, la pestaña 🚫 Bajas quedaría
+            // siempre vacía aunque existan. Se pide solo si el GRANT funciona
+            // (si no, no hay forma de leer la columna).
+            try {
+                const bajasRes = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.true&select=id,ruc,name,regime,tax_profile,declaration_history`, {
+                    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+                });
+                if (bajasRes.ok) {
+                    const bajas = await bajasRes.json();
+                    if (Array.isArray(bajas)) {
+                        clientesBaja = bajas.map(c => ({ ...c, is_deleted: true }));
+                    }
+                }
+            } catch (e) { /* la pestaña de bajas es secundaria; no tumbar el sync */ }
+        }
     } catch (err) {
         console.error(err);
         if (allClients.length === 0) {
@@ -354,6 +369,59 @@ async function fetchClients(forceSync = false) {
             });
         }
     }
+    renderClients();
+}
+
+/**
+ * Une los datos frescos de Supabase con lo local (claves, force_mensual) y
+ * reemplaza la lista: los que ya no vienen (baja real) desaparecen. Con
+ * conFiltroBajas=false no podemos distinguir bajas, así que la caché previa se
+ * conserva y solo se actualizan nombres/datos de RUC que siguen viniendo.
+ */
+async function fusionarClientes(data, conFiltroBajas) {
+    let prevList = [];
+    if (chrome && chrome.storage && chrome.storage.local) {
+        const pc = await chrome.storage.local.get(['sc_clients_cache']);
+        prevList = Array.isArray(pc.sc_clients_cache) ? pc.sc_clients_cache : [];
+    }
+    const prevMap = new Map(prevList.map((p) => [p.ruc, p]));
+
+    const frescos = data.map(c => {
+        const cached = prevMap.get(c.ruc) || {};
+        return {
+            id: c.id,
+            ruc: c.ruc,
+            name: c.name || 'Cliente SRI',
+            regime: c.regime,
+            tax_profile: c.tax_profile,
+            force_mensual: cached.force_mensual || false,
+            password: cached.password || cached.sri_password || "",
+            declarations: Array.isArray(c.declaration_history) ? c.declaration_history : []
+        };
+    });
+
+    if (conFiltroBajas) {
+        // La nube ya filtró: esto ES la verdad. Podar lo que ya no vino.
+        allRawClients = frescos;
+        const ts = Date.now();
+        syncUltimoTs = ts;
+        await chrome.storage.local.set({
+            sc_clients_cache: frescos,
+            [SC_CACHE_TS_KEY]: ts
+        });
+    } else {
+        // Degradado (sin GRANT): actualizamos los que siguen viniendo pero
+        // conservamos los RUC locales que la nube ya no manda — no sabemos
+        // si son bajas o un corte de permisos. El banner lo explica.
+        const frescosMap = new Map(frescos.map(c => [c.ruc, c]));
+        const conservados = prevList
+            .filter(p => p && p.ruc && !frescosMap.has(p.ruc))
+            .map(p => ({ ...p, declarations: Array.isArray(p.declarations) ? p.declarations : [] }));
+        allRawClients = [...frescos, ...conservados];
+        await chrome.storage.local.set({ sc_clients_cache: allRawClients });
+    }
+
+    separarPorRegimen();
 }
 
 function getNinthDigit(ruc) {
@@ -382,18 +450,170 @@ function hasPdfForPeriod(client, year, monthIndex) {
 }
 
 function loadClientsFromCacheOrFetch() {
-    chrome.storage.local.get(['sc_clients_cache', 'flagged_errors'], (res) => {
+    chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', SC_BENDITA_KEY, SC_CACHE_TS_KEY, SC_BAJAS_KEY], (res) => {
         flaggedErrors = res.flagged_errors || {};
+        listaBendita = Array.isArray(res[SC_BENDITA_KEY]) ? res[SC_BENDITA_KEY] : null;
+        syncUltimoTs = res[SC_CACHE_TS_KEY] || null;
+        clientesBaja = Array.isArray(res[SC_BAJAS_KEY]) ? res[SC_BAJAS_KEY] : [];
         if (Array.isArray(res.sc_clients_cache) && res.sc_clients_cache.length > 0) {
             console.log("⚡ [Nueva Luz 3.0] Carga instantánea desde caché local:", res.sc_clients_cache.length, "clientes");
             allRawClients = res.sc_clients_cache;
-            allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
-            otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
+            separarPorRegimen();
             renderClients();
         } else {
             fetchClients();
         }
     });
+}
+
+/** Parte allRawClients en mensuales / otros / bajas según régimen y estado. */
+function separarPorRegimen() {
+    allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
+    otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual && !(c.isDeleted || c.is_deleted));
+    clientesBaja = allRawClients.filter(c => c.isDeleted || c.is_deleted);
+}
+
+/** true si la Lista Bendita está activa (se creó alguna vez). null/ausente = corre todo. */
+function benditaActiva() {
+    return Array.isArray(listaBendita);
+}
+
+function esBendito(ruc) {
+    return !benditaActiva() || listaBendita.includes(ruc);
+}
+
+/** Persiste la lista y repinta. Activar por primera vez enciende el modo Bendita. */
+async function guardarBendita() {
+    await chrome.storage.local.set({ [SC_BENDITA_KEY]: listaBendita });
+    renderClients();
+    actualizarCabeceraBendita();
+}
+
+async function toggleBendito(ruc) {
+    if (!benditaActiva()) listaBendita = [];   // primer bendito: enciende la Bendita
+    const i = listaBendita.indexOf(ruc);
+    if (i === -1) listaBendita.push(ruc);
+    else listaBendita.splice(i, 1);
+    await guardarBendita();
+}
+
+/** Bendice a todos los pendientes del período actual (los que van a correr). */
+async function bendecirTodosPendientes() {
+    // OJO: acá NO se filtra por esBendito — la lista puede estar vacía y el
+    // propósito es justamente llenarla con todos los que faltan declarar.
+    const pendientes = pendientesSinBenditaFilter();
+    if (!benditaActiva()) listaBendita = [];
+    const set = new Set(listaBendita);
+    pendientes.forEach(c => set.add(c.ruc));
+    listaBendita = [...set];
+    await guardarBendita();
+    showToast(`🙏 ${pendientes.length} cliente(s) bendecido(s). El lote correrá sólo a los benditos.`);
+}
+
+/** Deja la Bendita vacía pero activa: nadie corre hasta bendecir. */
+async function quitarTodosBenditos() {
+    listaBendita = [];
+    await guardarBendita();
+    showToast('💔 Lista Bendita vacía: no correrá nadie hasta bendecir.');
+}
+
+/** Desactiva la Bendita por completo: vuelve el comportamiento de siempre (corre todo). */
+async function desactivarBendita() {
+    listaBendita = null;
+    await chrome.storage.local.set({ [SC_BENDITA_KEY]: null });
+    renderClients();
+    actualizarCabeceraBendita();
+    showToast('⚡ Lista Bendita desactivada: vuelve a correr todo pendiente.');
+}
+
+/** Los clientes mensuales que faltan declarar el período elegido (sin errores). */
+function clientesPendientesDelPeriodo() {
+    return allClients.filter(c =>
+        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth) && esBendito(c.ruc));
+}
+
+/** Ídem sin el filtro de la Bendita: para saber si hay pendientes aunque ninguno sea bendito. */
+function pendientesSinBenditaFilter() {
+    return allClients.filter(c =>
+        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth));
+}
+
+function benditosCount() {
+    return benditaActiva() ? listaBendita.length : allClients.length;
+}
+
+/** Cantidad de benditos que además faltan declarar el período (los que va a correr el lote). */
+function benditosPendientesCount() {
+    return clientesPendientesDelPeriodo().length;
+}
+
+/** Entre los benditos pendientes, cuántos no tienen clave cargada. */
+function benditosPendientesSinClave() {
+    return clientesPendientesDelPeriodo().filter(c => !c.password).length;
+}
+
+/** Actualiza la barra-resumen de la Bendita y el aviso de sync. */
+function actualizarCabeceraBendita() {
+    const el = document.getElementById('benditaResumen');
+    if (!el) return;
+    const sinClave = benditosPendientesSinClave();
+    const aCorrer = benditosPendientesCount();
+    const html = [];
+    if (benditaActiva()) {
+        html.push(`<span class="chip bendita-chip on">🙏 Benditos: <b>${listaBendita.length}</b></span>`);
+        html.push(`<span class="chip" title="Benditos que faltan declarar ${periodoLabel()}">🎯 Correrán: <b>${aCorrer}</b></span>`);
+        if (sinClave > 0) {
+            html.push(`<span class="chip chip-warn" title="Estos benditos no tienen clave SRI cargada">🔑 ${sinClave} sin clave</span>`);
+        }
+    } else {
+        html.push(`<span class="chip chip-off">🙏 Lista Bendita: inactiva — corre todo pendiente</span>`);
+    }
+    el.innerHTML = html.join(' ');
+}
+
+function periodoLabel() {
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    return `${meses[currentMonth]} ${currentYear}`;
+}
+
+/** Panel del Modo Auto: cuántos van a correr y desde dónde. */
+function pintarPanelModoAuto() {
+    const el = document.getElementById('modoAutoPanel');
+    if (!el) return;
+    const on = document.getElementById('chkAutoBatch')?.checked || false;
+    if (!on) { el.style.display = 'none'; return; }
+
+    const pendTotal = pendientesSinBenditaFilter().length;
+    const pendBenditos = clientesPendientesDelPeriodo().length;
+    const conClave = clientesPendientesDelPeriodo().filter(c => c.password).length;
+    const primera = clientesPendientesDelPeriodo().sort((a,b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc))[0];
+
+    const frag = [];
+    if (!benditaActiva()) {
+        frag.push(`<div style="color:#94a3b8;">🙏 La Lista Bendita está <b>inactiva</b>: al arrancar se te va a ofrecer crearla.</div>`);
+    } else if (pendBenditos === 0) {
+        frag.push(`<div style="color:#ffb95f;">🤍 No hay benditos pendientes para ${periodoLabel()}. Marcá con 🙏 a quienes corren o pulsá «Bendecir pendientes».</div>`);
+    } else {
+        frag.push(`<div>🎯 <b>${pendBenditos}</b> bendito(s) van a correr en ${periodoLabel()}${conClave < pendBenditos ? ` · 🔑 ${pendBenditos - conClave} sin clave (frenarán pidiendo clave)` : ''}.</div>`);
+        if (primera) frag.push(`<div style="color:#94a3b8;font-size:10px;">▶ Empieza por ${primera.name} (día ${getSriDueDateDay(getNinthDigit(primera.ruc))}).</div>`);
+    }
+    if (pendTotal > pendBenditos) {
+        frag.push(`<div style="color:#64748b;font-size:10px;">Hay ${pendTotal} pendiente(s) en total; ${pendTotal - pendBenditos} no bendito(s) NO correrán.</div>`);
+    }
+    el.style.display = 'block';
+    el.innerHTML = frag.join('');
+}
+
+/** Aviso honesto de sincronización: si el GRANT de is_deleted falta, se dice. */
+function pintarAvisoSync() {
+    const el = document.getElementById('syncAviso');
+    if (!el) return;
+    if (syncBajasBloqueado) {
+        el.style.display = 'flex';
+        el.innerHTML = '⚠️ <span>Supabase sin permiso para ocultar bajas (falta el GRANT de <code>is_deleted</code>). La lista puede incluir clientes viejos. Corré en Supabase: <code>GRANT SELECT (is_deleted) ON public.clients TO anon;</code> y sincronizá de nuevo.</span>';
+    } else {
+        el.style.display = 'none';
+    }
 }
 
 function renderClients() {
@@ -406,6 +626,12 @@ function renderClients() {
     });
 
     const filteredOtros = otrosClients.filter(c => {
+        const matchesName = (c.name || '').toLowerCase().includes(searchVal);
+        const matchesRuc = (c.ruc || '').includes(searchVal);
+        return matchesName || matchesRuc;
+    });
+
+    const filteredBaja = clientesBaja.filter(c => {
         const matchesName = (c.name || '').toLowerCase().includes(searchVal);
         const matchesRuc = (c.ruc || '').includes(searchVal);
         return matchesName || matchesRuc;
@@ -431,22 +657,27 @@ function renderClients() {
     completados.sort(sortBy9th);
     errores.sort(sortBy9th);
     filteredOtros.sort(sortBy9th);
+    filteredBaja.sort(sortBy9th);
 
     document.getElementById('countPendientes').innerText = pendientes.length;
     document.getElementById('countCompletados').innerText = completados.length;
     document.getElementById('countErrores').innerText = errores.length;
     const badgeOtros = document.getElementById('countOtros');
     if (badgeOtros) badgeOtros.innerText = filteredOtros.length;
+    const badgeBaja = document.getElementById('countBaja');
+    if (badgeBaja) badgeBaja.innerText = filteredBaja.length;
 
     const pendientesList = document.getElementById('pendientesList');
     const completadosList = document.getElementById('completadosList');
     const erroresList = document.getElementById('erroresList');
     const otrosList = document.getElementById('otrosList');
+    const bajaList = document.getElementById('bajaList');
 
     pendientesList.innerHTML = '';
     completadosList.innerHTML = '';
     erroresList.innerHTML = '';
     if (otrosList) otrosList.innerHTML = '';
+    if (bajaList) bajaList.innerHTML = '';
 
     if (pendientes.length === 0) {
         pendientesList.innerHTML = `<div class="empty-state">🎉 ¡Todos los clientes al día! No hay pendientes.</div>`;
@@ -473,6 +704,18 @@ function renderClients() {
             filteredOtros.forEach(client => otrosList.appendChild(createClientCard(client, 'otro')));
         }
     }
+
+    if (bajaList) {
+        if (filteredBaja.length === 0) {
+            bajaList.innerHTML = `<div class="empty-state">No hay clientes dados de baja.</div>`;
+        } else {
+            filteredBaja.forEach(client => bajaList.appendChild(createClientCard(client, 'baja')));
+        }
+    }
+
+    actualizarCabeceraBendita();
+    pintarAvisoSync();
+    pintarPanelModoAuto();
 }
 
 function getSriDueDateDay(digit) {
@@ -506,9 +749,12 @@ function createClientCard(client, statusType) {
     const isDone = statusType === 'done';
     const isError = statusType === 'error';
     const isOtro = statusType === 'otro';
+    const isBaja = statusType === 'baja';
+    const esBend = esBendito(client.ruc);
 
     let badgeHtml = '<div class="status-badge status-pending" style="margin-top:4px; font-size:10px; font-weight:700; color:#ffb95f; background:rgba(255,185,95,0.1); border:1px solid rgba(255,185,95,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟡 PENDIENTE</div>';
     if (isDone) badgeHtml = '<div class="status-badge status-done" style="margin-top:4px; font-size:10px; font-weight:700; color:#4edea3; background:rgba(78,222,163,0.1); border:1px solid rgba(78,222,163,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟢 COMPLETADO</div>';
+    if (isBaja) badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; color:#94a3b8; background:rgba(100,116,139,0.12); border:1px solid rgba(100,116,139,0.3); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🚫 DADO DE BAJA</div>';
     if (isError) {
         const errType = flaggedErrors[client.ruc];
         if (errType === 'clave_incorrecta' || errType === 'error_credenciales') {
@@ -579,6 +825,11 @@ function createClientCard(client, statusType) {
                     📋 ${client.ruc}
                 </span>
                 ${passUi}
+                <span data-action="toggle-bendito" data-ruc="${client.ruc}"
+                      style="cursor:pointer; font-size:13px; line-height:1; padding:3px 5px; border-radius:6px; border:1px solid ${esBend ? 'rgba(78,222,163,0.45)' : 'rgba(255,255,255,0.12)'}; background:${esBend ? 'rgba(78,222,163,0.12)' : 'transparent'}; transition:0.2s;"
+                      title="${esBend ? 'Quitar de la Lista Bendita (no correrá en el lote)' : 'Agregar a la Lista Bendita (correrá en el lote)'}">
+                    ${esBend ? '🙏' : '🤍'}
+                </span>
             </div>
             ${badgeHtml}
         </div>
@@ -596,11 +847,30 @@ document.addEventListener('click', async (e) => {
 
     if (action === 'iniciar') {
         iniciarCliente(ruc);
+    } else if (action === 'toggle-bendito') {
+        toggleBendito(ruc);
+    } else if (action === 'bendecir-pendientes') {
+        bendecirTodosPendientes();
+    } else if (action === 'quitar-benditos') {
+        quitarTodosBenditos();
+    } else if (action === 'desactivar-bendita') {
+        desactivarBendita();
     } else if (action === 'copiar-ruc') {
         copiarAlPortapapeles(ruc, el);
     } else if (action === 'toggle-pass') {
+        // Revelado TEMPORAL: la clave se oculta sola a los 5s. Que quede
+        // visible para siempre en un popup que se cierra al perder el foco
+        // es cómo se filtra una clave mirando por encima del hombro.
         visiblePasswords[ruc] = !visiblePasswords[ruc];
         renderClients();
+        if (visiblePasswords[ruc]) {
+            setTimeout(() => {
+                if (visiblePasswords[ruc]) {
+                    visiblePasswords[ruc] = false;
+                    renderClients();
+                }
+            }, 5000);
+        }
     } else if (action === 'copiar-pass') {
         copiarAlPortapapeles(el.dataset.pass || '', el);
     } else if (action === 'editar-clave') {
@@ -639,9 +909,8 @@ document.addEventListener('click', async (e) => {
             const idx = list.findIndex(c => c.ruc === ruc);
             if (idx !== -1) list[idx].force_mensual = true;
             await chrome.storage.local.set({ sc_clients_cache: list });
-            
-            allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
-            otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual);
+
+            separarPorRegimen();
             renderClients();
             showToast(`⚡ ${client.name || ruc} ahora está habilitado como IVA Mensual`);
         }
@@ -726,8 +995,9 @@ async function actualizarClaveSupabase(client, newPass) {
             c.ruc === client.ruc ? { ...c, password: newPass, sri_password: newPass } : c
         );
         client.password = newPass;
-        allClients = updatedCache.filter(isMensual);
         await chrome.storage.local.set({ sc_clients_cache: updatedCache });
+        allRawClients = updatedCache;
+        separarPorRegimen();
         renderClients();
         showToast("✅ Clave guardada localmente.");
         return true;
@@ -758,18 +1028,65 @@ async function iniciarCliente(ruc) {
     } catch (e) {}
 
     const isBatchActive = document.getElementById('chkAutoBatch')?.checked || false;
-    
-    // Obtener clientes pendientes actuales ordenados por 9no dígito
+
+    // 🕯️ LA LISTA BENDITA. En modo lote sólo corren los benditos.
+    //   - Bendita inactiva (null): nadie la creó → corre todo, como siempre.
+    //   - Bendita activa (array): corre SOLO lo que esté en la lista.
+    //   El arranque manual de un cliente suelto (sin lote) sigue intacto:
+    //   es una decisión explícita de una persona, no del bucle.
+    if (isBatchActive && benditaActiva()) {
+        // ▶ en un cliente puntual que no está bendito: con la Bendita activa el
+        // lote sólo corre benditos. Ofrecer bendecirlo, no arrancar a medias.
+        if (!esBendito(ruc)) {
+            const cliente = allRawClients.find(c => c.ruc === ruc);
+            const agregar = window.confirm(
+                `🤍 ${cliente ? cliente.name : ruc} NO está en la Lista Bendita.\n\n` +
+                'El lote corre sólo a los benditos. ¿Bendecirlo y arrancar el lote desde él?'
+            );
+            if (!agregar) {
+                showToast('💔 No se bendijo: el lote sigue sin incluirlo.');
+                return;
+            }
+            await toggleBendito(ruc);
+        }
+        const benditosPendientes = clientesPendientesDelPeriodo();
+        if (benditosPendientes.length === 0) {
+            const hayPendientesSinBendecir = pendientesSinBenditaFilter().length > 0;
+            if (!hayPendientesSinBendecir) {
+                showToast('🎉 No hay benditos pendientes para este período.');
+                return;
+            }
+            // Hay pendientes, pero ninguno bendito: no arrancar a ciegas.
+            const bendecir = window.confirm(
+                '🤍 Ninguno de los pendientes del período está en la Lista Bendita.\n\n' +
+                '¿Bendecir a todos los pendientes ahora?'
+            );
+            if (!bendecir) {
+                showToast('💔 Sin benditos no corre nadie. Marcá con 🙏 a los que corren.');
+                return;
+            }
+            await bendecirTodosPendientes();
+        }
+    }
+
+    // Obtener clientes pendientes actuales ordenados por 9no dígito.
+    // En modo lote = benditos pendientes. En modo manual = todos (decisión de persona).
     const sortBy9th = (a, b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc);
-    const pendingClients = allClients
-        .filter(c => !hasPdfForPeriod(c, currentYear, currentMonth) && !flaggedErrors[c.ruc])
-        .sort(sortBy9th);
+    const pendBase = isBatchActive
+        ? clientesPendientesDelPeriodo()
+        : allClients.filter(c => !hasPdfForPeriod(c, currentYear, currentMonth) && !flaggedErrors[c.ruc]);
+    const pendingClients = pendBase.sort(sortBy9th);
 
     // Si el cliente seleccionado está en la lista de pendientes, reordenar la cola comenzando por él
     let queue = pendingClients.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
     const startIndex = queue.findIndex(q => q.ruc === ruc);
     if (startIndex > 0) {
         queue = queue.slice(startIndex).concat(queue.slice(0, startIndex));
+    }
+
+    if (isBatchActive && queue.length === 0) {
+        showToast('🎉 No quedan benditos pendientes para este período.');
+        return;
     }
 
     const targetPeriodStr = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}`;

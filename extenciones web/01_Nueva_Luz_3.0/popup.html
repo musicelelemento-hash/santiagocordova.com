@@ -356,6 +356,36 @@
             font-size: 12px;
             font-family: 'JetBrains Mono', monospace;
         }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            font-size: 10.5px;
+            font-weight: 700;
+            color: var(--text-dim);
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+        }
+        .chip b { color: #f8fafc; }
+        .chip.bendita-chip.on {
+            color: #4edea3;
+            background: rgba(78,222,163,0.1);
+            border-color: rgba(78,222,163,0.35);
+        }
+        .chip.bendita-chip.on b { color: #4edea3; }
+        .chip.chip-warn {
+            color: #ffb95f;
+            background: rgba(255,185,95,0.1);
+            border-color: rgba(255,185,95,0.35);
+        }
+        .chip.chip-warn b { color: #ffb95f; }
+        .chip.chip-off {
+            color: #64748b;
+            border-style: dashed;
+        }
     </style>
 </head>
 <body>
@@ -389,6 +419,8 @@
         </label>
     </div>
 
+    <div id="modoAutoPanel" style="display:none; margin:0 18px 10px; padding:9px 12px; border-radius:9px; font-size:11px; line-height:1.6; background:rgba(78,222,163,0.06); border:1px solid rgba(78,222,163,0.25);"></div>
+
     <div class="controls">
         <select id="periodMonth">
             <option value="0">Enero</option>
@@ -412,11 +444,29 @@
         </div>
     </div>
 
+    <div id="syncAviso" style="display:none; margin:0 18px 8px; padding:8px 12px; border-radius:8px; font-size:10.5px; line-height:1.5; background:rgba(255,185,95,0.08); border:1px solid rgba(255,185,95,0.3); color:#fcd34d; align-items:flex-start; gap:8px;"></div>
+
+    <div id="benditaBar" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 18px 10px; flex-wrap:wrap;">
+        <div id="benditaResumen" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px;"></div>
+        <div style="display:flex; gap:6px;">
+            <button id="btnBendecirPendientes" data-action="bendecir-pendientes" style="background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.4); color:#4edea3; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:800; cursor:pointer;" title="Agrega a la Lista Bendita a todos los que faltan declarar este período">
+                🙏 Bendecir pendientes
+            </button>
+            <button id="btnQuitarBenditos" data-action="quitar-benditos" style="background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:800; cursor:pointer;" title="Deja la lista vacía: no correrá nadie hasta volver a bendecir">
+                💔 Quitar todos
+            </button>
+            <button id="btnDesactivarBendita" data-action="desactivar-bendita" style="background:transparent; border:1px dashed rgba(148,163,184,0.3); color:#64748b; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer;" title="Desactiva la Lista Bendita: vuelve el modo de siempre (corre todo pendiente)">
+                ⏻ Modo clásico
+            </button>
+        </div>
+    </div>
+
     <div class="tabs">
         <button class="tab-btn active" data-target="pendientesList">Pendientes (<span id="countPendientes">0</span>)</button>
         <button class="tab-btn" data-target="completadosList">Completados (<span id="countCompletados">0</span>)</button>
         <button class="tab-btn" data-target="erroresList">⚠️ Error (<span id="countErrores">0</span>)</button>
         <button class="tab-btn" data-target="otrosList">📋 Otros (<span id="countOtros">0</span>)</button>
+        <button class="tab-btn" data-target="bajaList">🚫 Bajas (<span id="countBaja">0</span>)</button>
     </div>
 
     <div id="pendientesList" class="tab-content active">
@@ -429,10 +479,11 @@
     <div id="completadosList" class="tab-content"></div>
     <div id="erroresList" class="tab-content"></div>
     <div id="otrosList" class="tab-content"></div>
+    <div id="bajaList" class="tab-content"></div>
 
     <div style="padding: 8px 18px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-        <span style="font-size: 9px; color: var(--text-dim); line-height: 1.4;">💡 Selecciona el <b>periodo</b> y pulsa <b>▶ Ingresar</b> en un cliente (o activa <b>⚡ Modo Auto</b> para encadenar).</span>
-        <span id="popupFootVersion" style="font-size: 9px; color: #475569; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">v3.1.0</span>
+        <span style="font-size: 9px; color: var(--text-dim); line-height: 1.4;">🕯️ Marcá con <b>🙏</b> a los que corren en el lote. Sin lista, corre todo como siempre.</span>
+        <span id="popupFootVersion" style="font-size: 9px; color: #475569; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">v3.2.0</span>
     </div>
 
     <!-- Las claves viven en la página de Ajustes, no acá: es una pantalla
