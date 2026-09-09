@@ -136,6 +136,41 @@ proporcionalidad**. Puede ser el Formulario 104 histórico vs el 2011 del
 wizard, o un error de la Biblia. **No se resuelve discutiendo: se resuelve con
 el 📐 sobre la fila real** (AGENTS §8a / §9d / §0b.5).
 
+### 2.0d · El Reglamento SRI — fuente única de reglas que no se rompen (09-sep, tarde)
+
+> Pedido del usuario: *"crear algo como reglas en base al SRI, como la Biblia,
+> para regirnos mejor en las leyes del SRI perfectamente y reducir errores por
+> fallos, pues no se pueden romper"*.
+
+**Qué se construyó (Fase 1, commits `3797b2e` + `6af323f` + `2737cbe`):**
+
+1. **`reglas_sri.js`** (raíz de la extensión) — fuente única ejecutable: 20
+   reglas, cada una con `id` inmutable, `severidad` (crítica/aviso), `tipo`
+   (ley/portal/bot), el mandato, el `porque` (la historia real), `fuente` y
+   `cobertura` (banco que la demuestra). Centraliza lo que estaba disperso
+   entre AGENTS y la Biblia.
+2. **Reglas de oro ya vigentes**: nunca sustitutiva · nunca pagar · saldo USD
+   0.00 estricto · `null`≠0 · ausencia≠limpio · id solo con evidencia (📐) ·
+   203 sin decreto inventado · 540 solo con 5% legítimo · claves fuera del DOM
+   · no cambiar claves · no leerse a sí mismo · no saltear por aviso · no
+   contestar encuestas · `%PDF` real · respetar sugerido 0.00.
+3. **Reglas 'ley' quedan `requiere_contador`**: la fuente legal la pone el
+   contador (liquidaciones 100% retenido · ND incrementan bruto · 502/512 sin
+   derecho · numeración 104 vs 2011). **Ninguna regla se marca vigente sin
+   demostración** — es la misma regla del proyecto.
+4. **`tests/reglas.html`** (24 comprobaciones): valida ids únicos, estados
+   válidos, cobertura real, críticas con acción, presencia de las reglas de
+   oro y huecos del contador. **Si alguien borra o cambia una regla, el banco
+   falla** — no se rompe en silencio.
+5. **`tools/generar_reglamento.js`** → regenera `_EVIDENCIA_SRI/REGLAMENTO_SRI.md`
+   (copia legible; no se edita a mano).
+6. **Evidencia primaria anclada sin transcribir**: `codigo_fuente_decl_iva_mes.pdf`
+   (view-source del portal) y `formulario_iva_mensual_sep_2026.pdf` — sus PDFs
+   tienen fuente sin tabla ToUnicode / son imagen, así que **ningún id se tomó
+   de ahí**: se transcriben con el 📐 y recién entonces se citan.
+
+**Estado final: 611 comprobaciones, todas verdes, 18 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
