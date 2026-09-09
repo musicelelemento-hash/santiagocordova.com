@@ -178,6 +178,54 @@ async function extraerTodasLasFacturas() {
     }
 
     const resumen = calcularResumen(todasLasFacturas, { rucsAl5 });
+
+    // 🧾 XML DE LAS CANDIDATAS AL 5% — el dato dicho, no deducido
+    // (AGENTS §0b.7). APOLO y REYES (09-sep-2026) se frenaron en el 203 con
+    // compras leídas al 5% por el cociente (96.43, 3.438,10, …) que TAMBIÉN
+    // caben como mezcladas 15%+0%. El cociente no distingue; el XML sí: dice
+    // cuánto va en cada tarifa, línea por línea. Se baja SOLO cuando la
+    // consulta quedó en una sola página (si hay paginación, el índice de fila
+    // de otra página ya no mapea acá) y el resultado se guarda en
+    // `sri_revision_5p` para decidir con el emisor y las tarifas a la vista.
+    if ((resumen.al5 || []).length > 0 && paginaActual === 1 &&
+        todasLasFacturas.length <= 75 && typeof traerXmlDeComprobantes === 'function') {
+        try {
+            const indices = resumen.al5.map((f) => f.numero - 1);
+            const xmls = await traerXmlDeComprobantes(indices, { pausaMs: 700, tope: 10 });
+            const revisadas = resumen.al5.map((f) => {
+                const xml = xmls.get(f.numero - 1) || null;
+                const tarifas = xml && xml.porTarifa ? Object.keys(xml.porTarifa) : [];
+                let veredicto;
+                if (!xml) veredicto = 'no se pudo leer';
+                else if (tarifas.some((t) => Number(t) === 5 && (xml.porTarifa[t].base || 0) > 0.005)) {
+                    veredicto = '5 REAL: necesita el decreto del 203';
+                } else if (tarifas.length > 0) {
+                    veredicto = 'mezclada/otra: NO lleva decreto del 203 (' +
+                                tarifas.map((t) => `${t}%`).join('+') + ')';
+                } else veredicto = 'revisar: sin tarifas en el XML';
+                return { numero: f.numero, rucRazon: f.rucRazon, base: f.base, iva: f.iva,
+                         fila: f.numero - 1, veredicto, xml };
+            });
+            revisadas.forEach((f) => {
+                console.warn(`   🧾 [XML 5%] Fila ${f.numero}: ${f.rucRazon} · base $${f.base} · IVA $${f.iva} → ${f.veredicto}`);
+            });
+            const clienteRuc = (typeof rucDelClienteActual === 'function') ? await rucDelClienteActual() : '';
+            await SafeStorage.set({
+                sri_revision_5p: {
+                    at: Date.now(),
+                    ruc: clienteRuc,
+                    lista: revisadas.map((f) => ({ ...f, xml: f.xml ? { porTarifa: f.xml.porTarifa, numAutorizacion: f.xml.numAutorizacion || '' } : null }))
+                }
+            });
+            if (revisadas.some((f) => f.veredicto.includes('5 REAL'))) {
+                console.warn('   🧾 [XML 5%] Al menos una es 5% REAL → el 203 la va a frenar (decisión del contador).');
+            }
+        } catch (e) {
+            // El XML es diagnóstico: jamás tumba la extracción.
+            console.warn('🧾 [XML 5%] No se pudo bajar el XML de las candidatas:', e.message);
+        }
+    }
+
     return resumen;
 }
 
@@ -1526,6 +1574,7 @@ function calcularResumen(facturas, opciones = {}) {
         iva15: balde(),
         ambiguas: [],   // ni una tarifa sola ni un reparto posible: las mira el contador
         mezcladas: [],  // repartidas por aritmética entre tarifa plena y 0%
+        al5: [],        // leídas al 5% por el cociente: su XML decide si son 5 real o mezcladas
         periodo: periodo
     };
 
@@ -1537,6 +1586,12 @@ function calcularResumen(facturas, opciones = {}) {
             destino = resumen.iva0;
         } else if (tarifa === 5) {
             destino = resumen.iva5;
+            resumen.al5.push({
+                numero: factura.numero || i + 1,
+                rucRazon: factura.rucRazon || 'S/N',
+                base: redondear(factura.valorSinImpuestos),
+                iva: redondear(factura.iva)
+            });
             console.log(`   🟡 [Factura ${factura.numero || i + 1}] Leída al 5%: base $${factura.valorSinImpuestos}, IVA $${factura.iva}. Va al 540/550, no al 500.`);
         } else if (tarifa !== null) {
             destino = resumen.iva15;
