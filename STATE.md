@@ -195,6 +195,34 @@ Banco nuevo `tests/radiografia203.html` (18 comprobaciones).
 
 **Estado final: 629 comprobaciones, todas verdes, 19 bancos** (09-sep-2026).
 
+### 2.0f · «No se puede detener la extensión» — parar de verdad pasa por el semáforo (09-sep, noche)
+
+> Reporte del usuario con un bucle vivo: la barra roja flotante
+> «DETENER BUCLE» y el ⏹ del panel se pulsaban, desaparecían, y el bucle
+> seguía. Causa raíz: desde el 07-sep `sc_loop` es la ÚNICA autoridad
+> (`puedeAvanzar()`), pero **dos** caminos de parada seguían apagando solo
+> las banderas viejas (`sri_master_switch_on`, `auto_batch_enabled`, …) sin
+> tocar el semáforo: `detenerBucleSRI()` (barra roja) y
+> `stopAutomation()` (⏹ del panel). Peor: con las banderas apagadas la
+> barra ni reaparecía, así que no quedaba forma visible de frenar.
+
+**Fix** (commit `cdb7992`):
+1. `detenerBucleSRI()` ahora delega en `SriLoop.emergencia('la barra roja
+   flotante')` — el mismo camino del 🛑 del HUD que sí funcionaba — y barre
+   la cola legacy como antes.
+2. `stopAutomation()` delega en `SriLoop.emergencia()` cuando el semáforo
+   está `CORRIENDO`/`PAUSANDO`/`PAUSADO`; conserva la limpieza legacy para
+   flujos de cliente suelto.
+3. `renderEmergencyStopBar()` muestra la barra mientras `sc_loop` diga
+   `CORRIENDO`, aunque las banderas viejas digan apagado (el estado varado
+   que dejaba el bug): nunca más un bucle vivo sin botón visible.
+
+Banco nuevo `tests/parada.html` (19 comprobaciones): la barra apaga el
+semáforo de verdad, reaparece en el estado varado, el ⏹ también deja
+`DETENIDO`, y después de parar se puede volver a iniciar.
+
+**Estado final: 648 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
