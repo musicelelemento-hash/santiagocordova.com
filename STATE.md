@@ -171,6 +171,30 @@ el 📐 sobre la fila real** (AGENTS §8a / §9d / §0b.5).
 
 **Estado final: 611 comprobaciones, todas verdes, 18 bancos** (09-sep-2026).
 
+### 2.0e · 📐 automático ante el reclamo del 203 — el dato se toma solo (09-sep, noche)
+
+> Corrida real de APOLO PALACIOS (build `3.1.0+20260909.1103`): el flujo
+> completo funcionó (43 facturas · 5 retenciones · 4 NC · formulario · 16
+> campos) y el SRI **rechazó el avance**: *«Casillero 203. Seleccione el
+> decreto…» + «El decreto seleccionado es incorrecto»*. El bot frenó sin enviar
+> (contrato de seguridad). El gatillo: Factura 29, `$96.43 al 5%` — que también
+> cabe como mezclada ($32.14 al 15% + $64.29 al 0%). Solo el XML distingue; no
+> se descargó. Dato nuevo: el mensaje doble sugiere que el 203 trae la opción
+> vacía `[0]` elegida, que el SRI rechaza.
+
+**Se implementó la propuesta §0c** (commits `6b0ba1a` + `403779a`): cuando
+`loQuePideElFormulario()` detecta un reclamo con número, **`radiografiarReclamo()`
+corre el 📐 acotado** y guarda en `SafeStorage.sri_radiografias_reclamo` la fila
+con su id real, el rótulo y —si es desplegable, como el 203— las opciones
+enteras con su `value` y cuál está elegida. Solo lee, no toca el formulario, no
+frena el flujo (el freno sigue igual). Anti-bucle: una vez por casillero por
+corrida (marca `accionEnCurso`); re-radiografía al cambiar de cliente. Se lee
+con `window.sriAssistant.verRadiografiaReclamo()`.
+
+Banco nuevo `tests/radiografia203.html` (18 comprobaciones).
+
+**Estado final: 629 comprobaciones, todas verdes, 19 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
