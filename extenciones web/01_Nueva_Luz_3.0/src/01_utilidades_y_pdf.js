@@ -2082,11 +2082,15 @@ async function handleBatchNextClient() {
 
   // 🚂 FERROCARRIL DINÁMICO: Si el usuario agregó clientes nuevos a la caché local o web
   // mientras el tren estaba corriendo, los añadimos a la cola para no parar nunca.
+  // 🕯️ Pero la Lista Bendita manda: si está activa, solo entran los benditos.
+  const benditaActiva = await leerBendita();   // null = inactiva = todos entran
+  const benditaSet = benditaActiva === null ? null : new Set(benditaActiva.map(String));
   const existingRucs = new Set(queue.map(q => q && q.ruc).filter(Boolean));
   let nuevosAgregados = 0;
   for (const c of cacheList) {
     if (!c || !c.ruc) continue;
     if (existingRucs.has(c.ruc)) continue;
+    if (benditaSet && !benditaSet.has(String(c.ruc))) continue;   // no bendito → no corre
     const clave = c.password || c.sri_password || c.sriPassword;
     if (!clave) continue;
     if (flaggedErrs[c.ruc] || tried[c.ruc]?.status === 'failed' || tried[c.ruc]?.status === 'locked') continue;

@@ -50,6 +50,40 @@ const SafeStorage = {
     }
 };
 
+// 🕯️ LA LISTA BENDITA — quién corre, decidido por el contador en el popup.
+// La escribe popup.js en `sc_lista_bendita`:
+//   - ausente/null  → inactiva: corre todo pendiente (comportamiento de siempre)
+//   - array de RUC  → activa: en el lote SOLO corren esos RUC
+// El arranque manual de un cliente suelto NO pasa por acá: es una decisión
+// explícita de una persona. Estas son las puertas del LOTE automático.
+const SC_BENDITA_KEY = 'sc_lista_bendita';
+
+async function leerBendita() {
+    try {
+        const r = await SafeStorage.get([SC_BENDITA_KEY]);
+        const v = r[SC_BENDITA_KEY];
+        return Array.isArray(v) ? v : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** ¿Puede este RUC correr en el lote automático? null = inactiva = todos pueden. */
+async function benditaPermite(ruc) {
+    const bendita = await leerBendita();
+    if (bendita === null) return true;               // nunca se creó: modo clásico
+    if (!ruc) return false;
+    return bendita.includes(String(ruc));
+}
+
+/** Filtra una cola por la Bendita. Si está inactiva devuelve la cola intacta. */
+async function filtrarColaPorBendita(cola) {
+    const bendita = await leerBendita();
+    if (bendita === null) return cola;
+    const set = new Set(bendita.map(String));
+    return (cola || []).filter((q) => q && set.has(String(q.ruc)));
+}
+
 const SriLoop = {
     _KEY: 'sc_loop',
     // paso: el lote frena solo al empezar cada fase, hasta que se pulse ▶.
@@ -420,9 +454,9 @@ const SriLoop = {
         const tried = r.sri_tried_credentials || {};
         const pStr = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
 
-        const cola = [];
+        let cola = [];
         let sinClave = 0, yaHechos = 0, excluidosSeguridad = 0;
-        const sinPdf = [];   // declararon, pero su comprobante no quedó guardado
+        let sinPdf = [];   // declararon, pero su comprobante no quedó guardado
 
         for (const c of lista) {
             if (!c || !c.ruc) continue;
@@ -482,6 +516,20 @@ const SriLoop = {
             const d = (r2) => (!r2 || r2.length < 9) ? 99 : (parseInt(r2.charAt(8), 10) || 10);
             return d(a.ruc) - d(b.ruc);
         });
+
+        // 🕯️ La Bendita decide quién entra al LOTE (no al arranque manual).
+        // Sin lista creada (null) esto no cambia nada: corre todo pendiente.
+        const bendita = await leerBendita();
+        if (bendita !== null) {
+            const set = new Set(bendita.map(String));
+            const filtrado = cola.filter((c) => set.has(String(c.ruc)));
+            const fuera = cola.length - filtrado.length;
+            cola = filtrado;
+            sinPdf = sinPdf.filter((c) => set.has(String(c.ruc)));
+            if (fuera > 0) {
+                console.log(`🕯️ [BENDITA] ${fuera} pendiente(s) NO corren: no están en la Lista Bendita.`);
+            }
+        }
 
         console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
         if (excluidosSeguridad || sinClave) {
@@ -3094,10 +3142,11 @@ window.addEventListener('message', async (event) => {
 
     if (event.data.type === 'SRI_START_BATCH_DECLARATION' && event.data.data) {
         const d = event.data.data;
-        const queue = (d.clients || []).map(c => ({ ruc: c.ruc, password: c.sriPassword || c.password, name: c.name }));
+        let queue = (d.clients || []).map(c => ({ ruc: c.ruc, password: c.sriPassword || c.password, name: c.name }));
+        queue = await filtrarColaPorBendita(queue);
         const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'turbo_step1_facturas';
         await SafeStorage.set({
-            auto_batch_enabled: true,
+            auto_batch_enabled: queue.length > 0,
             auto_batch_queue: queue,
             auto_batch_index: 0,
             auto_batch_mode: actionType

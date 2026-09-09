@@ -2303,6 +2303,15 @@ async function renderLoginCockpit(items) {
             const selectedRuc = clientSel?.value || (currentClient ? currentClient.ruc : '');
             let queue = pendientes.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
 
+            // 🕯️ La Lista Bendita decide quién entra al lote desde el HUD también.
+            // Sin lista (null) esto no cambia nada. El botón ▶ de un cliente suelto
+            // no pasa por acá: es una decisión explícita de una persona.
+            queue = await filtrarColaPorBendita(queue);
+            if (queue.length === 0 && pendientes.length > 0) {
+                alert('🤍 Ninguno de los pendientes está en la Lista Bendita.\n\nAbrí el popup de la extensión, marcá con 🙏 a los que corren y volvé a intentar.');
+                return;
+            }
+
             const selIdx = queue.findIndex(c => c.ruc === selectedRuc);
             if (selIdx > 0) {
                 queue = [queue[selIdx], ...queue.slice(0, selIdx), ...queue.slice(selIdx + 1)];
