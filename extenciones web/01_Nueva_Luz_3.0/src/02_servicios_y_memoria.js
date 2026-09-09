@@ -2492,8 +2492,21 @@ function detectarMensajeNoDatosSRI() {
     for (const sel of selectors) {
         const elems = document.querySelectorAll(sel);
         for (const el of elems) {
+            // Un mensaje viejo se ignora. La marca puede estar en el propio
+            // elemento o en el contenedor que lo envuelve: 03_ingreso_y_sesion
+            // marca los `.ui-messages-warn/info/error` enteros al preparar una
+            // consulta nueva, así que el `.ui-messages-warn-summary` interior
+            // no lleva la marca pero cuelga de un contenedor marcado.
             if (el.getAttribute('data-sri-old') === 'true') continue;
-            const txt = (el.textContent || '').toUpperCase().trim();
+            if (el.closest && el.closest('[data-sri-old="true"]')) continue;
+            // Y si el elemento envuelve a un mensaje marcado (el banco marca el
+            // span interior), su texto no debe contar: se evalúa un clon sin
+            // los nodos viejos. La doble dirección cubrió un falso positivo
+            // real: un "No existen datos" de una consulta previa volvía a
+            // detectarse como nuevo.
+            const clon = el.cloneNode(true);
+            (clon.querySelectorAll ? clon.querySelectorAll('[data-sri-old="true"]') : []).forEach(n => n.remove());
+            const txt = (clon.textContent || '').toUpperCase().trim();
             if (txt.includes('NO EXISTEN DATOS') ||
                 txt.includes('NO SE ENCONTRARON') ||
                 txt.includes('NO EXISTEN COMPROBANTES') ||
