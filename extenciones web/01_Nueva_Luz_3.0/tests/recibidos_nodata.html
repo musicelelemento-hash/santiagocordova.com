@@ -79,10 +79,12 @@
   push('no confunde mensaje de éxito con noData', res.encontrado, false);
 
   sec('Resumen final');
-  const total = ok.length;
-  const passed = ok.filter(Boolean).length;
-  L.push(`\nTotal: ${passed}/${total} comprobaciones en verde.`);
-  document.getElementById('out').textContent = L.join('\n');
+  L.push(`\nTotal: ${ok.filter(Boolean).length}/${ok.length} comprobaciones en verde.`);
+  const fallos = ok.filter(x => !x).length;
+  document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+    (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+            : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
 })();
 </script>
 </body>

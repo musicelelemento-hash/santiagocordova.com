@@ -127,7 +127,11 @@
                  valorSinImpuestos: 174.55, iva: 35.22, importeTotal: 270.01, tieneIva: true };
   r = calcularResumen([fHei]);
   push('Heineken con ICE no queda como dudosa', r.ambiguas.length, 0);
-  push('su base gravada incluye el ICE (234.80)', r.iva15.baseImponible, 234.8);
+  // 35.22/0.15 = 234.80 exacto, pero el fixture trae total 270.01: la base
+  // gravada que cabe en la factura es total − IVA = 234.79 (270.02 > 270.01
+  // sería declarar más base de la que el comprobante soporta). El código
+  // respeta el total; corregido el 09-sep-2026 (antes esperaba 234.80).
+  push('su base gravada incluye el ICE (234.79)', r.iva15.baseImponible, 234.79);
   push('el IVA oficial coincide con el 15% del total', r.iva15.montoIva, 35.22);
 
   // Farmaenlace no es proveedor de construcción al 5%
@@ -214,15 +218,15 @@
   push('el codigoPorcentaje 5 es tarifa 5%', x.porTarifa['5'], {base:500, iva:25});
 
   // ── EL CASO QUE JUSTIFICA TODO ESTO ────────────────────────────────────
-  // $100 con un tercio al 15% y el resto al 0%: el cociente da 4,95% y no se
-  // puede distinguir de una factura del 5%. El XML lo dice exacto.
+  // $100 con un tercio al 15% y el resto al 0%: el cociente da 4,95%.
   const mezclada = XML([['4',33,4.95],['0',67,0]]);
-  // Y acá está la trampa, medida y no supuesta: el cociente la lee como 5%.
-  // No es un bug que haya que "arreglar" — rechazar todo lo que caiga en 5%
-  // frenaría cada lote con compras legítimas al 5%. Es el límite del método, y
-  // la razón por la que hace falta el XML.
-  push('el cociente la confunde con una del 5%',
-       clasificarTarifaIva(100, 4.95).tarifa, 5);
+  // Antes el cociente la leía como 5% — el falso 5% que mandaba plata al 540
+  // y bloqueaba con el casillero 203. Desde el 08-sep-2026 (blindaje de las
+  // mezcladas minoristas exactas: Cabrera, Ramón Orellana, Walter Miño) ya
+  // no: si el reparto 15%+0% cierra con centavos exactos, dice null y la
+  // plata se reparte bien. El XML confirma el reparto, no lo contradice.
+  push('el cociente ya NO la confunde: mezclada exacta → null',
+       clasificarTarifaIva(100, 4.95).tarifa, null);
   x = parsearXmlComprobante(mezclada);
   push('el XML sí: $33 al 15%',   x.porTarifa['15'], {base:33, iva:4.95});
   push('y $67 al 0%',             x.porTarifa['0'],  {base:67, iva:0});
@@ -814,6 +818,7 @@
 
   // Una base grande con un cociente imposible sigue siendo «no sé»: ahí la
   // plata sí alcanza para mover una aguja y hay que mirarla.
+  const raro = clasificarTarifaIva(1000, 200);
   push('base grande y cociente imposible → null', raro.tarifa, null);
   push('y lo explica',                        /no coincide con ninguna tarifa/.test(raro.motivo), true);
 
