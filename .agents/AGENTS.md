@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los veinte bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **657 comprobaciones, verdes el 09-sep-2026** (20 bancos, el último
+scripts). **664 comprobaciones, verdes el 09-sep-2026** (20 bancos, el último
 agregado ese día: `parada`). Si tu cambio baja ese número, algo se
 rompió; si lo sube, dejá dicho qué agregaste.
 

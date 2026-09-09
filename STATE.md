@@ -255,6 +255,38 @@ puede afirmar, cableado verificado contra fuentes + bundle).
 
 **Estado final: 657 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
 
+### 2.0h · DETENER corta EN SECO el trabajo en curso (09-sep, tarde-noche)
+
+> Reclamo del usuario: *«ya le pongo DETENER y sigue con lo mismo sin fin, a
+> veces quiero parar para hacer otras cosas»*. Confirmado en el log real: el
+> 🛑 quedó registrado (`PARADA DE EMERGENCIA`) y el bot **siguió igual** —
+> terminó los 16 campos, clickeó «Siguiente» y entró al bucle de «desmissear
+> advertencias» de 20 s. Causa raíz: los botones marcaban el almacén y el
+> semáforo, pero los bucles que **ya estaban corriendo en la página** no lo
+> miraban.
+
+**Fix** (commit `35fe578`): compuerta única `sePidioParar()` /
+`cortarSiPidieronParar()` (01) que consulta, en orden:
+1. la **marca en memoria** de esta página (la ponen DETENER/⏹/`emergencia`;
+   expira a los 3 min o la limpia un arranque nuevo),
+2. el **semáforo** (un lote vivo que dejó de estar `CORRIENDO`),
+3. el **almacén** (`sriAutomationPaused`).
+
+Cortes insertados donde se repetía «lo mismo sin fin»:
+- **05**: las 4 fases del llenado maestro + el bucle de campos sugeridos;
+- **06**: antes del clic en «Siguiente», dentro de los bucles de advertencias
+  de 25 y 15 pasadas, y **antes del Cierre Mágico** (ese camino envía: parado,
+  no se envía nada);
+- **04**: los `while(true)` de paginación de facturas / retenciones / NC;
+- **07**: selección de la obligación, apertura del calendario y ajuste del año.
+
+Un arranque deliberado (`SriLoop.iniciar`/`reanudar`/`handleFillForm`/
+`runUnifiedWorkflow`) limpia la marca, para que un stop viejo no cancele un
+arranque nuevo. Banco `tests/parada.html`: 19 → **26 comprobaciones** (sección
+F: la compuerta responde a memoria / semáforo / pausa y no corta sin pedido).
+
+**Estado final: 664 comprobaciones, todas verdes, 20 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
