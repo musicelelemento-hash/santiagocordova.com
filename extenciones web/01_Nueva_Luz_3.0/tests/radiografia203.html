@@ -1,0 +1,117 @@
+<!doctype html><meta charset="utf-8"><title>📐 automático: el reclamo del 203 se radiografía solo</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Cuando el SRI reclama un casillero, la radiografía queda guardada</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(62)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const pintar=()=>{
+    const fallos=ok.filter(x=>!x).length;
+    document.getElementById('out').textContent=L.join('\n')+'\n\n'+
+      (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+      (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+  };
+
+  const P=document.getElementById('portal');
+
+  // ── El formulario simulado: la fila del 203 con su desplegable ──────────
+  // El 203 real (concepto91) tiene 17 opciones, todas decretos del 8% según el
+  // 📐 del 07-sep-2026. Se reproduce esa estructura: el rótulo "tarifa
+  // reducida" y un select con opciones.
+  P.innerHTML = `
+    <div id="frmFlujoDeclaracion:panelMensajes" style="display:block">
+      <ul>
+        <li class="estiloItemsMensajes">Casillero 203. Seleccione el decreto que determina la tarifa reducida a aplicar.</li>
+        <li class="estiloItemsMensajes">Casillero 203. El decreto seleccionado es incorrecto.</li>
+      </ul>
+    </div>
+    <table>
+      <tr>
+        <td>203</td>
+        <td>Decreto que determina la tarifa reducida a aplicar</td>
+        <td>
+          <select id="concepto91">
+            <option value="">Seleccione el decreto que aplique</option>
+            <option value="339">Decreto ejecutivo 339 (8%)</option>
+            <option value="644">Decreto ejecutivo 644 (8%)</option>
+            <option value="190">Decreto ejecutivo 190 (8%)</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  // esVisible() mide getBoundingClientRect; el div está visible porque no hay
+  // display:none ni estilos raros. El bundle lo usa para decidir si lee el panel.
+
+  sec('A · loQuePideElFormulario ve el reclamo');
+  const pide = loQuePideElFormulario();
+  push('detecta el texto del reclamo',       pide.textos.length, 2);
+  push('y extrae el número 203',             pide.casilleros, ['203']);
+  push('el resumen lo nombra',               pide.resumen.includes('203'), true);
+
+  sec('B · la radiografía automática se guarda');
+  const okGuardado = await radiografiarReclamo(pide.casilleros);
+  push('radiografiarReclamo devuelve true',  okGuardado, true);
+  const g1 = (await SafeStorage.get(['sri_radiografias_reclamo'])).sri_radiografias_reclamo || {};
+  push('guardó una entrada para el 203',     Object.keys(g1), ['203']);
+  const r = g1['203'];
+  push('con la acción pendiente registrada', typeof r.accion === 'string', true);
+  push('y un timestamp',                     typeof r.at === 'number' && r.at > 0, true);
+  // La FILA numerada puede no aparecer: el 203 llegó como desplegable '???' al
+  // 📐 (AGENTS §0b.5) — lo accionable es el desplegable con sus opciones, que
+  // es lo que este banco monta. El desplegable SÍ debe estar.
+  push('trae el desplegable con opciones',   Array.isArray(r.desplegables) && r.desplegables.length > 0, true);
+  if (r.desplegables && r.desplegables[0]) {
+    push('el desplegable es concepto91',     r.desplegables[0].id, 'concepto91');
+    // El select real arranca con la opción vacía "Seleccione…" ELEGIDA, y las
+    // 3 decretos debajo: 4 opciones en total. Que la vacía esté elegida es el
+    // dato del reclamo ("el decreto seleccionado es incorrecto").
+    push('lista la opción vacía + las 3 decretos',
+         (r.desplegables[0].opciones||[]).length, 4);
+    push('la opción inicial elegida es la vacía',
+         ((r.desplegables[0].opciones||[]).find(o=>o.elegida)||{}).valor, '');
+    push('y las decretos están con su value',
+         (r.desplegables[0].opciones||[]).map(o=>o.valor).join(','),
+         ',339,644,190');
+  }
+  push('deja el markdown para la Biblia',    typeof r.markdown === 'string' && r.markdown.length > 0, true);
+
+  sec('C · no se dispara en bucle');
+  const ok2 = await radiografiarReclamo(['203']);
+  push('reclamar otra vez NO re-guarda',     ok2, false);
+  const g2 = (await SafeStorage.get(['sri_radiografias_reclamo'])).sri_radiografias_reclamo || {};
+  push('y la entrada sigue siendo una',      Object.keys(g2).length, 1);
+
+  sec('D · con otra acción pendiente sí vuelve a tomar');
+  store.accionEnCurso = 'otra_corrida';
+  const ok3 = await radiografiarReclamo(['203']);
+  push('nueva corrida: sí re-radiografía',   ok3, true);
+
+  sec('E · sin números no hace nada');
+  const ok4 = await radiografiarReclamo([]);
+  push('casilleros vacíos → false',          ok4, false);
+  const ok5 = await radiografiarReclamo(['sin numero']);
+  push('sin número válido → false',          ok5, false);
+
+  pintar();
+})();
+</script>
+</body>
+</html>
