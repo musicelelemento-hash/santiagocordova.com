@@ -1,0 +1,226 @@
+<!doctype html><meta charset="utf-8"><title>Lista Bendita: quién corre y quién no</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>La Bendita decide la cola del lote; sin ella, corre todo (como siempre)</h3>
+<pre id="out">…</pre>
+<div id="popup"></div>
+<script>
+  const store = {};
+  window.__errors = [];
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  // confirm/alert controlables: el banco decide si el usuario acepta o no.
+  window.__confirms = [];          // respuestas en orden (false por defecto)
+  window.__log = [];
+  window.confirm = () => { const r = window.__confirms.length ? window.__confirms.shift() : false; window.__log.push('confirm→' + r); return r; };
+  window.alert = (m) => { window.__log.push('alert: ' + String(m).slice(0, 60)); };
+  const abiertas = [];
+  window.chrome = {
+    runtime: { getURL: p => p, onMessage: { addListener() {} }, sendMessage: (m, cb) => { cb && cb({ ok: true }); }, id: 't' },
+    storage: {
+      local: {
+        // popup.js mezcla los dos estilos: a veces await, a veces callback.
+        get: (k, cb) => {
+          const val = k === null ? { ...store }
+            : Array.isArray(k) ? Object.fromEntries(k.filter(x => x in store).map(x => [x, store[x]]))
+            : (typeof k === 'string' ? (k in store ? { [k]: store[k] } : {}) : {});
+          if (typeof cb === 'function') cb(val);
+          return Promise.resolve(val);
+        },
+        set: (o, cb) => { Object.assign(store, o); if (typeof cb === 'function') cb(); return Promise.resolve(); },
+        remove: (k, cb) => { [].concat(k).forEach(x => delete store[x]); if (typeof cb === 'function') cb(); return Promise.resolve(); }
+      },
+      onChanged: { addListener() {} }
+    },
+    tabs: { create: (o) => { abiertas.push(o); }, query: () => Promise.resolve([]) }
+  };
+  // fetch: el banco carga archivos locales (popup.html, popup.js) pero NUNCA
+  // debe salir a la red real. Cualquier fetch a Supabase es un fallo del banco.
+  const fetchReal = window.fetch.bind(window);
+  window.fetch = (url, opts) => {
+    const u = String(url);
+    if (u.includes('supabase.co')) {
+      return Promise.reject(new Error('el banco no debe llamar a Supabase'));
+    }
+    return fetchReal(url, opts);
+  };
+</script>
+<script>
+(async () => {
+  const MARCA = (t) => console.log('🏷️ [BENDITA] ' + t);
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(58) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '') +
+      (window.__log.length ? '\n\nLOG:\n' + window.__log.join('\n') : '');
+  };
+
+  // ── Clientes de prueba ────────────────────────────────────────────────
+  // Período "actual": el popup usa mes anterior. Se calcula igual que él.
+  const ahora = new Date();
+  let curMonth = ahora.getMonth() - 1, curYear = ahora.getFullYear();
+  if (curMonth < 0) { curMonth = 11; curYear--; }
+  const PER = `${curYear}-${(curMonth + 1).toString().padStart(2, '0')}`;
+
+  const pendiente = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    password: 'clave-de-prueba', declarations: [] });
+  const completado = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    password: 'clave-de-prueba',
+    declarations: [{ period: PER, proof_file: 'x', status: 'Enviada' }] });
+  const dadoDeBaja = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    is_deleted: true, declarations: [] });
+  const semestral = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    iva_frequency: 'semestral', declarations: [] });
+
+  store.sc_clients_cache = [
+    pendiente('0102030405001', 'PENDIENTE UNO'),
+    pendiente('0102030405002', 'PENDIENTE DOS'),
+    completado('0102030405003', 'COMPLETADO TRES'),
+    dadoDeBaja('0102030405004', 'BAJA CUATRO'),
+    semestral('0102030405005', 'SEMESTRAL CINCO')
+  ];
+
+  // ── Montar el popup real (markup + código de producción) ──────────────
+  MARCA('montando popup real');
+  const html = await (await fetch('../popup.html?v=' + Date.now())).text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const panel = doc.querySelector('body');
+  // Quitar los <script> del clon: se cargan a mano abajo, como claves.html.
+  [...panel.querySelectorAll('script')].forEach(s => s.remove());
+  document.getElementById('popup').appendChild(panel);
+  document.title = doc.title || document.title;
+
+  await new Promise((r) => {
+    const sc = document.createElement('script');
+    sc.src = '../shared_config.js?v=' + Date.now();
+    sc.onload = r; sc.onerror = r;
+    document.body.appendChild(sc);
+  });
+  await new Promise((r) => {
+    const sc = document.createElement('script');
+    sc.src = '../popup.js?v=' + Date.now();
+    sc.onload = r; sc.onerror = r;
+    document.body.appendChild(sc);
+  });
+  MARCA('popup.js cargado; disparando DOMContentLoaded');
+  window.__errors.length = 0;
+  window.__log.length = 0;
+  document.dispatchEvent(new Event('DOMContentLoaded'));
+  await new Promise(r => setTimeout(r, 150));
+
+  const $ = (id) => document.getElementById(id);
+  const texto = (id) => ($(id) ? $(id).textContent : '');
+
+  // ── A · separación de bajas y estado inicial ───────────────────────────
+  MARCA('A: separación');
+  sec('A · la caché se separa sola');
+  push('la baja NO cuenta como pendiente',      texto('countPendientes'), '2');
+  push('el completado NO cuenta como pendiente', texto('countCompletados'), '1');
+  push('la baja va a su propia pestaña',         texto('countBaja'), '1');
+  push('el semestral va a Otros',                texto('countOtros'), '1');
+
+  sec('B · Bendita inactiva = modo clásico (corre todo)');
+  push('sin lista creada, la barra lo dice',
+       /inactiva/.test(texto('benditaResumen')), true);
+
+  // Sin Bendita, iniciar lote encadena a los DOS pendientes (y empieza por el pulsado).
+  MARCA('B: clásico — arrancando lote sin bendita');
+  $('chkAutoBatch').checked = true;
+  const tarjetasPend = () => [...document.querySelectorAll('#pendientesList [data-action="iniciar"]')];
+  push('hay dos tarjetas de pendientes',        tarjetasPend().length, 2);
+  const btnDos = tarjetasPend().find(b => b.dataset.ruc === '0102030405002');
+  push('la tarjeta del DOS tiene su botón',     !!btnDos, true);
+  if (btnDos) btnDos.click();
+  await new Promise(r => setTimeout(r, 80));
+  const colaClasica = (store.auto_batch_queue || []).map(q => q.ruc);
+  push('modo clásico: la cola trae a los dos pendientes', colaClasica.length, 2);
+  push('y empieza por el cliente pulsado',      colaClasica[0], '0102030405002');
+  push('el completado NO entra a la cola',      colaClasica.includes('0102030405003'), false);
+  push('la baja NO entra a la cola',            colaClasica.includes('0102030405004'), false);
+  $('chkAutoBatch').checked = false;
+
+  sec('C · bendecir UNO activa la Bendita y lo marca');
+  MARCA('C: bendecir uno');
+  delete store.auto_batch_queue; delete store.auto_batch_index;
+  const chipUno = document.querySelector('#pendientesList [data-action="toggle-bendito"][data-ruc="0102030405001"]');
+  push('cada tarjeta tiene su chip bendito',    !!chipUno, true);
+  if (chipUno) chipUno.click();
+  await new Promise(r => setTimeout(r, 60));
+  push('se guardó la lista con ese RUC',        store.sc_lista_bendita, ['0102030405001']);
+  push('la barra ya dice que está activa',      /Benditos:/.test(texto('benditaResumen')), true);
+
+  sec('D · el lote con Bendita activa corre SOLO los benditos');
+  MARCA('D: lote bendito');
+  $('chkAutoBatch').checked = true;
+  // ▶ en PENDIENTE DOS (NO bendito) con modo auto: el confirm ofrece bendecirlo.
+  window.__confirms.push(false);   // el usuario NO quiere bendecirlo → no arranca
+  const btnDos2 = tarjetasPend().find(b => b.dataset.ruc === '0102030405002');
+  if (btnDos2) btnDos2.click();
+  await new Promise(r => setTimeout(r, 80));
+  push('▶ en no-bendito pregunta y frena si dicen que no',
+       !(store.auto_batch_queue && store.auto_batch_queue.length), true);
+  delete store.auto_batch_queue;
+
+  // Ahora bendecir al DOS también y arrancar desde él.
+  const chipDos = document.querySelector('#pendientesList [data-action="toggle-bendito"][data-ruc="0102030405002"]');
+  if (chipDos) chipDos.click();
+  await new Promise(r => setTimeout(r, 60));
+  const btnDos3 = tarjetasPend().find(b => b.dataset.ruc === '0102030405002');
+  if (btnDos3) btnDos3.click();
+  await new Promise(r => setTimeout(r, 80));
+  const colaBendita = (store.auto_batch_queue || []).map(q => q.ruc).sort();
+  push('con Bendita: la cola trae SOLO a los dos benditos', colaBendita, ['0102030405001', '0102030405002']);
+  $('chkAutoBatch').checked = false;
+
+  sec('E · des-bendecir saca al cliente de la cola');
+  MARCA('E: des-bendecir');
+  delete store.auto_batch_queue;
+  const chipUno2 = document.querySelector('#pendientesList [data-action="toggle-bendito"][data-ruc="0102030405001"]');
+  if (chipUno2) chipUno2.click();
+  await new Promise(r => setTimeout(r, 60));
+  push('des-bendecir quita de la lista',        store.sc_lista_bendita, ['0102030405002']);
+  $('chkAutoBatch').checked = true;
+  const btnDos4 = tarjetasPend().find(b => b.dataset.ruc === '0102030405002');
+  if (btnDos4) btnDos4.click();
+  await new Promise(r => setTimeout(r, 80));
+  const colaUno = (store.auto_batch_queue || []).map(q => q.ruc);
+  push('la cola ya no trae al des-bendecido',   colaUno.includes('0102030405001'), false);
+  push('y sí trae al que sigue bendito',        colaUno.includes('0102030405002'), true);
+  $('chkAutoBatch').checked = false;
+
+  sec('F · acciones masivas');
+  MARCA('F: masivas');
+  delete store.auto_batch_queue;
+  const btnQuitar = document.querySelector('[data-action="quitar-benditos"]');
+  if (btnQuitar) btnQuitar.click();
+  await new Promise(r => setTimeout(r, 60));
+  push('quitar todos deja la lista vacía',      store.sc_lista_bendita, []);
+  const btnBendecir = document.querySelector('[data-action="bendecir-pendientes"]');
+  if (btnBendecir) btnBendecir.click();
+  await new Promise(r => setTimeout(r, 60));
+  const lista = [...(store.sc_lista_bendita || [])].sort();
+  push('bendecir pendientes bendice a los dos pendientes', lista, ['0102030405001', '0102030405002']);
+  push('no bendice al completado',              lista.includes('0102030405003'), false);
+  push('ni a la baja',                          lista.includes('0102030405004'), false);
+  push('ni al semestral',                       lista.includes('0102030405005'), false);
+
+  // ── G · regresión: el fetch conserva el filtro de bajas ───────────────
+  sec('G · regresión: el fetch usa el filtro de bajas');
+  const srcPopup = await (await fetch('../popup.js?v=' + Date.now())).text();
+  push('popup.js pide is_deleted=eq.false (el filtro de bajas)',
+       srcPopup.includes('is_deleted=eq.false'), true);
+  push('y explica el GRANT en el aviso',
+       srcPopup.includes('GRANT SELECT (is_deleted) ON public.clients'), true);
+
+  MARCA('pintando veredicto');
+  pintar();
+})();
+</script>
+</body>
+</html>

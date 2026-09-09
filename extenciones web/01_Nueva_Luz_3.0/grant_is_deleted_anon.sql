@@ -1,0 +1,22 @@
+-- grant_is_deleted_anon.sql
+-- ---------------------------------------------------------------------
+-- UNA SOLA LÍNEA para el editor SQL de Supabase (SQL Editor → New query):
+--
+--   GRANT SELECT (is_deleted) ON public.clients TO anon;
+--
+-- Qué arregla: el popup de Nueva Luz 3.0 filtra la lista de clientes con
+-- `is_deleted=eq.false`. El rol `anon` no tiene permiso de LECTURA sobre esa
+-- columna (probado el 09-sep-2026: HTTP 401 / 42501 "permission denied for
+-- table clients"), así que el fetch falla siempre y el popup vive de la caché
+-- local, que nunca se entera de las bajas. Por eso "aparecen clientes viejos".
+--
+-- Con este GRANT el fetch funciona y los dados de baja desaparecen de la lista
+-- al sincronizar. Es aditivo y no rompe nada; es la misma línea que ya está
+-- documentada al final de database/fix_sri_declaraciones_anon_rls.sql.
+--
+-- Decisión tuya (le da al rol público lectura de esa columna). Si NO lo corrés,
+-- el popup funciona igual pero en "modo degradado": no puede ocultar bajas y
+-- muestra un aviso ámbar. La Lista Bendita es entonces tu control: lo que no
+-- está bendito no corre.
+-- ---------------------------------------------------------------------
+GRANT SELECT (is_deleted) ON public.clients TO anon;
