@@ -67,6 +67,48 @@ Commits: `4296a7b` (fix detector), `f769ae7` (bancos y expectativas), `7794e80`
 veredicto no es un banco en verde — es un banco mudo, y todo lo que cuidaba
 queda sin vigilar.
 
+### 2.0b · La Lista Bendita + la cura de los clientes viejos (misma jornada, 09-sep)
+
+> Pedido del usuario: que la lista del popup sea "la Lista Bendita" — todo el
+> que esté en esa lista corre; el resto no. Y que desaparezcan los clientes
+> viejos que aparecían.
+
+**Causa raíz de los clientes viejos — confirmada con HTTP contra Supabase real:**
+el popup pedía `clients?is_deleted=eq.false`, columna que el rol `anon` no puede
+leer (`HTTP 401 / 42501`). El fetch fallaba **siempre**, en silencio, y la lista
+vivía de `sc_clients_cache` (caché local inmortal): los dados de baja nunca se
+iban. La web ya había sacado ese filtro; la extensión había quedado pidiendo lo
+que no puede leer.
+
+**Qué se hizo (commits `651ccf5`, `0b212bc`, `bed47a4`, `6e6992d`):**
+
+1. **`grant_is_deleted_anon.sql`** — el GRANT de una línea para Supabase
+   (`GRANT SELECT (is_deleted) ON public.clients TO anon;`). Es la misma línea
+   documentada en `database/fix_sri_declaraciones_anon_rls.sql`. **Acción
+   pendiente del usuario**: correrla en el SQL Editor. Sin ella el popup anda en
+   "modo degradado" con aviso ámbar.
+2. **Fetch honesto + caché que expira**: el popup detecta el 401, avisa con el
+   SQL exacto y ya no finge que sincronizó. Con el GRANT, pide además las bajas
+   (`sc_clientes_baja`, clave aparte: la caché común alimenta el lote y no debe
+   llevar bajas). Marca `sc_clients_cache_ts` para saber cuándo se sincronizó.
+3. **La Lista Bendita** (`sc_lista_bendita`): `null` = inactiva (corre todo,
+   como siempre); array de RUC = activa (corre SOLO eso). El switch 🙏/🤍 por
+   tarjeta, acciones masivas (bendecir pendientes / quitar todos / modo
+   clásico), y el Modo Auto solo arranca con benditos. Global entre períodos
+   (decisión del usuario). El ▶ manual de un cliente puntual NO se filtra.
+4. **Las cuatro bocas del lote pasan por el filtro** (`SriLoop.armarCola`, el
+   mensaje `SRI_START_BATCH_DECLARATION`, el botón maestro del cockpit y el
+   ferrocarril dinámico que re-agrega clientes en caliente).
+5. **Visual**: barra-resumen viva (benditos · correrán · sin clave), aviso de
+   sync, clave con revelado temporal de 5 s, pestaña 🚫 Bajas separada de Otros,
+   panel del Modo Auto con destino, footer v3.2.0.
+6. **Banco nuevo `tests/bendita.html`** (26 comprobaciones) — monta el popup
+   real con mocks (patrón de `claves.html`) y cazó un bug real del código
+   (`bendecirTodosPendientes` filtraba por bendito sobre una lista vacía y no
+   bendecía a nadie).
+
+**Estado final: 587 comprobaciones, todas verdes, 17 bancos** (09-sep-2026).
+
 ---
 
 ## 🏆 2a. HITOS PREVIOS (08-SEP-2026)
