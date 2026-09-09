@@ -1200,6 +1200,44 @@ Recibidos:
 Con esa salida se agregan al barrido: el extractor de facturas ya sirve para
 todos los tipos, solo hay que decirle cuáles pedir.
 
+#### El criterio contable, dicho por el usuario (09-sep-2026) — pendiente de validar en pantalla
+
+> Anotado como **propuesta**, no como hecho. El usuario describió el manejo de
+> los tipos que faltan, pero la numeración que trajo **no coincide** con la
+> Biblia del Formulario 2011 (ver la advertencia abajo). Hasta validar con el
+> 📐 en el formulario real, esto es criterio anotado, **no** campo a cablear.
+
+**Liquidaciones de compra** (bienes y servicios):
+- Las emite el propio comprador para respaldar compras a personas que no pueden
+  facturar (rusticidad, no residentes/extranjeros).
+- Sustentan **crédito tributario** de IVA (personas obligadas a llevar
+  contabilidad y sociedades) **solo si se retuvo y depositó el 100% del IVA**.
+- Se registran en los casilleros de compras locales según tarifa e intención.
+- La retención ejercida se reporta aparte (Formulario 103 / sección de
+  retenciones) — y en el 2011, el contador de liquidaciones es el **casillero
+  119** (la Biblia ya tiene su DOM: `concepto260`).
+
+**Notas de crédito recibidas**:
+- Reducen base imponible E IVA de compras en el período en que se reciben.
+- Neto = Bruto − NC (el bot ya resta NC del 510/517/550).
+- Hay casilleros para excedentes de NC por compensar en el mes siguiente
+  (la Biblia: 543 NC 0% · 544/554 NC 15% — hoy el bot no los usa).
+
+**Notas de débito recibidas**:
+- Incrementan la base imponible y el IVA de las compras (intereses de mora,
+  costos/gastos posteriores a la factura).
+- Se suman al **valor bruto** del tipo de compra correspondiente del período en
+  que se reciben. **Nunca se barrió una ND**: es el tipo que falta construir.
+
+> ⚠️ **Advertencia de numeración (09-sep-2026).** El usuario describió la
+> sección compras con **501/511/521 como corriente 15% con derecho**, **502 como
+> activo fijo**, y **553/554 como proporcionalidad/crédito**. La Biblia del 2011
+> —armada con capturas reales y escrituras exitosas— dice **500/510/520**
+> corriente, **501/511/521** activo fijo, **502/512/522** sin derecho, y
+> **563/564/565** proporcionalidad/crédito. Puede ser el Formulario 104
+> histórico contra el 2011 del wizard, o un error de la Biblia. **No se resuelve
+> discutiendo: se resuelve con el 📐 sobre la fila real** (ver §9d / §0b.5).
+
 ### 8b. Notas de venta — casilleros 508 y 117
 
 Son comprobantes **físicos**: nunca aparecen en «comprobantes electrónicos
