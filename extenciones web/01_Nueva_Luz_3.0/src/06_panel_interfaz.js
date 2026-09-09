@@ -1695,6 +1695,21 @@ class SriAssistantPanel {
                         console.warn('   → El 203 es el DECRETO que habilita la tarifa reducida del 5%. ' +
                                      'Es una elección legal: la hace el contador, el bot no la adivina.');
                     }
+
+                    // 📐 AUTOMÁTICO (AGENTS §0c): el reclamo dice qué casillero
+                    // mirar; la radiografía se toma sola y queda guardada en
+                    // SafeStorage (sri_radiografias_reclamo) para resolverlo
+                    // después sin depender de que alguien llegue a tiempo. Solo
+                    // lee — no toca nada del formulario — y no frena el flujo.
+                    if (typeof radiografiarReclamo === 'function') {
+                        radiografiarReclamo(pide.casilleros)
+                            .then((ok) => {
+                                if (ok) this.log('📐 [AUTO] Radiografía guardada. Se lee con ' +
+                                    'window.sriAssistant.verRadiografiaReclamo().');
+                            })
+                            .catch(() => { /* el freno sigue igual */ });
+                    }
+
                     this.showEliteToast({
                         title: '🛑 Falta un campo del formulario',
                         msg: pide.textos.map((t) => escapeHtml(String(t))).join('<br>· ') +
@@ -4062,6 +4077,45 @@ class SriAssistantPanel {
         }
         console.log('🔎 Diagnóstico del ' + new Date(d.at).toLocaleString('es-EC') + ':\n\n' + d.reporte);
         return d.reporte;
+    }
+
+    /**
+     * Muestra las radiografías que el 📐 automático tomó cuando el portal
+     * reclamó un casillero (sri_radiografias_reclamo). Cada una trae la fila
+     * con su id real, el rótulo y —si es desplegable, como el 203— las
+     * opciones enteras con su value. Se copia el markdown para la Biblia.
+     */
+    async verRadiografiaReclamo() {
+        const r = await SafeStorage.get(['sri_radiografias_reclamo']);
+        const mapa = r.sri_radiografias_reclamo || {};
+        const nums = Object.keys(mapa);
+        if (nums.length === 0) {
+            console.log('ℹ️ No hay radiografías de reclamo guardadas. Se toman solas cuando el SRI ' +
+                        'reclama un casillero (p. ej. el 203).');
+            return null;
+        }
+        console.log('📐 Radiografías de reclamo guardadas: ' + nums.join(', '));
+        for (const num of nums) {
+            const d = mapa[num];
+            console.log('\n═══ Casillero ' + num + ' · ' + new Date(d.at).toLocaleString('es-EC') + ' ═══');
+            console.log('ruta: ' + d.url);
+            if (d.filas && d.filas.length) {
+                d.filas.forEach((f) => {
+                    console.log(`  fila: ${f.casillero} → id=${f.id} · ${f.rotulo} · valor="${f.valor}" ${f.editable ? '' : '(solo lectura)'}`);
+                });
+            } else {
+                console.log('  (el mapa no encontró una fila numerada para este casillero)');
+            }
+            if (d.desplegables && d.desplegables.length) {
+                d.desplegables.forEach((sel) => {
+                    console.log(`  desplegable: ${sel.id} · ${sel.rotulo} · elegida="${sel.elegida}"`);
+                    (sel.opciones || []).forEach((o) =>
+                        console.log(`       [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
+                });
+            }
+            if (d.markdown) console.log('\n' + d.markdown);
+        }
+        return mapa;
     }
 
     getDefaultPeriod() {

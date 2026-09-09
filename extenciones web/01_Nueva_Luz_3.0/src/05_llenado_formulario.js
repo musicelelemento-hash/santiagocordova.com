@@ -1190,6 +1190,91 @@ function sriMapaCasilleros(opciones = {}) {
 }
 
 /**
+ * 📐 AUTOMÁTICO — la radiografía se toma sola cuando el portal reclama un
+ * casillero (p. ej. el 203 que bloquea el 5%).
+ *
+ * La propuesta de AGENTS §0c: el dato que hace falta para resolver el reclamo
+ * es justamente lo que el 📐 sabe leer (el id del campo, su rótulo, sus
+ * opciones si es un desplegable). Hoy depende de que el contador llegue a
+ * tiempo y apriete el botón estando en la pantalla correcta — que es justo lo
+ * que no siempre pasa. Acá el reclamo dispara el mapa ACOTADO a ese número y
+ * deja la radiografía guardada en SafeStorage.
+ *
+ * No se dispara en bucle: una vez por casillero por corrida (la marca viaja en
+ * el propio storage y se limpia al cambiar de cliente).
+ *
+ * @param {string[]} casilleros números que reclama el formulario (de
+ *   loQuePideElFormulario()). Vacío o sin números → no hace nada.
+ * @returns {Promise<boolean>} true si guardó al menos una radiografía.
+ */
+async function radiografiarReclamo(casilleros = []) {
+    const numeros = (casilleros || [])
+        .map((c) => String(c).replace(/\D/g, ''))
+        .filter((c) => /^\d{3}$/.test(c));
+    if (numeros.length === 0) return false;
+
+    try {
+        const guardadas = await SafeStorage.get(['sri_radiografias_reclamo', 'accionEnCurso']);
+        const previas = guardadas.sri_radiografias_reclamo || {};
+        const accion = guardadas.accionEnCurso || '';
+        let nuevas = 0;
+
+        for (const num of numeros) {
+            // Una por casillero por corrida: si ya quedó radiografiado dentro de
+            // la misma acción pendiente, no volver a tomarlo — el reclamo puede
+            // persistir páginas enteras y no hace falta repetir.
+            const previa = previas[num];
+            if (previa && previa.accion === accion) continue;
+
+            let mapa = [];
+            let snap = null;
+            try {
+                sriMapaCasilleros({ desde: Number(num), hasta: Number(num) });
+                snap = (typeof window !== 'undefined' && window.__mapaCasilleros) || null;
+                mapa = snap ? snap.filas : [];
+            } catch (e) {
+                console.warn(`📐 [AUTO] No se pudo leer el casillero ${num}: ${e.message}`);
+            }
+
+            // Lo que importa para resolver el reclamo: el id real, el rótulo,
+            // el valor actual y —si es desplegable— las opciones enteras con su
+            // value. Para el 203 esas opciones son los decretos: cuáles existen
+            // lo averigua el bot; cuál corresponde lo elige el contador.
+            const filas = (mapa || []).filter((f) => String(f.casillero) === num);
+            const desplegables = (snap && snap.desplegables) || [];
+            const deps = desplegables.filter((d) =>
+                String(d.casillero) === num ||
+                // Un desplegable sin número al lado puede ser EL reclamado
+                // (el 203 llegó como '???' hasta que se le confirmó el id):
+                // se incluye si su rótulo nombra lo mismo que el reclamo.
+                /decreto|tarifa reducida/i.test(d.rotulo || ''));
+
+            previas[num] = {
+                accion,
+                at: Date.now(),
+                url: (typeof location !== 'undefined') ? location.pathname : '',
+                filas,
+                desplegables: deps,
+                markdown: (snap && snap.markdown) || '',
+                diagnostico: (snap && snap.diagnostico) || null
+            };
+            nuevas++;
+            console.log(`📐 [AUTO] Radiografía del casillero ${num} guardada ` +
+                `(${filas.length} fila(s), ${deps.length} desplegable(s) con sus opciones).`);
+        }
+
+        if (nuevas > 0) {
+            await SafeStorage.set({ sri_radiografias_reclamo: previas });
+            return true;
+        }
+    } catch (e) {
+        // El 📐 es diagnóstico: jamás tumba el flujo que iba a frenar igual.
+        console.warn('📐 [AUTO] No se pudo guardar la radiografía:', e.message);
+    }
+    return false;
+}
+
+/**
  * La casilla que está a la derecha de otra, en su misma línea.
  *
  * El formulario del SRI pone bruto y neto uno al lado del otro:
