@@ -381,6 +381,28 @@
   push('y no les inventa un casillero',
        anidado.every(f=>f.casillero==='???'), true);
 
+  // ── EMPAREJAR POR ALTURA cuando el número y el input no comparten fila ──
+  // El formulario 2011 real (10-sep-2026): 162 ids conceptoNNNN y CERO
+  // emparejados por fila o vecindad → todo salía «???». La estrategia 2.5 los
+  // cruza por geometría, igual que encontrarInputPorCasillero.
+  document.getElementById('portal').innerHTML = `
+    <div style="display:flex;align-items:center;height:28px;line-height:28px">
+      <span style="width:60px">540</span>
+      <div style="width:220px">Adquisiciones locales gravadas 5%</div>
+      <div><input type="text" id="concepto1271" value="0.00"></div>
+    </div>
+    <div style="display:flex;align-items:center;height:28px;line-height:28px">
+      <span style="width:60px">550</span>
+      <div style="width:220px">Menos notas de crédito 5%</div>
+      <div><input type="text" id="concepto1281" value="0.00"></div>
+    </div>`;
+  const geo = sriMapaCasilleros();
+  push('empareja número e input por altura cuando no comparten fila',
+       geo.filter(f=>f.casillero!=='???').map(f=>f.casillero+'→'+f.id),
+       ['540→concepto1271','550→concepto1281']);
+  push('y avisa que fue lectura posicional (via: altura)',
+       (geo.find(f=>f.casillero==='540')||{}).via, 'altura');
+
   // Lo que hace útil un «no encontré nada»: decir qué sí había.
   document.getElementById('portal').innerHTML =
     '<div><input type="text" id="raro-1"><input type="text" id="raro-2"></div>';

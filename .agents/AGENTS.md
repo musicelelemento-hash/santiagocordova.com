@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **724 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+scripts). **726 comprobaciones, verdes el 10-sep-2026** — los dos últimos
 bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
@@ -558,6 +558,16 @@ dato que sólo se saca escribiendo a mano es un dato que no se saca.
 > `concepto1281` y el 540 `concepto1271` — el patrón existía, y aun así sólo
 > se cablearon **después** de que el bot escribiera en ellos, en dos
 > contribuyentes reales. Eso es lo que pide la §5b: evidencia, no simetría.
+
+> **Y desde el 10-sep-2026 el 📐 empareja número ↔ id por altura.** La corrida
+> del 10-sep sobre el formulario real dio **162 ids `conceptoNNNN` y CERO
+> emparejados** — el 2011 anida una tabla por celda y el número queda sin
+> parentesco con su input, así que todo salía como `???`. La estrategia 2.5
+> (misma geometría probada de `encontrarInputPorCasillero`) cruza cada celda
+> «sólo un número» con el input a su derecha y a su misma altura, y lo marca
+> **`via: 'altura'`**: es lectura posicional, hay que ojearla contra la Biblia
+> antes de cablear. Con eso la próxima corrida del 📐 sobre el form real debería
+> devolver el 502/512/560 con número, no `???`.
 
 ### 0b.6 · Notificar las declaraciones — dónde está y qué falta
 
@@ -1710,6 +1720,45 @@ hipótesis, ninguna comprobada:
 **Hasta saberlo, el bot no elige ningún decreto.** Elegir el equivocado es
 declarar mal, y acá ni siquiera está claro cuál correspondería.
 
+#### Los 16 decretos, con su fecha — aportado por el usuario el 10-sep-2026
+
+El 📐 sacó los 16 valores de `concepto91` (opción `0` = «Seleccione»):
+
+```
+[1] 339   [2] 644   [3] 190   [4] 259   [5] 429   [6] 482   [7] 542   [8] 594
+[9] 179  [10] 196  [11] 271  [12] 304  [13] 348  [14] 368  [15] 391  [16] 465
+```
+
+Y el usuario mapeó cuatro a su feriado de 2026 — **todos 8%, turismo**:
+
+| Opción | Decreto | Feriado 2026 | Días |
+| :-: | :-: | :--- | :--- |
+| 11 | **271** | Año Nuevo | 1 – 4 enero |
+| 12 | **304** | Carnaval | 14 – 17 febrero |
+| 14 | **368** | Día del Trabajo | 30 abril – 3 mayo |
+| 15 | **391** | Batalla de Pichincha | 23 – 25 mayo |
+
+**Consecuencia para el código**: para el 8%, el decreto **NO lo tiene que
+elegir el contador** — sale de la fecha de la factura. El XML trae
+`fechaEmision`; si cae dentro de un feriado con decreto, es ése. Sólo hay que
+mantener la tabla de feriados al día (el SRI publica el número días antes).
+
+#### El 5% y el 203 — la evidencia estaba contaminada
+
+La única vez que vimos al **portal** exigir el 203 fue con MIÑO GOMEZ, y esa
+declaración tenía la factura de diez centavos mal clasificada como 5% (ver
+abajo). En APOLO PALACIOS el freno `frenarSiFaltaDecreto203()` saltó **antes de
+enviar**, así que nunca supimos si el portal iba a quejarse por una compra al
+5% legítima.
+
+O sea: **no está probado que una compra al 5% real (construcción) necesite el
+203.** El 203 es del 8% (turismo). Puede que nuestro freno esté siendo
+demasiado prudente. Para saberlo hace falta **una prueba manual**: un cliente
+con una compra al 5% limpia, llenar el 540/550, avanzar hacia el resumen **sin
+que el freno lo pare**, y ver qué dice `panelMensajes`. Si el portal acepta →
+el freno se saca o se acota. Si el portal exige el 203 → ahí sí hay una
+relación real y la captura de esa pantalla la explica.
+
 #### Lo que SÍ quedó resuelto: por qué se disparó
 
 **Por diez centavos.** De las 157 facturas de MIÑO GOMEZ, una decía
@@ -2031,7 +2080,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**724 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**726 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2045,7 +2094,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 
 | Banco | Qué cuida | ✓ |
 | :--- | :--- | --: |
-| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 181 |
+| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 183 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
 | `chequeo` | que avise de lo que va a morder, y que lea lo que Supabase contesta | 56 |
 | `notasventa` | que un silencio no se convierta en un cero | 35 |

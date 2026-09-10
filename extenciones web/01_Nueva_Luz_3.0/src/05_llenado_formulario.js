@@ -1029,6 +1029,55 @@ function sriMapaCasilleros(opciones = {}) {
         }
     });
 
+    // -- Estrategia 2.5 - a la misma altura --------------------------------
+    // El formulario 2011 anida una tabla por celda: el numero de casillero y
+    // su input no comparten ni fila ni celda vecina, asi que 1 y 2 se quedan
+    // cortas y TODO sale como <<???>> (corrida del 10-sep-2026: 162 ids, 0
+    // emparejados). Esto no mira el HTML sino la PANTALLA -- el mismo camino ya
+    // probado de encontrarInputPorCasillero() (§9a): para cada celda cuyo
+    // texto es solo un numero, se toma el input conceptoNNNN que este a su
+    // derecha y a su misma altura. Se marca via: 'altura' -- es lectura
+    // posicional, hay que ojearla contra la Biblia antes de cablear nada.
+    const textoPropio = (el) => {
+        let t = '';
+        for (const n of el.childNodes) if (n.nodeType === 3) t += n.nodeValue;
+        return t.replace(/[\s\u00a0]+/g, ' ').trim();
+    };
+    Array.from(document.querySelectorAll('td, th, span, label, b, strong, div')).forEach((et) => {
+        if (propio(et)) return;
+        const casillero = textoPropio(et);
+        if (!/^\d{3}$/.test(casillero)) return;
+        const nn = Number(casillero);
+        if (!(nn >= desde && nn <= hasta)) return;
+        const rr = et.getBoundingClientRect();
+        if (!rr.height) return;
+        const yc = rr.top + rr.height / 2;
+        const tol = Math.max(12, rr.height * 0.9);
+        const ambitos = [];
+        for (let n = et.parentElement; n && n !== document.body; n = n.parentElement) {
+            if (n.tagName === 'TR' || n.tagName === 'TABLE') ambitos.push(n);
+        }
+        ambitos.push(document.body);
+        for (const ambito of ambitos) {
+            const hit = Array.from(ambito.querySelectorAll('input[type="text"]'))
+                .filter((el) => !propio(el) && /concepto\d+/i.test(el.id || '') &&
+                    !Array.from(vistos).some((k) => k.endsWith('|' + el.id)))
+                .map((el) => ({ el, r: el.getBoundingClientRect() }))
+                .filter(({ r }) => r.width > 0 && r.height > 0 && r.left >= rr.left - 2 &&
+                    Math.abs((r.top + r.height / 2) - yc) < tol)
+                .sort((a, b) => a.r.left - b.r.left)[0];
+            if (hit) {
+                const fila = et.closest('tr');
+                const rotulo = fila
+                    ? Array.from(fila.querySelectorAll('td, th')).map(limpio)
+                        .filter((t) => t && t !== casillero).sort((a, b) => b.length - a.length)[0] || ''
+                    : '';
+                anotar(casillero, hit.el, rotulo, 'altura');
+                break;
+            }
+        }
+    });
+
     // ── Estrategia 3 · por el id, que en el SRI es `conceptoNNNN` ───────────
     // Último recurso, y el más valioso cuando las otras dos no encuentran nada:
     // devuelve los ids REALES aunque no se sepa a qué casillero corresponden.
