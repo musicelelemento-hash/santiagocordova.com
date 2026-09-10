@@ -82,18 +82,25 @@ El formulario de IVA 2011 consta de **6 secciones principales**, organizadas en 
 
 ### A. Matriz de Compras por Tarifa y Deducibilidad
 
+> **Los `id` de esta tabla se corrigieron el 10-sep-2026** con el barrido
+> apretado del 📐 sobre el formulario real (APOLO / REYES), verificado contra
+> cinco casilleros que el bot **escribió** con éxito: 507, 508, 518, 540, 550.
+> Los que decían otra cosa eran suposiciones viejas. El bot sólo escribe hoy
+> en 500/510, 540/550, 507/517, 508/518, 115/117 — el resto es referencia.
+
+
 | Rótulo del SRI | Bruto | Neto (Bruto - NC) | Impuesto Generado | ID DOM Bruto | ID DOM Neto | ID DOM IVA | Regla / Comportamiento del Bot |
 | :--- | :---: | :---: | :---: | :--- | :--- | :--- | :--- |
 | **Adquisiciones locales 15%** (con derecho a crédito) | **500** | **510** | **520** | `concepto1270` | `concepto1280` | `concepto1290` | **Compras operativas gravadas:** Llena `500 = Base 15%`, `510 = 500 - NC 15%`. El 520 lo calcula el SRI. |
 | **Activos fijos locales 15%** (con crédito) | **501** | **511** | **521** | `concepto1390` | `concepto1400` | `concepto1410` | Maquinaria, equipos o vehículos afectos a la actividad. |
 | **Adquisiciones locales tarifa 5%** (con crédito) | **540** | **550** | **560** | `concepto1261` | `concepto1262` | `concepto1263` | **CORREGIDO 10-sep-2026** — el usuario inspeccionó el DOM del formulario real (REYES MARQUEZ) y la 📐 apretada lee lo mismo. Los viejos `concepto1271`/`concepto1281` son en realidad los casilleros **530**/**533**; el bot venía escribiendo el 5% ahí y nunca se envió porque el 203 lo frenaba. Materiales de construcción (Ley 2024). Si es 0.00, no llenar. |
-| **Compras gravadas sin derecho a crédito** | **502** | **512** | **522** | `concepto1470` | `concepto1480` | `concepto1818` | Gastos no deducibles o de actividades no gravadas. Pendiente mapa CIIU. |
-| **Importaciones de servicios / derechos 15%** | **503** | **513** | **523** | `concepto1550` | `concepto1552` | `concepto1554` | Licencias de software en el exterior, servicios técnicos, etc. |
-| **Importaciones de bienes (excluye activos fijos)** | **504** | **514** | **524** | `concepto1556` | `concepto1600` | `concepto1610` | Materias primas y mercaderías importadas. |
-| **Importaciones de activos fijos 15%** | **505** | **515** | **525** | `concepto1620` | `concepto1640` | `concepto1650` | Bienes de capital importados. |
-| **Ajuste IVA NC compras distinta tarifa (+ crédito)** | — | **526** | — | — | `concepto1660` | — | Ajuste en positivo al crédito tributario. |
-| **Ajuste IVA NC compras distinta tarifa (- crédito)** | — | **527** | — | — | `concepto1700` | — | Ajuste en negativo al crédito tributario. |
-| **Importaciones de bienes tarifa 0%** | **506** | **516** | — | `concepto1710` | `concepto1715` | — | Bienes importados con arancel/IVA 0%. |
+| **Compras gravadas sin derecho a crédito** | **502** | **512** | **522** | `concepto1470` | `concepto1550` | `concepto1480` | **📐 apretado 10-sep-2026** (verificado contra 507/508/518/540/550, escritos por el bot). Gastos no deducibles o de actividades no gravadas. Pendiente mapa CIIU — el bot NO escribe acá todavía. |
+| **Importaciones de servicios / derechos 15%** | **503** | **513** | **523** | `concepto1552` | `concepto1554` | `concepto1556` | 📐 apretado 10-sep. Licencias de software en el exterior, servicios técnicos, etc. |
+| **Importaciones de bienes (excluye activos fijos)** | **504** | **514** | **524** | `concepto1600` | `concepto1610` | `concepto1620` | 📐 apretado 10-sep. Materias primas y mercaderías importadas. |
+| **Importaciones de activos fijos 15%** | **505** | **515** | **525** | `concepto1640` | `concepto1650` | `concepto1660` | 📐 apretado 10-sep. Bienes de capital importados. |
+| **Ajuste IVA NC compras distinta tarifa (+ crédito)** | — | **526** | — | — | `concepto2860` | — | 📐 apretado 10-sep. Ajuste en positivo al crédito tributario. |
+| **Ajuste IVA NC compras distinta tarifa (- crédito)** | — | **527** | — | — | `concepto2865` | — | 📐 apretado 10-sep. Ajuste en negativo al crédito tributario. |
+| **Importaciones de bienes tarifa 0%** | **506** | **516** | — | `concepto1700` | `concepto1710` | — | 📐 apretado 10-sep. Bienes importados con arancel/IVA 0%. |
 | **Adquisiciones locales tarifa 0%** | **507** | **517** | — | `concepto1720` | `concepto1730` | — | **Compras con IVA 0%:** Llena `507 = Base 0%`, `517 = 507 - NC 0%`. |
 | **Compras a Negocios Populares (RIMPE)** | **508** | **518** | — | `concepto1735` | `concepto1740` | — | **Notas de venta físicas:** Controlado por interruptor `NotasDeVenta` (pregunta al contador). |
 | **TOTAL ADQUISICIONES Y PAGOS** | **509** | **519** | **529** | `concepto1780` | `concepto1790` | `concepto1800` | **Solo lectura (Calculado por SRI):** Sumatoria de todas las compras brutas, netas e IVA. |
