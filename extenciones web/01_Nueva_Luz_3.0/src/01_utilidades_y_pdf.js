@@ -709,14 +709,21 @@ async function migrarUnComprobanteEmbebido(item) {
   // 4 · **Leerlo de vuelta.** Sin esto, borrar el base64 es tirar el único
   //     ejemplar confiando en que la subida salió bien.
   try {
-    const v = await fetch(url, { method: 'GET', cache: 'no-store' });
-    if (!v.ok) return { ok: false, motivo: `subió pero no se puede leer (HTTP ${v.status})` };
-    const buf = new Uint8Array(await v.arrayBuffer());
-    if (buf.length !== item.bytes) {
-      return { ok: false, motivo: `subió ${buf.length} bytes y el original tiene ${item.bytes}` };
+    // El content script NO puede leer de R2 con fetch directo: CORS desde
+    // Chrome 85, y host_permissions no lo exime (misma lección que la subida).
+    // Va por el service worker, que sí puede — con *.r2.dev y *.workers.dev
+    // en el manifest.
+    const v = await chrome.runtime.sendMessage({ tipo: 'SC_VERIFICAR_R2', url });
+    if (!v || !v.ok) {
+      const detalle = (v && (v.error || (v.status ? 'HTTP ' + v.status : ''))) || 'el service worker no respondió';
+      return { ok: false, motivo: `subió pero no se pudo releer desde R2 (${detalle})` };
     }
-    const cab = String.fromCharCode(...buf.slice(0, 5));
-    if (!cab.startsWith('%PDF')) return { ok: false, motivo: 'lo que volvió de R2 no es un PDF' };
+    if (v.bytes !== item.bytes) {
+      return { ok: false, motivo: `subió ${v.bytes} bytes y el original tiene ${item.bytes}` };
+    }
+    if (!String(v.cabecera || '').startsWith('%PDF')) {
+      return { ok: false, motivo: 'lo que volvió de R2 no es un PDF' };
+    }
   } catch (e) { return { ok: false, motivo: 'no pude releerlo desde R2: ' + e.message }; }
 
   // 5 · Recién ahora se toca la base. Se relee el cliente para no pisar lo que

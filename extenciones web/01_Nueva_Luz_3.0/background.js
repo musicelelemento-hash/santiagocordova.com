@@ -437,6 +437,26 @@ async function peticion({ url, opciones }) {
 }
 
 /**
+ * Lee un objeto de R2 de vuelta, en binario, para confirmar que la subida
+ * quedo. El content script NO puede hacer este fetch: desde Chrome 85 esta
+ * sujeto a CORS y host_permissions no lo exime. El service worker si, con las
+ * host_permissions del manifest (por eso se agrego *.r2.dev).
+ */
+async function verificarR2(url) {
+  if (!url) return { ok: false, status: 0, error: "sin URL" };
+  try {
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    if (!res.ok) return { ok: false, status: res.status, error: "HTTP " + res.status };
+    const buf = new Uint8Array(await res.arrayBuffer());
+    let cab = "";
+    for (let i = 0; i < Math.min(5, buf.length); i++) cab += String.fromCharCode(buf[i]);
+    return { ok: true, status: res.status, bytes: buf.length, cabecera: cab };
+  } catch (e) {
+    return { ok: false, status: 0, error: e.message };
+  }
+}
+
+/**
  * Limpia todas las cookies de sesión del SRI (incluyendo HttpOnly en sub-apps como
  * /tuportal-internet, /comprobantes-electronicos-internet, /sri-declaraciones-web-internet).
  */
@@ -503,6 +523,13 @@ chrome.runtime.onMessage.addListener((msg, sender, responder) => {
 
   if (msg.tipo === "SC_FETCH") {
     peticion(msg)
+      .then(responder)
+      .catch((e) => responder({ ok: false, error: e.message }));
+    return true;
+  }
+
+  if (msg.tipo === "SC_VERIFICAR_R2") {
+    verificarR2(msg.url)
       .then(responder)
       .catch((e) => responder({ ok: false, error: e.message }));
     return true;

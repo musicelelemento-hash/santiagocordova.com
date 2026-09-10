@@ -118,8 +118,8 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **721 comprobaciones, verdes el 10-sep-2026** — los dos últimos
-agregados ese día: `portal` (24) y `migrar` (33). Si tu cambio baja ese número, algo se rompió; si lo sube,
+scripts). **724 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
 > **La suite entera tarda unos cinco minutos**, y `bendita` roza el tope: el
@@ -912,6 +912,20 @@ el comprobante sigue donde estaba.
 `migrarUnComprobanteEmbebido()` en `01_utilidades_y_pdf.js` hace los cinco
 pasos en ese orden, y el banco comprueba los cuatro modos de fallo uno por uno.
 
+> **La relectura va por el service worker, no por `fetch` directo — 10-sep-2026.**
+> El paso 4 (`fetch(url)` contra R2 desde el content script) fallaba SIEMPRE
+> con *«no pude releerlo desde R2: Failed to fetch»*, y con eso el 📦 no podía
+> migrar nada: la regla de oro nunca se cumplía. Es la misma lección que la
+> subida —desde Chrome 85 el content script está sujeto a CORS y
+> `host_permissions` no lo exime—, sólo que el banco mockea `window.fetch` y
+> no la cazó. Ahora el paso 4 le pide al service worker (`SC_VERIFICAR_R2` →
+> `verificarR2()` en `background.js`) que lea el objeto en binario y devuelva
+> tamaño y cabecera. Hubo que agregar **`https://*.r2.dev/*`** a
+> `host_permissions`: la subida por «r2-directo» devuelve una URL
+> `pub-*.r2.dev` y sin ese permiso el propio service worker tampoco podía
+> leerla. Si el relay `workers.dev/files/` no sirviera GET, el motivo ahora
+> trae el HTTP real en vez de «Failed to fetch».
+
 ### Por qué esto no puede correr desde afuera
 
 ```js
@@ -942,7 +956,7 @@ eso la migración es un botón de la extensión y no una herramienta de consola.
 > los datos reales los 473 fragmentos no tienen cabecera de PDF, así que pedir
 > sólo la cabecera no deja entrar basura ni deja a nadie afuera.
 
-Banco: `tests/migrar.html` (33 comprobaciones, verdes el 10-sep-2026).
+Banco: `tests/migrar.html` (36 comprobaciones, verdes el 10-sep-2026).
 
 ---
 
@@ -1999,7 +2013,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**721 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**724 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2023,7 +2037,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `radiografia203` | que el 📐 salga solo cuando el portal reclama un casillero | 27 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
 | `parada` | que DETENER corte el trabajo en curso, no sólo el próximo cliente | 26 |
-| `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 33 |
+| `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |

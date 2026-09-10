@@ -23,7 +23,7 @@
   console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
   window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
   window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
-  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:(m)=>Promise.resolve((m&&m.tipo==='SC_VERIFICAR_R2'&&window.__r2)?window.__r2(m.url):{ok:false}),id:'s'},
    storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
 </script>
 <script src="../shared_config.js"></script>
@@ -59,14 +59,17 @@
       enR2[ruta] = subeDistinto ? new Uint8Array(3) : new Uint8Array(bytes);
       return 'https://r2.example/' + ruta;
     };
+    // El service worker: única vía de relectura desde R2 (el content script
+    // no puede, CORS desde Chrome 85). El banco imita su respuesta binaria.
+    window.__r2 = (u) => {
+      if (releerFalla) return { ok:false, status:404, error:'HTTP 404' };
+      const b = enR2[u.replace('https://r2.example/','')];
+      if (!b) return { ok:false, status:404, error:'HTTP 404' };
+      let cab=''; for (let i=0;i<Math.min(5,b.length);i++) cab+=String.fromCharCode(b[i]);
+      return { ok:true, status:200, bytes:b.length, cabecera:cab };
+    };
     window.fetch = async (url, opts = {}) => {
       const u = String(url);
-      // Relectura desde R2
-      if (u.startsWith('https://r2.example/')) {
-        if (releerFalla) return { ok:false, status:404, arrayBuffer: async()=>new ArrayBuffer(0) };
-        const b = enR2[u.replace('https://r2.example/','')];
-        return { ok:true, status:200, arrayBuffer: async()=> b.buffer.slice(b.byteOffset, b.byteOffset+b.byteLength) };
-      }
       // Supabase
       if (u.includes('/rest/v1/clients')) {
         if ((opts.method||'GET') === 'PATCH') {
@@ -166,15 +169,23 @@
 
   // ══ E · el botón existe y lista antes de migrar ════════════════════════
   sec('E · el botón 📦, y que liste antes');
-  const nav = await (await fetch('../src/07_navegacion_sri.js')).text();
+  const nav = await (await fetch('../src/07_navegacion_sri.js',{cache:'no-store'})).text();
   push('hay botón 📦 en la barra',               /id="slh-migrar"/.test(nav), true);
   push('y está en el cajón 🧰',                  /'slh-migrar',\s*'Migrar a la nube'/.test(nav), true);
   push('migrar se pide POR PERÍODO',             /data-migrar/.test(nav), true);
   push('no existe un «migrar todo»',             /migrarTodo|data-migrar="todos"/.test(nav), false);
-  const util = await (await fetch('../src/01_utilidades_y_pdf.js')).text();
+  const util = await (await fetch('../src/01_utilidades_y_pdf.js',{cache:'no-store'})).text();
   push('la relectura desde R2 está en el código',
        /Leerlo de vuelta|no pude releerlo desde R2/.test(util), true);
-  const bundle = await (await fetch('../build/content.js')).text();
+  push('la relectura va por el service worker, NO por fetch directo (CORS)',
+       /SC_VERIFICAR_R2/.test(util) && !/await fetch\(url, \{ method: 'GET'/.test(util), true);
+  const bg = await (await fetch('../background.js',{cache:'no-store'})).text();
+  push('el service worker sabe releer de R2 en binario',
+       /SC_VERIFICAR_R2/.test(bg) && /verificarR2/.test(bg) && /arrayBuffer/.test(bg), true);
+  const man = await (await fetch('../manifest.json',{cache:'no-store'})).text();
+  push('el manifest le da permiso al SW sobre *.r2.dev',
+       /r2\.dev/.test(man), true);
+  const bundle = await (await fetch('../build/content.js',{cache:'no-store'})).text();
   push('el bundle está reconstruido',            /listarComprobantesEmbebidos/.test(bundle), true);
 
   const fallos=ok.filter(x=>!x).length;
