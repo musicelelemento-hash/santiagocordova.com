@@ -1183,6 +1183,36 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 > para decidir un envío: devuelve `0` tanto para "cero" como para "no pude leer".
 > Para eso está `parseImporteEstricto()`, que devuelve `null` cuando no hay número.
 
+> ### ⚠️ El 📐 con geometría CONTRADICE el 540/550 confirmado — 10-sep-2026
+>
+> Primera corrida del 📐 nuevo (estrategia 2.5, `via:'altura'`) sobre el
+> formulario real de REYES MARQUEZ. Emparejó los 51 casilleros numerados. Los
+> **espaciados dan bien**: `500→concepto1270`, `510→concepto1280`,
+> `520→concepto1290` (coinciden con el banco `iva5`), `508→concepto1735`,
+> `518→concepto1740`, `117→concepto258`, `564→concepto2130`, `565→concepto1276`
+> (coinciden con §12).
+>
+> Pero en la zona **densa 530-565 se corre de fila**:
+>
+> | El 📐 dice | La Matriz dice (escribiendo en él) |
+> | :--- | :--- |
+> | `540 → concepto1261` | `540 → concepto1271` |
+> | `550 → concepto1262` | `550 → concepto1281` |
+> | `530 → concepto1271` · `533 → concepto1281` | — |
+> | `502 → concepto1470` · `512 → concepto1550` · `560 → concepto1263` | sin confirmar |
+>
+> **No se toca el `fieldMap` ni la Matriz.** El 540=`concepto1271` y el
+> 550=`concepto1281` se confirmaron **con el bot escribiendo en ellos en dos
+> contribuyentes reales y el portal aceptando el 5%** — es la evidencia más
+> fuerte que hay. El 📐 geométrico es un lector posicional y en filas juntas
+> se equivoca de renglón; por eso marca `via:'altura'`.
+>
+> **Cómo se resuelve** (y de paso cierra el 502/512/560): la próxima corrida
+> real que llene el 5%, **loguear el `id` exacto donde el bot escribe cada
+> valor y el `id`/valor que el portal calcula para el 560**. Si el bot escribe
+> $X en `concepto1271` y el portal pone $X·0.05 en `concepto1263`, entonces
+> 540=`concepto1271` y 560=`concepto1263`, y el 📐 se corrió una fila. Con eso
+> se sabe el offset y se leen bien el 502/512.
 
 ---
 

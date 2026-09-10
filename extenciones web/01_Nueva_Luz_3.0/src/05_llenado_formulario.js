@@ -1052,7 +1052,11 @@ function sriMapaCasilleros(opciones = {}) {
         const rr = et.getBoundingClientRect();
         if (!rr.height) return;
         const yc = rr.top + rr.height / 2;
-        const tol = Math.max(12, rr.height * 0.9);
+        // Tolerancia vertical apretada: media línea. El formulario 2011 no usa
+        // <table> (tablas: 0), así que sin filas que acoten sólo queda la
+        // geometría, y con filas a ~26px una tolerancia holgada agarra el
+        // renglón de al lado. Pasó con REYES MARQUEZ el 10-sep (§6).
+        const tol = Math.max(8, rr.height * 0.55);
         const ambitos = [];
         for (let n = et.parentElement; n && n !== document.body; n = n.parentElement) {
             if (n.tagName === 'TR' || n.tagName === 'TABLE') ambitos.push(n);
@@ -1065,7 +1069,14 @@ function sriMapaCasilleros(opciones = {}) {
                 .map((el) => ({ el, r: el.getBoundingClientRect() }))
                 .filter(({ r }) => r.width > 0 && r.height > 0 && r.left >= rr.left - 2 &&
                     Math.abs((r.top + r.height / 2) - yc) < tol)
-                .sort((a, b) => a.r.left - b.r.left)[0];
+                // El renglón MÁS alineado gana; a igual renglón, el de más a la
+                // izquierda. Ordenar sólo por `left` agarra un input de otra fila.
+                .sort((a, b) => {
+                    const dya = Math.abs((a.r.top + a.r.height / 2) - yc);
+                    const dyb = Math.abs((b.r.top + b.r.height / 2) - yc);
+                    if (Math.abs(dya - dyb) > 3) return dya - dyb;
+                    return a.r.left - b.r.left;
+                })[0];
             if (hit) {
                 const fila = et.closest('tr');
                 const rotulo = fila
