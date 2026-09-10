@@ -1,5 +1,5 @@
 # ESTADO DEL PROYECTO — COLABORACIÓN ANTIGRAVITY & CLAUDE CODE
-> **Fecha de actualización:** 09-sep-2026  
+> **Fecha de actualización:** 10-sep-2026  
 > **Entorno de trabajo:** Multi-agente (Antigravity IDE + Claude Code en paralelo)  
 > **Rama activa en repositorio raíz:** `extension/nueva-luz-control-bucle`  
 > **Sub-repositorio web (`santiagocordova-main`):** `main`
@@ -38,6 +38,54 @@
    - **NUNCA presentar sustitutivas**: el bot se frena y redirige a *Consulta de declaraciones* para descargar el comprobante oficial existente.
    - **NUNCA purgar cookies de sesión en el formulario de Keycloak**: el `AUTH_SESSION_ID` está ligado al formulario; purgarlo produce `HTTP 400 Bad Request`.
    - **NUNCA inventar un casillero o suponer datos tributarios**: cuando falta un dato contable/legal, el bot reúne la evidencia, la muestra y pide confirmación o marca al cliente en Omitidos.
+
+---
+
+## 🏆 2₀. HITOS DE HOY (10-SEP-2026)
+
+### El SRI se está cayendo, y el bot no se enteraba (Claude, commit `f6c91fa`)
+
+El usuario preguntó «¿qué será que está así?» y pegó el stack del portal.
+**No era la extensión ni su clave:**
+
+```
+javax.ejb.ConcurrentAccessTimeoutException: JBAS014373
+  could not obtain lock within 5000MILLISECONDS
+  ec.gob.sri...ConfigSistemaBean.getAmbienteEjecucion
+```
+
+`ConfigSistemaBean` es un EJB **singleton** del SRI. Cada visita a
+`comprobantesRecibidos.jsf` le pide algo desde el `init()` de
+`ControladorBase`; con carga, todas las peticiones hacen cola por el mismo
+lock y a los 5 s se rinden con HTTP 500. **Servidor del SRI saturado.**
+
+Lo nuestro: el bot cargaba la página de error, no encontraba
+`frmPrincipal:ano` y se ponía a esperarlo ocho segundos; después recargaba y
+volvía a esperar, ocho veces. **Reintentar rápido contra una saturación la
+empeora** — cada recarga suma una petición a la cola trabada.
+
+`elPortalSeCayo(zona)` + `manejarPortalCaido()` en
+`02_servicios_y_memoria.js`, consultados desde el bucle de espera de
+`03_ingreso_y_sesion.js`. Tres decisiones:
+
+1. **Esperar más cada vez**: 30 s · 1 min · 2 min.
+2. **No culpar al contribuyente** — motivo nuevo `portal_caido`. Marcarlo
+   `clave_incorrecta` sería mentir en el registro y excluirlo de la próxima
+   corrida.
+3. **Detener el lote**, no pasar al siguiente: con el portal caído el cliente
+   2 falla igual que el 1.
+
+Contra el falso positivo (que dejaría al lote sin declarar a nadie): si hay
+estructura del portal en el DOM no hay caída — la página de error de JBoss
+reemplaza la página entera— y se exigen marcas propias del servidor, no la
+palabra «error» suelta.
+
+Banco: `tests/portal.html` (24), con el stack real.
+**688 comprobaciones verdes en 21 bancos.**
+
+> ⏱️ **La suite entera tarda unos tres minutos.** `bendita` monta el popup
+> real con sus scripts y tarda mucho más que los otros: verlo en «…» no
+> quiere decir que esté colgado. Lo confundí por eso y lo dejo anotado.
 
 ---
 
