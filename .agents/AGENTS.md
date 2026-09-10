@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **726 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+scripts). **728 comprobaciones, verdes el 10-sep-2026** — los dos últimos
 bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
@@ -711,6 +711,16 @@ Dado que la plataforma del SRI es una Single Page Application (SPA) híbrida que
   > marcar declaraciones de IVA, y luego cerré y abrí y **siempre así** esa
   > ejecución con ese cliente». «Siempre así» era la acción pegada en el
   > almacén, sin forma de rendirse. Banco: `tests/bucles.html`.
+
+  > **10-sep-2026 — el modo paso a paso no avanzaba nunca.** `sePidioParar()`
+  > (la compuerta que consultan todos los bucles) devolvía `true` para
+  > cualquier estado ≠ CORRIENDO, PAUSADO incluido. El modo paso a paso vive
+  > en PAUSADO entre fases, así que en cada recarga la «última red» de
+  > `03_ingreso_y_sesion.js` borraba el `pendingAction` y el lote arrancaba de
+  > cero (DELGADO QUITO: perfil → comprobantes → PAUSADO → borrado → repetir).
+  > Ahora sólo **DETENIDO** descarta; PAUSADO/PAUSANDO se preservan y ▶ los
+  > reanuda. La pausa suave, además, ya no corta el trabajo a medias — cumple
+  > lo que promete («termina el cliente en curso»). Banco: `tests/parada.html`.
 
 **Regla**: Si necesitas crear un flujo que atraviese más de una URL del SRI, **debes** usar `SafeStorage` para guardar el estado siguiente antes de inyectar el redireccionamiento `window.location.href`.
 
@@ -2113,7 +2123,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**726 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**728 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2136,7 +2146,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `subidas` | que «Failed to fetch» diga algo accionable | 27 |
 | `radiografia203` | que el 📐 salga solo cuando el portal reclama un casillero | 27 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
-| `parada` | que DETENER corte el trabajo en curso, no sólo el próximo cliente | 26 |
+| `parada` | que DETENER corte el trabajo, y que PAUSA/paso-a-paso NO lo descarten | 28 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |

@@ -969,9 +969,14 @@ async function sePidioParar() {
     try {
         const sem = await SriLoop.get();
         if (sem && Array.isArray(sem.cola) && sem.cola.length > 0) {
-            // Lote de verdad: la autoridad es el semáforo. Si dejó de estar
-            // CORRIENDO (DETENIDO/PAUSADO/PAUSANDO), se pidió parar.
-            return sem.estado !== 'CORRIENDO';
+            // Lote de verdad: la autoridad es el semáforo. Sólo DETENIDO es
+            // "se pidió parar" y descarta lo pendiente. PAUSADO y PAUSANDO NO:
+            // el lote sigue vivo y ▶ lo reanuda. El modo paso a paso vive en
+            // PAUSADO entre fases — tratarlo como parada borraba el
+            // pendingAction en cada recarga y el lote no avanzaba nunca
+            // (DELGADO QUITO, 10-sep-2026). La pausa suave promete "termina el
+            // cliente en curso", así que tampoco corta el trabajo a medias.
+            return sem.estado === 'DETENIDO';
         }
     } catch (e) { /* si no se puede leer, seguir con el resto de la compuerta */ }
     try {

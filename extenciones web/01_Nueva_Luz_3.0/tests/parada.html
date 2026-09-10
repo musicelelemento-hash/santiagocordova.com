@@ -142,6 +142,17 @@
   await SriLoop.emergencia('banco compuerta');
   push('lote DETENIDO → parar',               await sePidioParar(), true);
   limpiarParadaPedida();                       // = el usuario arranca de nuevo
+
+  // PAUSADO / PAUSANDO NO son parar: el lote sigue vivo y ▶ lo reanuda. El
+  // 10-sep-2026 el modo paso a paso (que vive en PAUSADO entre fases) hacía
+  // que sePidioParar() borrara el pendingAction en cada recarga → DELGADO
+  // QUITO no avanzaba nunca.
+  await SriLoop.iniciar(cli, per);
+  await SriLoop._set({ estado: 'PAUSADO', motivo: 'Modo paso a paso' });
+  push('paso a paso (PAUSADO) → NO es parar',  await sePidioParar(), false);
+  await SriLoop._set({ estado: 'PAUSANDO', motivo: 'Pausa pedida por el usuario' });
+  push('pausa suave (PAUSANDO) → NO es parar', await sePidioParar(), false);
+  await SriLoop.emergencia('banco compuerta'); limpiarParadaPedida();
   await SriLoop.detener('banco compuerta');    // sin lote vivo
   await SafeStorage.set({ sriAutomationPaused: true });
   push('pausa pedida (flujo suelto) → parar', await sePidioParar(), true);
