@@ -1,0 +1,186 @@
+<!doctype html><meta charset="utf-8"><title>Migrar sin perder el único ejemplar</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>207 PDFs que sólo existen dentro de la base</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  Medido el 10-sep-2026 contra el proyecto real: <b>207 PDFs válidos</b> ·
+  7,65 MB · 79 contribuyentes · <b>0 duplicados</b>. Ese último número es el
+  que manda: ninguno tiene copia en R2, así que <b>el base64 de la base es el
+  único ejemplar</b> de esos comprobantes.
+  <br><br>
+  De ahí la regla que este banco vigila: <b>el contenido se borra sólo después
+  de haber leído el archivo de vuelta desde R2</b> y comprobado que es el
+  mismo. Si algo falla en el medio —la subida, la relectura, el tamaño— la
+  base queda intacta.
+  <br><br>
+  Es deuda histórica, no un flujo roto: R2 entró al flujo el 07-sep-2026 y
+  desde entonces sube el 100%.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(54)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,66-t.length)));
+
+  // Un PDF de verdad, chiquito pero con la cabecera que importa.
+  const PDF = '%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF';
+  const B64 = btoa(PDF);
+
+  // ── La base de mentira ────────────────────────────────────────────────
+  // Se guarda lo que se escribió para poder comprobar que NO se tocó cuando
+  // no correspondía. Eso es todo el banco, en realidad.
+  let baseDatos, patches, subidas, realFetch = window.fetch, realSubir = window.uploadToCloudflareR2Direct;
+  const enR2 = {};   // ruta -> bytes que quedaron
+  const reset = (hist) => {
+    baseDatos = [{ id: 'c1', ruc: '0102030405001', name: 'CONTRIBUYENTE DE PRUEBA',
+                   declaration_history: JSON.parse(JSON.stringify(hist)) }];
+    patches = []; subidas = [];
+    Object.keys(enR2).forEach(k => delete enR2[k]);
+  };
+
+  const montarPortal = ({ subirFalla=false, subeDistinto=false, releerFalla=false, patchFalla=false } = {}) => {
+    window.uploadToCloudflareR2Direct = async (ruta, blob) => {
+      if (subirFalla) throw new Error('R2 dijo que no');
+      const bytes = await blob.arrayBuffer();
+      subidas.push({ ruta, bytes: bytes.byteLength });
+      enR2[ruta] = subeDistinto ? new Uint8Array(3) : new Uint8Array(bytes);
+      return 'https://r2.example/' + ruta;
+    };
+    window.fetch = async (url, opts = {}) => {
+      const u = String(url);
+      // Relectura desde R2
+      if (u.startsWith('https://r2.example/')) {
+        if (releerFalla) return { ok:false, status:404, arrayBuffer: async()=>new ArrayBuffer(0) };
+        const b = enR2[u.replace('https://r2.example/','')];
+        return { ok:true, status:200, arrayBuffer: async()=> b.buffer.slice(b.byteOffset, b.byteOffset+b.byteLength) };
+      }
+      // Supabase
+      if (u.includes('/rest/v1/clients')) {
+        if ((opts.method||'GET') === 'PATCH') {
+          if (patchFalla) return { ok:false, status:401, text: async()=>'{"code":"42501"}' };
+          patches.push(JSON.parse(opts.body));
+          baseDatos[0].declaration_history = JSON.parse(opts.body).declaration_history;
+          return { ok:true, status:204, text: async()=>'' };
+        }
+        return { ok:true, status:200, json: async()=>JSON.parse(JSON.stringify(baseDatos)) };
+      }
+      return { ok:false, status:404, text: async()=>'' };
+    };
+  };
+
+  const conContenido = (extra={}) => ({
+    period:'2026-08', type:'IVA', status:'Realizada',
+    proof_file:{ name:'Declaracion_IVA_0102030405001_2026-08.pdf', content:B64, ...extra }
+  });
+  const sigueElBase64 = () => !!(baseDatos[0].declaration_history[0].proof_file||{}).content;
+
+  // ══ A · qué se puede migrar y qué no ═══════════════════════════════════
+  sec('A · clasificar antes de tocar nada');
+  reset([
+    conContenido(),                                                       // migrable
+    { period:'2026-S1', proof_file:{ content:B64 } },                      // período raro
+    { period:'2026-08', proof_file:{ content: btoa('hola') } },            // fragmento
+    { period:'2026-08', proof_file:{ content:B64, url:'https://ya/esta' } },// ya en la nube
+    { period:'2026-08', proof_file:{} }                                    // sin nada
+  ]);
+  montarPortal();
+  const r = await listarComprobantesEmbebidos(null);
+  push('un PDF con período AAAA-MM es migrable', r.migrables.length, 1);
+  push('un período raro NO se migra solo',       r.ambiguos.length, 1);
+  push('y se dice cuál era',                     r.ambiguos[0] && r.ambiguos[0].periodo, '2026-S1');
+  push('lo que no es PDF va a fragmentos',       r.fragmentos.length, 1);
+  push('lo que YA tiene url no es deuda',
+       r.migrables.concat(r.ambiguos, r.fragmentos).some(x=>x.periodo==='2026-08'&&x.bytes===0), false);
+  push('el filtro por período acota',
+       (await listarComprobantesEmbebidos('2026-08')).ambiguos.length, 0);
+
+  // ══ B · el camino feliz ════════════════════════════════════════════════
+  sec('B · sube, se relee, y RECIÉN ahí se borra');
+  reset([conContenido()]);
+  montarPortal();
+  const uno = (await listarComprobantesEmbebidos('2026-08')).migrables[0];
+  const okRes = await migrarUnComprobanteEmbebido(uno);
+  push('la migración sale bien',                 okRes.ok, true);
+  push('se subió exactamente un archivo',        subidas.length, 1);
+  push('con el peso del PDF original',           subidas[0].bytes, PDF.length);
+  push('la ruta lleva el RUC y el tramo opaco',
+       /^declaraciones\/0102030405001\/[0-9a-f]{22}\//.test(subidas[0].ruta), true);
+  push('el base64 se borró de la base',          sigueElBase64(), false);
+  push('y quedó la URL en su lugar',
+       (baseDatos[0].declaration_history[0].proof_file||{}).url, 'https://r2.example/'+subidas[0].ruta);
+
+  // ══ C · todo lo que puede fallar, y la base intacta ════════════════════
+  sec('C · si algo falla, NO se toca el único ejemplar');
+
+  reset([conContenido()]); montarPortal({ subirFalla:true });
+  const f1 = await migrarUnComprobanteEmbebido((await listarComprobantesEmbebidos('2026-08')).migrables[0]);
+  push('R2 rechaza la subida → no ok',           f1.ok, false);
+  push('  y el base64 SIGUE en la base',         sigueElBase64(), true);
+  push('  sin haber escrito nada',               patches.length, 0);
+
+  reset([conContenido()]); montarPortal({ releerFalla:true });
+  const f2 = await migrarUnComprobanteEmbebido((await listarComprobantesEmbebidos('2026-08')).migrables[0]);
+  push('sube pero no se puede releer → no ok',   f2.ok, false);
+  push('  y el base64 SIGUE en la base',         sigueElBase64(), true);
+  push('  sin haber escrito nada',               patches.length, 0);
+
+  reset([conContenido()]); montarPortal({ subeDistinto:true });
+  const f3 = await migrarUnComprobanteEmbebido((await listarComprobantesEmbebidos('2026-08')).migrables[0]);
+  push('vuelve otro tamaño → no ok',             f3.ok, false);
+  push('  lo dice con los dos números',          /bytes/.test(f3.motivo||''), true);
+  push('  y el base64 SIGUE en la base',         sigueElBase64(), true);
+
+  reset([conContenido()]); montarPortal({ patchFalla:true });
+  const f4 = await migrarUnComprobanteEmbebido((await listarComprobantesEmbebidos('2026-08')).migrables[0]);
+  push('la base rechaza el PATCH → no ok',       f4.ok, false);
+  push('  y lo dice: subió pero no se actualizó',
+       /subió a R2/.test(f4.motivo||''), true);
+  push('  el base64 sigue (nada se perdió)',     sigueElBase64(), true);
+
+  // ══ D · otra corrida movió el historial ════════════════════════════════
+  sec('D · si el historial cambió, no se pisa');
+  reset([conContenido()]); montarPortal();
+  const it = (await listarComprobantesEmbebidos('2026-08')).migrables[0];
+  // Entre el listado y la migración, alguien cambió esa entrada.
+  baseDatos[0].declaration_history[0] = { period:'2026-09', proof_file:{ content:B64 } };
+  const f5 = await migrarUnComprobanteEmbebido(it);
+  push('no se escribe sobre lo que cambió',      f5.ok, false);
+  push('  y lo dice',                            /cambió/.test(f5.motivo||''), true);
+  push('  el historial quedó como lo dejó el otro',
+       baseDatos[0].declaration_history[0].period, '2026-09');
+
+  window.fetch = realFetch; window.uploadToCloudflareR2Direct = realSubir;
+
+  // ══ E · el botón existe y lista antes de migrar ════════════════════════
+  sec('E · el botón 📦, y que liste antes');
+  const nav = await (await fetch('../src/07_navegacion_sri.js')).text();
+  push('hay botón 📦 en la barra',               /id="slh-migrar"/.test(nav), true);
+  push('y está en el cajón 🧰',                  /'slh-migrar',\s*'Migrar a la nube'/.test(nav), true);
+  push('migrar se pide POR PERÍODO',             /data-migrar/.test(nav), true);
+  push('no existe un «migrar todo»',             /migrarTodo|data-migrar="todos"/.test(nav), false);
+  const util = await (await fetch('../src/01_utilidades_y_pdf.js')).text();
+  push('la relectura desde R2 está en el código',
+       /Leerlo de vuelta|no pude releerlo desde R2/.test(util), true);
+  const bundle = await (await fetch('../build/content.js')).text();
+  push('el bundle está reconstruido',            /listarComprobantesEmbebidos/.test(bundle), true);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

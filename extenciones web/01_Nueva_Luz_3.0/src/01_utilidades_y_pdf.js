@@ -581,6 +581,181 @@ function loQueDijoSupabase(cuerpo) {
 }
 
 /**
+ * Los comprobantes que hoy viven DENTRO de la base, en base64.
+ *
+ * Deuda histórica: hasta el 07-sep-2026 R2 no estaba en el flujo de subida, y
+ * el PDF se guardaba entero en `clients.declaration_history`. Desde entonces
+ * sube el 100% y sólo queda la URL — pero lo viejo sigue adentro.
+ *
+ * **Sólo lee.** Devuelve tres montones, y la distinción importa:
+ *
+ * - `migrables`: PDFs de verdad, con período `AAAA-MM` legible.
+ * - `ambiguos`: PDFs cuyo período no se entiende (`2025`, `2026-S1`,
+ *   `2025:IC`). **No se migran solos**: el período va en la ruta de R2, y
+ *   archivar con un período inventado es el bug del 07-sep otra vez.
+ * - `fragmentos`: menos de 200 bytes o no empiezan con `%PDF`. No son
+ *   comprobantes; no hay nada que subir.
+ *
+ * @param {string|null} periodo Acota a un período (`'2026-08'`). `null` = todos.
+ * @returns {Promise<{migrables: object[], ambiguos: object[], fragmentos: object[], error: string}>}
+ */
+async function listarComprobantesEmbebidos(periodo = null) {
+  const vacio = { migrables: [], ambiguos: [], fragmentos: [], error: '' };
+  if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
+    return { ...vacio, error: 'No hay credenciales de Supabase cargadas.' };
+  }
+  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}` };
+
+  let filas;
+  try {
+    const r = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?select=id,ruc,name,declaration_history`,
+                          { headers: cab });
+    if (!r.ok) {
+      const cuerpo = await r.text().catch(() => '');
+      const dijo = (typeof loQueDijoSupabase === 'function') ? loQueDijoSupabase(cuerpo) : '';
+      return { ...vacio, error: `HTTP ${r.status}${dijo}` };
+    }
+    filas = await r.json();
+  } catch (e) {
+    return { ...vacio, error: 'No pude leer la base: ' + e.message };
+  }
+
+  const salida = { migrables: [], ambiguos: [], fragmentos: [], error: '' };
+
+  filas.forEach((cli) => {
+    const hist = Array.isArray(cli.declaration_history) ? cli.declaration_history : [];
+    hist.forEach((dec, indice) => {
+      const pf = (dec && dec.proof_file) || {};
+      if (!pf.content) return;                       // ya está en la nube, o no hay nada
+      if (pf.url || dec.pdfUrl) return;              // ya tiene URL: no es deuda
+
+      const per = String(dec.period || '');
+      if (periodo && per !== periodo) return;
+
+      // ¿Es un PDF de verdad? Se mira el contenido, no el nombre del archivo.
+      let crudo = String(pf.content);
+      const marcaDatos = /^data:([^;]+);base64,/.exec(crudo);
+      if (marcaDatos) crudo = crudo.slice(marcaDatos[0].length);
+      let bytes = 0;
+      let esPdf = false;
+      try {
+        const bin = atob(crudo);
+        bytes = bin.length;
+        esPdf = bin.slice(0, 5).startsWith('%PDF');
+      } catch (e) { /* no decodifica: va a fragmentos */ }
+
+      const item = {
+        clienteId: cli.id, ruc: cli.ruc || '', nombre: cli.name || '',
+        indice, periodo: per, tipo: dec.type || '', estado: dec.status || '',
+        bytes, enBase: crudo.length,
+        archivo: pf.name || `Declaracion_IVA_${cli.ruc}_${per}.pdf`,
+        base64: crudo
+      };
+
+      // **La cabecera manda; el tamaño no descarta.** Un `%PDF` de 300 bytes
+      // sigue siendo el comprobante de alguien. En los datos reales del
+      // 10-sep-2026 los 473 fragmentos NO tenían cabecera de PDF, así que
+      // pedir sólo la cabecera no deja entrar basura y no deja fuera a nadie.
+      if (!esPdf) { salida.fragmentos.push(item); return; }
+      // El período va en la ruta: si no es AAAA-MM, no se archiva a ciegas.
+      if (!/^\d{4}-\d{2}$/.test(per)) { salida.ambiguos.push(item); return; }
+      salida.migrables.push(item);
+    });
+  });
+
+  const porPeso = (a, b) => b.bytes - a.bytes;
+  salida.migrables.sort(porPeso);
+  salida.ambiguos.sort(porPeso);
+  return salida;
+}
+
+/**
+ * Sube UN comprobante a R2 y recién entonces lo saca de la base.
+ *
+ * **La regla de oro**: estos PDFs no tienen copia en ningún lado. El `content`
+ * sólo se borra después de haber **leído el objeto de vuelta desde R2** y
+ * comprobado que es el mismo archivo. Si algo falla en el medio, la base
+ * queda intacta y el comprobante sigue donde estaba.
+ *
+ * @param {object} item Un elemento de `listarComprobantesEmbebidos().migrables`.
+ * @returns {Promise<{ok: boolean, url?: string, motivo?: string}>}
+ */
+async function migrarUnComprobanteEmbebido(item) {
+  if (!item || !item.base64) return { ok: false, motivo: 'sin contenido' };
+
+  // 1 · A bytes.
+  let blob;
+  try {
+    const bin = atob(item.base64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    blob = new Blob([arr], { type: 'application/pdf' });
+  } catch (e) { return { ok: false, motivo: 'el base64 no decodifica' }; }
+
+  // 2 · La MISMA ruta que usarían las subidas nuevas. La semilla vive en este
+  //     navegador: por eso esto no se puede correr desde un script de afuera.
+  let ruta;
+  try {
+    ruta = await rutaDeComprobante(item.ruc, item.periodo, item.archivo);
+  } catch (e) { return { ok: false, motivo: 'no pude calcular la ruta: ' + e.message }; }
+
+  // 3 · Subir.
+  let url;
+  try {
+    url = await uploadToCloudflareR2Direct(ruta, blob, 'application/pdf');
+    if (!url) return { ok: false, motivo: 'la subida no devolvió URL' };
+  } catch (e) { return { ok: false, motivo: 'R2 rechazó la subida: ' + e.message }; }
+
+  // 4 · **Leerlo de vuelta.** Sin esto, borrar el base64 es tirar el único
+  //     ejemplar confiando en que la subida salió bien.
+  try {
+    const v = await fetch(url, { method: 'GET', cache: 'no-store' });
+    if (!v.ok) return { ok: false, motivo: `subió pero no se puede leer (HTTP ${v.status})` };
+    const buf = new Uint8Array(await v.arrayBuffer());
+    if (buf.length !== item.bytes) {
+      return { ok: false, motivo: `subió ${buf.length} bytes y el original tiene ${item.bytes}` };
+    }
+    const cab = String.fromCharCode(...buf.slice(0, 5));
+    if (!cab.startsWith('%PDF')) return { ok: false, motivo: 'lo que volvió de R2 no es un PDF' };
+  } catch (e) { return { ok: false, motivo: 'no pude releerlo desde R2: ' + e.message }; }
+
+  // 5 · Recién ahora se toca la base. Se relee el cliente para no pisar lo que
+  //     otra corrida haya escrito mientras tanto.
+  const cabS = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+                 'Content-Type': 'application/json' };
+  try {
+    const r = await fetch(
+      `${SC_SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(item.clienteId)}&select=declaration_history`,
+      { headers: cabS });
+    if (!r.ok) return { ok: false, motivo: `subió a R2, pero no pude releer al cliente (HTTP ${r.status})` };
+    const filas = await r.json();
+    const hist = (filas[0] && filas[0].declaration_history) || [];
+    const dec = hist[item.indice];
+
+    // Si la entrada ya no es la misma, no se toca: puede haberla movido otra
+    // corrida. El PDF ya está en R2; el próximo listado lo va a ver igual.
+    if (!dec || String(dec.period || '') !== item.periodo || !(dec.proof_file || {}).content) {
+      return { ok: false, motivo: 'el historial cambió mientras se migraba; no se tocó nada' };
+    }
+
+    dec.proof_file = { ...(dec.proof_file || {}), content: null, url, provider: 'cloudflare_r2' };
+    dec.pdfUrl = url;
+
+    const w = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?id=eq.${encodeURIComponent(item.clienteId)}`,
+      { method: 'PATCH', headers: cabS, body: JSON.stringify({ declaration_history: hist }) });
+    if (!w.ok) {
+      const cuerpo = await w.text().catch(() => '');
+      const dijo = (typeof loQueDijoSupabase === 'function') ? loQueDijoSupabase(cuerpo) : '';
+      return { ok: false, motivo: `subió a R2 pero la base no se actualizó: HTTP ${w.status}${dijo}` };
+    }
+  } catch (e) {
+    return { ok: false, motivo: 'subió a R2 pero falló al actualizar la base: ' + e.message };
+  }
+
+  return { ok: true, url };
+}
+
+/**
  * La semilla con la que se ofuscan las rutas de los comprobantes.
  *
  * Se genera sola la primera vez y vive **únicamente** en el almacén local de

@@ -116,16 +116,18 @@ IA la vuelve a proponer y se vuelve a descartar.
 node --check src/0*.js && npm run build
 ```
 
-y los **veintiún** bancos en `tests/index.html` (hace falta el servidor:
+y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **688 comprobaciones, verdes el 10-sep-2026** — el último agregado
-ese día: `portal`. Si tu cambio baja ese número, algo se rompió; si lo sube,
+scripts). **721 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+agregados ese día: `portal` (24) y `migrar` (33). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
-> **La suite entera tarda unos tres minutos.** `bendita` monta el popup real
-> con sus scripts y tarda bastante más que los otros: verlo en «…» no quiere
-> decir que esté colgado. El corredor le da 90 s a cada banco antes de
-> marcarlo «no terminó».
+> **La suite entera tarda unos cinco minutos**, y `bendita` roza el tope: el
+> 10-sep-2026 terminó en una corrida y en la siguiente dio «no terminó ·
+> 135 s». **Sola pasa con 26 verdes**, así que no está roto — monta el popup
+> real con todos sus scripts y tarda. Si vuelve a salir en rojo por tiempo,
+> el arreglo es subirle el tope al corredor o aligerar ese banco, no buscar un
+> fallo que no existe.
 
 ---
 
@@ -861,6 +863,86 @@ panel muestra el texto de un error viejo, eso no es el portal cayéndose.
 
 Banco: `tests/portal.html` (24 comprobaciones, verdes el 10-sep-2026), con el
 stack real que trajo el usuario.
+
+---
+
+## 2e. Los comprobantes que viven dentro de la base — el botón 📦
+
+> Medido y construido el **10-sep-2026**, a partir del análisis de costos que
+> pidió el usuario.
+
+### El número que decide todo
+
+```
+207 PDFs válidos · 7,65 MB · 79 contribuyentes · 0 duplicados
+473 fragmentos de menos de 200 B que NO son PDF
+```
+
+**Cero duplicados.** Ninguno de esos 207 tiene copia en R2: el base64 de la
+base es el **único ejemplar** de ese comprobante. De ahí sale la única regla
+que importa acá.
+
+### Antes de nada: R2 NO estaba fallando
+
+El análisis inicial dijo «R2 falla en el 97%». **Era falso**, y de la peor
+manera: salió de dividir 25 URLs entre 767 declaraciones sin preguntarse
+*cuándo* se guardó cada una. Agrupando por fecha:
+
+| | con URL | sólo base64 | éxito |
+| :--- | ---: | ---: | ---: |
+| Desde el 07-sep-2026 | 23 | 0 | **100,0%** |
+| Antes del 07-sep | 3 | 680 | 0,4% |
+
+R2 entró al flujo el 07-sep y desde entonces sube **todo**. Los 680 son
+historia de abril a agosto, de cuando el PDF se guardaba entero en la base.
+
+> Es el mismo error que ya está documentado dos veces en este archivo: **tomar
+> un reporte por la pantalla**. Pasó con el 540 («no se encontró el casillero»
+> → se concluyó que el casillero no existía) y volvió a pasar acá. Antes de
+> diagnosticar un fallo sistemático, mirar si el período de los datos incluye
+> una época en la que la función ni siquiera existía.
+
+### La regla de oro
+
+**El `content` se borra sólo después de haber leído el archivo de vuelta desde
+R2** y comprobado que es el mismo: mismo tamaño exacto y cabecera `%PDF`. Si
+falla la subida, la relectura, el tamaño o el `PATCH`, la base queda intacta y
+el comprobante sigue donde estaba.
+
+`migrarUnComprobanteEmbebido()` en `01_utilidades_y_pdf.js` hace los cinco
+pasos en ese orden, y el banco comprueba los cuatro modos de fallo uno por uno.
+
+### Por qué esto no puede correr desde afuera
+
+```js
+const semilla = await semillaDeRutas();     // chrome.storage.local
+const firma = await crypto.subtle.sign('HMAC', llave, enc.encode(`${ruc}|${periodo}`));
+return `declaraciones/${ruc}/${tramo}/${archivo}`;
+```
+
+La ruta lleva un tramo HMAC derivado de una semilla que vive **sólo en el
+navegador del usuario** (§10a). Un script externo no la tiene —y no debería
+tenerla—, así que subiría a rutas que ningún otro código sabe reconstruir. Por
+eso la migración es un botón de la extensión y no una herramienta de consola.
+
+### Lo que el botón no hace, a propósito
+
+- **No existe «migrar todo».** El listado pinta un botón **por período**. 207
+  comprobantes de una es justo la operación que no se puede deshacer.
+- **Los períodos raros no se migran solos.** `2025`, `2026-S1`, `2025:IC` — el
+  período va en la ruta, y archivar con uno inventado es el bug del 07-sep
+  (§2c) otra vez. Se listan aparte.
+- **Los fragmentos no se suben.** No son PDFs; no hay nada que guardar.
+- **De a uno y con pausa** (600 ms). Si el número quince falla, los catorce
+  anteriores ya están a salvo y el próximo listado muestra qué queda.
+
+> **La cabecera manda; el tamaño no descarta.** La primera versión mandaba a
+> «fragmentos» todo lo menor a 200 bytes, y eso habría descartado un `%PDF` de
+> 300 bytes que sigue siendo el comprobante de alguien. Lo cazó el banco. En
+> los datos reales los 473 fragmentos no tienen cabecera de PDF, así que pedir
+> sólo la cabecera no deja entrar basura ni deja a nadie afuera.
+
+Banco: `tests/migrar.html` (33 comprobaciones, verdes el 10-sep-2026).
 
 ---
 
@@ -1916,15 +1998,15 @@ subida · Panel.
 
 ### Los bancos de prueba, en una sola página
 
-`tests/index.html` corre **los veintiuno** en iframes y da un veredicto solo:
-**688 comprobaciones, verdes el 10-sep-2026**, en unos tres minutos.
+`tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
+**721 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
 `/tests/index.html`. **Hace falta el servidor**: los `file://` no ejecutan
 scripts.
 
-De a uno, no en paralelo: veintiún bancos a la vez se pisan el almacenamiento
+De a uno, no en paralelo: veintidós bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
 cada uno, así que un banco nuevo no necesita saber que esta página existe —
 alcanza con agregarlo a la lista `BANCOS`.
@@ -1941,6 +2023,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `radiografia203` | que el 📐 salga solo cuando el portal reclama un casillero | 27 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
 | `parada` | que DETENER corte el trabajo en curso, no sólo el próximo cliente | 26 |
+| `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 33 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
@@ -1954,7 +2037,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `recibidos_nodata` | que «sin datos» sea el mensaje oficial del SRI, no una suposición | 7 |
 
 > **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
-> veintiuno se escribió por completitud: cada uno cuida un fallo que ya llegó a
+> veintidós se escribió por completitud: cada uno cuida un fallo que ya llegó a
 > pantalla y costó un lote. Si arreglás algo que salió de un log real, dejale
 > su comprobación antes de cerrar.
 

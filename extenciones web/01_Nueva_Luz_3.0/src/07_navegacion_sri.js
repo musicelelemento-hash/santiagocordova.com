@@ -692,6 +692,7 @@ const SriLoopHUD = {
             '<span style="width:1px;align-self:stretch;background:rgba(255,255,255,0.12);margin:0 2px"></span>',
             '<button id="slh-cajon-btn" aria-label="Herramientas" aria-expanded="false" title="Herramientas: comprobantes, registro, cola, bitácora, proveedores, casilleros…" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🧰</button>',
             '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
+            '<button id="slh-migrar" aria-label="Migrar a la nube los comprobantes que quedaron dentro de la base" title="Migrar comprobantes que están guardados dentro de la base de datos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">\U0001f4e6</button>',
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
@@ -718,6 +719,7 @@ const SriLoopHUD = {
             '<div id="slh-omitidos-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-registro-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
             '<div id="slh-subida-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:230px;overflow:auto"></div>',
+            '<div id="slh-migrar-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:280px;overflow:auto"></div>',
             '<div id="slh-cola-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-bitacora-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:260px;overflow:auto"></div>',
             '<div id="slh-casilleros-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
@@ -1078,6 +1080,25 @@ const SriLoopHUD = {
             await this.pintarSubida();
         });
 
+        el.querySelector('#slh-migrar').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-migrar-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-migrar-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Mirando qué quedó dentro de la base…</div>';
+            panel.style.display = 'block';
+            await this.pintarMigracion();
+        });
+
+        // Migrar es de a un período y SIEMPRE después de haber listado. El
+        // botón lo pinta `pintarMigracion()` con el período ya adentro.
+        el.querySelector('#slh-migrar-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('[data-migrar]');
+            if (!btn) return;
+            ev.stopPropagation();
+            await this.migrarPeriodo(btn.getAttribute('data-migrar'));
+        });
+
         el.querySelector('#slh-omitidos-panel').addEventListener('click', async (ev) => {
             const btn = ev.target.closest('[data-reintentar]');
             if (!btn) return;
@@ -1113,6 +1134,7 @@ const SriLoopHUD = {
             ['slh-ir',          'Ir a…'],
             ['slh-chequeo',     'Chequeo'],
             ['slh-subida',      'Probar subida'],
+            ['slh-migrar',      'Migrar a la nube'],
             ['slh-panel',       'Panel']
         ];
         const cajon = el.querySelector('#slh-cajon');
@@ -2527,6 +2549,142 @@ const SriLoopHUD = {
             (filas.length > 40 ? ` · se muestran 40 de ${filas.length}` : '') +
             '</div>' + cuerpo +
             (sinPdf ? '<div style="font-size:10px;opacity:0.65;margin-top:6px">Los ⚠️ se declararon pero su PDF no llegó a la nube. El botón 🧾 los recupera desde Consulta de declaraciones.</div>' : '');
+    },
+
+    /**
+     * Lista los comprobantes que quedaron DENTRO de la base. **No toca nada.**
+     *
+     * Deuda histórica: hasta el 07-sep-2026 R2 no estaba en el flujo, y el PDF
+     * se guardaba entero en `clients.declaration_history`. Medido el
+     * 10-sep-2026: 207 PDFs · 7,65 MB · 79 contribuyentes · **0 duplicados**,
+     * o sea que son el único ejemplar de esos comprobantes.
+     *
+     * Esto siempre corre antes de migrar. Y el botón de migrar se pinta **por
+     * período**, nunca uno que diga «migrar todo»: 207 de una es justo la
+     * clase de operación que no se puede deshacer si sale mal.
+     */
+    async pintarMigracion() {
+        const panel = document.getElementById('slh-migrar-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const KB = (b) => (b / 1024).toFixed(0) + ' KB';
+
+        if (typeof listarComprobantesEmbebidos !== 'function') {
+            panel.innerHTML = '<div style="color:#fca5a5;font-size:11px">No está cargado el lector de la deuda.</div>';
+            return;
+        }
+        const r = await listarComprobantesEmbebidos(null);
+        if (r.error) {
+            panel.innerHTML = `<div style="color:#fca5a5;font-size:11px">No pude leer la base: ${esc(r.error)}</div>`;
+            return;
+        }
+
+        if (r.migrables.length === 0 && r.ambiguos.length === 0 && r.fragmentos.length === 0) {
+            panel.innerHTML = '<div style="font-size:11px;color:#86efac">✅ No queda ningún comprobante ' +
+                              'dentro de la base. Todos están en la nube.</div>';
+            return;
+        }
+
+        // Por período, el que más pesa arriba: es por donde conviene empezar.
+        const grupos = {};
+        r.migrables.forEach((m) => {
+            grupos[m.periodo] = grupos[m.periodo] || { n: 0, bytes: 0 };
+            grupos[m.periodo].n++; grupos[m.periodo].bytes += m.bytes;
+        });
+        const filas = Object.entries(grupos).sort((a, b) => b[1].bytes - a[1].bytes).map(([per, g]) =>
+            '<tr>' +
+            `<td style="padding:3px 6px;font-weight:800;color:#fcd34d">${esc(per)}</td>` +
+            `<td style="padding:3px 6px;font-size:10px">${g.n} comprobante(s)</td>` +
+            `<td style="padding:3px 6px;font-size:10px;opacity:0.8">${KB(g.bytes)}</td>` +
+            `<td style="padding:3px 6px"><button data-migrar="${esc(per)}" ` +
+            'style="border:none;border-radius:8px;padding:4px 9px;background:rgba(251,191,36,0.22);' +
+            'color:#fcd34d;font-size:10px;font-weight:800;cursor:pointer">Migrar</button></td>' +
+            '</tr>').join('');
+
+        const pesoTotal = r.migrables.reduce((a, m) => a + m.bytes, 0);
+        const rarezas = [...new Set(r.ambiguos.map((a) => a.periodo))].slice(0, 6).join(', ');
+
+        panel.innerHTML =
+            '<div style="font-size:11px;font-weight:800;margin-bottom:6px">📦 Comprobantes que viven dentro de la base</div>' +
+            '<div style="font-size:10px;opacity:0.85;line-height:1.5;margin-bottom:8px">' +
+            `<b>${r.migrables.length}</b> PDF(s) migrables · <b>${KB(pesoTotal)}</b>. ` +
+            'Ninguno tiene copia en la nube: son el único ejemplar, así que ' +
+            '<b>el contenido se borra sólo después de leerlo de vuelta desde R2</b>.' +
+            '</div>' +
+            (filas ? '<table style="width:100%;border-collapse:collapse">' + filas + '</table>' : '') +
+            (r.ambiguos.length
+                ? '<div style="margin-top:8px;font-size:10px;background:rgba(245,158,11,0.14);color:#fcd34d;' +
+                  `border-radius:8px;padding:6px 8px">⚠️ <b>${r.ambiguos.length}</b> con período que no se entiende ` +
+                  `(${esc(rarezas)}). No se migran solos: el período va en la ruta, y archivar con uno ` +
+                  'inventado es el bug del 07-sep otra vez.</div>'
+                : '') +
+            (r.fragmentos.length
+                ? `<div style="margin-top:6px;font-size:10px;opacity:0.7">🧹 ${r.fragmentos.length} fragmento(s) de ` +
+                  'menos de 200 bytes que no son PDF. No hay nada que subir.</div>'
+                : '');
+    },
+
+    /**
+     * Migra UN período, de a un comprobante y con pausa.
+     *
+     * De a uno a propósito: si el número quince falla, los catorce anteriores
+     * ya están a salvo y el listado siguiente muestra exactamente qué queda.
+     */
+    async migrarPeriodo(periodo) {
+        const panel = document.getElementById('slh-migrar-panel');
+        if (!panel || !periodo) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        const r = await listarComprobantesEmbebidos(periodo);
+        if (r.error) {
+            panel.innerHTML = `<div style="color:#fca5a5;font-size:11px">${esc(r.error)}</div>`;
+            return;
+        }
+        const lista = r.migrables;
+        if (!lista.length) { await this.pintarMigracion(); return; }
+
+        const linea = (t, color) => `<div style="font-size:10px;color:${color};padding:1px 0">${t}</div>`;
+        const partes = ['<div style="font-size:11px;font-weight:800;margin-bottom:6px">' +
+                        `📦 Migrando ${esc(periodo)} — ${lista.length} comprobante(s)</div>`];
+        const repintar = () => { panel.innerHTML = partes.join(''); panel.scrollTop = panel.scrollHeight; };
+        let hechos = 0, fallados = 0;
+        repintar();
+
+        for (let i = 0; i < lista.length; i++) {
+            const it = lista[i];
+            const quien = esc(it.nombre || it.ruc);
+            partes.push(linea(`⏳ ${i + 1}/${lista.length} · ${quien}…`, '#cbd5e1'));
+            repintar();
+
+            const res = await migrarUnComprobanteEmbebido(it);
+            partes.pop();
+            if (res.ok) {
+                hechos++;
+                partes.push(linea(`✅ ${i + 1}/${lista.length} · ${quien} — en la nube`, '#86efac'));
+                anotarBitacora('comprobante migrado', `${it.ruc} · ${it.periodo}`);
+            } else {
+                fallados++;
+                partes.push(linea(`⚠️ ${i + 1}/${lista.length} · ${quien} — ${esc(res.motivo)}`, '#fcd34d'));
+                anotarBitacora('migración fallida', `${it.ruc} · ${it.periodo} · ${res.motivo}`);
+            }
+            repintar();
+            // Sin apuro: R2 no tiene por qué recibir trece peticiones seguidas.
+            await sleep(600);
+        }
+
+        partes.push(
+            '<div style="margin-top:8px;padding:6px 8px;border-radius:8px;font-size:11px;' +
+            `background:${fallados ? 'rgba(245,158,11,0.14)' : 'rgba(74,222,128,0.14)'};` +
+            `color:${fallados ? '#fcd34d' : '#86efac'}">` +
+            `<b>${hechos}</b> migrado(s)${fallados ? ` · <b>${fallados}</b> quedaron donde estaban` : ''}. ` +
+            (fallados ? 'Lo que falló no se tocó: el comprobante sigue en la base.'
+                      : 'La base quedó más liviana.') +
+            '</div><div style="margin-top:6px;font-size:10px;opacity:0.7">Volvé a abrir 📦 para ver qué queda.</div>');
+        repintar();
+
+        this._aviso(fallados ? '📦 Migración con avisos' : '📦 Migración terminada',
+            `${hechos} comprobante(s) de ${esc(periodo)} pasaron a la nube.` +
+            (fallados ? ` ${fallados} quedaron en la base y se pueden reintentar.` : ''), 8000);
     },
 
     /**
