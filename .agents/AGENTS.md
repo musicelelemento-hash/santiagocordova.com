@@ -1866,6 +1866,24 @@ clasificar va donde va hoy, queda en la lista de pendientes, y no se lo manda
 al 502 por las dudas — mandarlo ahí le quita al contribuyente un crédito que
 quizá le corresponde.
 
+#### El criterio del contador — las 4 razones que quitan el crédito (10-sep-2026)
+
+> Dicho por el usuario. Es el mapa que faltaba. **Todavía no está cableado**:
+> primero hay que confirmar con el 📐 el casillero de «sin derecho» (el texto
+> externo dice 503/513/523; la Biblia del 2011 dice 502/512/522 — §12, §8a).
+
+| # | Razón | Qué dato necesita el bot | Estado |
+| :-: | :--- | :--- | :--- |
+| 1 | **Gasto personal o del hogar**, no relacionado con la actividad del RUC (víveres de la casa, luz del domicilio, ropa diaria, cenas de ocio). | actividad del proveedor **vs** actividad del cliente | difícil, caso por caso — es la misma pregunta del Anexo de Gastos Personales |
+| 2 | **Comprobante inválido o a nombre de un tercero** (recibos informales, notas de remisión, factura a nombre del cónyuge). | que la factura sea electrónica y al RUC del cliente | **ya resuelto de hecho**: el bot sólo baja «comprobantes electrónicos recibidos», que por definición van al RUC del cliente. Los físicos van al 508/518. |
+| 3 | **Compra con tarifa 0%** — no hay IVA que acreditar. | la tarifa | **ya resuelto**: van al 507/517 |
+| 4 | **El cliente vende EXCLUSIVAMENTE tarifa 0%** (declara semestral). Entonces **ninguna** de sus compras al 15%/5% da crédito: ese IVA es costo. Ej.: un centro médico (salud, 0%) que compra computadoras al 15%. | un flag por cliente: «¿vende sólo 0%?» | **fácil y de alto impacto** — sale del CIIU del catastro (salud, educación, transporte…) + confirmación del contador. Un flag y se resuelven todas sus facturas de una. |
+
+**El orden de trabajo que propone Claude (10-sep-2026):** primero la #4 —un
+flag por cliente cubre muchísimo con una sola línea de criterio—, después la #1
+con reglas por actividad (la Idea B de la cascada), y el casillero destino
+recién cuando el 📐 lo confirme. La #2 y la #3 ya están.
+
 ---
 
 ## 10. Los datasets del SRI — https://www.sri.gob.ec/datasets
