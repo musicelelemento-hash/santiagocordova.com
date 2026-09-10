@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **728 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+scripts). **727 comprobaciones, verdes el 10-sep-2026** — los dos últimos
 bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
@@ -254,7 +254,7 @@ la credencial.**
 
 | # | Qué | A quién frena | Detalle |
 | :-: | :--- | :--- | :--- |
-| 1 | **Casillero 203 · el decreto del 5%** | **todo contribuyente con compras al 5%** — no se puede enviar | §9d |
+| 1 | ~~Casillero 203 · el decreto del 5%~~ **RESUELTO 10-sep-2026** — el portal acepta el 5% sin decreto; era el id equivocado del 540 | §9d |
 | 2 | ~~Supabase rechaza la llave (401)~~ **RESUELTO** — nunca fue la llave | — | §0b.2 |
 | 3 | **jsPDF nunca carga** (CSP `unsafe-eval`) | el PDF de respaldo sale simple, siempre | §0b.3 |
 | 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
@@ -1722,12 +1722,32 @@ un cliente bloquearía al próximo.
 > Si aun así no apareciera, la plata **no** se manda al 500 por las dudas: se
 > anota y se frena.
 
-### 9d. El casillero 203 — declarar al 5% obliga a decir con qué decreto
+### 9d. El casillero 203 — RESUELTO: es del 8%, no frena al 5%
 
-> Descubierto el 07-sep-2026, en la primera corrida en que el 540 y el 550 se
-> llenaron de verdad. Sin el 550 nunca se había llegado tan lejos.
+> ### ✅ RESUELTO 10-sep-2026 — el 5% NO necesita decreto
+>
+> APOLO PALACIOS, build `3.1.0+20260910.1805`, con el 5% ya en el casillero
+> **correcto** (540 = `concepto1261`, $96.43): el bot llenó el formulario, el
+> **usuario pulsó «Siguiente»** y el portal **pasó al resumen sin pedir ningún
+> decreto**. *«le di siguiente y sí salió.»*
+>
+> El 203 (`concepto91`) es el decreto de la tarifa reducida del **8%** —
+> turismo en feriados—. **Nunca fue del 5%.** Toda la saga de abajo salió de
+> que el bot escribía el 5% en `concepto1271`, que es el casillero **530** (la
+> fila del decreto 8%): el portal, con razón, exigía el 203 porque había un
+> monto en la fila del 8% sin decreto. Corregido el id (§6), el problema
+> desapareció solo.
+>
+> **`frenarSiFaltaDecreto203()` ya no frena** — quedó informativo. Si algún
+> día una compra al 8% real necesita el decreto, lo dice el portal en
+> `panelMensajes` y lo agarra `loQuePideElFormulario()` tras el clic. Bancos:
+> `radiografia203` (secciones A-E siguen; F-I invertidas).
 
-Llenar el 5% no alcanza. El portal **no deja pasar al resumen** y escribe en
+---
+
+#### La saga, para no repetirla — todo salió del id equivocado
+
+Llenar el 5% *en el casillero 530* no alcanzaba. El portal escribía en
 `panelMensajes`:
 
 > «Casillero 203. Seleccione el decreto que determina la tarifa reducida a
@@ -2123,7 +2143,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**728 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**727 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2144,7 +2164,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `catastro` | la bisección, sobre todo en los bordes | 31 |
 | `claves` | que la pantalla nunca muestre el valor guardado | 28 |
 | `subidas` | que «Failed to fetch» diga algo accionable | 27 |
-| `radiografia203` | que el 📐 salga solo cuando el portal reclama un casillero | 27 |
+| `radiografia203` | que el 📐 salga solo, y que el 203 (8%) ya NO frene al 5% | 26 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
 | `parada` | que DETENER corte el trabajo, y que PAUSA/paso-a-paso NO lo descarten | 28 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |

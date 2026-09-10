@@ -1339,55 +1339,32 @@ async function radiografiarReclamo(casilleros = []) {
 }
 
 /**
- * 🛑 PRE-VUELO DEL 203 — el decreto de la tarifa reducida no se adivina.
+ * El 203 (`concepto91`) es el decreto de la tarifa reducida del **8%**
+ * (turismo en feriados), **NO del 5%**. Confirmado el 10-sep-2026: con las
+ * compras al 5% en el casillero CORRECTO (540 = `concepto1261`), el usuario
+ * pulsó «Siguiente» y el portal pasó al resumen **sin pedir ningún decreto**.
  *
- * Corrida real APOLO (09-sep-2026, build 3.1.0+20260909.1311): el bot llenó
- * las compras al 5% (540/550), clickeó «Siguiente» y el SRI devolvió los DOS
- * errores del 203 —«Seleccione el decreto…» y «El decreto seleccionado es
- * incorrecto»— porque nadie eligió el decreto (concepto91, el único
- * `<select>` del formulario). Elegir el decreto es decisión del contador
- * (AGENTS §9d): el bot no adivina.
+ * El freno preventivo nació de la corrida APOLO del 09-sep, cuando el bot
+ * escribía el 5% en `concepto1271` —que es el casillero **530**, la fila del
+ * decreto 8%— y el portal, con razón, exigía el 203. Era el síntoma del id
+ * equivocado (AGENTS §6, §9d), no una regla del 5%.
  *
- * Con una compra al 5% neta (550 > 0) y el 203 vacío, avanzar es ir a chocar
- * contra la pared. Este chequeo lee el formulario ya llenado y, si hace falta
- * el decreto, frena ANTES del clic, deja la radiografía con las opciones y
- * avisa. Solo lee. Si algo no se puede afirmar (sin 550, sin select, con
- * decreto ya elegido) NO frena: que lo diga el SRI, y el 📐 del post-clic
- * queda igual.
+ * **Ya NO frena.** Si algún día una compra al 8% real necesita el decreto, lo
+ * dice el portal en `panelMensajes` tras el clic, y lo agarra
+ * `loQuePideElFormulario()` — la autoridad de verdad, no una suposición previa.
  *
- * @returns {Promise<{ok: boolean, motivo: string}>} ok=false = hay que frenar.
+ * @returns {Promise<{ok: boolean, motivo: string}>} siempre ok:true.
  */
 async function frenarSiFaltaDecreto203() {
     try {
-        // El 550 es concepto1262 (inspección DOM del usuario, 10-sep-2026).
-        // Antes leía concepto1281, que es el casillero 533.
-        const neto550 = document.getElementById('concepto1262') ||
-                        document.querySelector('input[id*="concepto1262"]');
-        if (!neto550) return { ok: true, motivo: '' };
-        const neto = parseImporteEstricto(neto550.value !== undefined ? neto550.value : neto550.getAttribute('value'));
-        if (!neto || neto <= 0) return { ok: true, motivo: '' };
-
-        const sel203 = document.getElementById('concepto91') ||
-                       document.querySelector('select[id*="concepto91"]');
-        if (!sel203 || !sel203.options || sel203.options.length === 0) return { ok: true, motivo: '' };
-
-        const elegido = sel203.selectedIndex > 0 &&
-                        sel203.options[sel203.selectedIndex] &&
-                        String(sel203.options[sel203.selectedIndex].value || '').trim() !== '';
-        if (elegido) return { ok: true, motivo: '' };
-
-        const motivo = 'Hay compras al 5% netas por $' + neto.toFixed(2) +
-                       ' (casillero 550) y el 203 —el decreto que habilita la ' +
-                       'tarifa reducida— está vacío.';
-        console.warn('🛑 [203] ' + motivo + ' El decreto lo elige el contador; el bot no adivina.');
-        try {
-            await radiografiarReclamo(['203']);
-        } catch (e) { /* frenar no puede fallar por el 📐 */ }
-        return { ok: false, motivo };
-    } catch (e) {
-        // No afirmar nada que no se leyó: que lo diga el SRI.
-        return { ok: true, motivo: '' };
-    }
+        const neto550 = document.getElementById('concepto1262');
+        const neto = neto550 ? parseImporteEstricto(neto550.value) : null;
+        if (neto && neto > 0) {
+            console.log(`🟡 [5%] Compras al 5% netas por $${neto.toFixed(2)} (casillero 550). ` +
+                        'El portal no pide decreto para el 5%: se avanza normal.');
+        }
+    } catch (e) { /* informativo: no puede tumbar nada */ }
+    return { ok: true, motivo: '' };
 }
 
 /**

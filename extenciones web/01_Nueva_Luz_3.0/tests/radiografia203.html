@@ -115,43 +115,41 @@
   const ok5 = await radiografiarReclamo(['sin numero']);
   push('sin número válido → false',          ok5, false);
 
-  // ── El pre-vuelo: con 5% neto y el 203 vacío, frenar ANTES del Siguiente ─
-  // Corrida real APOLO 09-sep-2026: el bot llenaba 540/550, clickeaba
-  // «Siguiente» y el SRI contestaba los dos errores del 203. Elegir el decreto
-  // es del contador; el pre-vuelo frena antes y el 📐 deja las opciones.
-  sec('F · pre-vuelo frena cuando hace falta el decreto');
+  // ── El pre-vuelo del 203 ya NO frena el 5% ─────────────────────────────
+  // 10-sep-2026: con el 5% en el casillero CORRECTO (540 = concepto1261) el
+  // usuario pulsó «Siguiente» y el portal pasó al resumen SIN pedir decreto.
+  // El 203 es del 8% (turismo), no del 5%. El freno de la corrida APOLO
+  // 09-sep era el síntoma del id equivocado (§6, §9d): el bot escribía el 5%
+  // en concepto1271 = casillero 530, la fila del decreto 8%.
+  sec('F · el pre-vuelo del 203 ya no frena el 5%');
   await SafeStorage.remove(['sri_radiografias_reclamo']);
   store.accionEnCurso = 'pre_vuelo_203';
-  const preF = await frenarSiFaltaDecreto203();
-  push('550 > 0 y 203 vacío → ok=false',      preF.ok, false);
-  push('el motivo nombra el 550 y el 203',
-       /550/.test(preF.motivo) && /203/.test(preF.motivo), true);
-  const gF = (await SafeStorage.get(['sri_radiografias_reclamo'])).sri_radiografias_reclamo || {};
-  push('y el 📐 dejó la radiografía del 203', Object.keys(gF), ['203']);
-
-  sec('G · con decreto ya elegido NO frena');
   const selG = document.getElementById('concepto91');
-  selG.selectedIndex = 2; // «Decreto ejecutivo 644»
-  const preG = await frenarSiFaltaDecreto203();
-  push('decreto elegido → ok=true',            preG.ok, true);
+  const inp550 = document.getElementById('concepto1262');
+  const preF = await frenarSiFaltaDecreto203();
+  push('550 > 0 y 203 vacío → NO frena (el portal acepta el 5%)', preF.ok, true);
+  inp550.value = '0.00';
+  push('sin 5% neto tampoco frena',            (await frenarSiFaltaDecreto203()).ok, true);
+  inp550.value = '96.43';
+  selG.selectedIndex = 2;
+  push('con decreto elegido tampoco frena',    (await frenarSiFaltaDecreto203()).ok, true);
   selG.selectedIndex = 0;
 
-  sec('H · si no se puede afirmar, no frena');
-  const inp550 = document.getElementById('concepto1262');
-  inp550.value = '0.00';
-  push('sin 5% neto no frena',                 (await frenarSiFaltaDecreto203()).ok, true);
-  inp550.value = '96.43';
-  selG.remove();
-  push('sin el select del 203 no frena (que lo diga el SRI)',
-       (await frenarSiFaltaDecreto203()).ok, true);
+  sec('G · el portal sigue siendo la autoridad');
+  // Que el pre-vuelo no frene NO significa ignorar al 203: si el portal lo
+  // reclama en panelMensajes, loQuePideElFormulario lo agarra (secciones A-E).
+  push('un reclamo real del 203 se sigue detectando',
+       loQuePideElFormulario().casilleros.includes('203'), true);
 
-  sec('I · el pre-vuelo está cableado al Siguiente');
-  const f05 = await (await fetch('../src/05_llenado_formulario.js')).text();
-  const f06 = await (await fetch('../src/06_panel_interfaz.js')).text();
-  push('el helper existe en el 05',            /async function frenarSiFaltaDecreto203/.test(f05), true);
-  push('el 06 lo llama antes del clic',        /frenarSiFaltaDecreto203/.test(f06), true);
-  const bundle = await (await fetch('../build/content.js')).text();
-  push('y el bundle está reconstruido',        /el contador; el bot no adivina/.test(bundle), true);
+  sec('I · el llenado ya no lleva un freno preventivo del 203');
+  const f05 = await (await fetch('../src/05_llenado_formulario.js',{cache:'no-store'})).text();
+  const f06 = await (await fetch('../src/06_panel_interfaz.js',{cache:'no-store'})).text();
+  push('frenarSiFaltaDecreto203 sigue existiendo (informativo)',
+       /async function frenarSiFaltaDecreto203/.test(f05), true);
+  push('y ya no devuelve ok:false',            /ok: false/.test(f05.slice(f05.indexOf('async function frenarSiFaltaDecreto203'), f05.indexOf('async function frenarSiFaltaDecreto203')+1400)), false);
+  push('el 06 no lo trata como bloqueante',    !/if \(!pre203\.ok\)/.test(f06), true);
+  const bundle = await (await fetch('../build/content.js',{cache:'no-store'})).text();
+  push('y el bundle está reconstruido',        /El portal no pide decreto para el 5%/.test(bundle), true);
 
   pintar();
 })();

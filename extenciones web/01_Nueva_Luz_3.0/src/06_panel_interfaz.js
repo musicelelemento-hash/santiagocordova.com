@@ -3444,28 +3444,12 @@ class SriAssistantPanel {
                              soloDelPortal(document.querySelectorAll('button, a, span.ui-button-text')).find(el => (el.innerText || '').trim() === 'Siguiente')?.closest('button, a');
 
         if (btnSiguiente) {
-            // 🛑 PRE-VUELO 203: si el formulario quedó con compras al 5% netas
-            // (550 > 0) y el decreto del 203 vacío, el SRI va a rechazar el
-            // avance («Seleccione el decreto…»). Elegir el decreto es del
-            // contador: se frena ANTES del clic y el 📐 deja las opciones.
-            // Si el chequeo no puede afirmar nada, no frena (que lo diga el SRI).
+            // El 203 (decreto del 8% turismo) NO frena al 5%: el portal acepta
+            // el 5% sin decreto (confirmado 10-sep-2026, AGENTS §9d). Si el
+            // portal reclama algo tras el clic, lo agarra loQuePideElFormulario
+            // en el cierre. `frenarSiFaltaDecreto203()` quedó informativo.
             if (typeof frenarSiFaltaDecreto203 === 'function') {
-                const pre203 = await frenarSiFaltaDecreto203();
-                if (!pre203.ok) {
-                    console.warn('🛑 [203] No se avanza: ' + pre203.motivo);
-                    this.log('🛑 No se avanza al resumen: ' + pre203.motivo +
-                             ' Elegí el decreto en el formulario y recién ahí Siguiente.');
-                    if (typeof this.showEliteToast === 'function') {
-                        this.showEliteToast({
-                            title: '🛑 Falta el decreto del casillero 203',
-                            msg: escapeHtml(String(pre203.motivo)) +
-                                 '<br><br>Elegilo en el formulario (📐 guardó las opciones; se leen con ' +
-                                 'window.sriAssistant.verRadiografiaReclamo()) y recién ahí pulsá Siguiente.',
-                            duration: 20000
-                        });
-                    }
-                    return false;
-                }
+                await frenarSiFaltaDecreto203();
             }
             console.log('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
             // 🛑 Si el usuario pidió parar (DETENER/🛑/⏸) mientras se llenaba,
