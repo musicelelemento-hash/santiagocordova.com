@@ -1713,9 +1713,34 @@ async function autoLlenarBusqueda(data) {
     // real: era llegar temprano.
     for (let intento = 0; intento < 16; intento++) {
         if (getSelect('frmPrincipal:ano') && getSelect('frmPrincipal:mes')) break;
+
+        // Antes de seguir esperando, mirar si lo que cargó es una CAÍDA del
+        // portal. El 09-sep-2026 el SRI devolvía HTTP 500 acá y el bot se
+        // quedaba ocho segundos esperando un formulario que no iba a existir,
+        // para después recargar y volver a esperar, ocho veces. Cada recarga
+        // era una petición más peleando por el mismo lock trabado.
+        const salud = (typeof elPortalSeCayo === 'function') ? elPortalSeCayo() : { caido: false };
+        if (salud.caido) {
+            let quien = {};
+            try {
+                const it = await SafeStorage.get(['pending_sri_autofill']);
+                quien = it.pending_sri_autofill || {};
+            } catch (e) { /* sin cliente, igual se maneja */ }
+            if (typeof manejarPortalCaido === 'function') {
+                await manejarPortalCaido(salud, { ruc: quien.ruc, nombre: quien.name });
+            }
+            // Si iba a reintentar, la página ya se está recargando y esto no
+            // llega a correr. Si se rindió, el lote quedó detenido.
+            throw new Error('PORTAL_CAIDO: ' + salud.motivo);
+        }
+
         if (intento === 0) console.log('⏳ Esperando a que cargue el formulario de búsqueda...');
         await sleep(500);
     }
+
+    // Llegar hasta acá con los selectores puestos significa que el portal
+    // contestó bien: se olvida cualquier caída anterior.
+    if (typeof elPortalVolvio === 'function') await elPortalVolvio();
 
     const selAnio = getSelect('frmPrincipal:ano') || document.querySelectorAll('select')[0];
     const selMes = getSelect('frmPrincipal:mes') || document.querySelectorAll('select')[1];

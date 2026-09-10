@@ -853,6 +853,7 @@ const Omitidos = {
         formulario_incompleto: 'El SRI pide un campo que el bot no puede elegir por vos — típicamente el casillero 203, el decreto que habilita la tarifa reducida del 5%. Abrí el borrador, elegí el decreto y enviá a mano.',
         identidad:          'La sesión abierta era de otro contribuyente. Suele resolverse reintentando.',
         sin_datos:          'No se pudieron extraer comprobantes.',
+        portal_caido:       'El portal del SRI devolvió un error de servidor — NO es la clave ni la sesión. Se reintentó con esperas crecientes y siguió caído: probá más tarde.',
         no_declara_iva:     'Este contribuyente no tiene obligacion de IVA. Revisar su regimen en la ficha.',
         ya_declarada:       'El periodo ya estaba declarado: el portal abrio una sustitutiva. Si hay que corregirla, hacela vos.'
     },
@@ -2301,6 +2302,200 @@ function loQuePideElFormulario() {
         : 'el formulario reclama campos sin completar';
 
     return { textos, casilleros, resumen };
+}
+
+/**
+ * ¿Esta pantalla es una caída del portal, y no una página del SRI?
+ *
+ * El 09-sep-2026 el portal empezó a devolver HTTP 500 en
+ * `comprobantesRecibidos.jsf`. La raíz, en el stack que devuelve JBoss:
+ *
+ *     javax.ejb.ConcurrentAccessTimeoutException: JBAS014373
+ *       could not obtain lock within 5000MILLISECONDS
+ *       ec.gob.sri...ConfigSistemaBean.getAmbienteEjecucion
+ *
+ * `ConfigSistemaBean` es un EJB **singleton** del SRI con concurrencia
+ * gestionada por el contenedor. Cada visita a esa página construye un
+ * `ControladorBase` cuyo `init()` le pide algo a ese singleton; con mucha
+ * carga todas las peticiones hacen cola por el mismo lock y a los cinco
+ * segundos se rinden. **Es el servidor del SRI saturado**, no la clave del
+ * contribuyente ni la sesión ni nada nuestro.
+ *
+ * Sin esto el bot cargaba la página de error, no encontraba el formulario y
+ * se ponía a esperarlo ocho segundos; después recargaba, y volvía a esperar,
+ * ocho veces. **Reintentar rápido contra una saturación la empeora**: cada
+ * recarga es una petición más peleando por el mismo lock.
+ *
+ * @param {HTMLElement} [zona] Dónde mirar. Por defecto la página entera, que
+ *        es lo que la página de error del SRI ocupa. Los bancos le pasan su
+ *        propio contenedor para no leerse a sí mismos.
+ * @returns {{caido: boolean, saturado: boolean, motivo: string}}
+ *          `caido: false` cuando la pantalla es normal.
+ */
+function elPortalSeCayo(zona) {
+    const sano = { caido: false, saturado: false, motivo: '' };
+    const raiz = zona || (typeof document !== 'undefined' ? document.body : null);
+    if (!raiz) return sano;
+
+    // **Si hay estructura del portal, no hay caída.** La página de error de
+    // JBoss reemplaza la página entera: no conserva el formulario ni las
+    // tablas del SRI. Exigir esto es lo que impide que una pantalla normal que
+    // MENCIONE un error —un aviso, un texto de ayuda, el propio HUD— se lea
+    // como si el servidor se hubiera caído. Un falso positivo acá deja al
+    // lote entero sin declarar a nadie.
+    try {
+        const DEL_PORTAL = '[id^="frmPrincipal"], [id^="frmFlujoDeclaracion"], ' +
+                           '[id^="formPresentada"], [id^="tblIcono"], .ui-datatable, .ui-selectonemenu';
+        if (raiz.querySelector(DEL_PORTAL)) return sano;
+    } catch (e) { /* si el selector falla, se sigue con el texto */ }
+
+    let cuerpo = '';
+    try {
+        // Se saca el HUD antes de leer: la extensión escribe en la página, y
+        // ya tropezamos tres veces con el bot leyéndose a sí mismo.
+        const limpio = raiz.cloneNode(true);
+        limpio.querySelectorAll('[id^="sri-"], [id^="slh-"], [class*="sri-assistant"], [class*="ghost-"]')
+              .forEach((n) => n.remove());
+        cuerpo = (limpio.innerText || '').slice(0, 4000);
+    } catch (e) { return sano; }
+    if (!cuerpo) return sano;
+
+    // Marcas del servidor de aplicaciones del SRI (JBoss/JBWEB). Son códigos
+    // propios, no palabras sueltas: «error» a secas no alcanza para acusar al
+    // portal de estar caído.
+    const MARCAS = [
+        'JBWEB000065',       // HTTP Status 500
+        'JBAS011048',        // Failed to construct component instance
+        'JBAS014373',        // el timeout de concurrencia
+        'ConcurrentAccessTimeoutException',
+        'Failed to construct component instance',
+        'JBoss Web/'
+    ];
+    const golpe = MARCAS.find((m) => cuerpo.includes(m));
+
+    // Y el 500 genérico, por si el portal cambia de servidor algún día.
+    const quinientos = /HTTP\s*Status\s*5\d\d/i.test(cuerpo) ||
+                       /Internal Server Error/i.test(cuerpo);
+
+    if (!golpe && !quinientos) return sano;
+
+    // La saturación tiene su propia firma, y cambia qué hacer: no se arregla
+    // reintentando rápido, se arregla esperando.
+    const saturado = /ConcurrentAccessTimeoutException|could not obtain lock|JBAS014373/i.test(cuerpo);
+
+    return {
+        caido: true,
+        saturado,
+        motivo: saturado
+            ? 'el portal del SRI está saturado (timeout de concurrencia en su servidor)'
+            : `el portal del SRI devolvió un error de servidor${golpe ? ' (' + golpe + ')' : ''}`
+    };
+}
+
+/**
+ * Cuánto esperar antes de volver a probar, y cuándo rendirse.
+ *
+ * Cada intento espera más que el anterior. Contra una saturación eso no es
+ * cortesía: es lo único que funciona — machacar suma peticiones a la cola que
+ * ya está trabada.
+ *
+ * @returns {Promise<{seguir: boolean, esperaMs: number, intento: number}>}
+ *          `seguir: false` cuando ya se probó suficiente.
+ */
+async function anotarPortalCaido() {
+    const ESPERAS = [30000, 60000, 120000];   // 30 s · 1 min · 2 min
+    let estado = null;
+    try {
+        estado = (await SafeStorage.get(['sc_portal_caido'])).sc_portal_caido;
+    } catch (e) { /* sin almacén, se trata como primer intento */ }
+
+    // Si la última caída fue hace rato, esto es un episodio nuevo.
+    const FRESCO = 10 * 60 * 1000;
+    const ahora = Date.now();
+    const intentos = (estado && (ahora - (estado.cuando || 0)) < FRESCO)
+        ? (estado.intentos || 0) + 1 : 1;
+
+    try {
+        await SafeStorage.set({ sc_portal_caido: { cuando: ahora, intentos } });
+    } catch (e) { /* ídem */ }
+
+    if (intentos > ESPERAS.length) return { seguir: false, esperaMs: 0, intento: intentos };
+    return { seguir: true, esperaMs: ESPERAS[intentos - 1], intento: intentos };
+}
+
+/** Se olvida de la caída: el portal volvió. */
+async function elPortalVolvio() {
+    try { await SafeStorage.remove(['sc_portal_caido']); } catch (e) { /* nada */ }
+}
+
+/**
+ * Qué hacer cuando el portal contestó con un error de servidor.
+ *
+ * Está en un solo lugar a propósito: `autoLlenarBusqueda()` tiene cuatro
+ * llamadores y no puede cada uno tener su propia idea de qué significa que el
+ * SRI esté caído.
+ *
+ * Tres decisiones, y las tres importan:
+ *
+ * 1. **Esperar más cada vez** (30 s · 1 min · 2 min). Contra una saturación
+ *    reintentar rápido la empeora: cada recarga suma una petición a la cola
+ *    que ya está trabada.
+ * 2. **No culpar al contribuyente.** Su clave está bien, su sesión está bien.
+ *    Marcarlo como `clave_incorrecta` o `sin_datos` sería mentir en el
+ *    registro, y encima lo excluiría de la próxima corrida.
+ * 3. **Detener el lote, no pasar al siguiente.** Si el portal está caído, el
+ *    cliente 2 va a fallar igual que el 1. Avanzar sólo quema los 500 y le
+ *    agrega carga a un servidor que ya no da abasto.
+ *
+ * @param {{caido: boolean, saturado: boolean, motivo: string}} salud
+ * @param {{ruc?: string, nombre?: string}} quien El cliente en curso, si se sabe.
+ * @returns {Promise<boolean>} `true` si va a reintentar (y la página se recarga).
+ */
+async function manejarPortalCaido(salud, quien = {}) {
+    console.error(`🏥 [PORTAL] ${salud.motivo}.`);
+    console.error('   No es la clave, ni la sesión, ni la extensión: es el servidor del SRI.');
+    anotarBitacora('portal caído', salud.motivo);
+
+    const plan = await anotarPortalCaido();
+
+    if (plan.seguir) {
+        const seg = Math.round(plan.esperaMs / 1000);
+        console.warn(`⏳ [PORTAL] Intento ${plan.intento}: espero ${seg}s y vuelvo a probar. ` +
+                     'Insistir rápido contra un servidor saturado lo empeora.');
+        if (typeof window !== 'undefined' && window.sriAssistant?.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '🏥 El portal del SRI está caído',
+                msg: `${escapeHtml(salud.motivo)}.<br><br>` +
+                     `No es tu clave ni la extensión. Espero <b>${seg} segundos</b> y reintento ` +
+                     `(intento ${plan.intento} de 3).`,
+                duration: Math.min(plan.esperaMs, 15000)
+            });
+        }
+        await sleep(plan.esperaMs);
+        try { window.location.reload(); } catch (e) { /* la página ya se fue */ }
+        return true;
+    }
+
+    // Se probó suficiente. Se para el lote y se dice por qué, sin inventarle
+    // una falla al contribuyente.
+    console.error('🛑 [PORTAL] Sigue caído después de tres intentos con esperas crecientes. ' +
+                  'Se detiene el lote: con el portal así, el siguiente cliente falla igual.');
+
+    if (quien.ruc && typeof Omitidos !== 'undefined') {
+        await Omitidos.anotar(quien.ruc, 'portal_caido',
+            { nombre: quien.nombre, detalle: salud.motivo });
+    }
+    if (typeof window !== 'undefined' && window.sriAssistant?.showEliteToast) {
+        window.sriAssistant.showEliteToast({
+            title: '🛑 El SRI no responde',
+            msg: `${escapeHtml(salud.motivo)}.<br><br>` +
+                 'Se probó tres veces con esperas crecientes. El lote queda detenido: ' +
+                 '<b>ningún cliente quedó mal marcado</b>, es el portal. Probá más tarde.',
+            duration: 25000
+        });
+    }
+    try { await SriLoop.detener('El portal del SRI está caído'); } catch (e) { /* nada */ }
+    return false;
 }
 
 function anotarBitacora(evento, detalle = '') {

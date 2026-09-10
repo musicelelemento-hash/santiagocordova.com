@@ -1,0 +1,167 @@
+<!doctype html><meta charset="utf-8"><title>Cuando el que se cae es el SRI</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>«¿Qué será que está así?» — no era la extensión</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  09-sep-2026. El portal empezó a devolver <b>HTTP 500</b> en
+  <code>comprobantesRecibidos.jsf</code>. La raíz, en el stack que devuelve el
+  propio JBoss del SRI:
+  <br><br>
+  <code>javax.ejb.ConcurrentAccessTimeoutException: JBAS014373<br>
+  &nbsp;&nbsp;could not obtain lock within 5000MILLISECONDS<br>
+  &nbsp;&nbsp;ec.gob.sri…ConfigSistemaBean.getAmbienteEjecucion</code>
+  <br><br>
+  <code>ConfigSistemaBean</code> es un EJB <b>singleton</b> con concurrencia
+  gestionada por el contenedor. Cada visita construye un
+  <code>ControladorBase</code> cuyo <code>init()</code> le pide algo a ese
+  singleton; con carga, todas las peticiones hacen cola por el mismo lock y a
+  los cinco segundos se rinden. <b>Es el servidor del SRI saturado</b> — no la
+  clave, ni la sesión, ni nosotros.
+  <br><br>
+  Lo que <b>sí</b> era nuestro: el bot no sabía reconocerlo. Cargaba la página
+  de error, no encontraba el formulario y se ponía a esperarlo ocho segundos;
+  después recargaba y volvía a esperar, ocho veces.
+  <b>Reintentar rápido contra una saturación la empeora</b>: cada recarga es
+  una petición más peleando por el lock trabado.
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(52)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,64-t.length)));
+
+  const P = document.getElementById('portal');
+  // Se le pasa el contenedor a propósito: la descripción de ESTE banco tiene
+  // el stack del error completo, así que leyendo `document.body` el detector
+  // se leería a sí mismo y daría positivo siempre. En el portal real la página
+  // de error ocupa el body entero y no hace falta pasarle nada.
+
+  // La página de error, tal cual la devolvió el SRI. Recortada, pero con las
+  // marcas textuales que el detector busca.
+  const PAGINA_500 =
+    'JBWEB000065: HTTP Status 500 - JBAS011048: Failed to construct component instance\n' +
+    'JBWEB000309: type JBWEB000066: Exception report\n' +
+    'javax.ejb.ConcurrentAccessTimeoutException: JBAS014373: EJB 3.1 PFD2 4.8.5.5.1 ' +
+    'concurrent access timeout on org.jboss.invocation.InterceptorContext$Invocation@16a605b5 ' +
+    '- could not obtain lock within 5000MILLISECONDS\n' +
+    'ec.gob.sri.comprobantes.electronicos.impl.util.ConfigSistemaBean$$$view602.getAmbienteEjecucion\n' +
+    'JBoss Web/7.3.2.Final-redhat-3';
+
+  // ══ A · el caso real ════════════════════════════════════════════════════
+  sec('A · el 500 que trajo el usuario');
+  P.innerHTML = '<pre>' + PAGINA_500.replace(/</g,'&lt;') + '</pre>';
+  const caso = elPortalSeCayo(P);
+  push('se reconoce como caída del portal',  caso.caido, true);
+  push('y como SATURACIÓN, no otra cosa',    caso.saturado, true);
+  push('el motivo lo dice con palabras',
+       /saturado/.test(caso.motivo), true);
+
+  // ══ B · un 500 que NO es saturación ═════════════════════════════════════
+  sec('B · caído sí, saturado no');
+  // Otro fallo del servidor: hay que reconocerlo igual, pero la espera larga
+  // sólo tiene sentido contra la cola trabada.
+  P.innerHTML = '<pre>JBWEB000065: HTTP Status 500 - JBAS011048: Failed to construct ' +
+                'component instance\nJBoss Web/7.3.2.Final-redhat-3</pre>';
+  const otro = elPortalSeCayo(P);
+  push('igual se reconoce',                  otro.caido, true);
+  push('pero no se llama saturación',        otro.saturado, false);
+
+  // Un 500 genérico, por si el SRI cambia de servidor algún día.
+  P.innerHTML = '<pre>HTTP Status 500 – Internal Server Error</pre>';
+  push('un 500 genérico también cuenta',     elPortalSeCayo(P).caido, true);
+
+  // ══ C · lo que NO puede confundirse con una caída ═══════════════════════
+  sec('C · una pantalla normal no es una caída');
+  // Ésta es la clase de falso positivo que rompería todo: el bot creería que
+  // el portal está caído en cada cliente y no declararía a nadie.
+  P.innerHTML = '<div>Comprobantes electrónicos recibidos</div>' +
+                '<select id="frmPrincipal:ano"><option>2026</option></select>' +
+                '<div>No se encontraron datos para la búsqueda</div>';
+  push('la pantalla de «sin datos» NO es caída', elPortalSeCayo(P).caido, false);
+
+  P.innerHTML = '<div>Clave inválida / inactiva. Intento fallido 1 de 5.</div>';
+  push('un rechazo de clave tampoco',        elPortalSeCayo(P).caido, false);
+
+  P.innerHTML = '<div>Error en el casillero 203. El decreto seleccionado es incorrecto.</div>';
+  push('un reclamo del formulario tampoco',  elPortalSeCayo(P).caido, false);
+
+  P.innerHTML = '';
+  push('una página vacía tampoco',           elPortalSeCayo(P).caido, false);
+
+  // ══ D · el bot no se lee a sí mismo ═════════════════════════════════════
+  sec('D · el HUD no puede disparar la alarma');
+  // Cuarta vez que este proyecto se cuida de lo mismo. Si el propio panel
+  // muestra el texto de un error viejo, eso NO es el portal cayéndose.
+  P.innerHTML = '<div id="slh-barra">🏥 JBWEB000065 · HTTP Status 500 (aviso anterior)</div>' +
+                '<div>Comprobantes electrónicos recibidos</div>';
+  push('el texto del HUD se descarta',       elPortalSeCayo(P).caido, false);
+
+  // ══ E · esperar más cada vez, y rendirse ════════════════════════════════
+  sec('E · el backoff: 30 s · 1 min · 2 min');
+  await SafeStorage.remove(['sc_portal_caido']);
+  const p1 = await anotarPortalCaido();
+  push('primer intento: sigue, 30 s',        [p1.seguir, p1.esperaMs], [true, 30000]);
+  const p2 = await anotarPortalCaido();
+  push('segundo: sigue, 1 minuto',           [p2.seguir, p2.esperaMs], [true, 60000]);
+  const p3 = await anotarPortalCaido();
+  push('tercero: sigue, 2 minutos',          [p3.seguir, p3.esperaMs], [true, 120000]);
+  const p4 = await anotarPortalCaido();
+  push('cuarto: ya no, se rinde',            p4.seguir, false);
+
+  // Si el portal vuelve, la cuenta arranca de cero: la próxima caída no
+  // hereda los intentos de la anterior.
+  await elPortalVolvio();
+  const nuevo = await anotarPortalCaido();
+  push('tras volver, el contador se reinicia', [nuevo.seguir, nuevo.esperaMs], [true, 30000]);
+
+  // Y una caída de hace rato no cuenta como el mismo episodio.
+  await SafeStorage.set({ sc_portal_caido: { cuando: Date.now() - 30*60*1000, intentos: 3 } });
+  const viejo = await anotarPortalCaido();
+  push('una caída de hace media hora es otro episodio',
+       [viejo.seguir, viejo.esperaMs], [true, 30000]);
+
+  // ══ F · el motivo de omisión no culpa al contribuyente ══════════════════
+  sec('F · nunca marcar mal a un cliente por un fallo del SRI');
+  const texto = Omitidos.ARREGLO.portal_caido || '';
+  push('existe el motivo `portal_caido`',    texto.length > 0, true);
+  push('y dice que NO es la clave',          /NO es la clave/.test(texto), true);
+  push('y qué hacer: probar más tarde',      /más tarde/.test(texto), true);
+
+  // ══ G · el flujo lo consulta antes de esperar de gusto ══════════════════
+  sec('G · el bucle de espera pregunta primero');
+  const fuente = await (await fetch('../src/03_ingreso_y_sesion.js')).text();
+  const iCayo  = fuente.indexOf('elPortalSeCayo(');
+  const iEspera = fuente.indexOf('Esperando a que cargue el formulario');
+  push('se consulta ANTES de ponerse a esperar',
+       iCayo > -1 && iEspera > -1 && iCayo < iEspera, true);
+  push('y se maneja en un solo lugar',
+       /manejarPortalCaido/.test(fuente), true);
+  // Cuando el portal contesta bien, se olvida la caída anterior.
+  push('al andar, se limpia la marca',
+       /elPortalVolvio/.test(fuente), true);
+
+  const bundle = await (await fetch('../build/content.js')).text();
+  push('el bundle está reconstruido',        /elPortalSeCayo/.test(bundle), true);
+
+  P.innerHTML = '';
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

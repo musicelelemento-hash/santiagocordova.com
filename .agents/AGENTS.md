@@ -116,11 +116,16 @@ IA la vuelve a proponer y se vuelve a descartar.
 node --check src/0*.js && npm run build
 ```
 
-y los veinte bancos en `tests/index.html` (hace falta el servidor:
+y los **veintiún** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **664 comprobaciones, verdes el 09-sep-2026** (20 bancos, el último
-agregado ese día: `parada`). Si tu cambio baja ese número, algo se
-rompió; si lo sube, dejá dicho qué agregaste.
+scripts). **688 comprobaciones, verdes el 10-sep-2026** — el último agregado
+ese día: `portal`. Si tu cambio baja ese número, algo se rompió; si lo sube,
+dejá dicho qué agregaste.
+
+> **La suite entera tarda unos tres minutos.** `bendita` monta el popup real
+> con sus scripts y tarda bastante más que los otros: verlo en «…» no quiere
+> decir que esté colgado. El corredor le da 90 s a cada banco antes de
+> marcarlo «no terminó».
 
 ---
 
@@ -253,6 +258,7 @@ la credencial.**
 | 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
 | 5 | **La clave de R2 sigue en el repositorio** | seguridad, ya | §10a |
 | 6 | **Comprobantes ya archivados con el año del RUC** | ~30-40 de 500 · el bug está arreglado, lo archivado no | §2c · propuesta en §0c |
+| 7 | ~~El bot no reconocía una caída del portal~~ **RESUELTO 10-sep-2026** — y el SRI ha estado devolviendo 500 | — | §2d |
 
 ### Lo que falta construir, por tamaño
 
@@ -776,6 +782,85 @@ RUC real que lo destapó.
 
 > **Lo ya archivado sigue mal.** El arreglo no repara el pasado: ver la
 > propuesta de auditoría en la §0c.
+
+---
+
+## 2d. Cuando el que se cae es el SRI — y el bot no se enteraba
+
+> Corregido el **10-sep-2026**. El usuario preguntó *«¿qué será que está
+> así?»* y pegó el stack. **No era la extensión ni su clave: era el servidor
+> del SRI.**
+
+```
+javax.ejb.ConcurrentAccessTimeoutException: JBAS014373
+  could not obtain lock within 5000MILLISECONDS
+  ec.gob.sri.comprobantes.electronicos.impl.util.ConfigSistemaBean.getAmbienteEjecucion
+```
+
+`ConfigSistemaBean` es un EJB **singleton** del SRI con concurrencia
+gestionada por el contenedor. Cada visita a `comprobantesRecibidos.jsf`
+construye un `ControladorBase` cuyo `init()` le pide `getAmbienteEjecucion()`
+a ese singleton. Con carga, **todas las peticiones hacen cola por el mismo
+lock** y a los cinco segundos se rinden con un HTTP 500.
+
+Es un problema del portal, no nuestro. Lo que **sí** era nuestro:
+
+### El bot esperaba un formulario que no iba a llegar
+
+```
+Failed to load resource: the server responded with a status of 500
+🔁 [BUCLE] «turbo_step1_facturas» va por la vuelta 4 de 8
+⏳ Esperando a que cargue el formulario de búsqueda...
+```
+
+Cargaba la página de error de JBoss, no encontraba `frmPrincipal:ano`, y se
+ponía a esperarlo **ocho segundos**. Después recargaba, y volvía a esperar,
+hasta gastar las ocho vueltas del cortacircuitos.
+
+**Reintentar rápido contra una saturación la empeora.** Cada recarga es una
+petición más peleando por el lock que ya está trabado: el bot estaba
+ayudando a tirar abajo el servidor del que dependía.
+
+### Las tres decisiones
+
+`elPortalSeCayo(zona)` en `02_servicios_y_memoria.js` reconoce la pantalla;
+`manejarPortalCaido()` decide qué hacer, **en un solo lugar** — porque
+`autoLlenarBusqueda()` tiene cuatro llamadores y no puede cada uno tener su
+propia idea de qué significa que el SRI esté caído.
+
+1. **Esperar más cada vez**: 30 s · 1 min · 2 min. Contra una cola trabada
+   eso no es cortesía, es lo único que funciona.
+2. **No culpar al contribuyente.** Su clave está bien y su sesión está bien.
+   Marcarlo `clave_incorrecta` o `sin_datos` sería mentir en el registro y
+   encima lo excluiría de la próxima corrida. Motivo nuevo: **`portal_caido`**,
+   que dice con todas las letras que no es la clave.
+3. **Detener el lote, no pasar al siguiente.** Con el portal caído el cliente
+   2 falla igual que el 1: avanzar sólo quema los 500 y suma carga.
+
+### Cómo se evita el falso positivo, que sería peor
+
+Un detector demasiado laxo diría «el portal está caído» en cada cliente y el
+lote no declararía a nadie. Dos defensas:
+
+- **Si hay estructura del portal, no hay caída.** La página de error de JBoss
+  *reemplaza* la página entera: no conserva `frmPrincipal`, ni
+  `frmFlujoDeclaracion`, ni una `.ui-datatable`. Si algo de eso está en el
+  DOM, lo que se ve es el portal — por más que el texto mencione un error.
+- **Marcas propias del servidor, no palabras sueltas.** `JBWEB000065`,
+  `JBAS011048`, `JBAS014373`, `ConcurrentAccessTimeoutException`. «Error» a
+  secas no alcanza para acusar al portal de estar caído.
+
+Y el HUD se saca antes de leer: **cuarta vez** que este proyecto se cuida del
+bot leyéndose a sí mismo (modales, login, período, y ahora esto). Si el propio
+panel muestra el texto de un error viejo, eso no es el portal cayéndose.
+
+> El parámetro `zona` existe por el banco: la descripción de `tests/portal.html`
+> incluye el stack completo, así que leyendo `document.body` el detector se
+> leería a sí mismo. En el portal real la página de error ocupa el body entero
+> y no hace falta pasarle nada.
+
+Banco: `tests/portal.html` (24 comprobaciones, verdes el 10-sep-2026), con el
+stack real que trajo el usuario.
 
 ---
 
@@ -1831,39 +1916,45 @@ subida · Panel.
 
 ### Los bancos de prueba, en una sola página
 
-`tests/index.html` corre **los quince** en iframes y da un veredicto solo:
-**546 comprobaciones, verdes el 07-sep-2026**, en poco más de un minuto.
+`tests/index.html` corre **los veintiuno** en iframes y da un veredicto solo:
+**688 comprobaciones, verdes el 10-sep-2026**, en unos tres minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
 `/tests/index.html`. **Hace falta el servidor**: los `file://` no ejecutan
 scripts.
 
-De a uno, no en paralelo: quince bancos a la vez se pisan el almacenamiento
+De a uno, no en paralelo: veintiún bancos a la vez se pisan el almacenamiento
 simulado y el resultado dejaría de significar nada. Lee el `<pre id="out">` de
 cada uno, así que un banco nuevo no necesita saber que esta página existe —
 alcanza con agregarlo a la lista `BANCOS`.
 
 | Banco | Qué cuida | ✓ |
 | :--- | :--- | --: |
-| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 173 |
-| `catastro` | la bisección, sobre todo en los bordes | 31 |
+| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 181 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
-| `notasventa` | que un silencio no se convierta en un cero | 35 |
 | `chequeo` | que avise de lo que va a morder, y que lea lo que Supabase contesta | 56 |
-| `esperas` | que se siga apenas el portal contesta | 20 |
-| `subidas` | que «Failed to fetch» diga algo accionable | 27 |
-| `clavevencida` | que se detecte antes de navegar, sin cambiar la clave | 19 |
+| `notasventa` | que un silencio no se convierta en un cero | 35 |
+| `catastro` | la bisección, sobre todo en los bordes | 31 |
 | `claves` | que la pantalla nunca muestre el valor guardado | 28 |
+| `subidas` | que «Failed to fetch» diga algo accionable | 27 |
+| `radiografia203` | que el 📐 salga solo cuando el portal reclama un casillero | 27 |
+| `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
+| `parada` | que DETENER corte el trabajo en curso, no sólo el próximo cliente | 26 |
+| `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
+| `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
+| `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
+| `recuperar` | que el comprobante de lo ya declarado llegue a la mano | 22 |
+| `esperas` | que se siga apenas el portal contesta | 20 |
+| `clavevencida` | que se detecte antes de navegar, sin cambiar la clave | 19 |
+| `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
 | `resumen` | que «Pendiente por cubrir» le gane al total en cero | 15 |
 | `rutas` | que con una cédula ajena no se baje la declaración de nadie | 14 |
 | `login` | que el bot no se lea a sí mismo y crea que lo rechazaron | 11 |
-| `bucles` | que una acción que da vueltas se corte, y un lote sano no | 15 |
-| `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |
-| `recuperar` | que el comprobante de lo ya declarado llegue a la mano | 22 |
+| `recibidos_nodata` | que «sin datos» sea el mensaje oficial del SRI, no una suposición | 7 |
 
 > **Un banco nuevo por cada cosa que se rompió de verdad.** Ninguno de estos
-> quince se escribió por completitud: cada uno cuida un fallo que ya llegó a
+> veintiuno se escribió por completitud: cada uno cuida un fallo que ya llegó a
 > pantalla y costó un lote. Si arreglás algo que salió de un log real, dejale
 > su comprobación antes de cerrar.
 
