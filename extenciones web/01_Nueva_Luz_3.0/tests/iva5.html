@@ -389,17 +389,17 @@
     <div style="display:flex;align-items:center;height:28px;line-height:28px">
       <span style="width:60px">540</span>
       <div style="width:220px">Adquisiciones locales gravadas 5%</div>
-      <div><input type="text" id="concepto1271" value="0.00"></div>
+      <div><input type="text" id="concepto1261" value="0.00"></div>
     </div>
     <div style="display:flex;align-items:center;height:28px;line-height:28px">
       <span style="width:60px">550</span>
       <div style="width:220px">Menos notas de crédito 5%</div>
-      <div><input type="text" id="concepto1281" value="0.00"></div>
+      <div><input type="text" id="concepto1262" value="0.00"></div>
     </div>`;
   const geo = sriMapaCasilleros();
   push('empareja número e input por altura cuando no comparten fila',
        geo.filter(f=>f.casillero!=='???').map(f=>f.casillero+'→'+f.id),
-       ['540→concepto1271','550→concepto1281']);
+       ['540→concepto1261','550→concepto1262']);
   push('y avisa que fue lectura posicional (via: altura)',
        (geo.find(f=>f.casillero==='540')||{}).via, 'altura');
 
@@ -647,8 +647,8 @@
   push('un casillero ausente sigue siendo null',  await halla('508'), null);
 
   // ── El 550 se rescata por vecindad ──────────────────────────────────────
-  // Corrida real del 07-sep-2026: el 540 apareció (concepto1271) y se llenó;
-  // el 550, que está en la MISMA fila, no. El bruto quedó cargado y el neto
+  // Corrida real del 07-sep-2026: el 540 apareció y se llenó; el 550, que
+  // está en la MISMA fila, no. El bruto quedó cargado y el neto
   // vacío, que es PEOR que no haber cargado nada — el crédito tributario sale
   // del neto.
   const i540 = await encontrarInputPorCasillero('540');
@@ -737,9 +737,9 @@
   // La vecindad los rescataba, pero depende de que la sección esté abierta
   // — y con la sección cerrada se rindió en silencio: REYES MARQUEZ quedó sin
   // declarar con $4507.72 al 5%. El `id` no depende de nada.
-  P.innerHTML = '<input id="concepto1281"><input id="concepto1740">';
+  P.innerHTML = '<input id="concepto1262"><input id="concepto1740">';
   const i550 = await encontrarInputPorCasillero('550');
-  push('el 550 sale directo por el fieldMap', i550 && i550.id, 'concepto1281');
+  push('el 550 sale directo por el fieldMap', i550 && i550.id, 'concepto1262');
   const i518 = await encontrarInputPorCasillero('518');
   push('y el 518 también',                    i518 && i518.id, 'concepto1740');
   P.innerHTML = '';

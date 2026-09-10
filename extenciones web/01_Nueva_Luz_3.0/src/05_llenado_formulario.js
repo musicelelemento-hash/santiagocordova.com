@@ -1359,8 +1359,10 @@ async function radiografiarReclamo(casilleros = []) {
  */
 async function frenarSiFaltaDecreto203() {
     try {
-        const neto550 = document.getElementById('concepto1281') ||
-                        document.querySelector('input[id*="concepto1281"]');
+        // El 550 es concepto1262 (inspección DOM del usuario, 10-sep-2026).
+        // Antes leía concepto1281, que es el casillero 533.
+        const neto550 = document.getElementById('concepto1262') ||
+                        document.querySelector('input[id*="concepto1262"]');
         if (!neto550) return { ok: true, motivo: '' };
         const neto = parseImporteEstricto(neto550.value !== undefined ? neto550.value : neto550.getAttribute('value'));
         if (!neto || neto <= 0) return { ok: true, motivo: '' };
@@ -1501,18 +1503,20 @@ async function encontrarInputPorCasillero(casillero) {
         // No salen de suponer un patrón: la estrategia por altura los encontró
         // y el bot ESCRIBIÓ en ellos con éxito. Eso es evidencia, que es lo que
         // pide la §5b antes de cablear nada.
-        '540': 'concepto1271', // Compras 5% bruto · escrito: 0.48
         '508': 'concepto1735', // Notas de venta, valor · escrito: 50.00
         '117': 'concepto258',  // Notas de venta, cantidad · escrito: 2
-        // ── Confirmados en la corrida del 07-sep-2026, segunda vuelta ─────
-        // El rescate por vecindad los encontró y el bot ESCRIBIÓ en ellos, en
-        // dos contribuyentes distintos. Ya no son una suposición de patrón:
-        //   550 → ORTIZ AMAYA $0.48 · REYES MARQUEZ $4507.72
-        //   518 → ORTIZ AMAYA $50.00 (por altura, no por vecindad)
-        // Cablearlos ahorra el rodeo, que es dónde se rompe: la vecindad
-        // depende de que la sección esté abierta y el `id` no depende de nada.
-        '550': 'concepto1281', // Compras 5% neto (menos NC)
         '518': 'concepto1740', // Notas de venta neto (menos NC)
+        // ── CORREGIDO el 10-sep-2026 · el 540/550 estaban en el id equivocado ─
+        // Decían concepto1271 / concepto1281. El usuario INSPECCIONÓ el DOM del
+        // formulario real (REYES MARQUEZ): la casilla rotulada 540 es
+        // `concepto1261` y la 550 es `concepto1262` — y el 📐 apretado, en la
+        // misma corrida, lee lo mismo. `concepto1271` / `concepto1281` son en
+        // realidad los casilleros 530 / 533. El bot venía escribiendo el 5% ahí
+        // por meses; nunca llegó a enviarse porque el 203 siempre lo frenaba.
+        // «El bot escribió y no crasheó» NO prueba que el id sea el casillero.
+        '540': 'concepto1261', // Compras 5% bruto — inspección DOM del usuario
+        '550': 'concepto1262', // Compras 5% neto (menos NC) — ídem
+        '560': 'concepto1263', // IVA generado del 5% — ídem (misma fila)
     };
 
     if (fieldMap[casillero]) {

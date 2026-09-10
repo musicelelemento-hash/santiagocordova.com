@@ -57,7 +57,7 @@
       <tr>
         <td>550</td>
         <td>Compras 5% neto</td>
-        <td><input type="text" id="concepto1281" value="96.43"></td>
+        <td><input type="text" id="concepto1262" value="96.43"></td>
       </tr>
     </table>
   `;
@@ -137,7 +137,7 @@
   selG.selectedIndex = 0;
 
   sec('H · si no se puede afirmar, no frena');
-  const inp550 = document.getElementById('concepto1281');
+  const inp550 = document.getElementById('concepto1262');
   inp550.value = '0.00';
   push('sin 5% neto no frena',                 (await frenarSiFaltaDecreto203()).ok, true);
   inp550.value = '96.43';

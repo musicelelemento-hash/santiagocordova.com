@@ -86,7 +86,7 @@ El formulario de IVA 2011 consta de **6 secciones principales**, organizadas en 
 | :--- | :---: | :---: | :---: | :--- | :--- | :--- | :--- |
 | **Adquisiciones locales 15%** (con derecho a crédito) | **500** | **510** | **520** | `concepto1270` | `concepto1280` | `concepto1290` | **Compras operativas gravadas:** Llena `500 = Base 15%`, `510 = 500 - NC 15%`. El 520 lo calcula el SRI. |
 | **Activos fijos locales 15%** (con crédito) | **501** | **511** | **521** | `concepto1390` | `concepto1400` | `concepto1410` | Maquinaria, equipos o vehículos afectos a la actividad. |
-| **Adquisiciones locales tarifa 5%** (con crédito) | **540** | **550** | **560** | `concepto1271` | `concepto1281` | `concepto1800` | **Materiales de construcción (Ley 2024):** Solo si la factura es legítimamente al 5%. Si es 0.00, no llenar para evitar salto de Casillero 203. |
+| **Adquisiciones locales tarifa 5%** (con crédito) | **540** | **550** | **560** | `concepto1261` | `concepto1262` | `concepto1263` | **CORREGIDO 10-sep-2026** — el usuario inspeccionó el DOM del formulario real (REYES MARQUEZ) y la 📐 apretada lee lo mismo. Los viejos `concepto1271`/`concepto1281` son en realidad los casilleros **530**/**533**; el bot venía escribiendo el 5% ahí y nunca se envió porque el 203 lo frenaba. Materiales de construcción (Ley 2024). Si es 0.00, no llenar. |
 | **Compras gravadas sin derecho a crédito** | **502** | **512** | **522** | `concepto1470` | `concepto1480` | `concepto1818` | Gastos no deducibles o de actividades no gravadas. Pendiente mapa CIIU. |
 | **Importaciones de servicios / derechos 15%** | **503** | **513** | **523** | `concepto1550` | `concepto1552` | `concepto1554` | Licencias de software en el exterior, servicios técnicos, etc. |
 | **Importaciones de bienes (excluye activos fijos)** | **504** | **514** | **524** | `concepto1556` | `concepto1600` | `concepto1610` | Materias primas y mercaderías importadas. |
@@ -201,7 +201,7 @@ const SRI_FIELD_MAP = {
 
     // Compras
     '500': 'concepto1270', '510': 'concepto1280', '520': 'concepto1290',
-    '540': 'concepto1271', '550': 'concepto1281', '560': 'concepto1800',
+    '540': 'concepto1261', '550': 'concepto1262', '560': 'concepto1263', // CORREGIDO 10-sep (DOM del usuario)
     '507': 'concepto1720', '517': 'concepto1730', '508': 'concepto1735',
     '518': 'concepto1740', '543': 'concepto1900', '544': 'concepto1890',
     '563': 'concepto2110', '564': 'concepto2130', '565': 'concepto1276',

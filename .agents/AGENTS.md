@@ -529,8 +529,9 @@ Es exactamente el objetivo del §0. Se disparan con el botón **🧾** del cajó
 
 ### 0b.5 · Los `id` que faltan — cómo se consiguen, y cómo NO
 
-Faltan: **502 / 512** (sin derecho a crédito), **560** (IVA generado del 540) y
-**203** (el decreto de la tarifa reducida).
+Faltan: **502 / 512** (sin derecho a crédito) y **203** (el decreto). El
+**560** (`concepto1263`) y la **corrección del 540/550** (`concepto1261` /
+`concepto1262`) salieron el 10-sep-2026 — ver el bloque ✅ RESUELTO en la §6.
 
 **El único camino legítimo es el botón 📐** del cajón 🧰, con el formulario
 abierto: lista todos los casilleros reales con su `id`, rótulo y si son
@@ -554,10 +555,13 @@ Es un botón y no un comando a propósito: **Chrome bloquea el pegado en la
 consola** (protección contra self-XSS, que pide escribir `allow pasting`), y un
 dato que sólo se saca escribiendo a mano es un dato que no se saca.
 
-> ⛔ **Prohibido suponer un `id` por patrón.** El 550 resultó ser
-> `concepto1281` y el 540 `concepto1271` — el patrón existía, y aun así sólo
-> se cablearon **después** de que el bot escribiera en ellos, en dos
-> contribuyentes reales. Eso es lo que pide la §5b: evidencia, no simetría.
+> ⛔ **Prohibido suponer un `id` por patrón — y «escribir» no es «confirmar».**
+> El 540/550 se cablearon como `concepto1271`/`concepto1281` porque el bot
+> escribió ahí sin crashear. El 10-sep-2026 el usuario inspeccionó el DOM: eran
+> los casilleros **530**/**533**. Los de verdad son `concepto1261`/`concepto1262`
+> (§6, bloque ✅ RESUELTO). Un `id` se confirma **leyendo el rótulo de la
+> pantalla**, no escribiendo a ciegas — la §5b pide evidencia, y la evidencia
+> es el rótulo, no la ausencia de error.
 
 > **Y desde el 10-sep-2026 el 📐 empareja número ↔ id por altura.** La corrida
 > del 10-sep sobre el formulario real dio **162 ids `conceptoNNNN` y CERO
@@ -1157,15 +1161,15 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 401 (Ventas 15%)** | `concepto401` | Input casillero 401 |
 | **Casillero 411 (Ventas Netas 15%)** | `concepto411` | Input casillero 411 |
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
-| **Casillero 502 (sin derecho a crédito)** | *id sin confirmar — el casillero EXISTE* | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
-| **Casillero 512 (NC del 502)** | *id sin confirmar — EXISTE* | Menos notas de crédito del 502 |
-| **Casillero 540 (compras 5%)** | `concepto1271` — **CONFIRMADO 07-sep-2026** (se escribió en él) | Adquisiciones locales gravadas 5% con crédito · ver §9 |
+| **Casillero 502 (sin derecho a crédito)** | `concepto1470` — 📐 apretado 10-sep-2026 · falta inspección DOM | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
+| **Casillero 512 (NC del 502)** | `concepto1550` — 📐 apretado · **choca con la Biblia (concepto1480)** · falta DOM | Menos notas de crédito del 502 |
+| **Casillero 540 (compras 5%)** | `concepto1261` — **CORREGIDO 10-sep-2026** (inspección DOM del usuario + 📐). El viejo `concepto1271` es el casillero 530. | Adquisiciones locales gravadas 5% con crédito · ver §9 |
 | **Casillero 508 (notas de venta)** | `concepto1735` — **CONFIRMADO 07-sep-2026** | Valor de las notas de venta recibidas |
 | **Casillero 117 (cantidad NV)** | `concepto258` — **CONFIRMADO 07-sep-2026** | Cantidad de notas de venta |
-| **Casillero 550 (NC del 540)** | `concepto1281` — **CONFIRMADO 07-sep-2026** (escrito en dos contribuyentes) | Menos notas de crédito del 540 |
+| **Casillero 550 (NC del 540)** | `concepto1262` — **CORREGIDO 10-sep-2026** (inspección DOM). El viejo `concepto1281` es el casillero 533. | Menos notas de crédito del 540 |
 | **Casillero 518 (NC de notas de venta)** | `concepto1740` — **CONFIRMADO 07-sep-2026** | Neto de notas de venta (508 menos NC) |
 | **Casillero 203 (decreto de tarifa reducida)** | `concepto91` — **CONFIRMADO 07-sep-2026** (📐, único `<select>` del formulario) | 17 opciones, **todas del 8%** · ver §9d |
-| **Casillero 560 (IVA generado del 540)** | *id sin confirmar — EXISTE* | Impuesto generado de las compras al 5% |
+| **Casillero 560 (IVA generado del 540)** | `concepto1263` — 📐 apretado 10-sep-2026, misma fila que 540/550 (no inspeccionado a mano) | Impuesto generado de las compras al 5% |
 | **Casillero 510 (Compras Netas 15%)** | `concepto510` | Input casillero 510 |
 | **Casillero 601 (Impuesto Causado)** | `concepto601` | Lectura de impuesto causado |
 | **Casillero 609 (Retenciones IVA)** | `concepto609` | Input retenciones IVA del mes |
@@ -1183,36 +1187,35 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 > para decidir un envío: devuelve `0` tanto para "cero" como para "no pude leer".
 > Para eso está `parseImporteEstricto()`, que devuelve `null` cuando no hay número.
 
-> ### ⚠️ El 📐 con geometría CONTRADICE el 540/550 confirmado — 10-sep-2026
+> ### ✅ RESUELTO 10-sep-2026 — el 📐 tenía razón, la Matriz estaba mal
 >
-> Primera corrida del 📐 nuevo (estrategia 2.5, `via:'altura'`) sobre el
-> formulario real de REYES MARQUEZ. Emparejó los 51 casilleros numerados. Los
-> **espaciados dan bien**: `500→concepto1270`, `510→concepto1280`,
-> `520→concepto1290` (coinciden con el banco `iva5`), `508→concepto1735`,
-> `518→concepto1740`, `117→concepto258`, `564→concepto2130`, `565→concepto1276`
-> (coinciden con §12).
+> La primera corrida del 📐 (geometría floja) leyó `540→concepto1261`,
+> `550→concepto1262` — contra la Matriz, que decía `concepto1271`/`concepto1281`
+> «confirmados escribiendo». Se apretó la tolerancia vertical del 📐 y **volvió
+> a leer lo mismo**. Entonces el usuario **inspeccionó el DOM del formulario
+> real** (REYES MARQUEZ): la casilla rotulada **540** es `id="concepto1261"`
+> (name `…j_idt627:33:j_idt631`), la **550** es `concepto1262` (`…:35:…`).
 >
-> Pero en la zona **densa 530-565 se corre de fila**:
+> **Tres lecturas independientes coinciden.** La Matriz se corrigió:
 >
-> | El 📐 dice | La Matriz dice (escribiendo en él) |
-> | :--- | :--- |
-> | `540 → concepto1261` | `540 → concepto1271` |
-> | `550 → concepto1262` | `550 → concepto1281` |
-> | `530 → concepto1271` · `533 → concepto1281` | — |
-> | `502 → concepto1470` · `512 → concepto1550` · `560 → concepto1263` | sin confirmar |
+> | Casillero | Ahora (correcto) | Antes (era el casillero de al lado) |
+> | :-- | :-- | :-- |
+> | 540 | `concepto1261` | ~~`concepto1271`~~ = casillero **530** |
+> | 550 | `concepto1262` | ~~`concepto1281`~~ = casillero **533** |
+> | 560 | `concepto1263` (📐, misma fila) | ~~`concepto1800`~~ = casillero **529**, solo lectura |
 >
-> **No se toca el `fieldMap` ni la Matriz.** El 540=`concepto1271` y el
-> 550=`concepto1281` se confirmaron **con el bot escribiendo en ellos en dos
-> contribuyentes reales y el portal aceptando el 5%** — es la evidencia más
-> fuerte que hay. El 📐 geométrico es un lector posicional y en filas juntas
-> se equivoca de renglón; por eso marca `via:'altura'`.
+> **La lección**: «el bot escribió en `concepto1271` y no crasheó» NO prueba
+> que `concepto1271` sea el 540. El bot venía metiendo el 5% en el casillero
+> 530 hacía meses; **nunca se envió** porque el 203 lo frenaba siempre, así que
+> ninguna declaración salió mal — pero tampoco salió. Una identificación de
+> casillero se confirma **leyendo el rótulo de la pantalla**, no escribiendo a
+> ciegas. Corregido en `fieldMap`, `frenarSiFaltaDecreto203` (leía
+> `concepto1281`), la Biblia y los bancos `iva5` / `radiografia203`.
 >
-> **Cómo se resuelve** (y de paso cierra el 502/512/560): la próxima corrida
-> real que llene el 5%, **loguear el `id` exacto donde el bot escribe cada
-> valor y el `id`/valor que el portal calcula para el 560**. Si el bot escribe
-> $X en `concepto1271` y el portal pone $X·0.05 en `concepto1263`, entonces
-> 540=`concepto1271` y 560=`concepto1263`, y el 📐 se corrió una fila. Con eso
-> se sabe el offset y se leen bien el 502/512.
+> **Sigue pendiente**: el 📐 da `502→concepto1470` (coincide con la Biblia),
+> pero `512→concepto1550` y `522→concepto1480` chocan con la Biblia
+> (`concepto1480` / `concepto1818`). Esa zona necesita la misma inspección DOM
+> antes de cablearse. El bot no escribe ahí hoy, así que no corre prisa.
 
 ---
 
