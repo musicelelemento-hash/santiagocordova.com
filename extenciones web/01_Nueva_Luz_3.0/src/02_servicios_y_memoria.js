@@ -50,6 +50,31 @@ const SafeStorage = {
     }
 };
 
+// 💤 DORMIDA POR DEFECTO — elección del usuario, 10-sep-2026.
+//
+// En el portal del SRI la extensión NO monta nada (ni barra, ni panel, ni
+// escáner) a menos que esté DESPIERTA. La despiertan, poniendo
+// `sri_master_switch_on: true`:
+//   · tu web (bridge_content.js: "declarar este cliente" / "correr el lote")
+//   · el popup de la extensión (botón ▶ de un cliente)
+// También cuenta como despierta un lote vivo (sc_loop CORRIENDO/PAUSADO) o un
+// autofill manual pendiente — para no cortar algo a mitad de camino.
+//
+// Ante un error de lectura de storage, devuelve `true`: mejor de más que
+// dejar al usuario sin barra en una corrida real.
+async function extensionDespierta() {
+    try {
+        const st = await SafeStorage.get(['sri_master_switch_on', 'sc_loop', 'pending_sri_autofill']);
+        if (st.sri_master_switch_on === true) return true;
+        const e = st.sc_loop && st.sc_loop.estado;
+        if (e === 'CORRIENDO' || e === 'PAUSANDO' || e === 'PAUSADO') return true;
+        if (st.pending_sri_autofill && st.pending_sri_autofill.manual) return true;
+        return false;
+    } catch (err) {
+        return true;
+    }
+}
+
 // 🕯️ LA LISTA BENDITA — quién corre, decidido por el contador en el popup.
 // La escribe popup.js en `sc_lista_bendita`:
 //   - ausente/null  → inactiva: corre todo pendiente (comportamiento de siempre)
@@ -3404,7 +3429,9 @@ function initDeclarationSuccessWatcher() {
         }
     }, 2000);
 }
-initDeclarationSuccessWatcher();
+// 💤 El vigía del post-envío sólo corre si la extensión está despierta. Si
+// declarás a mano sin despertarla, el 🧾 la baja después igual.
+extensionDespierta().then((d) => { if (d) initDeclarationSuccessWatcher(); });
 
 // HELPER: ENCONTRAR BOTÓN ACEPTAR/ENVIAR PRINCIPAL EN EL RESUMEN (NO DIÁLOGOS OCULTOS)
 function findAceptarBtnOnSummary() {

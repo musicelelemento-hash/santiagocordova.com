@@ -4318,5 +4318,16 @@ class SriAssistantPanel {
 }
 
 // Inicializar panel automáticamente
-window.sriAssistant = new SriAssistantPanel();
+// 💤 Dormida por defecto (elección del usuario, 10-sep-2026): el panel y el
+// escáner de obligaciones sólo arrancan si la extensión está despierta — la
+// despiertan tu web (bridge_content.js) o el popup. Un lote vivo o un autofill
+// manual también. Ante error de lectura, arranca igual.
+(async () => {
+    const despierta = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
+    if (despierta) {
+        window.sriAssistant = new SriAssistantPanel();
+    } else {
+        console.log('💤 [SRI ELITE] Extensión dormida en el portal. Se despierta desde tu web o el popup.');
+    }
+})();
 

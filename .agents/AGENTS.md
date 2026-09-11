@@ -118,7 +118,7 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **727 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+scripts). **735 comprobaciones, verdes el 10-sep-2026** — los dos últimos
 bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
@@ -2127,6 +2127,31 @@ eso afuera. Descartada.
 
 ## 9c. La barra flotante: qué se ve y qué no
 
+### 💤 Dormida por defecto en el portal — 10-sep-2026
+
+> Elegido por el usuario: *«uso el portal para otras cosas y es muy invasiva»*.
+
+En `srienlinea.sri.gob.ec` la extensión **no monta nada** —ni barra, ni panel,
+ni escáner de obligaciones— a menos que esté **despierta**. `extensionDespierta()`
+(`02_servicios_y_memoria.js`) devuelve `true` sólo si:
+
+- `sri_master_switch_on === true` — lo pone **tu web** (`bridge_content.js`:
+  «declarar este cliente» / «correr el lote») o el **popup** (▶ de un cliente);
+- hay un **lote vivo** (`sc_loop` en CORRIENDO/PAUSANDO/PAUSADO) — para no
+  cortar algo a mitad;
+- hay un **autofill manual** pendiente.
+
+Ante un error de lectura del storage devuelve `true`: nunca dejar a alguien sin
+barra en una corrida real. Tres puertas gateadas: `new SriAssistantPanel()`
+(§6 panel), `SriLoopHUD.montar()` (barra), `initDeclarationSuccessWatcher()`
+(vigía del post-envío) y el bloque de auto-flujo de `03` (`!== true`, antes
+`=== false`). Banco: `tests/parada.html` sección G.
+
+Si declarás **a mano** sin despertarla, el comprobante no se captura solo —
+para eso está el 🧾 después. Es el precio de que no moleste.
+
+---
+
 Llegó a **diecisiete controles**. Diecisiete íconos sueltos encima del portal
 no se leen: se tropiezan, y el que hay que apretar cuando algo va mal queda
 perdido entre los demás.
@@ -2143,7 +2168,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**727 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**735 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2166,7 +2191,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `subidas` | que «Failed to fetch» diga algo accionable | 27 |
 | `radiografia203` | que el 📐 salga solo, y que el 203 (8%) ya NO frene al 5% | 26 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
-| `parada` | que DETENER corte el trabajo, y que PAUSA/paso-a-paso NO lo descarten | 28 |
+| `parada` | DETENER corta el trabajo · PAUSA no descarta · **dormida por defecto** | 36 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |

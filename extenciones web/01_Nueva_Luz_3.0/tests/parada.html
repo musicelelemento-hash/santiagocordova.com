@@ -97,6 +97,11 @@
   await flagsLote(true);
   await SafeStorage.set({ pendingAction: 'turbo_step1_facturas', actionTimestamp: Date.now() });
 
+  // La extensión arranca DORMIDA (no monta el panel sin sri_master_switch_on).
+  // Para probar el ⏹ hay que despertarlo — un lote CORRIENDO ya es "despierta".
+  if (!window.sriAssistant && typeof SriAssistantPanel === 'function') {
+    window.sriAssistant = new SriAssistantPanel();
+  }
   const panel = window.sriAssistant;
   push('el panel del asistente está vivo', typeof panel === 'object' && typeof panel.stopAutomation === 'function', true);
   if (panel && typeof panel.stopAutomation === 'function') {
@@ -161,6 +166,33 @@
   push('cortarSiPidieronParar no corta sin pedido',
        await cortarSiPidieronParar('prueba'), false);
   await SriLoop.detener('fin del banco');
+
+  // ══ G · dormida por defecto — extensionDespierta() ═════════════════════
+  // Elección del usuario, 10-sep-2026: en el portal NO se monta nada salvo
+  // que la extensión esté despierta. La despierta tu web o el popup.
+  sec('G · dormida por defecto en el portal');
+  for (const k of ['sri_master_switch_on','sc_loop','pending_sri_autofill']) await SafeStorage.remove([k]);
+  push('sin nada → dormida',                   await extensionDespierta(), false);
+  await SafeStorage.set({ sri_master_switch_on: true });
+  push('master switch en true → despierta',    await extensionDespierta(), true);
+  await SafeStorage.set({ sri_master_switch_on: false });
+  push('master switch en false → dormida',     await extensionDespierta(), false);
+  await SafeStorage.remove(['sri_master_switch_on']);
+  await SriLoop._set({ estado: 'CORRIENDO', cola: [{ruc:'x'}] });
+  push('lote CORRIENDO → despierta (no cortar a medias)', await extensionDespierta(), true);
+  await SriLoop._set({ estado: 'PAUSADO' });
+  push('lote PAUSADO → despierta',             await extensionDespierta(), true);
+  await SriLoop.detener('g');
+  await SafeStorage.set({ pending_sri_autofill: { ruc:'x', manual: true } });
+  push('autofill manual pendiente → despierta',await extensionDespierta(), true);
+  await SafeStorage.set({ pending_sri_autofill: { ruc:'x', manual: false } });
+  push('autofill NO manual → dormida',         await extensionDespierta(), false);
+  await SafeStorage.remove(['pending_sri_autofill']);
+  // Fail-safe: si el storage explota, NO dejar al usuario sin barra.
+  const realGet = window.chrome.storage.local.get;
+  window.chrome.storage.local.get = () => Promise.reject(new Error('storage caído'));
+  push('storage caído → despierta (fail-safe)', await extensionDespierta(), true);
+  window.chrome.storage.local.get = realGet;
 
   const fallos=ok.filter(x=>!x).length;
   document.getElementById('out').textContent=

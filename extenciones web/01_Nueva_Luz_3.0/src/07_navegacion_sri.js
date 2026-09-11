@@ -2860,10 +2860,12 @@ const SriLoopHUD = {
     }
 };
 
-function arrancarEnLaPagina() {
-    SriLoopHUD.montar();
-    // El canario de la Biblia: si el portal cambió de versión, avisarlo antes
-    // de que un selector fijo falle de un modo raro y cueste media hora.
+async function arrancarEnLaPagina() {
+    // 💤 Dormida por defecto: en el portal no se monta la barra salvo que la
+    // extensión esté despierta (la despierta tu web o el popup). El canario de
+    // versión sí corre siempre: es sólo lectura y avisa si el portal cambió.
+    const despierta = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
+    if (despierta) SriLoopHUD.montar();
     if (typeof revisarVersionDelPortal === 'function') {
         revisarVersionDelPortal().catch(() => {});
     }

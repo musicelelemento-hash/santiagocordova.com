@@ -128,7 +128,9 @@ SafeStorage.get(null).then(async (items) => {
     }
 
     const isAutoFlow = await SriLoop.puedeAvanzar();
-    if (items.sri_master_switch_on === false && !isAutoFlow) {
+    // 💤 Dormida por defecto: `undefined` cuenta como apagada (antes sólo
+    // `=== false`). La despiertan tu web o el popup poniendo el flag en true.
+    if (items.sri_master_switch_on !== true && !isAutoFlow) {
         const autofill = items.pending_sri_autofill;
         // Un cliente de LOTE nunca puede despertar la extensión por su cuenta:
         // para eso está el semáforo. Solo un login manual suelto (el botón del
