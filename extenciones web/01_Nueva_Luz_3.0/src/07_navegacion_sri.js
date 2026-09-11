@@ -709,6 +709,8 @@ const SriLoopHUD = {
             '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
             '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
             '<button id="slh-chequeo" aria-label="Chequeo: ver si está todo listo para correr el lote" title="Chequeo: la subida, las claves, el catastro, los proveedores y las marcas que frenan el envío" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🩺</button>',
+            '<button id="slh-probarclaves" aria-label="Probar claves: entra con cada clave guardada y sale, sin declarar nada" title="Probar claves: recorre la cartera, entra con cada clave guardada y sale — nunca declara" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🔑</button>',
+            '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
@@ -734,7 +736,9 @@ const SriLoopHUD = {
             '<div id="slh-ir-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
             '<div id="slh-proveedores-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
             '<div id="slh-notas-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
-            '<div id="slh-chequeo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>'
+            '<div id="slh-chequeo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
+            '<div id="slh-probarclaves-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:280px;overflow:auto"></div>',
+            '<div id="slh-auditoria-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:320px;overflow:auto"></div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -1078,6 +1082,33 @@ const SriLoopHUD = {
             await this.pintarRegistro();
         });
 
+        el.querySelector('#slh-probarclaves').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-probarclaves-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-probarclaves-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Leyendo…</div>';
+            panel.style.display = 'block';
+            await this.pintarProbarClaves();
+        });
+
+        el.querySelector('#slh-probarclaves-panel').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('#slh-probarclaves-ir');
+            if (!btn) return;
+            ev.stopPropagation();
+            await this.arrancarPruebaClaves();
+        });
+
+        el.querySelector('#slh-auditoria').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-auditoria-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-auditoria-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Revisando la base…</div>';
+            panel.style.display = 'block';
+            await this.pintarAuditoriaPeriodos();
+        });
+
         el.querySelector('#slh-subida').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             const panel = el.querySelector('#slh-subida-panel');
@@ -1141,6 +1172,8 @@ const SriLoopHUD = {
             ['slh-casilleros',  'Casilleros'],
             ['slh-ir',          'Ir a…'],
             ['slh-chequeo',     'Chequeo'],
+            ['slh-probarclaves','Probar claves'],
+            ['slh-auditoria',   'Períodos'],
             ['slh-subida',      'Probar subida'],
             ['slh-migrar',      'Migrar a la nube'],
             ['slh-panel',       'Panel']
@@ -2557,6 +2590,109 @@ const SriLoopHUD = {
             (filas.length > 40 ? ` · se muestran 40 de ${filas.length}` : '') +
             '</div>' + cuerpo +
             (sinPdf ? '<div style="font-size:10px;opacity:0.65;margin-top:6px">Los ⚠️ se declararon pero su PDF no llegó a la nube. El botón 🧾 los recupera desde Consulta de declaraciones.</div>' : '');
+    },
+
+    /**
+     * «Probar claves» (pedido por el usuario, 10-sep-2026): recorre la
+     * cartera, entra con cada clave guardada y sale — de a uno, nunca en
+     * paralelo, y NUNCA navega a Comprobantes Recibidos ni a ningún wizard.
+     * El resultado de cada cliente lo anota `PruebaClaves` desde
+     * `03_ingreso_y_sesion.js` (ok / rechazada / pide_cambio); acá sólo se
+     * arma la cola con `SriLoop.armarColaPruebaClaves()` y se pinta el
+     * resumen de la última corrida.
+     */
+    async pintarProbarClaves() {
+        const panel = document.getElementById('slh-probarclaves-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        const resumen = (typeof PruebaClaves !== 'undefined')
+            ? await PruebaClaves.resumen() : { ok: 0, rechazadas: 0, pideCambio: 0, filas: [] };
+        const enCurso = typeof SriLoop !== 'undefined' && (await SriLoop.get()).estado === 'CORRIENDO';
+
+        const filas = resumen.filas.slice(0, 40).map((f) => {
+            const color = f.resultado === 'ok' ? '#4ade80' : f.resultado === 'pide_cambio' ? '#fbbf24' : '#fca5a5';
+            const icono = f.resultado === 'ok' ? '✅' : f.resultado === 'pide_cambio' ? '🔑 pide cambio' : '❌ rechazada';
+            return [
+                '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06)">',
+                `  <span style="flex:1;font-size:11px;font-weight:700">${esc(f.nombre || f.ruc)}</span>`,
+                `  <span style="font-size:10px;color:${color}">${icono}</span>`,
+                '</div>'
+            ].join('');
+        }).join('');
+
+        panel.innerHTML =
+            '<div style="font-size:10px;opacity:0.8;margin-bottom:6px">Entra con cada clave guardada y sale. ' +
+            '<b>Nunca declara ni navega a Comprobantes Recibidos.</b></div>' +
+            `<button id="slh-probarclaves-ir" ${enCurso ? 'disabled' : ''} style="border:none;border-radius:8px;padding:6px 10px;font-weight:700;font-size:11px;cursor:${enCurso ? 'default' : 'pointer'};background:rgba(56,189,248,0.22);color:#7dd3fc;margin-bottom:8px;opacity:${enCurso ? 0.6 : 1}">` +
+            (enCurso ? '⏳ Ya hay un lote en curso…' : '▶️ Arrancar') + '</button>' +
+            (resumen.filas.length
+                ? `<div style="font-size:10px;opacity:0.75;margin:6px 0">` +
+                  `<b style="color:#4ade80">${resumen.ok}</b> ok · ` +
+                  `<b style="color:#fbbf24">${resumen.pideCambio}</b> piden cambio · ` +
+                  `<b style="color:#fca5a5">${resumen.rechazadas}</b> rechazadas` +
+                  (resumen.filas.length > 40 ? ` · se muestran 40 de ${resumen.filas.length}` : '') +
+                  '</div>' + filas
+                : '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Todavía no se probó ninguna clave en esta ronda.</div>');
+    },
+
+    /** Arma la cola de «probar claves» y la arranca — ver `pintarProbarClaves()`. */
+    async arrancarPruebaClaves() {
+        if (typeof SriLoop === 'undefined' || !SriLoop.armarColaPruebaClaves) return;
+        const { cola, sinClave, excluidosSeguridad } = await SriLoop.armarColaPruebaClaves();
+        if (!cola.length) {
+            this._aviso('🔑 Nada para probar',
+                `No quedó ningún cliente por probar (${sinClave} sin clave guardada, ${excluidosSeguridad} excluidos por seguridad).`, 8000);
+            return;
+        }
+        if (typeof PruebaClaves !== 'undefined') await PruebaClaves.limpiar();
+        const periodo = SriLoop.periodoPorDefecto();
+        await SriLoop.iniciar(cola, periodo);
+        await SriLoop.prepararCliente(cola[0], periodo);
+        this._aviso('🔑 Probando claves', `Arrancó con ${cola.length} cliente(s). Sólo entra y sale, nunca declara.`, 6000);
+        await sleep(500);
+        window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
+    },
+
+    /**
+     * Pinta la auditoría de `auditarPeriodosSospechosos()` — lista, de sólo
+     * lectura, los comprobantes que pudieron archivarse con el año sacado
+     * del RUC (§2c del AGENTS.md). **No mueve ni borra nada**: el usuario
+     * decide caso por caso si hace falta re-archivarlos.
+     */
+    async pintarAuditoriaPeriodos() {
+        const panel = document.getElementById('slh-auditoria-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        if (typeof auditarPeriodosSospechosos !== 'function') {
+            panel.innerHTML = '<div style="color:#fca5a5;font-size:11px">No está cargado el auditor de períodos.</div>';
+            return;
+        }
+        const r = await auditarPeriodosSospechosos();
+        if (r.error) {
+            panel.innerHTML = `<div style="color:#fca5a5;font-size:11px">No pude leer la base: ${esc(r.error)}</div>`;
+            return;
+        }
+        if (r.sospechosos.length === 0) {
+            panel.innerHTML = `<div style="font-size:11px;color:#86efac">✅ Nada sospechoso en ${r.revisados} declaración(es) revisada(s).</div>`;
+            return;
+        }
+
+        const filas = r.sospechosos.map((s) => [
+            '<div style="padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06)">',
+            `  <div style="display:flex;gap:6px;align-items:baseline"><span style="flex:1;font-size:11px;font-weight:700">${esc(s.nombre || s.ruc)}</span>`,
+            `  <span style="font-size:10px;font-family:monospace;opacity:0.7">${esc(s.ruc)}</span></div>`,
+            `  <div style="font-size:10px;opacity:0.8">Archivado como <b style="color:#fcd34d">${esc(s.periodo)}</b>` +
+            (s.tipo ? ` (${esc(s.tipo)})` : '') +
+            ` · guardado el ${esc(s.guardadoEl ? s.guardadoEl.slice(0, 10) : '(sin fecha)')}</div>`,
+            '</div>'
+        ].join('')).join('');
+
+        panel.innerHTML =
+            `<div style="font-size:10px;opacity:0.8;margin-bottom:6px">` +
+            `<b style="color:#fbbf24">${r.sospechosos.length}</b> candidato(s) sobre ${r.revisados} declaración(es) revisada(s). ` +
+            `El año archivado aparece dentro del RUC y no coincide con cuándo se guardó — la huella del bug del 07-sep-2026. ` +
+            `<b>Esto NO mueve nada</b>: revisá cada caso antes de re-archivar.</div>` + filas;
     },
 
     /**

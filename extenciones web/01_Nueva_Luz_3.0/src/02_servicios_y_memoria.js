@@ -458,6 +458,38 @@ const SriLoop = {
      * periodo. Excluye los marcados con error y los que no tienen clave
      * guardada (sin clave el auto-login es imposible).
      */
+    /** Cola para el modo «probar claves»: TODOS los clientes con clave
+     *  guardada que la bóveda deje intentar. A diferencia de `armarCola()`,
+     *  NO filtra por declarado/PDF —acá no importa si ya declaró, sólo si
+     *  la clave todavía sirve—, así que no reusa esa función. */
+    async armarColaPruebaClaves() {
+        const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
+        const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        const errs = r.flagged_errors || {};
+        const tried = r.sri_tried_credentials || {};
+
+        let cola = [], sinClave = 0, excluidosSeguridad = 0;
+        for (const c of lista) {
+            if (!c || !c.ruc) continue;
+            if (errs[c.ruc] === 'cuenta_bloqueada' || tried[c.ruc]?.status === 'locked') {
+                excluidosSeguridad++;
+                continue;
+            }
+            const clave = c.password || c.sri_password || c.sriPassword || '';
+            if (!clave) { sinClave++; continue; }
+            if (typeof SriCredentialVault !== 'undefined') {
+                const check = await SriCredentialVault.canAttemptLogin(c.ruc, clave);
+                if (!check.allowed) { excluidosSeguridad++; continue; }
+            } else if (errs[c.ruc] || tried[c.ruc]?.status === 'failed') {
+                excluidosSeguridad++;
+                continue;
+            }
+            cola.push({ ruc: c.ruc, name: c.name || 'Cliente SRI', password: clave, soloProbarClave: true });
+        }
+        console.log(`🔑 [PROBAR CLAVES] Cola: ${cola.length} por probar · ${sinClave} sin clave · ${excluidosSeguridad} excluidos por seguridad.`);
+        return { cola, sinClave, excluidosSeguridad, total: lista.length };
+    },
+
     async armarCola(periodo) {
         const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
         let lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
@@ -578,6 +610,25 @@ const SriLoop = {
                 await SafeStorage.set({ sc_rebotes: rb });
             }
         } catch (e) { /* un contador no puede tumbar el arranque */ }
+
+        if (cliente.soloProbarClave) {
+            console.log(`🔑 [PROBAR CLAVES] ${cliente.name || cliente.ruc}: sólo entra y sale, no declara nada.`);
+            await SafeStorage.set({
+                pending_sri_autofill: {
+                    ruc: cliente.ruc, password: cliente.password, name: cliente.name,
+                    timestamp: Date.now(), manual: true, isBatch: true
+                },
+                pendingAction: 'probar_clave',
+                actionTimestamp: Date.now(),
+                autoDeclaration: false,
+                sri_auto_mode: true,
+                sri_master_switch_on: true,
+                sriAutomationPaused: false,
+                ghost_manual_mode: false
+            });
+            await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
+            return;
+        }
 
         if (cliente.soloRecuperar) {
             console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
@@ -903,6 +954,37 @@ async function loteDebeContinuar() {
 //   window.sriReintentar('RUC')   → lo saca de la lista para volver a intentarlo
 //   window.sriOmitidosLimpiar()   → vacía la lista entera
 // ═══════════════════════════════════════════════════════════════════════════
+/** Registro del modo «probar claves» (§0c del AGENTS.md, pedido por el
+ *  usuario el 10-sep-2026): sólo entra y sale, nunca declara. Vive aparte de
+ *  `Omitidos` porque acá interesa también el resultado POSITIVO —clave ok—,
+ *  no sólo los que quedaron fuera de un lote de declaración. */
+const PruebaClaves = {
+    _KEY: 'sc_prueba_claves',
+    async anotar(ruc, resultado, detalle = '', nombre = '') {
+        if (!ruc) return;
+        try {
+            const r = await SafeStorage.get([this._KEY]);
+            const lista = r[this._KEY] || {};
+            lista[ruc] = { ruc, nombre: nombre || lista[ruc]?.nombre || '', resultado, detalle, cuando: Date.now() };
+            await SafeStorage.set({ [this._KEY]: lista });
+        } catch (e) { /* un registro no puede tumbar el lote */ }
+    },
+    async resumen() {
+        const r = await SafeStorage.get([this._KEY]);
+        const lista = r[this._KEY] || {};
+        const filas = Object.values(lista).sort((a, b) => b.cuando - a.cuando);
+        return {
+            ok: filas.filter((f) => f.resultado === 'ok').length,
+            rechazadas: filas.filter((f) => f.resultado === 'rechazada').length,
+            pideCambio: filas.filter((f) => f.resultado === 'pide_cambio').length,
+            filas
+        };
+    },
+    async limpiar() {
+        await SafeStorage.remove([this._KEY]);
+    }
+};
+
 const Omitidos = {
     _KEY: 'sc_omitidos',
 

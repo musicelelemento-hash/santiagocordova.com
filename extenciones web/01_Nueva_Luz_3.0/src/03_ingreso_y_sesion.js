@@ -336,6 +336,9 @@ SafeStorage.get(null).then(async (items) => {
             errs[clientRuc] = isAccountLocked ? 'cuenta_bloqueada' : 'error_credenciales';
             await SafeStorage.set({ flagged_errors: errs });
         }
+        if (clientRuc && items.pendingAction === 'probar_clave' && typeof PruebaClaves !== 'undefined') {
+            await PruebaClaves.anotar(clientRuc, 'rechazada', feedbackText || '', clientName);
+        }
 
         if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
             window.sriAssistant.showEliteToast({
@@ -567,6 +570,9 @@ SafeStorage.get(null).then(async (items) => {
             console.log(`   ${nombre} queda marcado: el lote lo va a omitir.`);
             await Omitidos.anotar(ruc, 'clave_caducada', { nombre });
             await marcarCredencialEnLaWeb(ruc, 'caducada', 'El SRI exige cambiar la clave antes de entrar');
+            if (items.pendingAction === 'probar_clave' && typeof PruebaClaves !== 'undefined') {
+                await PruebaClaves.anotar(ruc, 'pide_cambio', avisoClave.mensaje || '', nombre);
+            }
         }
 
         if (window.sriAssistant?.showEliteToast) {
@@ -677,6 +683,23 @@ SafeStorage.get(null).then(async (items) => {
         const selloEsperado = quienEntro.ruc && items.workflowPeriod
             ? `${quienEntro.ruc}|${items.workflowPeriod.year}-${String(items.workflowPeriod.monthIndex + 1).padStart(2, '0')}`
             : null;
+
+        // 🔑 Modo «probar claves»: la clave sirvió. Se anota y se sale — nunca
+        // navega al perfil ni a ningún wizard, porque eso sería exactamente
+        // lo que este modo promete no hacer.
+        if (items.pendingAction === 'probar_clave') {
+            const ruc = quienEntro.ruc;
+            const nombre = quienEntro.name || ruc || 'este contribuyente';
+            console.log(`🔑 [PROBAR CLAVES] ${nombre}: clave OK.`);
+            if (ruc && typeof PruebaClaves !== 'undefined') {
+                await PruebaClaves.anotar(ruc, 'ok', '', nombre);
+            }
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+            if (typeof handleBatchNextClient === 'function') {
+                setTimeout(() => handleBatchNextClient(), 1000);
+            }
+            return;
+        }
 
         if (selloEsperado &&
             items.pendingAction !== 'recuperar_comprobante' &&

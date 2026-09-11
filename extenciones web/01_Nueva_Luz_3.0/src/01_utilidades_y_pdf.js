@@ -670,6 +670,73 @@ async function listarComprobantesEmbebidos(periodo = null) {
 }
 
 /**
+ * Audita, de SOLO LECTURA, los comprobantes archivados con el período
+ * equivocado por el bug del año-sacado-del-RUC (§2c del AGENTS.md, corregido
+ * el 07-sep-2026: `extractFormPeriod()` tomaba el primer `202X` del texto de
+ * la cabecera, y el RUC del contribuyente a veces lo lleva adentro —ej.
+ * `0706482023001` contiene `2023`—). NO mueve ni borra nada: sólo lista
+ * candidatos para que el usuario decida.
+ *
+ * Heurística: una declaración es candidata cuando el AÑO de su `period` NO
+ * coincide con el año en que realmente se guardó (`updated_at`) Y ese mismo
+ * año aparece como substring dentro del RUC del cliente — la huella exacta
+ * del bug. Cualquiera de las dos señales sola puede ser legítima (una
+ * declaración atrasada real, o una coincidencia de dígitos); las dos juntas
+ * son la firma del bug. Sigue siendo una lista de candidatos, no un veredicto.
+ *
+ * @returns {Promise<{sospechosos: object[], revisados: number, error: string}>}
+ */
+async function auditarPeriodosSospechosos() {
+  const vacio = { sospechosos: [], revisados: 0, error: '' };
+  if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
+    return { ...vacio, error: 'No hay credenciales de Supabase cargadas.' };
+  }
+  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}` };
+
+  let filas;
+  try {
+    const r = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?select=id,ruc,name,declaration_history`,
+                          { headers: cab });
+    if (!r.ok) {
+      const cuerpo = await r.text().catch(() => '');
+      const dijo = (typeof loQueDijoSupabase === 'function') ? loQueDijoSupabase(cuerpo) : '';
+      return { ...vacio, error: `HTTP ${r.status}${dijo}` };
+    }
+    filas = await r.json();
+  } catch (e) {
+    return { ...vacio, error: 'No pude leer la base: ' + e.message };
+  }
+
+  const sospechosos = [];
+  let revisados = 0;
+
+  filas.forEach((cli) => {
+    const ruc = cli.ruc || '';
+    const hist = Array.isArray(cli.declaration_history) ? cli.declaration_history : [];
+    hist.forEach((dec, indice) => {
+      if (!dec || !dec.period) return;
+      revisados++;
+      const mPer = String(dec.period).match(/^(\d{4})/);
+      const anioPeriodo = mPer && mPer[1];
+      if (!anioPeriodo || !ruc.includes(anioPeriodo)) return;
+
+      const mGuardado = dec.updated_at ? String(dec.updated_at).match(/^(\d{4})/) : null;
+      const anioGuardado = mGuardado && mGuardado[1];
+      // Coinciden → el año no es sospechoso: declaró ese año, ese mismo año.
+      if (anioGuardado && anioGuardado === anioPeriodo) return;
+
+      sospechosos.push({
+        clienteId: cli.id, ruc, nombre: cli.name || '',
+        indice, periodo: String(dec.period), tipo: dec.type || '',
+        guardadoEl: dec.updated_at || '', anioPeriodo, anioGuardado: anioGuardado || '(sin fecha)'
+      });
+    });
+  });
+
+  return { sospechosos, revisados, error: '' };
+}
+
+/**
  * Sube UN comprobante a R2 y recién entonces lo saca de la base.
  *
  * **La regla de oro**: estos PDFs no tienen copia en ningún lado. El `content`
@@ -2441,6 +2508,28 @@ async function handleBatchNextClient() {
     // (el freno lo evita) pero quemaba minutos por cada uno de esos clientes.
     // El orden «primero el comprobante» pedido por el usuario depende de que
     // ESTA rama también lo respete, no sólo la del primer cliente.
+    if (nextClient.soloProbarClave) {
+      console.log(`🔑 [PROBAR CLAVES] ${nextClient.name || nextClient.ruc}: sólo entra y sale, no declara nada.`);
+      await SafeStorage.set({
+        auto_batch_index: nextIndex,
+        pending_sri_autofill: {
+          ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
+          timestamp: Date.now(), manual: true, isBatch: true,
+        },
+        pendingAction: 'probar_clave',
+        actionTimestamp: Date.now(),
+        ghost_manual_mode: false,
+      });
+      if (typeof SriLoop !== 'undefined') {
+        await SriLoop.avanzarIndice(nextIndex);
+        await SriLoop.avanzarA(nextIndex);
+      }
+      await GhostMemory.clearCurrent();
+      await sleep(1000);
+      await cerrarSesionSRI();
+      return true;
+    }
+
     if (nextClient.soloRecuperar) {
       console.log(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc} ya declaró: solo se recupera su comprobante.`);
       await SafeStorage.set({

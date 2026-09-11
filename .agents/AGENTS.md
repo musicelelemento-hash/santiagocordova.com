@@ -136,27 +136,43 @@ dejá dicho qué agregaste.
 > Formato en la §0a. Lo que está acá **no está hecho**: es lo que una IA vio y
 > dejó anotado para que lo decida el usuario, u otra IA con más contexto.
 
-### Propuesta · Botón «probar claves» — una vuelta rápida, sólo login
+### Propuesta · Botón «probar claves» — HECHA el 11-sep-2026, sin corrida real todavía
 
 **Quién la propone**: el usuario · 10-sep-2026
 **Qué se pidió**: *«un botón solo para probar claves, sería como una vuelta
 rápida de uno por uno pero de forma inteligente, sería como un rotar
 claves»*. O sea: recorrer toda la cartera, entrar con cada clave guardada,
 confirmar que el SRI la acepta, y salir — sin tocar ninguna declaración.
-**Qué se propone**: un modo de lote nuevo (`sc_loop` con un `modo:'solo_login'`
-o similar) que reutiliza TODO lo que ya existe para entrar y detectar el
-resultado (`SriCredentialVault`, `elSriPideCambiarLaClave`,
-`claveVencida`, el detector de «clave incorrecta») pero corta ahí: no navega
-a Comprobantes Recibidos ni a ningún wizard. Por cliente, tres resultados
-posibles — **ok** / **rechazada** (`recordFailure`, igual que hoy) /
-**el SRI pide cambiarla** (ya detectado, hoy sólo bloquea) — y al final una
-lista. Es más rápido que el lote normal (nada de extraer ni declarar) y no
-arriesga nada: nunca llena un formulario.
-**Qué cuesta / qué rompe**: bajo. Reutiliza detección ya probada; lo nuevo es
-sólo el modo «cortar después del login» y la lista de resultados. Un cuidado:
-que NO cuente como intento fallido real ante el SRI algo que en realidad fue
-el bot cortando por su cuenta.
-**Estado**: propuesta — buena candidata para la próxima sesión de trabajo.
+
+**Cómo quedó implementado**: botón 🔑 «Probar claves» en el cajón 🧰
+(`07_navegacion_sri.js`). Arma la cola con `SriLoop.armarColaPruebaClaves()`
+— nueva, en `02_servicios_y_memoria.js`, hermana de `armarCola()` pero SIN
+filtrar por declarado/PDF: acá no importa si ya declaró, sólo si la clave
+sirve. Cada cliente entra con `pendingAction: 'probar_clave'`
+(`SriLoop.prepararCliente()` para el primero, la rama espejo en
+`handleBatchNextClient()` para el resto). En `03_ingreso_y_sesion.js` un
+bloque nuevo intercepta ese `pendingAction` en el punto exacto donde el login
+exitoso saltaba al perfil (`selloEsperado`, antes de esta rama) y **corta
+ahí**: nunca llega a Comprobantes Recibidos ni a ningún wizard — misma guarda
+que ya usan `recuperar_comprobante`/`bajar_todos_comprobantes`.
+
+Los tres resultados —**ok** / **rechazada** / **pide cambiar**— **reutilizan
+toda la detección ya probada** (`elSriLoRechazo`, `elSriPideCambiarLaClave`,
+`recordFailure`/`recordLocked` de `SriCredentialVault`): no se tocó ni una
+línea de esa lógica, sólo se agregó una anotación en el registro nuevo
+`PruebaClaves` (`sc_prueba_claves`, con `resultado: 'ok'|'rechazada'|'pide_cambio'`)
+en los tres puntos donde el flujo ya decide cada caso. El panel del botón 🔑
+lee ese registro y pinta el resumen (cuántos ok/rechazadas/piden cambio, con
+nombre de cada uno).
+
+**Lo que el banco NO puede probar**: la corrida real contra el portal —
+requiere sesión y sería literalmente 500 intentos de login reales. `node
+--check` en los 4 archivos tocados + `npm run build` + los 22 bancos
+existentes (777 comprobaciones) siguen en verde: no se rompió nada del flujo
+de lote ya probado. **Falta una primera corrida real, mirando la consola**,
+antes de confiar en esto para 500 contribuyentes de una — empezar con 2 o 3
+clientes de prueba, no con la cartera entera.
+**Estado**: implementada · sin corrida real todavía.
 
 ### Propuesta · Herramientas de un clic para el día a día (certificado RUC, aviso de clave por vencer)
 
@@ -226,7 +242,7 @@ IP/rate-limit).
 **Estado**: propuesta — desaconsejada para la declaración; el disparo remoto
 (web/Telegram → extensión) ya existe y alcanza para lo que el pedido busca.
 
-### Propuesta · Auditar los comprobantes archivados con el período equivocado
+### Propuesta · Auditar los comprobantes archivados con el período equivocado — HECHA el 11-sep-2026, sin corrida real todavía
 
 **Quién la propone**: Claude · 07-sep-2026
 **Qué se vio**: el bug del período (§2c) archivó la declaración de agosto de
@@ -235,15 +251,37 @@ IP/rate-limit).
 se archivó mal sigue archivado mal**.
 **Cuánta gente**: en el lote de 15 del 07-sep, 1 RUC de 15 contenía un `202X`.
 Sobre 500 contribuyentes son del orden de **30 o 40** — no es un caso raro.
-**Qué se propone**: un botón que no toca nada y sólo compara. La memoria local
-(`filed_<ruc>_2011_<mes>_<año>`) tiene el período **correcto**, porque se arma
-con `workflowPeriod` y no con la pantalla. Cruzarla contra lo que hay en
-Supabase / R2 y listar los que no coinciden. Después el usuario decide si se
-re-suben o se dejan.
-**Qué cuesta / qué rompe**: nada, si es sólo de lectura. El riesgo está en
-"arreglarlo solo": mover un comprobante puede pisar uno legítimo de ese
-período viejo. **Listar sí, mover no** sin confirmación.
-**Estado**: propuesta
+
+**Cómo quedó implementado**: botón 🕵️ «Períodos» en el cajón 🧰. La función
+`auditarPeriodosSospechosos()` (`01_utilidades_y_pdf.js`) trae TODOS los
+clientes con `declaration_history` de Supabase (mismo fetch que
+`listarComprobantesEmbebidos`) y marca como candidato cada declaración donde
+**el año del período archivado aparece dentro del RUC del cliente Y no
+coincide con el año de `updated_at`** — las dos señales juntas son la huella
+exacta del bug; una sola puede ser legítima (una declaración atrasada real,
+o una coincidencia de dígitos). Es **sólo lectura**: no mueve ni borra nada,
+sólo lista candidatos con nombre, RUC, período archivado y fecha real de
+guardado, para que el usuario decida caso por caso.
+
+*Nota de diseño*: se descartó cruzar contra `filed_<ruc>_2011_<mes>_<año>`
+(la memoria local) como proponía originalmente esta entrada — un segundo
+agente de exploración confirmó que esa clave caduca a los 5 días («Smart
+Silence») y no sirve como registro histórico. `sc_declaraciones_locales`
+(vía `SriLoop.verDeclaraciones()`) sí persiste, pero tampoco cubre lo
+archivado ANTES de que esa función existiera, así que la auditoría quedó
+autocontenida en Supabase (período vs. RUC vs. fecha de guardado) en vez de
+depender de un rastro local que no llega tan atrás.
+
+**Qué cuesta / qué rompe**: nada — de sólo lectura, confirmado con
+`node --check` + `npm run build` + los 22 bancos existentes (777
+comprobaciones, sigue en verde). **Falta correrlo contra la base real** para
+ver cuántos candidatos tira de verdad y si la heurística necesita ajuste
+(por ejemplo, un contribuyente que genuinamente declaró tarde un período
+viejo podría aparecer como falso positivo si además su RUC contiene ese año
+por coincidencia — revisar los primeros resultados a mano antes de confiar
+en la lista). **Listar sí, mover no**: re-archivar sigue siendo decisión del
+usuario, caso por caso.
+**Estado**: implementada · sin corrida real todavía.
 
 ### Propuesta · Un solo lector de texto del portal, y prohibir `document.body.innerText`
 
