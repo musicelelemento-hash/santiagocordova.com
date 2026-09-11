@@ -118,8 +118,8 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **735 comprobaciones, verdes el 10-sep-2026** — los dos últimos
-bancos agregados ese día: `portal` (24) y `migrar` (36). Si tu cambio baja ese número, algo se rompió; si lo sube,
+scripts). **761 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+bancos agregados ese día: `migrar` (36) y `lote` (26). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
 > **La suite entera tarda unos cinco minutos**, y `bendita` roza el tope: el
@@ -235,6 +235,31 @@ falta es una corrida que lo muestre.
 la columna `is_deleted` (`42501`). Ver la §0b.2. Se deja escrita porque la
 lección vale más que el caso: **leer lo que la API contesta antes de acusar a
 la credencial.**
+
+---
+
+### Propuesta · Barrer TODOS los años de cada cliente antes de declarar (no sólo el sinPdf de la cola)
+
+**Quién la propone**: Claude · 10-sep-2026
+**Qué se vio**: el usuario pidió que el lote arranque bajando los PDF
+originales que falten (todos los años, `bajarTodosLosComprobantes`) para
+CADA cliente, y recién declare al que no tenga ni PDF ni declaración
+presentada. Lo que ya existía (y se corrigió el mismo día, ver §9c) sólo
+cubre al que la cola YA sabía que le faltaba el PDF de ESTE período — no
+barre años anteriores para alguien sin ese registro local.
+**Qué se propone**: en `handleBatchNextClient()`, antes de mandar a un
+cliente normal a `turbo_step1_facturas`, encadenar primero
+`pendingAction: 'bajar_todos_comprobantes'` (con `continuarCon` apuntando de
+vuelta al declare) — reutilizando `barrerTodosLosAnios()`, que ya existe y
+está probada para el 🧾 manual.
+**Qué cuesta / qué rompe**: el encadenamiento cruza dos sub-apps del SRI
+(Consulta de declaraciones → Comprobantes Recibidos) dentro de la función que
+gobierna el avance de TODO el lote. Sin una corrida real para ver esa
+transición, un error ahí no rompe una declaración: deja al lote entero dando
+vueltas o saltando clientes. Cada cliente además tarda más (visita una
+sub-app de más).
+**Estado**: propuesta — hacerla con el usuario mirando la consola en la
+primera corrida, no a ciegas.
 
 ---
 
@@ -2150,6 +2175,71 @@ barra en una corrida real. Tres puertas gateadas: `new SriAssistantPanel()`
 Si declarás **a mano** sin despertarla, el comprobante no se captura solo —
 para eso está el 🧾 después. Es el precio de que no moleste.
 
+
+
+### 🌐 La lista sale sólo de tu web — 10-sep-2026
+
+> Elegido por el usuario: *«mis clientes mensuales son los que están en la web
+> en menú Declaraciones… de la nada aparecieron clientes que no había visto
+> en mucho tiempo, hasta de prueba»*.
+
+`fetchClientsDirectly()` **ya no consulta Supabase por su cuenta**. Antes lo
+hacía, y `isClientMensual()` decía «sí, incluir» a cualquier cliente **sin la
+frecuencia marcada** — así se colaban los viejos y los de prueba. Peor: esa
+misma regla estaba **duplicada en tres lugares** (acá, en
+`bridge_content.js`, y una tercera copia inline en `renderAnticipationWidget`)
+con defaults que no coincidían entre sí.
+
+Ahora: una sola `isClientMensual()`, sin frecuencia marcada → **no entra**
+(antes sí). Y `fetchClientsDirectly()` sólo lee `sc_clients_cache` — la
+llena `bridge_content.js` sincronizando lo que ves en el menú Declaraciones
+de tu web (cada 2,5 s con esa pestaña abierta), o lo que importás a mano por
+CSV. Si la caché está vacía, el mensaje ahora dice lo que hay que hacer:
+abrir la web para sincronizar, no salir a buscar clientes por otro lado.
+Banco: `tests/lote.html`, sección A-B.
+
+### 🧾 El lote recupera el comprobante antes de re-declarar — 10-sep-2026
+
+> Pedido del usuario: *«el orden sea por pdf, si ya tiene el pdf original,
+> perfecto»*.
+
+La cola YA marcaba `soloRecuperar: true` a quien declaró pero le falta el
+PDF, para que se recupere en vez de declararse de nuevo (§0b.4). Revisando el
+código para cumplir el pedido salieron **tres bugs reales, nunca vistos en
+producción porque el síntoma es silencioso**:
+
+1. **`arrancarLote()` preparaba las credenciales del cliente equivocado.**
+   Armaba la cola completa (`colaFinal`, con los `soloRecuperar` primero) pero
+   preparaba `cola[0]` — el primero **a declarar**, no el primero de verdad.
+2. **`handleBatchNextClient()` ignoraba `soloRecuperar` en todo cliente que
+   no fuera el #1.** Sólo `SriLoop.prepararCliente()` miraba ese flag, y a
+   ése lo llama `arrancarLote()` una única vez, para el primer cliente. Del
+   #2 en adelante, alguien marcado «sólo recuperar» pasaba igual por
+   `turbo_step1_facturas`: extraía todo, navegaba el wizard entero, y recién
+   en el paso 4 el freno de la sustitutiva lo paraba. No declaraba mal —pero
+   quemaba varios minutos por cliente sin que nadie se enterara.
+3. **Peor: `isClientDoneOrError()` los saltaba en silencio.** Trataba
+   *cualquier* registro local como «ya está», tuviera o no `pdfSubido`. Un
+   cliente `soloRecuperar` **siempre** tiene un registro local sin PDF —es
+   justo por qué está marcado así— así que el `while` de salto lo sacaba de
+   la cola antes de que la corrección del punto 2 llegara a mirarlo. Ni se
+   recuperaba ni se declaraba: desaparecía.
+
+Los tres corregidos y probados juntos en `tests/lote.html`, sección C-D (con
+espía sobre `cerrarSesionSRI` para no navegar de verdad).
+
+**Lo que NO se hizo, y por qué:** el pedido completo era barrer los PDF
+faltantes de **todos los años** para cada cliente del lote (`bajarTodosLosComprobantes`
+completo) antes de declarar, no sólo recuperar al que la cola ya sabía que le
+faltaba. Eso exige encadenar `pendingAction` a través de dos sub-apps del SRI
+distintas (Consulta de declaraciones → Comprobantes Recibidos) **dentro de
+`handleBatchNextClient()`**, la función que ya gobierna el avance de todo el
+lote (bendita, cola dinámica, rescate de credenciales, índice). Sin una
+sesión real contra el portal para ver la transición entre pantallas, es
+exactamente el tipo de cambio que el §4 pide "probar rigurosamente" — un
+error ahí no rompe una declaración, rompe el lote entero. Queda anotado en la
+§0c para hacerlo con el usuario mirando la primera corrida.
+
 ---
 
 Llegó a **diecisiete controles**. Diecisiete íconos sueltos encima del portal
@@ -2168,7 +2258,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**735 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**761 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2193,6 +2283,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
 | `parada` | DETENER corta el trabajo · PAUSA no descarta · **dormida por defecto** | 36 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
+| `lote` | **la lista sale sólo de tu web; el lote recupera antes de re-declarar** | 26 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |

@@ -19,7 +19,11 @@ function isMensual(c) {
   if (reg.includes('emprendedor')) {
     return freq === 'mensual';
   }
-  return true;
+  // 💤 Sin frecuencia marcada, ya NO se incluye por defecto (10-sep-2026):
+  // así entraban clientes viejos y de prueba sin la frecuencia cargada en la
+  // web. processAndSaveClientsList() de más abajo la fuerza a 'Mensual' para
+  // los que SÍ pasan este filtro, así que esto no les afecta.
+  return false;
 }
 
 function processAndSaveClientsList(clientsList) {

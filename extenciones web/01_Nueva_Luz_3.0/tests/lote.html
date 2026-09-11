@@ -1,0 +1,151 @@
+<!doctype html><meta charset="utf-8"><title>La lista real, y primero el comprobante</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>La lista sale sólo de tu web · el lote recupera antes de declarar</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  El usuario, 10-sep-2026: <i>«uso el portal para otras cosas»</i>, <i>«de la
+  nada aparecieron clientes de prueba»</i>, <i>«el orden sea por pdf, si ya
+  tiene el pdf original, perfecto»</i>. Este banco cuida cuatro cosas:
+  <br><br>
+  1) <code>fetchClientsDirectly()</code> ya no consulta Supabase — sólo lee
+  <code>sc_clients_cache</code>, que llena el puente con tu web.
+  <br>
+  2) <code>isClientMensual()</code> ya NO incluye por defecto a un cliente sin
+  frecuencia marcada — así se colaban los viejos y los de prueba.
+  <br>
+  3) <code>arrancarLote()</code> preparaba las credenciales del cliente
+  equivocado cuando había alguno «sólo recuperar comprobante» por delante.
+  <br>
+  4) <code>handleBatchNextClient()</code> ignoraba el flag «sólo recuperar» en
+  cualquier cliente que no fuera el primero del lote — y además los saltaba en
+  silencio si ya tenían UN registro local, tuviera o no el PDF.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[]; window.__fetchCalls=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:(m,cb)=>{cb&&cb({ok:false});return Promise.resolve({ok:false})},id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+  // Espía: si algo vuelve a llamar a fetch contra Supabase, que quede anotado.
+  const realFetch = window.fetch ? window.fetch.bind(window) : null;
+  window.fetch = (...args) => { window.__fetchCalls.push(String(args[0])); return realFetch ? realFetch(...args) : Promise.reject(new Error('no hay fetch real en este banco')); };
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const limpiar = async () => {
+    for (const k of ['sc_clients_cache','flagged_errors','sri_tried_credentials','sc_declaraciones_locales',
+                      'sc_loop','auto_batch_queue','auto_batch_index','auto_batch_enabled','auto_batch_period',
+                      'auto_batch_mode','pendingAction','pending_sri_autofill','recuperarComprobante',
+                      'workflowPeriod','declaration_synced_flag','iva_sin_ubicar','sc_lista_bendita']) {
+      await SafeStorage.remove([k]);
+    }
+  };
+  await limpiar();
+
+  // El logout real purga cookies/localStorage y navega — no hay portal acá.
+  window.cerrarSesionSRI = async () => { window.__cerroSesion = (window.__cerroSesion||0) + 1; };
+
+  // ══ A · fetchClientsDirectly ya NO consulta Supabase ═══════════════════
+  sec('A · la lista sale sólo del puente con la web');
+  await SafeStorage.set({ sc_clients_cache: [
+    { ruc: '0700000001001', name: 'MENSUAL SA', ivaFrequency: 'Mensual', password: 'x' },
+    { ruc: '0700000002001', name: 'SEMESTRAL SA', ivaFrequency: 'Semestral', password: 'x' },
+    { ruc: '0700000003001', name: 'SIN FRECUENCIA (viejo/prueba)', password: 'x' },
+  ]});
+  window.__fetchCalls.length = 0;
+  const directos = await fetchClientsDirectly();
+  push('NO llamó a fetch (nada de red)',              window.__fetchCalls.length, 0);
+  push('sólo trae al mensual',                        directos.map(c=>c.ruc), ['0700000001001']);
+  push('el semestral queda afuera',                   directos.some(c=>c.ruc==='0700000002001'), false);
+  push('el sin frecuencia queda afuera (antes entraba)', directos.some(c=>c.ruc==='0700000003001'), false);
+
+  // ══ B · isClientMensual: el default ya no es "sí" ══════════════════════
+  sec('B · isClientMensual no incluye por defecto');
+  push('mensual explícito → true',   isClientMensual({ ruc:'1', ivaFrequency:'Mensual' }), true);
+  push('semestral → false',          isClientMensual({ ruc:'1', ivaFrequency:'Semestral' }), false);
+  push('sin nada → false (antes true)', isClientMensual({ ruc:'1' }), false);
+  push('sin RUC → false',            isClientMensual({ name:'x' }), false);
+  push('emprendedor + mensual → true', isClientMensual({ ruc:'1', regime:'Emprendedor', ivaFrequency:'Mensual' }), true);
+  push('emprendedor sin frecuencia → false', isClientMensual({ ruc:'1', regime:'Emprendedor' }), false);
+  // 'mensual' se mira ANTES que el régimen: un Popular marcado mensual sí
+  // entra (regla existente, no la tocamos). El caso que importa es sin
+  // frecuencia explícita — ahí el régimen popular sí lo saca.
+  push('RIMPE Negocio Popular sin frecuencia → false', isClientMensual({ ruc:'1', regime:'RIMPE Popular' }), false);
+
+  // ══ C · arrancarLote(): preparaba al cliente equivocado ════════════════
+  sec('C · arrancarLote() prepara al primero de VERDAD, no al primero a declarar');
+  await limpiar();
+  const periodo = { year: 2026, monthIndex: 7 }; // 2026-08
+  await SafeStorage.set({
+    sc_clients_cache: [
+      { ruc: 'A', name: 'CLIENTA (ya declaró, sin PDF)', password: 'pa', declarations: [] },
+      { ruc: 'B', name: 'CLIENTB (falta declarar)', password: 'pb', declarations: [] },
+    ],
+    // A ya declaró 2026-08 pero el PDF no llegó a subir — por eso es sinPdf.
+    sc_declaraciones_locales: { 'A|2026-08': { periodo: '2026-08', pdfSubido: false, nombre: 'CLIENTA' } },
+  });
+  const cola = await SriLoop.armarCola(periodo);
+  push('A queda en sinPdf, no en cola',        cola.sinPdf.map(c=>c.ruc), ['A']);
+  push('B queda en cola para declarar',        cola.cola.map(c=>c.ruc), ['B']);
+
+  const r = await SriLoop.arrancarLote(periodo);
+  push('arrancarLote sale bien',               r.ok, true);
+  push('el primero de verdad es A (sinPdf), no B', r.primero, 'CLIENTA (ya declaró, sin PDF)');
+  const s1 = await SafeStorage.get(['pending_sri_autofill','pendingAction']);
+  push('preparó las credenciales de A',        s1.pending_sri_autofill.ruc, 'A');
+  push('con la acción de RECUPERAR, no declarar', s1.pendingAction, 'recuperar_comprobante');
+
+  // ══ D · handleBatchNextClient(): ignoraba "sólo recuperar" salvo el #1 ═
+  sec('D · el avance del lote respeta "sólo recuperar" en cualquier posición');
+  await limpiar();
+  const colaLote = [
+    { ruc: 'X', name: 'CLIENTX (normal)', password: 'px' },
+    { ruc: 'Y', name: 'CLIENTY (ya declaró, sin PDF)', password: 'py', soloRecuperar: true },
+    { ruc: 'Z', name: 'CLIENTZ (normal)', password: 'pz' },
+  ];
+  await SriLoop.iniciar(colaLote, periodo); // estado CORRIENDO, cola=colaLote, indice=0
+  await SafeStorage.set({
+    auto_batch_queue: colaLote, auto_batch_index: 0, auto_batch_enabled: true,
+    auto_batch_mode: 'turbo_step1_facturas', auto_batch_period: periodo,
+    // Y ya declaró este período (por eso está soloRecuperar) — antes esto lo
+    // hacía desaparecer del lote sin más: cualquier registro local contaba
+    // como "hecho", tuviera o no el PDF.
+    sc_declaraciones_locales: { 'Y|2026-08': { periodo: '2026-08', pdfSubido: false, nombre: 'CLIENTY' } },
+  });
+
+  const avance1 = await handleBatchNextClient();
+  push('avanza (no dice que no hay nada)',     avance1, true);
+  const s2 = await SafeStorage.get(['pending_sri_autofill','pendingAction','auto_batch_index','recuperarComprobante']);
+  push('el siguiente es Y, no lo salta',       s2.pending_sri_autofill.ruc, 'Y');
+  push('con la acción de RECUPERAR, no declarar', s2.pendingAction, 'recuperar_comprobante');
+  push('con el período correcto',              s2.recuperarComprobante.per, '2026-08');
+  push('el índice avanzó a 1',                 s2.auto_batch_index, 1);
+
+  const avance2 = await handleBatchNextClient();
+  const s3 = await SafeStorage.get(['pending_sri_autofill','pendingAction','auto_batch_index']);
+  push('el normal de después SÍ declara',      s3.pendingAction, 'turbo_step1_facturas');
+  push('y es Z, no se lo comió el salto',      s3.pending_sri_autofill.ruc, 'Z');
+  push('el índice avanzó a 2',                 s3.auto_batch_index, 2);
+  push('cerrarSesionSRI se llamó dos veces (una por cliente)', window.__cerroSesion, 2);
+
+  await SriLoop.detener('fin del banco');
+  await limpiar();
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>
+</body>
+</html>

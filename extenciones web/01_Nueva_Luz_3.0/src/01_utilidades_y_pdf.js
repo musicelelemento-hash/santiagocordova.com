@@ -850,7 +850,11 @@ function isClientMensual(db) {
   if (reg.includes('emprendedor')) {
     return freq === 'mensual';
   }
-  return true;
+  // 💤 Sin frecuencia marcada, ya NO se incluye por defecto (10-sep-2026):
+  // así aparecían clientes viejos y de prueba que nunca declararon la
+  // frecuencia en la web. La lista real es la que sincroniza tu web — un
+  // cliente de verdad la trae marcada.
+  return false;
 }
 // ============================================================
 // Helper global para estados y logs sin depender del contexto 'this'
@@ -2371,10 +2375,19 @@ async function handleBatchNextClient() {
 
   const registroLocal = res.sc_declaraciones_locales || {};
 
-  const isClientDoneOrError = (clientRuc) => {
+  const isClientDoneOrError = (item) => {
+    const clientRuc = item && item.ruc;
     if (!clientRuc || flaggedErrs[clientRuc]) return true;
-    // 🧾 Constancia de esta misma corrida: si ya declaró el periodo, no se vuelve.
-    if (registroLocal[`${clientRuc}|${targetPeriodStr}`]) {
+    // 🧾 Constancia de esta misma corrida: si ya declaró el periodo, no se
+    // vuelve. BUG real (10-sep-2026): esto trataba CUALQUIER registro local
+    // como "ya está", con o sin `pdfSubido`. Un cliente en cola marcado
+    // `soloRecuperar` —ya declaró, sólo le falta el comprobante— tiene
+    // justamente un registro local sin `pdfSubido`, así que desaparecía en
+    // silencio de acá en cuanto no era el primero del lote: nunca llegaba a
+    // la rama que lo recupera. Ahora sólo cuenta como "hecho" si el PDF ya
+    // subió, o si el cliente no estaba marcado para recuperar nada.
+    const reg = registroLocal[`${clientRuc}|${targetPeriodStr}`];
+    if (reg && (reg.pdfSubido || !item.soloRecuperar)) {
       console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${targetPeriodStr} en esta corrida.`);
       return true;
     }
@@ -2398,7 +2411,7 @@ async function handleBatchNextClient() {
 
   while (
     nextIndex < queue.length &&
-    isClientDoneOrError(queue[nextIndex].ruc)
+    isClientDoneOrError(queue[nextIndex])
   ) {
     console.log(
       `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado, con error o credencial fallida: ${queue[nextIndex].ruc}`,
@@ -2415,6 +2428,46 @@ async function handleBatchNextClient() {
     const pParts = targetPeriodStr.split("-");
     const pYear = parseInt(pParts[0]);
     const pMonth = parseInt(pParts[1]) - 1; // monthIndex 0..11 para workflowPeriod
+    const periodoSiguiente = { year: pYear, monthIndex: pMonth };
+
+    // 🧾 BUG real (10-sep-2026): este método arma pendingAction para el
+    // siguiente cliente con su PROPIA copia, sin mirar `soloRecuperar`. Ese
+    // flag —puesto por armarCola() para quien YA declaró y sólo le falta el
+    // PDF— sólo lo respetaba SriLoop.prepararCliente(), y a ése únicamente lo
+    // llama arrancarLote() para el cliente #1. Del #2 en adelante, un cliente
+    // marcado «solo recuperar» terminaba pasando por `turbo_step1_facturas`
+    // igual que cualquiera — extraía todo, navegaba el wizard entero, y recién
+    // en el paso 4 el freno de la sustitutiva lo frenaba. No declaraba mal
+    // (el freno lo evita) pero quemaba minutos por cada uno de esos clientes.
+    // El orden «primero el comprobante» pedido por el usuario depende de que
+    // ESTA rama también lo respete, no sólo la del primer cliente.
+    if (nextClient.soloRecuperar) {
+      console.log(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc} ya declaró: solo se recupera su comprobante.`);
+      await SafeStorage.set({
+        auto_batch_index: nextIndex,
+        pending_sri_autofill: {
+          ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
+          timestamp: Date.now(), manual: true, isBatch: true,
+        },
+        pendingAction: 'recuperar_comprobante',
+        recuperarComprobante: {
+          ruc: nextClient.ruc, nombre: nextClient.name, periodo: periodoSiguiente,
+          per: targetPeriodStr, intentos: 0,
+        },
+        workflowPeriod: periodoSiguiente,
+        actionTimestamp: Date.now(),
+        ghost_manual_mode: false,
+      });
+      if (typeof SriLoop !== 'undefined') {
+        await SriLoop.avanzarIndice(nextIndex);
+        await SriLoop.avanzarA(nextIndex);
+      }
+      await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
+      await GhostMemory.clearCurrent();
+      await sleep(1000);
+      await cerrarSesionSRI();
+      return true;
+    }
 
     const batchAction = res.auto_batch_mode || 'turbo_step1_facturas';
 
@@ -2429,7 +2482,7 @@ async function handleBatchNextClient() {
         isBatch: true,
       },
       pendingAction: batchAction,
-      workflowPeriod: { year: pYear, monthIndex: pMonth },
+      workflowPeriod: periodoSiguiente,
       actionTimestamp: Date.now(),
       ghost_manual_mode: false
       // Las banderas de encendido las gestiona SriLoop, no este método.
@@ -2754,99 +2807,27 @@ function isSRILoginPage() {
   return hasLoginUrl || hasLoginForm;
 }
 
+// 💤 Ya NO consulta Supabase por su cuenta — elección del usuario, 10-sep-2026:
+// «la lista real es la de mi web, no quiero clientes fantasma». Antes esta
+// función le preguntaba a Supabase directamente y por eso aparecían clientes
+// viejos y de prueba: `isClientMensual` decía «sí, incluir» a cualquiera sin
+// la frecuencia marcada, y ese default vivía en TRES copias del mismo filtro
+// (acá, en bridge_content.js y en renderAnticipationWidget) que nadie
+// mantenía sincronizadas.
+//
+// La única fuente de la verdad ahora es `sc_clients_cache`: la llena
+// `bridge_content.js` sincronizando lo que ves en el menú Declaraciones de tu
+// web (cada 2,5 s mientras esa pestaña está abierta), o lo que importaste a
+// mano por CSV. Se mantiene el nombre de la función y la forma del retorno
+// (array de clientes) para no tocar a cada uno de los que la llaman.
 async function fetchClientsDirectly() {
   try {
-    const SUPABASE_URL = SC_SUPABASE_URL;
-    const SUPABASE_KEY = SC_SUPABASE_ANON_KEY;
-    const authStore = await SafeStorage.get(["sc_supabase_token"]);
-    const authToken = authStore.sc_supabase_token || SUPABASE_KEY;
-
-    // 💡 ULTRA-LIGHT QUERY: Incluye sri_declaraciones relacional y declaration_history
-    // También sin `is_deleted=eq.false`, por lo mismo (42501). Acá sí puede
-    // entrar algún contribuyente dado de baja en la web. Para recuperar el
-    // filtro alcanza con una línea en el editor SQL de Supabase:
-    //
-    //     GRANT SELECT (is_deleted) ON public.clients TO anon;
-    //
-    // Mientras no esté, esto anda; con el filtro puesto no anda nada.
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id,ruc,name,regime,tax_profile,declaration_history,sri_declaraciones(id,period,type,status,proof_file,is_paid,created_at,updated_at)`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${authToken}`
-      }
-    });
-
-    const prevCache = await SafeStorage.get(["sc_clients_cache"]);
-    const prevList = Array.isArray(prevCache.sc_clients_cache) ? prevCache.sc_clients_cache : [];
-    const prevPasswords = new Map(
-      prevList.map((p) => [p.ruc, p.password || p.sri_password || p.sriPassword || ""])
-    );
-    const prevDeclsMap = new Map(
-      prevList.map((p) => [p.ruc, Array.isArray(p.declarations) ? p.declarations : []])
-    );
-
-    if (!res.ok) {
-      console.warn(`[fetchClientsDirectly] Supabase respondió status ${res.status}. Preservando ${prevList.length} clientes de caché local.`);
-      return prevList;
-    }
-
-    const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) {
-      console.warn("[fetchClientsDirectly] Supabase no devolvió clientes. Preservando caché local.");
-      return prevList;
-    }
-
-    const clients = data
-      .filter(isClientMensual)
-      .map((c) => {
-        const rawHistory = Array.isArray(c.declaration_history) ? c.declaration_history : [];
-        const relDecls = Array.isArray(c.sri_declaraciones) ? c.sri_declaraciones : [];
-        const cachedDecls = prevDeclsMap.get(c.ruc) || [];
-
-        const declMap = new Map();
-        // 1. Cargar declaraciones de caché previa
-        cachedDecls.forEach((d) => {
-          if (!d || !d.period) return;
-          const clean = d.period.split(':')[0].trim();
-          declMap.set(clean, { ...d, period: clean });
-        });
-
-        // 2. Fusionar con declaration_history y tabla relacional sri_declaraciones
-        [...rawHistory, ...relDecls].forEach((d) => {
-          if (!d || !d.period) return;
-          const cleanPeriod = d.period.split(':')[0].trim();
-          const proofUrl = d.pdfUrl || d.proof_file?.url || (typeof d.proof_file === 'string' ? d.proof_file : null);
-          const existing = declMap.get(cleanPeriod) || {};
-          declMap.set(cleanPeriod, {
-            ...existing,
-            ...d,
-            period: cleanPeriod,
-            pdfUrl: proofUrl || existing.pdfUrl || d.pdfUrl,
-            status: d.status || existing.status || (proofUrl ? 'Enviada' : 'Pendiente')
-          });
-        });
-
-        const pass = prevPasswords.get(c.ruc) || "";
-        return {
-          id: c.id,
-          ruc: c.ruc,
-          name: c.name || "Cliente SRI",
-          password: pass,
-          sri_password: pass,
-          sriPassword: pass,
-          declarations: Array.from(declMap.values()),
-          regime: c.regime || "Régimen General",
-          tax_profile: { ...(c.tax_profile || {}), ivaFrequency: "Mensual" },
-          taxProfile: { ...(c.tax_profile || {}), ivaFrequency: "Mensual" },
-          ivaFrequency: "Mensual",
-        };
-      });
-
-    return clients;
+    const cache = await SafeStorage.get(["sc_clients_cache"]);
+    const list = Array.isArray(cache.sc_clients_cache) ? cache.sc_clients_cache : [];
+    return list.filter(isClientMensual);
   } catch (err) {
     console.warn("fetchClientsDirectly error:", err);
-    const prevCache = await SafeStorage.get(["sc_clients_cache"]).catch(() => ({}));
-    return Array.isArray(prevCache.sc_clients_cache) ? prevCache.sc_clients_cache : [];
+    return [];
   }
 }
 
@@ -2893,20 +2874,13 @@ async function renderAnticipationWidget(items) {
     items.sc_clients_cache = freshClients;
   }
 
+  // 10-sep-2026: era una tercera copia del mismo filtro, con su propio
+  // default (a veces `true`, acá ya `false`). Tres copias del mismo criterio
+  // es cómo un default quedó suelto sin que nadie lo notara. Delega en el
+  // único `isClientMensual` de arriba.
   const isClientMensualLocal = (c) => {
-    if (!c || !c.ruc) return false;
-    if (c.isDeleted || c.is_deleted) return false;
-    if (c.isActive === false || c.is_active === false) return false;
-    const tp = c.tax_profile || c.taxProfile || {};
-    const freq = (tp.ivaFrequency || c.iva_frequency || c.ivaFrequency || '').toLowerCase();
-    const reg = (c.regime || '').toLowerCase();
-    const type = (c.client_type || c.clientType || tp.clientType || '').toLowerCase();
-    if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) return false;
-    if (freq === 'mensual') return true;
-    if (freq === 'semestral' || freq === 'ninguno' || freq === 'anual') return false;
-    if (reg.includes('popular')) return false;
-    if (reg.includes('emprendedor')) return false;
-    return true;
+    if (typeof isClientMensual === 'function') return isClientMensual(c);
+    return false;
   };
 
   const flaggedErrs = items.flagged_errors || {};

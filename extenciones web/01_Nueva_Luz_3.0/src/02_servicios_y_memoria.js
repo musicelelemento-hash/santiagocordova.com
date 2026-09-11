@@ -462,22 +462,13 @@ const SriLoop = {
         const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
         let lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
 
-        // La caché se llena al abrir SantiagoCordova.com (bridge_content.js).
-        // Si está vacía —sesión nueva, otro perfil de Chrome, caché limpiada—
-        // pedimos la lista a Supabase para al menos poder decir QUIÉNES faltan.
-        // Las claves NO viajan desde la nube: viven solo en este navegador.
-        if (lista.length === 0 && typeof fetchClientsDirectly === 'function') {
-            console.log('📭 [BUCLE] Caché local vacía. Consultando la lista en Supabase...');
-            try {
-                const remotos = await fetchClientsDirectly();
-                if (remotos.length) {
-                    lista = remotos;
-                    await SafeStorage.set({ sc_clients_cache: remotos });
-                    console.log(`☁️ [BUCLE] ${remotos.length} clientes recuperados de la nube (sin claves).`);
-                }
-            } catch (e) {
-                console.warn('No se pudo consultar la lista remota:', e);
-            }
+        // La caché se llena SOLO al abrir tu web (bridge_content.js) — desde
+        // el 10-sep-2026 ya no se completa consultando Supabase por su
+        // cuenta (§9c: «la lista real es la de mi web»). Si está vacía, lo
+        // que hace falta es abrir santiagocordova.com para sincronizar, no
+        // salir a buscar clientes por otro lado.
+        if (lista.length === 0) {
+            console.log('📭 [BUCLE] Caché local vacía. Abrí SantiagoCordova.com para sincronizar.');
         }
         const errs = r.flagged_errors || {};
         const tried = r.sri_tried_credentials || {};
@@ -682,8 +673,14 @@ const SriLoop = {
             auto_batch_enabled: true,
             auto_batch_mode: 'turbo_step1_facturas'
         });
-        await this.prepararCliente(cola[0], p);
-        return { ok: true, total: cola.length, primero: cola[0].name, sinClave };
+        // BUG real (10-sep-2026): acá decía `cola[0]`, que es el primer
+        // cliente a DECLARAR — pero si hay `sinPdf`, el primero de verdad
+        // (el que arranca la sesión) es `colaFinal[0]`, uno que sólo necesita
+        // recuperar su comprobante. Con `cola[0]` se preparaban las
+        // credenciales de un cliente que no era el que iba a correr primero.
+        await this.prepararCliente(colaFinal[0], p);
+        return { ok: true, total: colaFinal.length, primero: colaFinal[0].name,
+                 aRecuperar: (sinPdf || []).length, sinClave };
     },
 
     /**

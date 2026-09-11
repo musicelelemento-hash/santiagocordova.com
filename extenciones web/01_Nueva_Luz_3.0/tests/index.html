@@ -151,7 +151,9 @@ const BANCOS = [
   ['portal.html',      'Cuando el que se cae es el SRI',
                        'Que un HTTP 500 del portal no se confunda con una clave mala, y que no se machaque a un servidor saturado.'],
   ['migrar.html',      'Migrar sin perder el único ejemplar',
-                       'Que el PDF sólo se borre de la base tras leerlo de vuelta desde R2, y que un fallo no pierda nada.']
+                       'Que el PDF sólo se borre de la base tras leerlo de vuelta desde R2, y que un fallo no pierda nada.'],
+  ['lote.html',        'La lista real, y primero el comprobante',
+                       'Que la extensión ya no consulte Supabase por su cuenta, y que el lote recupere el comprobante de quien ya declaró en vez de saltarlo o re-declararlo.']
 ];
 
 const $ = (id) => document.getElementById(id);
