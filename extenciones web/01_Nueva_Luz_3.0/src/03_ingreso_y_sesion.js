@@ -1619,7 +1619,20 @@ async function ejecutarAccionPendiente(items) {
         const listo = await prepararTablaDeclaraciones();
         if (!listo) { await SafeStorage.set({ actionTimestamp: Date.now() }); return; }
 
-        await barrerTodosLosAnios(items.bajarTodos);
+        const resumenBarrido = await barrerTodosLosAnios(items.bajarTodos);
+
+        // 🕰️ Marcar el barrido histórico como hecho — pedido por el usuario
+        // el 10-sep-2026: «este es un bucle mensual, no es necesario
+        // desconfiar de uno mismo en el mes anterior». El barrido de TODOS
+        // los años es una puesta al día de una sola vez, no un paso que haga
+        // falta repetir cada mes una vez que un cliente ya está al día. Sólo
+        // se marca si no quedó ninguna descarga fallida — si algo falló, el
+        // próximo mes se vuelve a intentar en vez de darlo por hecho a medias.
+        if (items.bajarTodos.ruc && resumenBarrido && (resumenBarrido.fallaron || 0) === 0) {
+            const hist = (await SafeStorage.get(['sc_barrido_historico'])).sc_barrido_historico || {};
+            hist[items.bajarTodos.ruc] = Date.now();
+            await SafeStorage.set({ sc_barrido_historico: hist });
+        }
 
         // 🧾→🚀 Si esto era la etapa previa de un cliente del lote
         // («primero el comprobante, después declarar», 10-sep-2026), no

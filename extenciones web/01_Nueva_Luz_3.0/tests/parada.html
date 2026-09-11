@@ -194,6 +194,31 @@
   push('storage caído → despierta (fail-safe)', await extensionDespierta(), true);
   window.chrome.storage.local.get = realGet;
 
+  // ══ H · SriLoopHUD no se duplica al recargar la extensión ══════════════
+  // El usuario, 10-sep-2026: «a veces son 2 [barras]». Si la extensión se
+  // recarga con una pestaña del SRI abierta, Chrome inyecta el content
+  // script nuevo SIN retirar el viejo: dos SriLoopHUD, cada uno con su
+  // propio `_el` en null, montaban dos barras «#sri-loop-hud» superpuestas.
+  sec('H · la barra flotante no se duplica');
+  document.getElementById('sri-loop-hud')?.remove();
+  const realEnSri = SriLoopHUD._enSri;
+  SriLoopHUD._enSri = () => true; // en el banco no estamos en sri.gob.ec
+  await SriLoopHUD.montar();
+  push('la primera vez sí monta la barra', document.querySelectorAll('#sri-loop-hud').length, 1);
+
+  // Simula el «script viejo, todavía vivo»: otra instancia, sin memoria de
+  // que ya hay un `_el`, intentando montar sobre la MISMA página.
+  const otraInstancia = Object.assign(Object.create(Object.getPrototypeOf(SriLoopHUD)), SriLoopHUD, { _el: null });
+  await otraInstancia.montar();
+  push('la segunda instancia NO crea una segunda barra',
+       document.querySelectorAll('#sri-loop-hud').length, 1);
+  push('y adopta la barra que ya estaba, no se queda sin referencia',
+       otraInstancia._el === document.getElementById('sri-loop-hud'), true);
+
+  document.getElementById('sri-loop-hud')?.remove();
+  SriLoopHUD._el = null;
+  SriLoopHUD._enSri = realEnSri;
+
   const fallos=ok.filter(x=>!x).length;
   document.getElementById('out').textContent=
     L.join('\n')+'\n\n'+

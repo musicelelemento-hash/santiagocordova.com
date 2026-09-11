@@ -118,8 +118,8 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **772 comprobaciones, verdes el 10-sep-2026** — los dos últimos
-bancos agregados ese día: `migrar` (36) y `lote` (37). Si tu cambio baja ese número, algo se rompió; si lo sube,
+scripts). **777 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+bancos agregados ese día: `migrar` (36) y `lote` (39). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
 > **La suite entera tarda unos cinco minutos**, y `bendita` roza el tope: el
@@ -135,6 +135,96 @@ dejá dicho qué agregaste.
 
 > Formato en la §0a. Lo que está acá **no está hecho**: es lo que una IA vio y
 > dejó anotado para que lo decida el usuario, u otra IA con más contexto.
+
+### Propuesta · Botón «probar claves» — una vuelta rápida, sólo login
+
+**Quién la propone**: el usuario · 10-sep-2026
+**Qué se pidió**: *«un botón solo para probar claves, sería como una vuelta
+rápida de uno por uno pero de forma inteligente, sería como un rotar
+claves»*. O sea: recorrer toda la cartera, entrar con cada clave guardada,
+confirmar que el SRI la acepta, y salir — sin tocar ninguna declaración.
+**Qué se propone**: un modo de lote nuevo (`sc_loop` con un `modo:'solo_login'`
+o similar) que reutiliza TODO lo que ya existe para entrar y detectar el
+resultado (`SriCredentialVault`, `elSriPideCambiarLaClave`,
+`claveVencida`, el detector de «clave incorrecta») pero corta ahí: no navega
+a Comprobantes Recibidos ni a ningún wizard. Por cliente, tres resultados
+posibles — **ok** / **rechazada** (`recordFailure`, igual que hoy) /
+**el SRI pide cambiarla** (ya detectado, hoy sólo bloquea) — y al final una
+lista. Es más rápido que el lote normal (nada de extraer ni declarar) y no
+arriesga nada: nunca llena un formulario.
+**Qué cuesta / qué rompe**: bajo. Reutiliza detección ya probada; lo nuevo es
+sólo el modo «cortar después del login» y la lista de resultados. Un cuidado:
+que NO cuente como intento fallido real ante el SRI algo que en realidad fue
+el bot cortando por su cuenta.
+**Estado**: propuesta — buena candidata para la próxima sesión de trabajo.
+
+### Propuesta · Herramientas de un clic para el día a día (certificado RUC, aviso de clave por vencer)
+
+**Quién la propone**: el usuario · 10-sep-2026
+**Qué se pidió**: en vez de una barra que sólo declara, que la extensión sea
+una caja de herramientas — con un clic, el **certificado de RUC**; con otro,
+**cambiar la clave** o que la extensión **avise apenas vea una clave por
+vencer** (ya hay detección — `elSriPideCambiarLaClave`, banco `clavevencida`
+— sólo falta la sugerencia proactiva, no bloqueante).
+**Qué se sabe ya**:
+- El aviso de clave por vencer es casi gratis: la detección existe, falta
+  mostrarlo como sugerencia (un botón «Cambiarla ahora») en vez de sólo
+  frenar el lote.
+- El certificado de RUC es una **descarga nueva** — hace falta encontrar el
+  endpoint/pantalla real en el portal (no está mapeado todavía) antes de
+  prometer un botón. Es un trabajo de reconocimiento, no de código.
+- Cambio de clave por lote ya tiene una traza guardada (§8c) y nunca se
+  construyó — mismo principio de siempre: proponer el cambio, mostrar a quién
+  le pisa una clave que funcionaba, aplicar sólo lo confirmado.
+**Qué se propone**: no agregar un cuarto flotante — consolidar. Con la §9c ya
+documentando tres superficies distintas (barra, panel, sidebar de
+anticipación) y un bug de duplicación recién encontrado, sumar herramientas
+sueltas ahí sería empeorar exactamente lo que el usuario está pidiendo
+simplificar. Mejor: un panel «Herramientas del día» dentro del cajón 🧰 ya
+existente, con estas acciones agrupadas.
+**Estado**: propuesta — falta primero mapear el certificado de RUC en el
+portal (📐 no sirve para esto, es una pantalla distinta) antes de prometer
+nada.
+
+### Propuesta · Automatizar desde un servidor privado, orquestado por el bot de Telegram
+
+**Quién la propone**: el usuario · 10-sep-2026
+**Qué se vio**: el usuario preguntó si conviene mover la automatización a un
+servidor privado que el bot de Telegram (`telegram-bot/`, ya existe para
+notificaciones) pudiera mandar a correr.
+**Opinión de Claude, con los motivos**: **no migrar la declaración en sí
+todavía.** Tres razones concretas:
+1. **Las 500 claves del SRI en un servidor son un riesgo cualitativamente
+   distinto** al de hoy (viven sólo en `chrome.storage.local`, en el
+   navegador de cada uno — §10a). Un servidor necesita bóveda de secretos,
+   cifrado, control de acceso y un plan si lo comprometen — nada de eso existe
+   hoy, y hasta que exista, 500 contraseñas del SRI en un lugar es el peor
+   escenario posible si algo sale mal.
+2. **El SRI ya es sensible a la carga** (§2d: el `ConcurrentAccessTimeoutException`
+   del portal, los HTTP 500). Un servidor pegándole desde una sola IP, de
+   forma automática y sin un humano mirando, es más fácil de bloquear —y más
+   fácil de tumbar el portal para todo el mundo— que 500 sesiones normales
+   desde navegadores distintos a lo largo del día.
+3. **Todo este proyecto es reglas aprendidas de que un humano tiene que poder
+   frenar a tiempo** — el 203, la sustitutiva, el 502/512, cada «frena y
+   avisa» de este documento asume que alguien está mirando cuando el bot no
+   sabe qué hacer. Correr esto de noche, sin nadie, es sacarle la red de
+   seguridad justo donde más costó construirla.
+
+**Lo que SÍ tiene sentido del servidor**: el bot de Telegram ya sirve para
+avisar y — con `SC_PRO_DASHBOARD`/el puente (§9c) — podría **disparar** una
+corrida en la extensión (mandar la orden), no **correrla él mismo**. Es la
+misma idea que ya existe para la web: un botón allá, la extensión responde
+acá, con vos mirando.
+**Si más adelante hace falta de verdad correr algo sin supervisión**: empezar
+por lo de **sólo lectura** — bajar comprobantes (🧾), nunca llenar ni enviar
+nada — que es exactamente lo que menos puede salir mal.
+**Qué cuesta / qué rompe**: nada si no se hace. Migrar de verdad sería
+prácticamente un proyecto aparte (bóveda de credenciales, un navegador
+headless real —no llamadas HTTP sueltas, el SRI no lo permite—, manejo de
+IP/rate-limit).
+**Estado**: propuesta — desaconsejada para la declaración; el disparo remoto
+(web/Telegram → extensión) ya existe y alcanza para lo que el pedido busca.
 
 ### Propuesta · Auditar los comprobantes archivados con el período equivocado
 
@@ -271,6 +361,21 @@ lote. Tiene que decir, en este orden: `🧾 [BUCLE] … primero el comprobante,
 después declarar` → el barrido de años (los mismos logs que ya deja el 🧾
 manual) → `🧾→🚀 [BUCLE] Comprobantes al día. Ahora sí: turbo_step1_facturas.`
 → recién ahí arranca la extracción normal.
+
+#### El barrido es de UNA sola vez, no todos los meses — 10-sep-2026
+
+> El usuario: *«este es un bucle mensual, y no es necesario desconfiar de uno
+> mismo en el mes anterior, además eso sería raro»*. Tenía razón: la primera
+> versión barría los años de CADA cliente CADA mes, lo cual desperdicia
+> tiempo real en Consulta de declaraciones sin encontrar nada nuevo.
+
+`sc_barrido_historico` (`{ruc: timestamp}`) marca a un cliente como «ya
+puesto al día» la primera vez que el barrido termina **sin ninguna descarga
+fallida**. `armarCola()` sólo agrega `barrerAntes` a quien no está en ese
+registro. Si algo falló, no se marca — el mes siguiente se reintenta en vez
+de darlo por bueno a medias. El 🧾 manual sigue sirviendo para forzar un
+repaso completo cuando haga falta (un cliente nuevo con historia rara, una
+sospecha puntual). Banco: `tests/lote.html`, secciones E2-E3.
 
 ---
 
@@ -2186,7 +2291,37 @@ barra en una corrida real. Tres puertas gateadas: `new SriAssistantPanel()`
 Si declarás **a mano** sin despertarla, el comprobante no se captura solo —
 para eso está el 🧾 después. Es el precio de que no moleste.
 
+### 🪟 La barra flotante se duplicaba al recargar la extensión — 10-sep-2026
 
+> El usuario: *«a veces son 2 [barras]… lo peor es que a veces corría solo,
+> no se paraba»*.
+
+Hay **tres superficies flotantes distintas** en el portal, cada una con su
+propio elemento raíz: `#sri-loop-hud` (`SriLoopHUD`, la barrita chica siempre
+visible), `#sri-assistant-panel-root` (`SriAssistantPanel`, el panel grande y
+el cajón 🧰), y `#sri-anticipacion-sidebar` (el panel de anticipación en el
+login). Las dos últimas ya se cuidaban de no duplicarse mirando el DOM
+(`if (document.getElementById(...)) return;`) — a `SriLoopHUD.montar()` le
+faltaba esa guarda: sólo miraba `this._el` (memoria de ESA instancia).
+
+**Por qué eso alcanza para duplicarla**: recargar la extensión con una
+pestaña del SRI ya abierta no mata el content script viejo — Chrome inyecta
+el nuevo AL LADO del que ya estaba corriendo. Dos `SriLoopHUD` separados, cada
+uno con su propio `_el` en `null`, montaban dos `#sri-loop-hud` superpuestos.
+Corregido: ahora `montar()` primero busca el elemento por `id` en el DOM: si
+ya existe (lo puso el script viejo), lo adopta en vez de crear otro. Banco:
+`tests/parada.html`, sección H.
+
+> **Sobre «a veces corría solo, no se paraba»**: con dos content scripts
+> vivos a la vez, cada uno escuchando sus propios eventos y leyendo el mismo
+> `sc_loop`, es exactamente el terreno donde un ▶ o un 🛑 en la barra de
+> *uno* no se refleja en el estado que *el otro* cree tener. No hay evidencia
+> todavía de que sea la causa completa —falta confirmarlo en una corrida con
+> el fix puesto—, pero encaja con el síntoma y con la fecha (antes del
+> 10-sep-2026 no existía ni el modo dormido ni esta guarda). **A vigilar**: si
+> vuelve a pasar después de este commit, no es esto.
+
+---
 
 ### 🌐 La lista sale sólo de tu web — 10-sep-2026
 
@@ -2269,7 +2404,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**772 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**777 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2292,9 +2427,9 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `subidas` | que «Failed to fetch» diga algo accionable | 27 |
 | `radiografia203` | que el 📐 salga solo, y que el 203 (8%) ya NO frene al 5% | 26 |
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
-| `parada` | DETENER corta el trabajo · PAUSA no descarta · **dormida por defecto** | 36 |
+| `parada` | DETENER corta el trabajo · PAUSA no descarta · dormida por defecto · **la barra no se duplica** | 39 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
-| `lote` | **la lista sale sólo de tu web; el lote barre TODOS los años antes de declarar** | 37 |
+| `lote` | **la lista sale sólo de tu web; barre TODOS los años, pero UNA sola vez** | 39 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |

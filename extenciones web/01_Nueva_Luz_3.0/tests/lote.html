@@ -152,6 +152,27 @@
   push('para el cliente correcto',              s4.pending_sri_autofill.ruc, 'W');
   push('con el período a retomar',              s4.bajarTodos && s4.bajarTodos.continuarPeriodo, periodo);
 
+  // ══ E2 · el barrido es de UNA sola vez, no todos los meses ═════════════
+  // El usuario, 10-sep-2026: «este es un bucle mensual, no es necesario
+  // desconfiar de uno mismo en el mes anterior, además eso sería raro».
+  sec('E2 · una vez barrido, los meses siguientes van directo a declarar');
+  await limpiar();
+  await SafeStorage.set({
+    sc_clients_cache: [{ ruc: 'W', name: 'CLIENTW (ya barrido antes)', password: 'pw', declarations: [] }],
+    sc_barrido_historico: { W: Date.now() - 30*24*60*60*1000 }, // barrido el mes pasado
+  });
+  await SriLoop.arrancarLote(periodo);
+  const s4b = await SafeStorage.get(['pendingAction']);
+  push('ya no pasa por el barrido: va directo al wizard',
+       s4b.pendingAction, 'turbo_step1_facturas');
+
+  // Y si el mes pasado el barrido tuvo algo que falló, NO se marca hecho:
+  // el próximo mes se reintenta en vez de darlo por bueno a medias.
+  sec('E3 · un barrido con fallas no se marca hecho');
+  const f03txt = await (await fetch('../src/03_ingreso_y_sesion.js', {cache:'no-store'})).text();
+  push('sólo marca sc_barrido_historico si fallaron === 0',
+       /resumenBarrido\.fallaron \|\| 0\) === 0/.test(f03txt), true);
+
   // ══ F · handleBatchNextClient() respeta "primero el comprobante" también ═
   sec('F · lo mismo, para el que no es el primero del lote');
   await limpiar();

@@ -652,6 +652,14 @@ const SriLoopHUD = {
     async montar() {
         if (this._el || !document.body) return;
         if (!this._enSri()) return;
+        // Guarda por DOM, no sólo por memoria (10-sep-2026): si la extensión
+        // se recarga con una pestaña del SRI ya abierta, Chrome inyecta el
+        // content script NUEVO sin retirar el viejo — dos SriLoopHUD
+        // separados, cada uno con su propio `this._el` en null, montaban DOS
+        // barras «#sri-loop-hud» superpuestas. SriAssistantPanel y el sidebar
+        // de anticipación ya se cuidaban de esto por id; a éste le faltaba.
+        const yaHay = document.getElementById('sri-loop-hud');
+        if (yaHay) { this._el = yaHay; return; }
 
         const el = document.createElement('div');
         el.id = 'sri-loop-hud';

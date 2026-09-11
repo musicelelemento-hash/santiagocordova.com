@@ -687,11 +687,16 @@ const SriLoop = {
         const { cola, yaHechos, sinClave, sinPdf, total } = await this.armarCola(p);
         // Los que solo necesitan recuperar el comprobante van primero y marcados:
         // no se les vuelve a declarar nada. Los que sí van a declarar llevan
-        // `barrerAntes`: primero pasan por Consulta de declaraciones a traer
-        // lo que les falte de años anteriores, y recién después el wizard.
+        // `barrerAntes` SÓLO la primera vez: es una puesta al día de una sola
+        // vez, no un paso mensual — «no es necesario desconfiar de uno mismo
+        // en el mes anterior» (el usuario, 10-sep-2026). Una vez que
+        // sc_barrido_historico[ruc] queda marcado (sin fallos), los meses
+        // siguientes van directo a declarar. El 🧾 manual sigue sirviendo
+        // para forzar un repaso cuando haga falta.
+        const histBarrido = (await SafeStorage.get(['sc_barrido_historico'])).sc_barrido_historico || {};
         const colaFinal = [
             ...(sinPdf || []).map((c) => ({ ...c, soloRecuperar: true })),
-            ...cola.map((c) => ({ ...c, barrerAntes: true }))
+            ...cola.map((c) => histBarrido[c.ruc] ? { ...c } : { ...c, barrerAntes: true })
         ];
 
         if (total === 0) {
