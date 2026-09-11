@@ -118,8 +118,8 @@ node --check src/0*.js && npm run build
 
 y los **veintidós** bancos en `tests/index.html` (hace falta el servidor:
 `bancos-extension` en `.claude/launch.json`, los `file://` no ejecutan
-scripts). **761 comprobaciones, verdes el 10-sep-2026** — los dos últimos
-bancos agregados ese día: `migrar` (36) y `lote` (26). Si tu cambio baja ese número, algo se rompió; si lo sube,
+scripts). **772 comprobaciones, verdes el 10-sep-2026** — los dos últimos
+bancos agregados ese día: `migrar` (36) y `lote` (37). Si tu cambio baja ese número, algo se rompió; si lo sube,
 dejá dicho qué agregaste.
 
 > **La suite entera tarda unos cinco minutos**, y `bendita` roza el tope: el
@@ -238,28 +238,39 @@ la credencial.**
 
 ---
 
-### Propuesta · Barrer TODOS los años de cada cliente antes de declarar (no sólo el sinPdf de la cola)
+### Propuesta · Barrer TODOS los años de cada cliente antes de declarar — HECHA el 10-sep-2026
 
-**Quién la propone**: Claude · 10-sep-2026
-**Qué se vio**: el usuario pidió que el lote arranque bajando los PDF
-originales que falten (todos los años, `bajarTodosLosComprobantes`) para
-CADA cliente, y recién declare al que no tenga ni PDF ni declaración
-presentada. Lo que ya existía (y se corrigió el mismo día, ver §9c) sólo
-cubre al que la cola YA sabía que le faltaba el PDF de ESTE período — no
-barre años anteriores para alguien sin ese registro local.
-**Qué se propone**: en `handleBatchNextClient()`, antes de mandar a un
-cliente normal a `turbo_step1_facturas`, encadenar primero
-`pendingAction: 'bajar_todos_comprobantes'` (con `continuarCon` apuntando de
-vuelta al declare) — reutilizando `barrerTodosLosAnios()`, que ya existe y
-está probada para el 🧾 manual.
-**Qué cuesta / qué rompe**: el encadenamiento cruza dos sub-apps del SRI
-(Consulta de declaraciones → Comprobantes Recibidos) dentro de la función que
-gobierna el avance de TODO el lote. Sin una corrida real para ver esa
-transición, un error ahí no rompe una declaración: deja al lote entero dando
-vueltas o saltando clientes. Cada cliente además tarda más (visita una
-sub-app de más).
-**Estado**: propuesta — hacerla con el usuario mirando la consola en la
-primera corrida, no a ciegas.
+**Estado**: implementada, sin corrida real todavía (*«ya hice este mes, no
+tengo con quien probar»*). Cada cliente que va a declarar (`barrerAntes` en
+la cola) pasa primero por Consulta de declaraciones —
+`bajarTodosLosComprobantes()` de TODOS los años, ya probado para el 🧾
+manual— y recién cuando eso termina lo manda a `turbo_step1_facturas` con
+`bajarTodos.continuarCon`. `SriLoop.prepararCliente()` (cliente #1) y
+`handleBatchNextClient()` (los demás) llevan la misma rama; el handler de
+`03_ingreso_y_sesion.js` es el que encadena de vuelta y navega a
+`SRI_PUENTE_RECIBIDOS`.
+
+**Lo que el banco (`tests/lote.html`, secciones E-G) prueba de verdad**: que
+la cola marca a quien va a declarar con `barrerAntes`, que ambos preparadores
+de cliente arman el `pendingAction: 'bajar_todos_comprobantes'` con
+`continuarCon` correcto, y que el código de vuelta al declare está cableado
+en el bundle.
+
+**Lo único que el banco NO puede probar**: la navegación real
+(`window.location.href = SRI_PUENTE_RECIBIDOS`) al terminar el barrido —
+exige abandonar la página, que es exactamente lo que el bank runner no puede
+sobrevivir. Es la única pieza de esta cadena que sigue sin verse contra el
+portal real. Dos redes ya la cubren si algo sale mal: el barrido en sí es de
+sólo lectura (nunca llena ni envía nada), y si el encadenamiento se traba, el
+cortacircuitos de `accionVueltas` (§2) descarta todo a los 8 recargos — el
+síntoma sería un cliente que tarda de más o queda marcado para reintentar,
+nunca una declaración mal hecha.
+
+**Para la primera corrida real**: mirar la consola en el primer cliente del
+lote. Tiene que decir, en este orden: `🧾 [BUCLE] … primero el comprobante,
+después declarar` → el barrido de años (los mismos logs que ya deja el 🧾
+manual) → `🧾→🚀 [BUCLE] Comprobantes al día. Ahora sí: turbo_step1_facturas.`
+→ recién ahí arranca la extracción normal.
 
 ---
 
@@ -2258,7 +2269,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**761 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**772 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2283,7 +2294,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 | `bendita` | que el lote corra sólo a los benditos cuando la lista existe | 26 |
 | `parada` | DETENER corta el trabajo · PAUSA no descarta · **dormida por defecto** | 36 |
 | `migrar` | **que el PDF sólo se borre de la base tras releerlo desde R2** | 36 |
-| `lote` | **la lista sale sólo de tu web; el lote recupera antes de re-declarar** | 26 |
+| `lote` | **la lista sale sólo de tu web; el lote barre TODOS los años antes de declarar** | 37 |
 | `portal` | **que un 500 del SRI no se confunda con una clave mala** | 24 |
 | `reglas` | que las reglas de negocio tengan id único y severidad válida | 24 |
 | `periodo` | que agosto de 2026 no se archive como agosto de 2023 | 22 |

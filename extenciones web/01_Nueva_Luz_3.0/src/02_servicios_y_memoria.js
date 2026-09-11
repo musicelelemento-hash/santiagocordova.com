@@ -605,6 +605,43 @@ const SriLoop = {
             await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
             return;
         }
+
+        // 🧾→🚀 «Primero el comprobante, después declarar» — pedido por el
+        // usuario el 10-sep-2026. Antes de meterse en el wizard de recepción,
+        // se barren TODOS los años de Consulta de declaraciones (lo que ya
+        // hace el botón 🧾 manual) y recién cuando eso termina se sigue con
+        // la declaración de este período. `bajarTodos.continuarCon` es lo que
+        // le dice al handler de `03_ingreso_y_sesion.js` que no corte acá:
+        // que siga con el declare en cuanto el barrido esté completo.
+        //
+        // Es de sólo lectura del lado del SRI (nunca llena ni envía nada) —
+        // si algo de esta cadena se traba, el cortacircuitos de `accionVueltas`
+        // (§2) la descarta a los 8 recargos, igual que a cualquier otra.
+        if (cliente.barrerAntes) {
+            console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc}: primero el comprobante, después declarar.`);
+            await SafeStorage.set({
+                pending_sri_autofill: {
+                    ruc: cliente.ruc, password: cliente.password, name: cliente.name,
+                    timestamp: Date.now(), manual: true, isBatch: true
+                },
+                pendingAction: 'bajar_todos_comprobantes',
+                bajarTodos: {
+                    ruc: cliente.ruc, nombre: cliente.name, soloFaltantes: true,
+                    continuarCon: 'turbo_step1_facturas', continuarPeriodo: periodo
+                },
+                accionDeQuien: cliente.ruc,
+                workflowPeriod: periodo,
+                actionTimestamp: Date.now(),
+                autoDeclaration: true,
+                sri_auto_mode: true,
+                sri_master_switch_on: true,
+                sriAutomationPaused: false,
+                ghost_manual_mode: false
+            });
+            await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
+            return;
+        }
+
         await SafeStorage.set({
             pending_sri_autofill: {
                 ruc: cliente.ruc,
@@ -649,10 +686,12 @@ const SriLoop = {
         const p = periodo || this.periodoPorDefecto();
         const { cola, yaHechos, sinClave, sinPdf, total } = await this.armarCola(p);
         // Los que solo necesitan recuperar el comprobante van primero y marcados:
-        // no se les vuelve a declarar nada.
+        // no se les vuelve a declarar nada. Los que sí van a declarar llevan
+        // `barrerAntes`: primero pasan por Consulta de declaraciones a traer
+        // lo que les falte de años anteriores, y recién después el wizard.
         const colaFinal = [
             ...(sinPdf || []).map((c) => ({ ...c, soloRecuperar: true })),
-            ...cola
+            ...cola.map((c) => ({ ...c, barrerAntes: true }))
         ];
 
         if (total === 0) {

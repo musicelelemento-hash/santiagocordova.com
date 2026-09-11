@@ -137,6 +137,59 @@
   push('el índice avanzó a 2',                 s3.auto_batch_index, 2);
   push('cerrarSesionSRI se llamó dos veces (una por cliente)', window.__cerroSesion, 2);
 
+  // ══ E · armarCola() marca a los que van a declarar con barrerAntes ═════
+  sec('E · el que va a declarar lleva "primero el comprobante" marcado');
+  await limpiar();
+  await SafeStorage.set({
+    sc_clients_cache: [{ ruc: 'W', name: 'CLIENTW (falta declarar)', password: 'pw', declarations: [] }],
+  });
+  await SriLoop.arrancarLote(periodo);
+  const s4 = await SafeStorage.get(['pending_sri_autofill','pendingAction','bajarTodos']);
+  push('primero pasa por Consulta de declaraciones, no directo al wizard',
+       s4.pendingAction, 'bajar_todos_comprobantes');
+  push('con la orden de seguir declarando después',
+       s4.bajarTodos && s4.bajarTodos.continuarCon, 'turbo_step1_facturas');
+  push('para el cliente correcto',              s4.pending_sri_autofill.ruc, 'W');
+  push('con el período a retomar',              s4.bajarTodos && s4.bajarTodos.continuarPeriodo, periodo);
+
+  // ══ F · handleBatchNextClient() respeta "primero el comprobante" también ═
+  sec('F · lo mismo, para el que no es el primero del lote');
+  await limpiar();
+  await SriLoop.iniciar(
+    [{ ruc: 'V', name: 'CLIENTV', password: 'v1' },
+     { ruc: 'W', name: 'CLIENTW', password: 'w1', barrerAntes: true }],
+    periodo);
+  await SafeStorage.set({
+    auto_batch_queue: [{ ruc: 'V', name: 'CLIENTV', password: 'v1' },
+                        { ruc: 'W', name: 'CLIENTW', password: 'w1', barrerAntes: true }],
+    auto_batch_index: 0, auto_batch_enabled: true,
+    auto_batch_mode: 'turbo_step1_facturas', auto_batch_period: periodo,
+  });
+  await handleBatchNextClient(); // V (normal) -> avanza a W
+  const s5 = await SafeStorage.get(['pending_sri_autofill','pendingAction','bajarTodos']);
+  push('a W también lo manda primero por el comprobante',
+       s5.pendingAction, 'bajar_todos_comprobantes');
+  push('con la orden de seguir declarando después',
+       s5.bajarTodos && s5.bajarTodos.continuarCon, 'turbo_step1_facturas');
+  push('y es W, no se saltea',                  s5.pending_sri_autofill.ruc, 'W');
+
+  // ══ G · el handler de 03 sabe encadenar de vuelta al declare ═══════════
+  // No se ejecuta acá: navega de verdad (window.location.href) al terminar,
+  // y eso no se puede probar sin abandonar la página del banco. Se
+  // comprueba que el cableado esté, como ya se hace en otros bancos para
+  // pasos que tocan el portal en serio.
+  sec('G · el código para volver a declarar después del barrido está cableado');
+  const f03 = await (await fetch('../src/03_ingreso_y_sesion.js', {cache:'no-store'})).text();
+  push('el handler de bajar_todos_comprobantes sigue con continuarCon',
+       /bajarTodos\.continuarCon/.test(f03), true);
+  push('y navega a Comprobantes Recibidos para retomar',
+       /continuarCon[\s\S]{0,400}SRI_PUENTE_RECIBIDOS/.test(f03), true);
+  push('bajar_todos_comprobantes no se frena por el chequeo de perfil',
+       /pendingAction !== 'bajar_todos_comprobantes'/.test(f03), true);
+  const bundleE = await (await fetch('../build/content.js', {cache:'no-store'})).text();
+  push('y el bundle está reconstruido con esto',
+       /barrerAntes/.test(bundleE), true);
+
   await SriLoop.detener('fin del banco');
   await limpiar();
 

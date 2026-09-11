@@ -2469,6 +2469,41 @@ async function handleBatchNextClient() {
       return true;
     }
 
+    // 🧾→🚀 «Primero el comprobante, después declarar» (10-sep-2026). Espejo
+    // exacto de lo que SriLoop.prepararCliente() hace para el cliente #1 —
+    // acá hace falta porque este método arma el pendingAction del siguiente
+    // cliente con su propia copia, sin llamar a prepararCliente(). El
+    // handler de `bajar_todos_comprobantes` en 03_ingreso_y_sesion.js sigue
+    // con `continuarCon` en cuanto el barrido de años termina.
+    if (nextClient.barrerAntes) {
+      console.log(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc}: primero el comprobante, después declarar.`);
+      await SafeStorage.set({
+        auto_batch_index: nextIndex,
+        pending_sri_autofill: {
+          ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
+          timestamp: Date.now(), manual: true, isBatch: true,
+        },
+        pendingAction: 'bajar_todos_comprobantes',
+        bajarTodos: {
+          ruc: nextClient.ruc, nombre: nextClient.name, soloFaltantes: true,
+          continuarCon: res.auto_batch_mode || 'turbo_step1_facturas',
+          continuarPeriodo: periodoSiguiente,
+        },
+        workflowPeriod: periodoSiguiente,
+        actionTimestamp: Date.now(),
+        ghost_manual_mode: false,
+      });
+      if (typeof SriLoop !== 'undefined') {
+        await SriLoop.avanzarIndice(nextIndex);
+        await SriLoop.avanzarA(nextIndex);
+      }
+      await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
+      await GhostMemory.clearCurrent();
+      await sleep(1000);
+      await cerrarSesionSRI();
+      return true;
+    }
+
     const batchAction = res.auto_batch_mode || 'turbo_step1_facturas';
 
     await SafeStorage.set({

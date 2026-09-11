@@ -680,6 +680,7 @@ SafeStorage.get(null).then(async (items) => {
 
         if (selloEsperado &&
             items.pendingAction !== 'recuperar_comprobante' &&
+            items.pendingAction !== 'bajar_todos_comprobantes' &&
             items.sri_verificacion_sello !== selloEsperado &&
             !location.href.includes('/contribuyente/perfil')) {
             console.log(`👋 [PERFIL] Antes de nada, verifico las obligaciones de ${quienEntro.name || quienEntro.ruc}.`);
@@ -703,6 +704,17 @@ SafeStorage.get(null).then(async (items) => {
         if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante &&
             typeof enConsultaDeclaraciones === 'function' && !enConsultaDeclaraciones()) {
             console.log('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
+            await SafeStorage.set({ actionTimestamp: Date.now() });
+            window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
+            return;
+        }
+
+        // 🧾→🚀 Mismo camino que arriba, para «primero el comprobante, después
+        // declarar» (10-sep-2026): antes de ir al wizard de recepción, este
+        // cliente pasa por Consulta de declaraciones a traer lo que le falte.
+        if (items.pendingAction === 'bajar_todos_comprobantes' && items.bajarTodos &&
+            typeof enConsultaDeclaraciones === 'function' && !enConsultaDeclaraciones()) {
+            console.log('🧾 Sesión activa: primero el comprobante, después declarar. Yendo a Consulta de declaraciones...');
             await SafeStorage.set({ actionTimestamp: Date.now() });
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
             return;
@@ -1608,6 +1620,29 @@ async function ejecutarAccionPendiente(items) {
         if (!listo) { await SafeStorage.set({ actionTimestamp: Date.now() }); return; }
 
         await barrerTodosLosAnios(items.bajarTodos);
+
+        // 🧾→🚀 Si esto era la etapa previa de un cliente del lote
+        // («primero el comprobante, después declarar», 10-sep-2026), no
+        // termina acá: sigue con la declaración. `turbo_*` es genérico y
+        // redirige solo si hace falta (07/03), pero no se re-evalúa en esta
+        // misma carga — sin la navegación explícita, el pendingAction
+        // quedaría escrito sin que nada lo mirara hasta el próximo recargo.
+        if (items.bajarTodos.continuarCon) {
+            const periodoSiguiente = items.bajarTodos.continuarPeriodo ||
+                (typeof SriLoop !== 'undefined' ? SriLoop.periodoPorDefecto() : null);
+            console.log(`🧾→🚀 [BUCLE] Comprobantes al día. Ahora sí: ${items.bajarTodos.continuarCon}.`);
+            await SafeStorage.set({
+                pendingAction: items.bajarTodos.continuarCon,
+                workflowPeriod: periodoSiguiente,
+                actionTimestamp: Date.now(),
+                checkFacturas: true, checkRetenciones: true, checkNC: true,
+                autoDeclaration: true, sri_auto_mode: true
+            });
+            await SafeStorage.remove(['bajarTodos']);
+            window.location.href = SRI_PUENTE_RECIBIDOS;
+            return;
+        }
+
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'bajarTodos']);
         return;
     }
