@@ -226,6 +226,85 @@ async function extraerTodasLasFacturas() {
         }
     }
 
+    // 🧾 XML DE LAS AMBIGUAS — resolverlas de verdad, no solo avisarlas
+    // (AGENTS §0b.7 / §11). Se baja SOLO cuando la consulta quedó en una
+    // sola página, misma condición que el bloque del 5% de arriba.
+    if (paginaActual === 1 && todasLasFacturas.length <= 75) {
+        await resolverAmbiguasConXml(resumen, todasLasFacturas);
+    }
+
+    return resumen;
+}
+
+/**
+ * Intenta resolver `resumen.ambiguas` con el XML de cada comprobante — la
+ * tarifa DICHA por quien emitió, línea por línea, en vez del cociente
+ * adivinado (AGENTS §0b.7 / §11). Hoy una ambigua cae por defecto en
+ * `iva15` (ver `calcularResumen()`, más arriba en este archivo) y frena el
+ * envío vía `iva_sin_ubicar` (§9a) — el contador tiene que abrirla a mano.
+ *
+ * Si el XML de una fila resuelve limpio (sin `tarifasDesconocidas`), se
+ * revierte EXACTAMENTE lo que se había sumado por defecto a `iva15` y se
+ * reparte de verdad con `repartirXmlEnResumen()`. Si no resuelve limpio —o
+ * no se puede leer— esa fila queda intacta: sigue ambigua, sigue frenando,
+ * la mira el contador. Nunca deja el resumen peor que sin el XML.
+ *
+ * Muta `resumen` in-place (mismo contrato que `repartirXmlEnResumen`) y
+ * también lo devuelve, para poder testearla llamándola directo.
+ *
+ * @param {Object} resumen Lo que devuelve calcularResumen().
+ * @param {Array<Object>} facturas El mismo array que se le pasó a
+ *   calcularResumen() — hace falta para el `valorSinImpuestos`/`iva`/
+ *   `importeTotal` SIN redondear de cada ambigua (`resumen.ambiguas` sólo
+ *   trae los valores ya redondeados con `redondear()`).
+ * @returns {Promise<Object>} el mismo `resumen`, mutado.
+ */
+async function resolverAmbiguasConXml(resumen, facturas) {
+    if (!resumen || !(resumen.ambiguas || []).length) return resumen;
+    if (typeof traerXmlDeComprobantes !== 'function') return resumen;
+
+    try {
+        const indices = resumen.ambiguas.map((f) => f.numero - 1);
+        const xmls = await traerXmlDeComprobantes(indices, { pausaMs: 700, tope: 10 });
+        const resueltas = new Set();
+
+        resumen.ambiguas.forEach((amb) => {
+            const xml = xmls.get(amb.numero - 1) || null;
+            if (!xml || !xml.porTarifa) {
+                console.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: no se pudo leer el XML. Sigue ambigua.`);
+                return;
+            }
+            if ((xml.tarifasDesconocidas || []).length > 0) {
+                console.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: el XML trae una tarifa que no se ` +
+                             `reconoce (${xml.tarifasDesconocidas.join(', ')}). Sigue ambigua, la mira el contador.`);
+                return;
+            }
+
+            const original = (facturas || [])[amb.numero - 1];
+            const baseOriginal = original ? original.valorSinImpuestos : amb.base;
+            const ivaOriginal = original ? original.iva : amb.iva;
+            const totalOriginal = original ? original.importeTotal : (amb.base + amb.iva);
+            resumen.iva15.cantidad--;
+            resumen.iva15.baseImponible -= baseOriginal;
+            resumen.iva15.montoIva -= ivaOriginal;
+            resumen.iva15.total -= totalOriginal;
+
+            repartirXmlEnResumen(resumen, xml);
+            resueltas.add(amb.numero);
+            console.log(`   🧾 [XML AMBIGUA] Fila ${amb.numero} resuelta: ${amb.rucRazon} → ` +
+                        `${Object.keys(xml.porTarifa).map((t) => `${t}%`).join('+')}.`);
+        });
+
+        if (resueltas.size) {
+            resumen.ambiguas = resumen.ambiguas.filter((a) => !resueltas.has(a.numero));
+            console.log(`🧾 [XML AMBIGUA] ${resueltas.size} de ${indices.length} ambigua(s) resuelta(s) con el XML.`);
+        }
+    } catch (e) {
+        // Si falla, el resumen queda exactamente como estaba antes de
+        // esta función: nunca peor que sin el XML.
+        console.warn('🧾 [XML AMBIGUA] No se pudo bajar el XML de las ambiguas:', e.message);
+    }
+
     return resumen;
 }
 

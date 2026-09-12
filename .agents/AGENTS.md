@@ -306,7 +306,7 @@ un banco que falle si aparece un `document.body.innerText` nuevo en `src/`.
 depender del comportamiento viejo. Es una tarde, no cinco minutos.
 **Estado**: propuesta
 
-### Propuesta · Que el 📐 se dispare solo cuando el portal reclama un casillero
+### Propuesta · Que el 📐 se dispare solo cuando el portal reclama un casillero — HECHA (fecha exacta sin registrar, encontrada implementada el 11-sep-2026)
 
 **Quién la propone**: Claude · 07-sep-2026
 **Qué se vio**: cuando el SRI pide el casillero 203 (§9d), lo que hace falta
@@ -319,7 +319,21 @@ guardada** en `SafeStorage`. Así el dato queda tomado en el momento exacto en
 que el portal lo estaba pidiendo, sin depender de que alguien llegue a tiempo.
 **Qué cuesta / qué rompe**: poco. El 📐 ya no toca nada del formulario, sólo
 lee. Hay que cuidar que no se dispare en bucle si el reclamo persiste.
-**Estado**: propuesta
+
+**Cómo quedó implementado** (verificado el 11-sep-2026, esta entrada estaba
+desactualizada como "propuesta" cuando ya estaba hecha): `radiografiarReclamo()`
+en `src/05_llenado_formulario.js` corre `sriMapaCasilleros({desde, hasta})`
+acotado al número exacto y guarda el resultado (`filas`, `desplegables`,
+`markdown`, `diagnostico`) en `SafeStorage.sri_radiografias_reclamo` (una
+entrada por número de casillero). La llaman los dos puntos donde
+`loQuePideElFormulario()` ya se consultaba —el Cierre Mágico
+(`06_panel_interfaz.js:1673`) y el camino de "Siguiente" del formulario
+(`06_panel_interfaz.js:3541`)— cuando hay casilleros en el reclamo. El
+antibucle: cada radiografía guarda `accion: accionEnCurso`, y si el reclamo
+persiste dentro de la MISMA acción no se vuelve a tomar la foto. Se lee con
+`sriAssistant.verRadiografiaReclamo()`. Banco: `tests/radiografia203.html`
+("📐 automático ante el reclamo del 203").
+**Estado**: hecha.
 
 ### Propuesta · Crear `notification_count`, o sacarla del upsert
 
@@ -452,7 +466,7 @@ sospecha puntual). Banco: `tests/lote.html`, secciones E2-E3.
 | Email automático con el PDF adjunto | decidido, no empezado | código | §0b.6 |
 | Tipos de comprobante que faltan (ND, liquidación) | códigos sin leer del portal | una consulta al `<select>` | §8a |
 | Empresas fantasmas | dataset sin bajar | código | §10 |
-| El XML, cableado al flujo automático | parser y descarga hechos, no se disparan solos | código | §11 · §0b.7 |
+| El XML, cableado al flujo automático | 2 de 3 casos hechos (5% y ambiguas); falta activo fijo | código | §11 · §0b.7 |
 | Cambio de clave por lote | traza guardada, nada construido | código | §8c |
 | Botones de un clic desde la ficha del cliente | ideas anotadas | código | web §6 |
 
@@ -790,18 +804,48 @@ registrados como avisados sin haber recibido nada.
 > se banea es **el del estudio**, por donde escriben 500 contribuyentes. No
 > construir esto salvo pedido explícito del usuario sabiendo el riesgo.
 
-### 0b.7 · El XML: construido, no cableado
+### 0b.7 · El XML: cableado para dos de los tres casos — hecho el 12-sep-2026
 
 `parsearXmlComprobante()`, `repartirXmlEnResumen()`, `descargarXmlComprobante(N)`
-y `traerXmlDeComprobantes([…])` funcionan y están probados (§11). Lo que falta
-es **dispararlos solos** para los pocos casos que los necesitan:
+y `traerXmlDeComprobantes([…])` funcionan y están probados (§11). De los tres
+casos que hacía falta dispararlos solos, van **dos**:
 
-- las facturas que quedaron **sin tarifa reconocible** (`resumen.ambiguas`),
-- las que el cociente leyó como **5%**, para confirmar que no son mezcladas,
-- las candidatas a **activo fijo**, donde además se quiere ver qué se compró.
+- **las que el cociente leyó como 5%** (`resumen.al5`) — ya estaba cableado
+  antes de esta entrada: pide el XML de cada una y guarda el veredicto
+  (`5 REAL: necesita el decreto del 203` / `mezclada/otra`) en
+  `SafeStorage.sri_revision_5p`, para decidir con el emisor y las tarifas a
+  la vista. Diagnóstico puro: nunca cambia el resumen, sólo avisa.
+- **las que quedaron sin tarifa reconocible** (`resumen.ambiguas`) — cableado
+  el 12-sep-2026, `resolverAmbiguasConXml(resumen, facturas)` en
+  `src/04_extraccion_datos.js`, llamada al final de `extraerTodasLasFacturas()`.
+  A diferencia del punto anterior, ÉSTE SÍ cambia el resumen: una ambigua cae
+  hoy por defecto en el balde de tarifa plena (`iva15`) y frena el envío vía
+  `iva_sin_ubicar` (§9a) — si el XML resuelve limpio (sin
+  `tarifasDesconocidas`), se revierte exactamente lo que se había sumado por
+  defecto y se reparte de verdad con `repartirXmlEnResumen()`; si no resuelve
+  limpio, el resumen queda intacto y la ambigua sigue frenando, igual que
+  antes. Es el cierre real del "agujero gemelo" del §9a (una mezclada que
+  cabe como 15%+0% o como 5%+0%, según quién la emitió): antes se anotaban
+  las dos cuentas posibles y las miraba el contador; ahora, si el XML está
+  disponible, la tarifa **dicha** decide sin que nadie tenga que abrir nada.
+  Banco: `tests/iva5.html`, sección J (11 comprobaciones nuevas, 194 en
+  total el banco completo).
+- **las candidatas a activo fijo**, donde además se quiere ver qué se
+  compró — **sigue sin cablear**. Es el único de los tres que queda.
 
 Son unas pocas peticiones por cliente, no 27. `traerXmlDeComprobantes()` ya
-pausa 700 ms entre una y otra y corta a las 40, para no despertar al WAF.
+pausa 700 ms entre una y otra y corta a las 40, para no despertar al WAF; el
+bloque de ambiguas usa el mismo límite (tope 10) y sólo corre cuando la
+consulta quedó en una sola página (mismo cuidado que el bloque del 5%: el
+índice de fila de otra página ya no mapea a la tabla actual).
+
+**Lo que NO se pudo probar**: contra el portal real — necesita sesión y
+facturas ambiguas de verdad en pantalla. `node --check` + `npm run build` +
+`tests/iva5.html` (194 comprobaciones, todas verdes) confirman que la lógica
+de reparto es correcta contra los casos ya documentados (§9a, el ejemplo real
+de $61 con IVA $1,83). Antes de confiar en esto para 500 contribuyentes,
+mirar la consola en los primeros clientes con ambiguas reales: debe decir
+`🧾 [XML AMBIGUA] Fila N resuelta` o, si no resolvió, por qué sigue ambigua.
 
 ### 0b.8 · Cosas chicas anotadas, para que no se pierdan
 
@@ -2442,7 +2486,7 @@ subida · Panel.
 ### Los bancos de prueba, en una sola página
 
 `tests/index.html` corre **los veintidós** en iframes y da un veredicto solo:
-**777 comprobaciones, verdes el 10-sep-2026**, en unos cinco minutos.
+**788 comprobaciones, verdes el 12-sep-2026**, en unos cinco minutos.
 
 Se sirven con la configuración `bancos-extension` de `.claude/launch.json`, que
 levanta la carpeta de la extensión en `localhost:8791`; el índice queda en
@@ -2456,7 +2500,7 @@ alcanza con agregarlo a la lista `BANCOS`.
 
 | Banco | Qué cuida | ✓ |
 | :--- | :--- | --: |
-| `iva5` | el 5%, el XML, el 203, los desplegables, la holgura de centavos | 183 |
+| `iva5` | el 5%, el XML (incl. ambiguas resueltas de verdad), el 203, los desplegables, la holgura de centavos | 194 |
 | `proveedores` | que una sugerencia no pise al contador | 58 |
 | `chequeo` | que avise de lo que va a morder, y que lea lo que Supabase contesta | 56 |
 | `notasventa` | que un silencio no se convierta en un cero | 35 |

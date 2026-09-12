@@ -328,6 +328,58 @@
   push('nunca pide más que el tope',
        (await traerXmlDeComprobantes([0,1,0,1,0], { pausaMs: 0, tope: 2 })).size, 2);
 
+  // ══ J · resolverAmbiguasConXml: la tarifa dicha se impone a la adivinada ═
+  sec('J · las ambiguas se resuelven con el XML, no se adivinan');
+
+  const baldeVacio = () => ({cantidad:0,total:0,baseImponible:0,montoIva:0});
+  // Así queda una ambigua de verdad al salir de calcularResumen(): ya sumada
+  // a iva15 por defecto (la rama `destino = resumen.iva15` de este archivo).
+  const resumenConAmbigua = (numero, base, iva, motivo) => {
+    const r = {totalFacturas:1, iva0:baldeVacio(), iva5:baldeVacio(), iva15:baldeVacio(),
+               ambiguas:[{numero, rucRazon:'099 PROVEEDOR', base, iva, motivo}],
+               mezcladas:[], al5:[], periodo:'Test'};
+    r.iva15.cantidad = 1; r.iva15.baseImponible = base; r.iva15.montoIva = iva;
+    r.iva15.total = +(base + iva).toFixed(2);
+    return r;
+  };
+
+  // Caso 1: el XML resuelve limpio — «el agujero gemelo» del §9a, la
+  // factura de $61 con IVA $1,83 que cabe como $12,20 al 15% + $48,80 al 0%.
+  let rAmb = resumenConAmbigua(1, 61, 1.83, 'no cierra');
+  responder(XML([['4',12.2,1.83],['0',48.8,0]]));
+  await resolverAmbiguasConXml(rAmb, [F(61,1.83)]);
+  push('J1 · se saca de ambiguas cuando el XML resuelve limpio', rAmb.ambiguas.length, 0);
+  push('J1 · el 15% real va a su balde',   rAmb.iva15.baseImponible, 12.2);
+  push('J1 · el 0% real va al suyo',       rAmb.iva0.baseImponible,  48.8);
+  push('J1 · la resta fue exacta, sin residuos de centavos',
+       +rAmb.iva15.total.toFixed(2), +(12.2+1.83).toFixed(2));
+  push('J1 · cantidad de iva15 vuelve a 1 (se fue y volvió una)', rAmb.iva15.cantidad, 1);
+
+  // Caso 2: el XML trae un codigoPorcentaje que no se reconoce — sigue
+  // ambigua, y el resumen queda EXACTAMENTE como antes de intentar.
+  rAmb = resumenConAmbigua(1, 61, 1.83, 'no cierra');
+  responder(XML([['4',12.2,1.83],['99',48.8,0]]));
+  await resolverAmbiguasConXml(rAmb, [F(61,1.83)]);
+  push('J2 · una tarifa desconocida NO se resuelve', rAmb.ambiguas.length, 1);
+  push('J2 · iva15 queda intacto (nada se tocó)',    rAmb.iva15.baseImponible, 61);
+  push('J2 · nada se coló en iva0',                  rAmb.iva0.baseImponible, 0);
+
+  // Caso 3: la fila no tiene XML para leer (sesión caída, fila que ya no
+  // está en pantalla). Misma garantía: el resumen no empeora.
+  rAmb = resumenConAmbigua(99, 61, 1.83, 'no cierra'); // fila 99: no existe en el DOM
+  await resolverAmbiguasConXml(rAmb, [F(61,1.83)]);
+  push('J3 · sin XML para leer, sigue ambigua', rAmb.ambiguas.length, 1);
+  push('J3 · iva15 queda intacto',              rAmb.iva15.baseImponible, 61);
+
+  // Sin ambiguas, no pide nada — ni siquiera intenta.
+  const sinTocar = {ambiguas:[], iva0:baldeVacio(), iva5:baldeVacio(), iva15:baldeVacio()};
+  const fetchQueNoDebeLlamarse = window.fetch;
+  window.fetch = async () => { throw new Error('no debería pedir nada'); };
+  let J4ok = true;
+  try { await resolverAmbiguasConXml(sinTocar, []); } catch (e) { J4ok = false; }
+  push('J4 · sin ambiguas no intenta pedir ningún XML', J4ok, true);
+  window.fetch = fetchQueNoDebeLlamarse;
+
   window.fetch = fetchReal;
 
   // ══ I · leer los casilleros del formulario ══════════════════════════════
