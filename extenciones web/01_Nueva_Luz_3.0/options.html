@@ -112,6 +112,7 @@ button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .b-guardar { background: var(--primary); color: #04241a; }
 .b-neutro  { background: rgba(148, 163, 184, 0.16); color: var(--text-dim); }
 .b-borrar  { background: rgba(255, 133, 133, 0.14); color: var(--rose); }
+.b-cuidado { background: var(--amber-glow); color: var(--amber); }
 
 .aviso {
     border-radius: 10px;
@@ -265,10 +266,14 @@ footer {
         <button class="b-guardar" id="btnImportarCsvOpciones" style="background:#6366f1; color:white;">
             📥 Importar CSV de Contraseñas
         </button>
-        <button class="b-neutro" id="btnExportarClavesOpciones">
+        <button class="b-cuidado" id="btnExportarClavesOpciones" title="Descarga un CSV con las claves del SRI de todos los clientes, en texto plano">
             📤 Exportar Respaldo Local (CSV)
         </button>
     </div>
+    <p class="bajada" style="margin: 10px 0 0;">
+        El CSV lleva la clave del SRI de cada cliente <b>en texto plano</b>. Una vez descargado,
+        tratalo con el mismo cuidado que una clave pegada en un chat: quien lo vea, la tiene.
+    </p>
     <div id="resultadoCsvOpciones" style="display:none; margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; background:rgba(0,0,0,0.3); border-radius:8px; padding:12px;"></div>
 </section>
 
