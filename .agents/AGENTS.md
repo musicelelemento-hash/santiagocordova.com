@@ -2481,7 +2481,7 @@ estado, declarar al que está logueado (🎯), omitidos (⚠️), saltar (⏭️
 **El resto vive en el cajón 🧰**, en su propia línea y **con el rótulo escrito
 debajo** de cada ícono: Comprobantes · Registro · La cola · Bitácora ·
 Proveedores · Notas de venta · Casilleros · Ir a… · **Chequeo** · Probar
-subida · Panel.
+subida · **Migrar a la nube** (📦) · Panel.
 
 ### Los bancos de prueba, en una sola página
 
