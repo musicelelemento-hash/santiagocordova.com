@@ -123,8 +123,18 @@ SafeStorage.get(null).then(async (items) => {
     }
 
     if (isLoginPage) {
-        renderLoginCockpit(items);
-        initLoginCockpitWatcher();
+        // 💤 Mismo criterio que la barra flotante y el panel (§9c): sin esto,
+        // CUALQUIER visita al login del SRI —así el usuario esté ahí por otra
+        // razón, con la extensión dormida— precargaba RUC y CLAVE REAL de un
+        // cliente pendiente en el formulario, sin que nadie lo pidiera. Un
+        // autofill manual pendiente (`pending_sri_autofill.manual`) ya cuenta
+        // como "despierta" adentro de extensionDespierta(), así que el ▶
+        // del popup y el lote siguen funcionando igual que siempre.
+        const despierta = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
+        if (despierta) {
+            renderLoginCockpit(items);
+            initLoginCockpitWatcher();
+        }
     }
 
     const isAutoFlow = await SriLoop.puedeAvanzar();
