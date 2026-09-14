@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/block-secrets.cjs",
+            "statusMessage": "Chequeando reglas de seguridad de credenciales..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/check-syntax.cjs",
+            "statusMessage": "node --check sobre src/ de la extensión..."
+          }
+        ]
+      }
+    ]
+  }
+}
