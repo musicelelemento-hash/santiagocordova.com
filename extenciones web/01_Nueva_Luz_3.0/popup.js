@@ -205,7 +205,14 @@ function evaluarRegimenCliente(c) {
         return { esMensual: false, label: `Frecuencia: ${freq || 'Ninguna'}`, motivo: 'no_mensual' };
     }
 
-    return { esMensual: true, label: 'Régimen General', motivo: 'general' };
+    // 💤 Sin frecuencia marcada, NO se incluye por defecto — mismo criterio que
+    // isClientMensual() en src/01_utilidades_y_pdf.js (corregido ahí el
+    // 10-sep-2026 porque este mismo "sin dato, asumo mensual" era como
+    // aparecían clientes viejos y de prueba). El popup no puede compartir esa
+    // función tal cual porque corre en un contexto de extensión aparte del
+    // content script, pero la DECISIÓN tiene que ser la misma: un cliente de
+    // verdad trae la frecuencia marcada desde la web.
+    return { esMensual: false, label: 'Sin frecuencia marcada', motivo: 'sin_frecuencia' };
 }
 
 function isMensual(c) {
@@ -342,6 +349,11 @@ async function fetchClients(forceSync = false) {
                     const bajas = await bajasRes.json();
                     if (Array.isArray(bajas)) {
                         clientesBaja = bajas.map(c => ({ ...c, is_deleted: true }));
+                        // SC_BAJAS_KEY estaba declarada pero nunca se escribía:
+                        // la pestaña 🚫 Bajas se veía bien recién sincronizada y
+                        // quedaba vacía de nuevo en cuanto se reabría el popup
+                        // (loadClientsFromCacheOrFetch la lee de acá).
+                        await chrome.storage.local.set({ [SC_BAJAS_KEY]: clientesBaja });
                     }
                 }
             } catch (e) { /* la pestaña de bajas es secundaria; no tumbar el sync */ }
@@ -388,6 +400,23 @@ async function fusionarClientes(data, conFiltroBajas) {
 
     const frescos = data.map(c => {
         const cached = prevMap.get(c.ruc) || {};
+        // conFiltroBajas=true: la consulta ya excluyó bajas en el servidor,
+        // así que todo lo que llega acá es is_deleted=false de verdad.
+        // conFiltroBajas=false (degradado): el SELECT ni pidió esa columna
+        // (falta el GRANT), así que `c.isDeleted`/`c.is_deleted` vienen
+        // undefined — NO se asume "activo" con eso: se conserva lo último que
+        // se supo de este RUC en la caché. Mismo defecto que ya se corrigió
+        // en la web (useAppStore.loadFromDB): un `undefined` convertido en
+        // `false` es cómo una baja resucitaba.
+        const rawIsDeleted = conFiltroBajas
+            ? false
+            : (typeof c.isDeleted === 'boolean' ? c.isDeleted
+               : typeof c.is_deleted === 'boolean' ? c.is_deleted
+               : !!cached.isDeleted);
+        const rawIsActive = typeof c.isActive === 'boolean' ? c.isActive
+            : typeof c.is_active === 'boolean' ? c.is_active
+            : (cached.isActive !== false);
+
         return {
             id: c.id,
             ruc: c.ruc,
@@ -396,7 +425,9 @@ async function fusionarClientes(data, conFiltroBajas) {
             tax_profile: c.tax_profile,
             force_mensual: cached.force_mensual || false,
             password: cached.password || cached.sri_password || "",
-            declarations: Array.isArray(c.declaration_history) ? c.declaration_history : []
+            declarations: Array.isArray(c.declaration_history) ? c.declaration_history : [],
+            isDeleted: rawIsDeleted,
+            isActive: rawIsActive
         };
     });
 
