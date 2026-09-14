@@ -700,7 +700,7 @@ const SriLoopHUD = {
             '<span style="width:1px;align-self:stretch;background:rgba(255,255,255,0.12);margin:0 2px"></span>',
             '<button id="slh-cajon-btn" aria-label="Herramientas" aria-expanded="false" title="Herramientas: comprobantes, registro, cola, bitácora, proveedores, casilleros…" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🧰</button>',
             '<button id="slh-registro" aria-label="Ver qué declaraciones tienen su comprobante guardado" title="Registro: qué se declaró y de cuáles está guardado el comprobante" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(167,139,250,0.18);color:#c4b5fd">📊</button>',
-            '<button id="slh-migrar" aria-label="Migrar a la nube los comprobantes que quedaron dentro de la base" title="Migrar comprobantes que están guardados dentro de la base de datos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">\U0001f4e6</button>',
+            '<button id="slh-migrar" aria-label="Migrar a la nube los comprobantes que quedaron dentro de la base" title="Migrar comprobantes que están guardados dentro de la base de datos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📦</button>',
             '<button id="slh-subida" aria-label="Probar si la subida de comprobantes a la nube funciona" title="Probar la subida a la nube (dice por qué falla cada camino)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🔌</button>',
             '<button id="slh-cola" aria-label="Ver la cola: quién ya pasó, quién viene y quién quedó afuera" title="La cola del lote: quién ya pasó, quién viene y quién quedó afuera" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">👥</button>',
             '<button id="slh-bitacora" aria-label="Leer la bitácora de la corrida" title="Leer la bitácora de la corrida (y copiarla si hace falta)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">📜</button>',
@@ -827,6 +827,7 @@ const SriLoopHUD = {
             ev.stopPropagation();
             const panel = el.querySelector('#slh-omitidos-panel');
             if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            this.soloUnPanel('slh-omitidos-panel');
             await this.pintarOmitidos();
             panel.style.display = 'block';
         });
@@ -1938,7 +1939,8 @@ const SriLoopHUD = {
         ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
          'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
          'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel',
-         'slh-chequeo-panel']
+         'slh-chequeo-panel', 'slh-probarclaves-panel', 'slh-auditoria-panel',
+         'slh-migrar-panel']
             .filter((id) => id !== cual && id !== 'slh-plan')   // null cierra todos
             .forEach((id) => {
                 const p = this._el.querySelector('#' + id);
