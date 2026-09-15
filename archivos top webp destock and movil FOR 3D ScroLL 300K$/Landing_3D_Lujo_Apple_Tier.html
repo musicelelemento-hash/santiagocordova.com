@@ -963,15 +963,158 @@
       filter: none;
     }
 
-    /* Responsive */
+    /* ==========================================================================
+       RESPONSIVE PERFECTION: DESKTOP, TABLET & MOBILE (APPLE TIER)
+       ========================================================================== */
+    .hidden-mobile {
+      display: flex;
+    }
+
+    /* Tablet (iPad, Android Tablets, 768px - 1040px) */
     @media (max-width: 1040px) {
       .nav-links { display: none !important; }
       .mobile-dock { display: flex !important; }
       #top { padding-bottom: 90px; }
       .scroll-cue { display: none !important; }
+      .hidden-mobile { display: none !important; }
+      
+      .sistema-grid {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+      .webgl-container {
+        position: relative;
+        top: 0;
+        min-height: 420px;
+      }
+      .gallery-card {
+        width: 82vw;
+      }
     }
-    @media (max-width: 860px) {
-      .brand-sub { display: none; }
+
+    /* Phablet & Mobile (< 768px) */
+    @media (max-width: 768px) {
+      .brand-sub { display: none !important; }
+      .hidden-mobile { display: none !important; }
+
+      /* Safe area insets for notched iPhones & Androids */
+      .dynamic-island-container {
+        top: max(8px, env(safe-area-inset-top, 8px));
+      }
+      .dynamic-island {
+        padding: 5px 12px;
+        gap: 8px;
+        max-width: 95vw;
+      }
+      .island-text {
+        font-size: 9px;
+        letter-spacing: 0.08em;
+      }
+      .island-badge {
+        font-size: 8px;
+        padding: 2px 6px;
+      }
+
+      /* Mobile Navbar */
+      header {
+        top: max(44px, calc(env(safe-area-inset-top, 8px) + 38px));
+        padding: 0 12px;
+      }
+      .navbar {
+        padding: 8px 12px;
+      }
+      .brand-icon {
+        width: 32px;
+        height: 32px;
+      }
+      .brand-title {
+        font-size: 12px;
+      }
+      .btn-cta {
+        height: 36px;
+        padding: 0 14px;
+        font-size: 10px;
+      }
+
+      /* iOS Liquid Bottom Dock */
+      .mobile-dock {
+        bottom: max(12px, env(safe-area-inset-bottom, 12px));
+        left: 12px;
+        right: 12px;
+        padding: 6px 10px;
+      }
+
+      /* Hero Mobile */
+      #top {
+        padding-top: 140px;
+        padding-bottom: 80px;
+      }
+      h1.hero-title {
+        font-size: clamp(2.1rem, 9vw, 3.2rem);
+        line-height: 1.08;
+      }
+      p.hero-desc {
+        font-size: 14px;
+        padding: 0 8px;
+      }
+      .hero-actions {
+        flex-direction: column;
+        align-items: stretch;
+        max-width: 290px;
+        margin-left: auto;
+        margin-right: auto;
+        gap: 10px;
+      }
+      .btn-hero-primary, .btn-hero-secondary {
+        width: 100%;
+        height: 50px;
+        justify-content: center;
+        font-size: 11px;
+      }
+
+      /* Exploded 3D Inspection Mobile */
+      .exploded-viewport {
+        height: 380px;
+        max-width: 94vw;
+        perspective: 900px;
+      }
+      .exploded-stack {
+        transform: scale(0.82) rotateX(20deg) rotateY(-14deg) rotateZ(3deg);
+      }
+      .exploded-layer {
+        inset: 10px;
+        padding: 16px;
+        border-radius: 16px;
+      }
+
+      /* Horizontal Gallery on Mobile */
+      .gallery-card {
+        width: 88vw;
+      }
+      .act-content-wrap {
+        padding: 0 16px;
+      }
+      .act-title {
+        font-size: clamp(2rem, 8vw, 2.8rem);
+      }
+    }
+
+    /* Small Mobile (< 480px, e.g. iPhone SE, 13 mini) */
+    @media (max-width: 480px) {
+      .island-drawer {
+        width: calc(100vw - 24px);
+        padding: 16px 14px;
+      }
+      .island-drawer [style*="grid-template-columns:repeat(5,1fr)"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 6px !important;
+      }
+      .services-grid {
+        grid-template-columns: 1fr;
+      }
+      .service-card {
+        padding: 20px;
+      }
     }
   </style>
 </head>
