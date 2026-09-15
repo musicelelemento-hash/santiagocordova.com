@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<script src="./crystal3d.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: #020617; color: #e2e8f0; font-family: Inter, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: #00A896; text-decoration: none; }
+  a:hover { color: #4edea3; }
+  ::selection { background: rgba(0,168,150,0.32); color: #fff; }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-track { background: #020617; }
+  ::-webkit-scrollbar-thumb { background: linear-gradient(to bottom,#00A896,#2B6AFF); border-radius: 5px; border: 2px solid #020617; }
+  @keyframes scPulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  @keyframes scDrift { 0% { transform: translateY(0) } 100% { transform: translateY(8px) } }
+  @keyframes scShine { to { background-position: 200% center } }
+  summary::-webkit-details-marker { display: none; }
+  a:focus-visible, summary:focus-visible, details:focus-visible {
+    outline: 2px solid #4edea3; outline-offset: 3px; border-radius: 10px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  }
+</style>
+</helmet>
+
+<div style="position:relative;background:#020617">
+
+  <header style="position:fixed;top:0;left:0;right:0;z-index:90;display:flex;flex-direction:column;align-items:center;padding:14px 16px 0;pointer-events:none">
+    <div style="width:100%;max-width:1160px;height:2px;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;margin-bottom:12px">
+      <div data-progress="" style="height:100%;width:0%;background:linear-gradient(90deg,#00A896,#2B6AFF 55%,#C9A96E)"></div>
+    </div>
+    <nav style="pointer-events:auto;width:100%;max-width:1160px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:10px 14px 10px 16px;border:1px solid rgba(255,255,255,0.10);border-radius:999px;background:rgba(5,20,36,0.72);backdrop-filter:blur(26px) saturate(180%);box-shadow:0 20px 60px -24px rgba(0,0,0,0.9)">
+      <a href="#top" style="display:flex;align-items:center;gap:11px;color:inherit">
+        <span style="width:38px;height:38px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#00A896,#2B6AFF);box-shadow:0 0 22px -4px rgba(0,168,150,0.55);flex:none">
+          <svg viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:19px;height:19px" aria-label="Soluciones Contables Pro">
+            <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M30 80 H 78"></path>
+              <path d="M54 80 V 30"></path>
+              <path d="M25 35 H 83"></path>
+              <circle cx="54" cy="25" r="5" fill="#ffffff"></circle>
+              <path d="M35 35 V 45"></path>
+              <path d="M22 60 C 28 70, 42 70, 48 60" fill="none"></path>
+              <path d="M73 35 V 45"></path>
+              <path d="M60 60 C 66 70, 80 70, 86 60" fill="none"></path>
+            </g>
+          </svg>
+        </span>
+        <span style="display:flex;flex-direction:column;line-height:1.1;white-space:nowrap">
+          <span style="font-family:Manrope,sans-serif;font-weight:800;font-size:13px;letter-spacing:-0.01em;color:#fff">SANTIAGO CÓRDOVA</span>
+          <span data-brandsub="" style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.22em;color:#00A896;margin-top:3px">SOLUCIONES TRIBUTARIAS PRO</span>
+        </span>
+      </a>
+      <div data-navlinks="" style="display:flex;align-items:center;gap:4px;padding:4px;border-radius:999px;border:1px solid rgba(255,255,255,0.06);background:rgba(0,0,0,0.25)">
+        <a href="#blindaje" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">Blindaje</a>
+        <a href="#sistema" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">Sistema</a>
+        <a href="#resultados" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">Resultados</a>
+        <a href="#cobertura" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">Cobertura</a>
+        <a href="#servicios" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">Servicios</a>
+        <a href="#faq" style="padding:7px 13px;border-radius:999px;font-size:12px;font-weight:600;color:#cbd5e1">FAQ</a>
+      </div>
+      <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20quiero%20agendar%20un%20diagn%C3%B3stico%20tributario." target="_blank" rel="noopener noreferrer" style="flex:none;display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;background:#00A896;color:#031310;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;box-shadow:0 12px 30px -12px rgba(0,168,150,0.8)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:14px;height:14px"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+        Diagnóstico
+      </a>
+    </nav>
+  </header>
+
+  <div data-mobiledock="" style="display:none;position:fixed;bottom:14px;left:14px;right:14px;z-index:92;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border:1px solid rgba(255,255,255,0.12);border-radius:999px;background:rgba(5,20,36,0.94);backdrop-filter:blur(26px) saturate(180%);box-shadow:0 24px 60px -22px rgba(0,0,0,0.95)">
+    <a href="#top" style="flex:1;min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:999px;color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.12em">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:17px;height:17px"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5.5 9.5V21h13V9.5"></path></svg>
+      INICIO
+    </a>
+    <a href="#sistema" style="flex:1;min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:999px;color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.12em">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:17px;height:17px"><path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z"></path></svg>
+      SISTEMA
+    </a>
+    <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20quiero%20agendar%20un%20diagn%C3%B3stico%20tributario." target="_blank" rel="noopener noreferrer" aria-label="Escribir por WhatsApp" style="flex:none;width:54px;height:54px;margin-top:-22px;display:flex;align-items:center;justify-content:center;border-radius:999px;background:#00A896;color:#031310;border:3px solid #051424;box-shadow:0 0 26px -4px rgba(0,168,150,0.85)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:22px;height:22px"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+    </a>
+    <a href="#servicios" style="flex:1;min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:999px;color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.12em">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:17px;height:17px"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"></rect><path d="M3.5 9.5h17M8.5 19.5v-10"></path></svg>
+      SERVICIOS
+    </a>
+    <a href="#faq" style="flex:1;min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:999px;color:#94a3b8;font-family:'JetBrains Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:0.12em">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:17px;height:17px"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4"></path><path d="M12 17h.01"></path></svg>
+      FAQ
+    </a>
+  </div>
+
+  <section id="top" data-screen-label="Hero" style="position:relative;min-height:min(100vh,620px);height:100vh;overflow:hidden;display:grid;place-items:center">
+    <img data-hero-media="" src="media/obsidian-crystal.webp" alt="" fetchpriority="high" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.62;transform:scale(1.06);will-change:transform" />
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 45%,rgba(0,168,150,0.16),transparent 70%),linear-gradient(to bottom,rgba(2,6,23,0.82) 0%,rgba(2,6,23,0.42) 35%,rgba(2,6,23,0.94) 100%)"></div>
+    <div style="position:relative;z-index:2;width:100%;max-width:1100px;padding:0 24px;text-align:center">
+      <div data-reveal="" style="display:inline-flex;align-items:center;gap:10px;padding:7px 15px;border-radius:999px;border:1px solid rgba(201,169,110,0.42);background:rgba(201,169,110,0.10)">
+        <span style="width:6px;height:6px;border-radius:999px;background:#C9A96E;animation:scPulse 2.4s infinite"></span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.28em;color:#e6d3ab">PASAJE · EL ORO · ECUADOR</span>
+      </div>
+      <h1 data-reveal="" style="margin:26px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.035em;line-height:1.02;font-size:clamp(2.6rem,7.4vw,6.4rem);color:#fff;text-wrap:balance">
+        Ingeniería tributaria<br /><span style="background:linear-gradient(100deg,#ffffff 0%,#00A896 45%,#C9A96E 100%);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:scShine 9s linear infinite">de precisión</span>
+      </h1>
+      <p data-reveal="" style="margin:26px auto 0;max-width:620px;font-size:clamp(1rem,1.5vw,1.2rem);font-weight:300;line-height:1.65;color:#a9b6c9;text-wrap:pretty">
+        Contabilidad, declaraciones y blindaje fiscal para empresas y profesionales del Ecuador. Automatización algorítmica con revisión humana experta.
+      </p>
+      <div data-reveal="" style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:38px">
+        <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20quiero%20agendar%20un%20diagn%C3%B3stico%20tributario%20gratuito." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 28px;border-radius:16px;background:linear-gradient(135deg,#00A896,#028090);color:#fff;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;box-shadow:0 22px 50px -18px rgba(0,168,150,0.9)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:17px;height:17px"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+          Agendar diagnóstico
+        </a>
+        <a href="#servicios" style="display:inline-flex;align-items:center;gap:10px;height:56px;padding:0 26px;border-radius:16px;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.05);color:#e2e8f0;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em">
+          Ver servicios
+        </a>
+      </div>
+    </div>
+    <div data-scrollcue="" style="position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:2;display:flex;flex-direction:column;align-items:center;gap:9px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.34em;color:#64748b">SCROLL</span>
+      <span style="width:1px;height:46px;background:linear-gradient(to bottom,#00A896,transparent);animation:scDrift 2.2s ease-in-out infinite alternate"></span>
+    </div>
+  </section>
+
+  <section id="blindaje" data-act="" data-screen-label="Acto I · Blindaje" style="position:relative;height:300vh">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;display:grid;place-items:center">
+      <img data-act-media="" loading="lazy" decoding="async" src="media/shield-circuit.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.5;transform:translate3d(calc(var(--p,0) * 5vw),0,0) scale(calc(1.26 - 0.18 * var(--p,0)));clip-path:polygon(0 0, calc(34% + var(--p,0) * 76%) 0, calc(8% + var(--p,0) * 100%) 100%, 0 100%);will-change:transform,clip-path" />
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 62% 50%,rgba(0,168,150,0.20),transparent 68%),linear-gradient(to right,rgba(2,6,23,0.95) 0%,rgba(2,6,23,0.72) 48%,rgba(2,6,23,0.35) 100%)"></div>
+      <span data-act-num="" style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">01</span>
+      <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;opacity:calc(0.12 + 0.88 * var(--q,1));transform:translate3d(calc((var(--p,0) - 0.5) * -90px),calc((0.5 - var(--p,0)) * -46px),0)">
+        <div style="max-width:620px">
+          <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#00A896">ACTO I — CIFRADO DE DATOS</span>
+          <h2 style="margin:20px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.03;font-size:clamp(2.1rem,5.2vw,4.4rem);color:#fff">Blindaje total de tu información fiscal</h2>
+          <p style="margin:22px 0 0;max-width:520px;font-size:clamp(0.98rem,1.4vw,1.15rem);font-weight:300;line-height:1.7;color:#aebbcd;text-wrap:pretty">
+            Tu información contable y tributaria protegida con cifrado de nivel bancario y accesos auditados. Cero errores en los casilleros 615 y 617, cero notificaciones que nadie quiere recibir.
+          </p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-top:34px;max-width:560px">
+            <div style="padding:16px 18px;border:1px solid rgba(255,255,255,0.09);border-radius:16px;background:rgba(255,255,255,0.03);backdrop-filter:blur(14px)">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#00A896">CASILLEROS</div>
+              <div style="margin-top:7px;font-family:Manrope,sans-serif;font-weight:700;font-size:15px;color:#fff">615 / 617 verificados</div>
+            </div>
+            <div style="padding:16px 18px;border:1px solid rgba(255,255,255,0.09);border-radius:16px;background:rgba(255,255,255,0.03);backdrop-filter:blur(14px)">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.18em;color:#00A896">ACCESOS</div>
+              <div style="margin-top:7px;font-family:Manrope,sans-serif;font-weight:700;font-size:15px;color:#fff">Bóveda de claves SRI</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="sistema" data-screen-label="Sistema 3D" style="position:relative;padding:clamp(80px,12vh,150px) 24px;overflow:clip">
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 55% 45% at 50% 40%,rgba(43,106,255,0.12),transparent 70%)"></div>
+    <div style="position:relative;max-width:1160px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:clamp(32px,5vw,70px);align-items:center">
+      <div>
+        <span data-reveal="" style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#C9A96E">EL SISTEMA — NUEVA LUZ 3.0</span>
+        <h2 data-reveal="" style="margin:20px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.05;font-size:clamp(2rem,4.4vw,3.6rem);color:#fff;text-wrap:balance">Un motor propio detrás de cada declaración</h2>
+        <p data-reveal="" style="margin:22px 0 0;font-size:clamp(0.98rem,1.4vw,1.12rem);font-weight:300;line-height:1.7;color:#aebbcd;text-wrap:pretty">
+          Nueva Luz 3.0 sincroniza tus comprobantes electrónicos, calcula el formulario contra las reglas del SRI 2026 y deja el respaldo listo antes del vencimiento. La máquina propone; el criterio profesional decide.
+        </p>
+        <div data-reveal="" style="display:grid;gap:12px;margin-top:32px">
+          <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.025)">
+            <span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#00A896;margin-top:2px">01</span>
+            <div><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:15px;color:#fff">Sincronización de comprobantes</div><div style="margin-top:5px;font-size:13.5px;font-weight:300;line-height:1.6;color:#9fadc0">Descarga y clasificación de documentos electrónicos recibidos y emitidos.</div></div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.025)">
+            <span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#2B6AFF;margin-top:2px">02</span>
+            <div><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:15px;color:#fff">Cálculo contra reglas SRI 2026</div><div style="margin-top:5px;font-size:13.5px;font-weight:300;line-height:1.6;color:#9fadc0">Encuadre exacto de régimen, retenciones e IVA, sin redondeos improvisados.</div></div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border:1px solid rgba(255,255,255,0.08);border-radius:16px;background:rgba(255,255,255,0.025)">
+            <span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#C9A96E;margin-top:2px">03</span>
+            <div><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:15px;color:#fff">Respaldo y aviso al cliente</div><div style="margin-top:5px;font-size:13.5px;font-weight:300;line-height:1.6;color:#9fadc0">Comprobante archivado y notificación directa por WhatsApp cuando queda presentado.</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="position:sticky;top:calc(50vh - min(26vh,280px));align-self:start;min-height:clamp(340px,52vh,560px);display:grid;place-items:center">
+        <div style="position:absolute;inset:8%;border-radius:999px;background:radial-gradient(circle,rgba(0,168,150,0.16),transparent 68%);filter:blur(28px)"></div>
+        <x-import component-from-global-scope="crystal-3d" from="./crystal3d.js" hint-size="100%,100%" style="position:relative;width:100%;height:clamp(340px,52vh,560px)"></x-import>
+      </div>
+    </div>
+  </section>
+
+  <section id="resultados" data-act="" data-screen-label="Acto II · Resultados" style="position:relative;height:300vh">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;display:grid;place-items:center">
+      <img data-act-media="" loading="lazy" decoding="async" src="media/financial-bars.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.46;transform:translate3d(calc(var(--p,0) * -6vw),0,0) scale(calc(1.1 + 0.16 * var(--p,0)));will-change:transform" />
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 38% 50%,rgba(43,106,255,0.18),transparent 68%),linear-gradient(to left,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.7) 50%,rgba(2,6,23,0.4) 100%)"></div>
+      <span style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">02</span>
+      <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;display:flex;justify-content:flex-end;opacity:calc(0.12 + 0.88 * var(--q,1));transform:translate3d(calc((var(--p,0) - 0.5) * 90px),calc((0.5 - var(--p,0)) * -46px),0)">
+        <div style="max-width:620px;text-align:left">
+          <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#2B6AFF">ACTO II — RESULTADOS MEDIBLES</span>
+          <h2 style="margin:20px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.03;font-size:clamp(2.1rem,5.2vw,4.4rem);color:#fff">Pagar lo correcto, ni un centavo de más</h2>
+          <p style="margin:22px 0 0;font-size:clamp(0.98rem,1.4vw,1.15rem);font-weight:300;line-height:1.7;color:#aebbcd;text-wrap:pretty">
+            RIMPE, IVA y Renta optimizados con criterio técnico: recuperación de retenciones a favor, deducción correcta de gastos personales y facilidades de pago cuando el historial lo exige.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:26px;margin-top:34px">
+            <div><div data-count="10" data-suffix="+" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(1.8rem,3.4vw,2.6rem);color:#fff">0+</div><div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;color:#7d8ca1">AÑOS DE EXPERIENCIA</div></div>
+            <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+            <div><div data-count="500" data-suffix="+" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(1.8rem,3.4vw,2.6rem);color:#fff">0+</div><div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;color:#7d8ca1">EMPRESAS Y PROFESIONALES</div></div>
+            <div style="width:1px;background:rgba(255,255,255,0.1)"></div>
+            <div><div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:clamp(1.8rem,3.4vw,2.6rem);color:#fff">24h</div><div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;color:#7d8ca1">FIRMA ELECTRÓNICA .P12</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cobertura" data-act="" data-screen-label="Acto III · Cobertura" style="position:relative;height:320vh">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;display:grid;place-items:center">
+      <img data-act-media="" loading="lazy" decoding="async" src="media/ecuador-map.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.52;transform:scale(calc(1.18 - 0.14 * var(--p,0)));will-change:transform" />
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 70% at 50% 50%,rgba(0,168,150,0.14),transparent 72%),linear-gradient(to bottom,rgba(2,6,23,0.9) 0%,rgba(2,6,23,0.55) 45%,rgba(2,6,23,0.92) 100%)"></div>
+      <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;text-align:center;opacity:calc(0.12 + 0.88 * var(--q,1));transform:translateY(calc((0.5 - var(--p,0)) * -46px)) scale(calc(0.94 + var(--p,0) * 0.11))">
+        <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#00A896">ACTO III — COBERTURA NACIONAL</span>
+        <h2 style="margin:20px auto 0;max-width:900px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.04;font-size:clamp(2.1rem,5vw,4.2rem);color:#fff;display:flex;flex-wrap:wrap;justify-content:center;gap:0 0.35em">
+          <span style="transform:translateX(min(0px, calc((var(--p,0) - 0.5) * 150px)))">Base en Pasaje,</span>
+          <span style="transform:translateX(max(0px, calc((0.5 - var(--p,0)) * 150px)))">alcance en todo el Ecuador</span>
+        </h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;max-width:940px;margin:38px auto 0;text-align:left">
+          <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#00A896">EL ORO · BASE</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Pasaje</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Atención presencial y tu contabilidad siempre al día.</div></div>
+          <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#00A896">EL ORO · CAPITAL</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Machala</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Gestión tributaria para comercio, servicio y agro.</div></div>
+          <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#C9A96E">NACIONAL · REMOTO</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Guayaquil</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Soporte digital y declaraciones en línea.</div></div>
+          <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#C9A96E">NACIONAL · REMOTO</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Quito</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Asesoría fiscal a distancia, sin fricciones.</div></div>
+          <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#C9A96E">NACIONAL · REMOTO</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Cuenca</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Ingeniería tributaria para todo el Austro.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <sc-if value="{{ showAgro }}" hint-placeholder-val="{{ true }}">
+  <section id="raices" data-act="" data-screen-label="Acto IV · Agro" style="position:relative;height:300vh">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;display:grid;place-items:center">
+      <img data-act-media="" loading="lazy" decoding="async" src="media/cacao-fields.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.58;transform:translate3d(calc(var(--p,0) * -4vw),calc(var(--p,0) * 3vh),0) scale(calc(1.26 - 0.16 * var(--p,0)));will-change:transform" />
+      <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.96) 0%,rgba(2,6,23,0.5) 45%,rgba(2,6,23,0.8) 100%)"></div>
+      <span style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">04</span>
+      <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;opacity:calc(0.12 + 0.88 * var(--q,1));transform:translate3d(calc((var(--p,0) - 0.5) * -70px),calc((0.5 - var(--p,0)) * -50px),0)">
+        <div style="max-width:640px">
+          <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#C9A96E">ACTO IV — RAÍCES PRODUCTIVAS</span>
+          <h2 style="margin:20px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.03;font-size:clamp(2.1rem,5.2vw,4.4rem);color:#fff">El Oro es agro, y el agro tiene su propia contabilidad</h2>
+          <p style="margin:22px 0 0;max-width:540px;font-size:clamp(0.98rem,1.4vw,1.15rem);font-weight:300;line-height:1.7;color:#c4cddb;text-wrap:pretty">
+            Banano, cacao, camarón y comercio mayorista: producción, exportación y retenciones tratadas con las reglas que realmente les aplican. Contabilidad que entiende el ciclo del campo.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:30px">
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(201,169,110,0.35);background:rgba(201,169,110,0.10);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.14em;color:#e6d3ab">AGRO &amp; PRODUCCIÓN</span>
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.14em;color:#cbd5e1">COMERCIO &amp; RETAIL</span>
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.14em;color:#cbd5e1">TRANSPORTE &amp; LOGÍSTICA</span>
+            <span style="padding:9px 15px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.14em;color:#cbd5e1">PYMES &amp; EMPRENDEDORES</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  </sc-if>
+
+  <section id="galeria" data-act="" data-screen-label="Recorrido horizontal" style="position:relative;height:420vh">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;background:#020617;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding-top:clamp(74px,12vh,120px);padding-bottom:clamp(20px,4vh,44px);box-sizing:border-box">
+      <div style="position:relative;z-index:3;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;padding:0 clamp(20px,5vw,72px) clamp(16px,3vh,32px);pointer-events:none">
+        <div>
+          <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#C9A96E">RECORRIDO LATERAL</span>
+          <h2 style="margin:14px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.02;font-size:clamp(1.7rem,3.6vw,3rem);color:#fff">Cuatro frentes, un solo criterio</h2>
+        </div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.26em;color:#64748b;white-space:nowrap">SIGUE BAJANDO →</span>
+      </div>
+      <div style="position:relative;min-height:0;display:flex;align-items:center;overflow:hidden">
+        <div style="display:flex;gap:2vw;padding:0 clamp(20px,5vw,72px);will-change:transform;transform:translate3d(calc(var(--p,0) * -232vw),0,0)">
+          <article style="position:relative;flex:none;width:78vw;max-width:1100px;height:100%;max-height:min(64vh,620px);border-radius:26px;overflow:hidden;border:1px solid rgba(255,255,255,0.10)">
+            <img src="media/poster-shield-circuit.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.62" />
+            <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.25) 60%)"></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:clamp(24px,3.4vw,44px)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:#00A896">01 · CUMPLIMIENTO</span>
+              <h3 style="margin:12px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.025em;font-size:clamp(1.5rem,3.2vw,2.6rem);color:#fff">IVA y retenciones al día</h3>
+              <p style="margin:12px 0 0;max-width:520px;font-size:clamp(0.92rem,1.2vw,1.05rem);font-weight:300;line-height:1.65;color:#cdd7e3">Declaración mensual o semestral presentada antes del vencimiento, con el comprobante archivado y el aviso enviado.</p>
+            </div>
+          </article>
+          <article style="position:relative;flex:none;width:78vw;max-width:1100px;height:100%;max-height:min(64vh,620px);border-radius:26px;overflow:hidden;border:1px solid rgba(255,255,255,0.10)">
+            <img src="media/poster-financial-bars.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.55" />
+            <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.25) 60%)"></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:clamp(24px,3.4vw,44px)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:#2B6AFF">02 · OPTIMIZACIÓN</span>
+              <h3 style="margin:12px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.025em;font-size:clamp(1.5rem,3.2vw,2.6rem);color:#fff">Retenciones a favor recuperadas</h3>
+              <p style="margin:12px 0 0;max-width:520px;font-size:clamp(0.92rem,1.2vw,1.05rem);font-weight:300;line-height:1.65;color:#cdd7e3">Cruce de comprobantes y encuadre en la tabla del SRI para que el saldo a favor no se quede en el aire.</p>
+            </div>
+          </article>
+          <article style="position:relative;flex:none;width:78vw;max-width:1100px;height:100%;max-height:min(64vh,620px);border-radius:26px;overflow:hidden;border:1px solid rgba(255,255,255,0.10)">
+            <img src="media/poster-ecuador-map.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.6" />
+            <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.25) 60%)"></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:clamp(24px,3.4vw,44px)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:#00A896">03 · PRESENCIA</span>
+              <h3 style="margin:12px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.025em;font-size:clamp(1.5rem,3.2vw,2.6rem);color:#fff">Presencial en El Oro, remoto en el país</h3>
+              <p style="margin:12px 0 0;max-width:520px;font-size:clamp(0.92rem,1.2vw,1.05rem);font-weight:300;line-height:1.65;color:#cdd7e3">Visitas programadas en la provincia y atención digital para Guayaquil, Quito y Cuenca.</p>
+            </div>
+          </article>
+          <article style="position:relative;flex:none;width:78vw;max-width:1100px;height:100%;max-height:min(64vh,620px);border-radius:26px;overflow:hidden;border:1px solid rgba(201,169,110,0.28)">
+            <img src="media/poster-cacao-fields.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.62" />
+            <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.22) 60%)"></div>
+            <div style="position:absolute;left:0;right:0;bottom:0;padding:clamp(24px,3.4vw,44px)">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.24em;color:#C9A96E">04 · SECTORES</span>
+              <h3 style="margin:12px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.025em;font-size:clamp(1.5rem,3.2vw,2.6rem);color:#fff">Contabilidad que entiende el campo</h3>
+              <p style="margin:12px 0 0;max-width:520px;font-size:clamp(0.92rem,1.2vw,1.05rem);font-weight:300;line-height:1.65;color:#cdd7e3">Banano, cacao, camarón y comercio mayorista, con las reglas que realmente les aplican.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+      <div style="position:relative;z-index:3;margin:clamp(16px,3vh,32px) clamp(20px,5vw,72px) 0;height:2px;background:rgba(255,255,255,0.10);border-radius:999px;overflow:hidden">
+        <div style="height:100%;width:calc(var(--p,0) * 100%);background:linear-gradient(90deg,#00A896,#C9A96E)"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="criterio" data-act="" data-screen-label="Interludio claro" style="position:relative;height:200vh;background:#f2ece0">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden;display:grid;place-items:center;background:#f2ece0">
+      <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 55% at 70% 40%,rgba(201,169,110,0.30),transparent 68%)"></div>
+      <div style="position:absolute;top:0;left:0;right:0;height:120px;background:linear-gradient(to bottom,rgba(2,6,23,0.22),transparent)"></div>
+      <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:clamp(28px,5vw,64px);align-items:center">
+        <div>
+          <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#8a6b22">INTERLUDIO — CRITERIO HUMANO</span>
+          <h2 style="margin:20px 0 0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.032em;line-height:1.04;font-size:clamp(2rem,4.6vw,3.6rem);color:#14110b;text-wrap:balance">La máquina calcula. La decisión sigue siendo profesional.</h2>
+          <p style="margin:22px 0 0;max-width:520px;font-size:clamp(1rem,1.4vw,1.15rem);font-weight:400;line-height:1.7;color:#4a4335;text-wrap:pretty">
+            Ningún sistema firma por ti. Cada declaración se revisa con nombre y apellido antes de presentarse, y si algo no cuadra con tu realidad, se conversa antes del envío.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:32px">
+            <div style="max-width:220px"><div style="font-family:Manrope,sans-serif;font-weight:800;font-size:16px;color:#14110b">Revisión firmada</div><div style="margin-top:6px;font-size:13.5px;line-height:1.6;color:#5c5442">Un responsable identificable detrás de cada formulario.</div></div>
+            <div style="max-width:220px"><div style="font-family:Manrope,sans-serif;font-weight:800;font-size:16px;color:#14110b">Respuesta directa</div><div style="margin-top:6px;font-size:13.5px;line-height:1.6;color:#5c5442">Sin call center: hablas con quien lleva tu contabilidad.</div></div>
+          </div>
+        </div>
+        <div style="position:relative;aspect-ratio:1/1;max-width:min(78vw,460px);justify-self:center;width:100%;border-radius:999px;overflow:hidden;border:1px solid rgba(20,17,11,0.12);box-shadow:0 40px 90px -40px rgba(20,17,11,0.45);transform:translateY(calc((0.5 - var(--p,0)) * 70px)) rotate(calc(var(--p,0) * 6deg))">
+          <img src="media/poster-obsidian-crystal.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.92;transform:scale(calc(1.08 + var(--p,0) * 0.12))" />
+          <div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,transparent 55%,rgba(242,236,224,0.55) 100%)"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="servicios" data-screen-label="Servicios" style="position:relative;padding:clamp(80px,12vh,150px) 24px;background:linear-gradient(to bottom,#020617,#050a1b)">
+    <div style="position:absolute;top:0;left:0;right:0;height:clamp(60px,10vh,140px);background:linear-gradient(to bottom,#f2ece0,rgba(2,6,23,0))"></div>
+    <div style="position:relative;max-width:1160px;margin:0 auto">
+      <span data-reveal="" style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#00A896">SERVICIOS</span>
+      <h2 data-reveal="" style="margin:18px 0 0;max-width:760px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.05;font-size:clamp(2rem,4.4vw,3.4rem);color:#fff;text-wrap:balance">Lo que resolvemos, con tarifa clara</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin-top:44px">
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(255,255,255,0.09);border-radius:22px;background:rgba(255,255,255,0.025);transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(0,168,150,0.28);background:rgba(0,168,150,0.10);color:#4edea3;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><path d="M13.5 3 6 13.5h4.6L9.8 21l7.7-10.8h-4.7z"></path></svg>
+          </span>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#00A896">TECNOLOGÍA</span><span style="font-family:Manrope,sans-serif;font-weight:800;font-size:22px;color:#fff">$45<span style="font-size:11px;font-weight:500;color:#8b99ac"> /anual</span></span></div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Facturación electrónica &amp; sistema web</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#9fadc0;flex:1">Software en la nube para emitir facturas, notas de crédito, retenciones y guías ilimitadas. Nueva Luz 3.0.</p>
+          <ul style="margin:18px 0 0;padding:0;list-style:none;display:grid;gap:8px">
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Envío automático de XML/PDF al cliente</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Conexión directa SRI 2026</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Compatible con celular y PC</li>
+          </ul>
+        </div>
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(255,255,255,0.09);border-radius:22px;background:rgba(255,255,255,0.025);transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(43,106,255,0.3);background:rgba(43,106,255,0.10);color:#7ea6ff;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><rect x="4.5" y="3" width="15" height="18" rx="2.5"></rect><path d="M8 7.5h8M8 12h2.5M8 16h2.5M14 12h2M14 16h2"></path></svg>
+          </span>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#2B6AFF">PLANIFICACIÓN</span><span style="font-family:Manrope,sans-serif;font-weight:800;font-size:22px;color:#fff">$50<span style="font-size:11px;font-weight:500;color:#8b99ac"> /año</span></span></div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Declaración Renta anual &amp; RIMPE</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#9fadc0;flex:1">Formulario 102/102A con cruce de retenciones para Negocio Popular, Emprendedor y régimen general.</p>
+          <ul style="margin:18px 0 0;padding:0;list-style:none;display:grid;gap:8px">
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Encuadre exacto en tabla SRI</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Deducción de gastos personales</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Certificado oficial de cumplimiento</li>
+          </ul>
+        </div>
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(255,255,255,0.09);border-radius:22px;background:rgba(255,255,255,0.025);transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(201,169,110,0.32);background:rgba(201,169,110,0.10);color:#e6d3ab;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><path d="M12 3l7.5 2.7v6c0 4.4-3.1 7.9-7.5 9.3-4.4-1.4-7.5-4.9-7.5-9.3v-6z"></path><path d="M12 8.5v4M12 15.5h.01"></path></svg>
+          </span>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#C9A96E">DEFENSA FISCAL</span><span style="font-family:Manrope,sans-serif;font-weight:800;font-size:22px;color:#fff">$60<span style="font-size:11px;font-weight:500;color:#8b99ac"> base</span></span></div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Regularización de RUC &amp; glosas</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#9fadc0;flex:1">Reactivación de RUC suspendido, declaraciones pendientes al día y solicitud de facilidades de pago.</p>
+          <ul style="margin:18px 0 0;padding:0;list-style:none;display:grid;gap:8px">
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#C9A96E">·</span>Diagnóstico histórico sin costo</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#C9A96E">·</span>Eliminación de clausuras</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#C9A96E">·</span>Cálculo exacto de recargos mínimos</li>
+          </ul>
+        </div>
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(255,255,255,0.09);border-radius:22px;background:rgba(255,255,255,0.025);transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(0,168,150,0.28);background:rgba(0,168,150,0.10);color:#4edea3;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><path d="M12 20s-7-4.4-7-9.3A4 4 0 0 1 12 7.4a4 4 0 0 1 7 3.3c0 4.9-7 9.3-7 9.3z"></path></svg>
+          </span>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#00A896">GRUPOS PRIORITARIOS</span><span style="font-family:Manrope,sans-serif;font-weight:800;font-size:22px;color:#fff">$30<span style="font-size:11px;font-weight:500;color:#8b99ac"> /solicitud</span></span></div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Devolución de IVA tercera edad</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#9fadc0;flex:1">Recuperación mensual del IVA pagado en compras para personas de 65+ años y con discapacidad.</p>
+          <ul style="margin:18px 0 0;padding:0;list-style:none;display:grid;gap:8px">
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Solicitud digital ante el SRI</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Seguimiento hasta acreditación</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#00A896">·</span>Atención humana y preferente</li>
+          </ul>
+        </div>
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(255,255,255,0.09);border-radius:22px;background:rgba(255,255,255,0.025);transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(43,106,255,0.3);background:rgba(43,106,255,0.10);color:#7ea6ff;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><circle cx="8.5" cy="8.5" r="4"></circle><path d="M11.4 11.4 20 20M16.5 15l-2 2M19 17.5l-1.6 1.6"></path></svg>
+          </span>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#2B6AFF">FIRMA ELECTRÓNICA</span><span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;color:#8b99ac">24 h</span></div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Firma electrónica .P12 express</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#9fadc0;flex:1">Válida para facturación electrónica, Quipux y trámites legales. Proceso 100% digital, sin filas.</p>
+          <ul style="margin:18px 0 0;padding:0;list-style:none;display:grid;gap:8px">
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Cédula y papeleta vigentes</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Emisión en menos de 24 horas</li>
+            <li style="display:flex;gap:9px;font-size:12.5px;color:#b8c3d2"><span style="color:#2B6AFF">·</span>Instalación y respaldo incluidos</li>
+          </ul>
+        </div>
+        <div data-reveal="" data-card="" style="display:flex;flex-direction:column;padding:26px;border:1px solid rgba(0,168,150,0.35);border-radius:22px;background:linear-gradient(140deg,rgba(0,168,150,0.12),rgba(43,106,255,0.08));transition:transform .45s cubic-bezier(.16,1,.3,1),border-color .45s,box-shadow .45s">
+          <span style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;border:1px solid rgba(78,222,163,0.35);background:rgba(78,222,163,0.12);color:#4edea3;margin-bottom:20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:21px;height:21px"><circle cx="12" cy="12" r="8.5"></circle><path d="M15.5 8.5 13 13l-4.5 2.5L11 11z"></path></svg>
+          </span>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.2em;color:#4edea3">¿NO SABES DÓNDE ESTÁS PARADO?</div>
+          <h3 style="margin:16px 0 0;font-family:Manrope,sans-serif;font-weight:700;font-size:19px;line-height:1.25;color:#fff">Diagnóstico tributario sin costo</h3>
+          <p style="margin:12px 0 0;font-size:13.5px;font-weight:300;line-height:1.65;color:#c3d0dd;flex:1">Revisamos tu historial en el SRI, tu régimen y tus pendientes. Te decimos exactamente qué falta y cuánto cuesta ponerlo al día.</p>
+          <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20quiero%20mi%20diagn%C3%B3stico%20tributario%20sin%20costo." target="_blank" rel="noopener noreferrer" style="margin-top:20px;display:inline-flex;align-items:center;justify-content:center;gap:9px;height:48px;border-radius:14px;background:#00A896;color:#031310;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:15px;height:15px"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+            Escribir por WhatsApp
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Testimonios" style="position:relative;padding:clamp(70px,10vh,130px) 24px;background:#050a1b">
+    <div style="max-width:1160px;margin:0 auto">
+      <span data-reveal="" style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#C9A96E">CLIENTES</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px;margin-top:34px">
+        <blockquote data-reveal="" style="margin:0;padding:26px;border:1px solid rgba(255,255,255,0.08);border-radius:20px;background:rgba(255,255,255,0.02)">
+          <p style="margin:0;font-size:14.5px;font-weight:300;line-height:1.7;color:#cdd7e3">“La tranquilidad que tengo ahora con mis declaraciones no tiene precio. Santiago automatizó todo mi esquema de retenciones y nunca más tuve una notificación del SRI.”</p>
+          <footer style="margin-top:18px"><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:14px;color:#fff">Ing. Carlos Mendoza</div><div style="margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896">MACHALA · SECTOR BANANERO</div></footer>
+        </blockquote>
+        <blockquote data-reveal="" style="margin:0;padding:26px;border:1px solid rgba(255,255,255,0.08);border-radius:20px;background:rgba(255,255,255,0.02)">
+          <p style="margin:0;font-size:14.5px;font-weight:300;line-height:1.7;color:#cdd7e3">“Como profesional independiente no tenía tiempo para el control contable. Con Soluciones Tributarias PRO todo está al día y recuperaron mis retenciones a favor.”</p>
+          <footer style="margin-top:18px"><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:14px;color:#fff">Dra. Mariana Valarezo</div><div style="margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896">PASAJE · CONSULTA PRIVADA</div></footer>
+        </blockquote>
+        <blockquote data-reveal="" style="margin:0;padding:26px;border:1px solid rgba(255,255,255,0.08);border-radius:20px;background:rgba(255,255,255,0.02)">
+          <p style="margin:0;font-size:14.5px;font-weight:300;line-height:1.7;color:#cdd7e3">“Emitieron mi firma electrónica .P12 en horas y me configuraron la facturación electrónica. Servicio honesto, ágil y muy profesional.”</p>
+          <footer style="margin-top:18px"><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:14px;color:#fff">Roberto Aguilar</div><div style="margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896">EL GUABO · COMERCIANTE RIMPE</div></footer>
+        </blockquote>
+        <blockquote data-reveal="" style="margin:0;padding:26px;border:1px solid rgba(255,255,255,0.08);border-radius:20px;background:rgba(255,255,255,0.02)">
+          <p style="margin:0;font-size:14.5px;font-weight:300;line-height:1.7;color:#cdd7e3">“Gestionaron la devolución del IVA de mi abuelita en tiempo récord. Cada mes recibimos el depósito directo en su cuenta, sin complicaciones.”</p>
+          <footer style="margin-top:18px"><div style="font-family:Manrope,sans-serif;font-weight:700;font-size:14px;color:#fff">Lcda. Sonia Carrión</div><div style="margin-top:3px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896">SANTA ROSA · FAMILIAR DE ADULTO MAYOR</div></footer>
+        </blockquote>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" data-screen-label="FAQ" style="position:relative;padding:clamp(70px,10vh,130px) 24px;background:linear-gradient(to bottom,#050a1b,#020617)">
+    <div style="max-width:880px;margin:0 auto">
+      <span data-reveal="" style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.3em;color:#00A896">PREGUNTAS FRECUENTES</span>
+      <h2 data-reveal="" style="margin:18px 0 36px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.06;font-size:clamp(1.9rem,4vw,3rem);color:#fff;text-wrap:balance">Lo que más nos preguntan del SRI</h2>
+      <div style="display:grid;gap:10px">
+        <details data-reveal="" style="border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(255,255,255,0.02);padding:20px 22px">
+          <summary style="cursor:pointer;list-style:none;display:flex;gap:14px;align-items:flex-start;font-family:Manrope,sans-serif;font-weight:700;font-size:16px;line-height:1.4;color:#fff"><span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896;margin-top:5px">RÉGIMEN</span>¿Cuáles son las obligaciones del RIMPE 2026 en Ecuador?</summary>
+          <p style="margin:14px 0 0;font-size:14px;font-weight:300;line-height:1.75;color:#a9b6c9">El RIMPE se divide en Negocio Popular (ingresos brutos hasta $20.000 anuales, emite notas de venta o facturas sin IVA, declaración anual con tarifa progresiva base de $60) y RIMPE Emprendedor (ingresos entre $20.001 y $300.000, factura con IVA y declara semestralmente). Diagnosticamos tu caso para garantizar el régimen correcto y evitar multas.</p>
+        </details>
+        <details data-reveal="" style="border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(255,255,255,0.02);padding:20px 22px">
+          <summary style="cursor:pointer;list-style:none;display:flex;gap:14px;align-items:flex-start;font-family:Manrope,sans-serif;font-weight:700;font-size:16px;line-height:1.4;color:#fff"><span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#2B6AFF">FIRMA</span>¿Cómo tramitar la firma electrónica .P12 en Pasaje y El Oro?</summary>
+          <p style="margin:14px 0 0;font-size:14px;font-weight:300;line-height:1.75;color:#a9b6c9">Emitimos firmas electrónicas en archivo .P12 válidas para facturación electrónica, Quipux y trámites legales en menos de 24 horas. El proceso es 100% digital con tu cédula y papeleta de votación vigentes, sin filas en el Registro Civil.</p>
+        </details>
+        <details data-reveal="" style="border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(255,255,255,0.02);padding:20px 22px">
+          <summary style="cursor:pointer;list-style:none;display:flex;gap:14px;align-items:flex-start;font-family:Manrope,sans-serif;font-weight:700;font-size:16px;line-height:1.4;color:#fff"><span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#C9A96E">IVA</span>¿Cómo funciona la devolución de IVA para tercera edad y discapacidad?</summary>
+          <p style="margin:14px 0 0;font-size:14px;font-weight:300;line-height:1.75;color:#a9b6c9">Las personas de 65 años en adelante o con carnet de discapacidad tienen derecho por ley a recuperar mensualmente el IVA pagado en compras de bienes y servicios de primera necesidad. Realizamos la solicitud digital ante el SRI hasta la acreditación directa en la cuenta bancaria.</p>
+        </details>
+        <details data-reveal="" style="border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(255,255,255,0.02);padding:20px 22px">
+          <summary style="cursor:pointer;list-style:none;display:flex;gap:14px;align-items:flex-start;font-family:Manrope,sans-serif;font-weight:700;font-size:16px;line-height:1.4;color:#fff"><span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#00A896">MÉTODO</span>¿Por qué elegirlos frente a un contador tradicional?</summary>
+          <p style="margin:14px 0 0;font-size:14px;font-weight:300;line-height:1.75;color:#a9b6c9">Combinamos más de 10 años de experiencia fiscal con automatización algorítmica (sistema Nueva Luz 3.0): cero errores en casilleros de retenciones 615/617, sincronización inmediata de comprobantes electrónicos y blindaje fiscal continuo ante auditorías del SRI.</p>
+        </details>
+        <details data-reveal="" style="border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(255,255,255,0.02);padding:20px 22px">
+          <summary style="cursor:pointer;list-style:none;display:flex;gap:14px;align-items:flex-start;font-family:Manrope,sans-serif;font-weight:700;font-size:16px;line-height:1.4;color:#fff"><span style="flex:none;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.14em;color:#2B6AFF">ATRASOS</span>¿Qué hago si tengo declaraciones atrasadas o multas acumuladas?</summary>
+          <p style="margin:14px 0 0;font-size:14px;font-weight:300;line-height:1.75;color:#a9b6c9">Analizamos tu historial tributario sin costo inicial, estructuramos las declaraciones pendientes con cálculo exacto de intereses y gestionamos facilidades de pago o remisiones de ley para restablecer tu RUC en estado activo.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section data-screen-label="Cierre" style="position:relative;padding:clamp(90px,14vh,170px) 24px;overflow:hidden;text-align:center">
+    <img src="media/poster-obsidian-crystal.png" alt="" loading="lazy" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.3" />
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 50% 50%,rgba(201,169,110,0.14),transparent 70%),linear-gradient(to bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.97))"></div>
+    <div style="position:relative;z-index:2;max-width:760px;margin:0 auto">
+      <h2 data-reveal="" style="margin:0;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.035em;line-height:1.05;font-size:clamp(2.1rem,5.4vw,4.2rem);color:#fff;text-wrap:balance">Que el SRI sea el menor de tus problemas</h2>
+      <p data-reveal="" style="margin:24px auto 0;max-width:540px;font-size:clamp(1rem,1.5vw,1.15rem);font-weight:300;line-height:1.7;color:#aebbcd">Cuéntanos tu caso por WhatsApp. El diagnóstico es gratuito y la respuesta, directa.</p>
+      <a data-reveal="" href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20quiero%20agendar%20un%20diagn%C3%B3stico%20tributario." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:11px;margin-top:36px;height:60px;padding:0 34px;border-radius:18px;background:linear-gradient(135deg,#00A896,#028090);color:#fff;font-family:'JetBrains Mono',monospace;font-size:12.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;box-shadow:0 26px 60px -20px rgba(0,168,150,0.9)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="width:18px;height:18px"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+        Agendar diagnóstico tributario
+      </a>
+      <div data-reveal="" style="margin-top:18px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.18em;color:#7d8ca1">+593 97 898 0722</div>
+
+      <div data-reveal="" style="margin-top:52px;padding-top:34px;border-top:1px solid rgba(255,255,255,0.09)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.26em;color:#64748b">O ENTRA DIRECTO AL TEMA</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:20px">
+          <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20deseo%20simular%20y%20encuadrar%20mi%20r%C3%A9gimen%20RIMPE%202026." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:9px;min-height:46px;padding:0 17px;border-radius:13px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#dbe3ec;font-size:13px;font-weight:500">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#4edea3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;flex:none"><rect x="4.5" y="3" width="15" height="18" rx="2.5"></rect><path d="M8 7.5h8M8 12h2.5M8 16h2.5M14 12h2M14 16h2"></path></svg>
+            Encuadre RIMPE 2026
+          </a>
+          <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20requiero%20tramitar%20mi%20Firma%20Electr%C3%B3nica%20.P12%20en%2024h." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:9px;min-height:46px;padding:0 17px;border-radius:13px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#dbe3ec;font-size:13px;font-weight:500">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#7ea6ff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;flex:none"><circle cx="8.5" cy="8.5" r="4"></circle><path d="M11.4 11.4 20 20M16.5 15l-2 2M19 17.5l-1.6 1.6"></path></svg>
+            Firma electrónica .P12
+          </a>
+          <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20deseo%20gestionar%20la%20devoluci%C3%B3n%20de%20IVA%20para%20adulto%20mayor%20o%20discapacidad." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:9px;min-height:46px;padding:0 17px;border-radius:13px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.04);color:#dbe3ec;font-size:13px;font-weight:500">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#4edea3" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;flex:none"><path d="M12 20s-7-4.4-7-9.3A4 4 0 0 1 12 7.4a4 4 0 0 1 7 3.3c0 4.9-7 9.3-7 9.3z"></path></svg>
+            Devolución de IVA
+          </a>
+          <a href="https://wa.me/593978980722?text=Hola%20Santiago%20C%C3%B3rdova%2C%20tengo%20declaraciones%20pendientes%20y%20quiero%20regularizar%20mi%20RUC." target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:9px;min-height:46px;padding:0 17px;border-radius:13px;border:1px solid rgba(201,169,110,0.3);background:rgba(201,169,110,0.09);color:#e6d3ab;font-size:13px;font-weight:500">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px;flex:none"><path d="M12 3l7.5 2.7v6c0 4.4-3.1 7.9-7.5 9.3-4.4-1.4-7.5-4.9-7.5-9.3v-6z"></path><path d="M12 8.5v4M12 15.5h.01"></path></svg>
+            Declaraciones atrasadas
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="position:relative;padding:44px 24px 104px;border-top:1px solid rgba(255,255,255,0.07);background:#020617">
+    <div style="max-width:1160px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:34px">
+      <div>
+        <span style="display:flex;align-items:center;gap:11px">
+          <span style="width:34px;height:34px;border-radius:999px;display:grid;place-items:center;background:linear-gradient(135deg,#00A896,#2B6AFF);flex:none">
+            <svg viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:17px;height:17px" aria-label="Soluciones Contables Pro">
+              <g stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M30 80 H 78"></path><path d="M54 80 V 30"></path><path d="M25 35 H 83"></path>
+                <circle cx="54" cy="25" r="5" fill="#ffffff"></circle>
+                <path d="M35 35 V 45"></path><path d="M22 60 C 28 70, 42 70, 48 60" fill="none"></path>
+                <path d="M73 35 V 45"></path><path d="M60 60 C 66 70, 80 70, 86 60" fill="none"></path>
+              </g>
+            </svg>
+          </span>
+          <span style="font-family:Manrope,sans-serif;font-weight:800;font-size:13px;color:#fff;letter-spacing:-0.01em">SANTIAGO CÓRDOVA</span>
+        </span>
+        <p style="margin:16px 0 0;max-width:300px;font-size:13px;font-weight:300;line-height:1.65;color:#8494a8">Soluciones Tributarias PRO. Contabilidad, declaraciones y blindaje fiscal con criterio profesional.</p>
+      </div>
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.22em;color:#4a5a70">NAVEGACIÓN</div>
+        <div style="display:grid;gap:10px;margin-top:16px">
+          <a href="#blindaje" style="font-size:13px;color:#9fadc0">Blindaje</a>
+          <a href="#sistema" style="font-size:13px;color:#9fadc0">El sistema</a>
+          <a href="#servicios" style="font-size:13px;color:#9fadc0">Servicios</a>
+          <a href="#faq" style="font-size:13px;color:#9fadc0">Preguntas frecuentes</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.22em;color:#4a5a70">CONTACTO</div>
+        <div style="display:grid;gap:12px;margin-top:16px">
+          <a href="https://wa.me/593978980722" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:9px;font-size:13px;color:#00A896">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" style="width:16px;height:16px;flex:none"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+            +593 97 898 0722
+          </a>
+          <span style="display:inline-flex;align-items:center;gap:9px;font-size:13px;color:#9fadc0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#C9A96E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex:none"><path d="M12 21s-6.5-5.6-6.5-10.2A6.5 6.5 0 0 1 12 4.3a6.5 6.5 0 0 1 6.5 6.5C18.5 15.4 12 21 12 21z"></path><circle cx="12" cy="10.6" r="2.3"></circle></svg>
+            Pasaje · El Oro · Ecuador
+          </span>
+        </div>
+      </div>
+    </div>
+    <div style="max-width:1160px;margin:34px auto 0;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:0.18em;color:#46566c">SOLUCIONES TRIBUTARIAS PRO · SISTEMA NUEVA LUZ 3.0</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showAgro&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Contenido&quot;},&quot;scrollIntensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.4,&quot;max&quot;:1.6,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Movimiento&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    const root = this.el || document;
+    this._root = root;
+    this._reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // El scroller puede ser body (host embebido) o el documento (archivo suelto)
+    const scrollTopOf = () => window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const scrollSpan = () => Math.max(
+      document.documentElement.scrollHeight, document.body.scrollHeight
+    ) - window.innerHeight;
+    const intensity = this._reduced ? 1 : (this.props.scrollIntensity ?? 1);
+
+    // Sólo el medio visible decodifica su WebP animado; el resto queda en fotograma estático.
+    const media = Array.from(root.querySelectorAll('[data-act-media],[data-hero-media]'));
+    media.forEach(img => {
+      const src = img.getAttribute('src') || '';
+      if (!src.endsWith('.webp')) return;
+      img.dataset.anim = src;
+      img.dataset.still = src.replace(/media\/([^/]+)\.webp$/, 'media/poster-$1.png');
+      if (!img.hasAttribute('data-hero-media')) img.setAttribute('src', img.dataset.still);
+    });
+    this._mio = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const img = e.target;
+        const want = e.isIntersecting ? img.dataset.anim : img.dataset.still;
+        if (want && img.getAttribute('src') !== want) img.setAttribute('src', want);
+      }
+    }, { rootMargin: '10% 0px' });
+    media.forEach(img => this._mio.observe(img));
+
+    // Progreso por acto → var(--p) (0..1) + barra de progreso global
+    const acts = Array.from(root.querySelectorAll('[data-act]'));
+    const bar = root.querySelector('[data-progress]');
+    let ticking = false;
+    const update = () => {
+      ticking = false;
+      const vh = window.innerHeight;
+      for (const a of acts) {
+        const r = a.getBoundingClientRect();
+        const span = r.height - vh;
+        const p = span > 0 ? Math.min(1, Math.max(0, -r.top / span)) : 0;
+        a.style.setProperty('--p', this._reduced ? '0.5' : String(p * intensity));
+        // --q: curva de entrada/salida (0 en los bordes del acto, 1 en el centro)
+        const edge = 0.24;
+        const ramp = (x) => { const c = Math.min(1, Math.max(0, x)); return c * c * (3 - 2 * c); };
+        const q = this._reduced ? 1 : Math.min(ramp(p / edge), ramp((1 - p) / edge));
+        a.style.setProperty('--q', String(q));
+      }
+      if (bar) {
+        const total = scrollSpan();
+        let pct = total > 0 ? (scrollTopOf() / total) * 100 : 0;
+        if (scrollTopOf() + window.innerHeight >= (document.documentElement.scrollHeight || document.body.scrollHeight) - 35) {
+          pct = 100;
+        }
+        bar.style.width = Math.min(100, Math.max(0, pct)) + '%';
+      }
+      if (this._showReveals) this._showReveals();
+      if (this._runCounters) this._runCounters();
+      if (this._syncNav) this._syncNav();
+      const hero = root.querySelector('[data-hero-media]');
+      if (hero) {
+        const y = Math.min(scrollTopOf(), vh);
+        hero.style.transform = 'scale(' + (1.06 + (y / vh) * 0.14) + ') translateY(' + (y * 0.12) + 'px)';
+      }
+    };
+    // Nav responsivo sin clases: oculta piezas según ancho real
+    const brandsub = root.querySelector('[data-brandsub]');
+    const navlinks = root.querySelector('[data-navlinks]');
+    const dock = root.querySelector('[data-mobiledock]');
+    const hero = root.querySelector('#top');
+    this._fitNav = () => {
+      const w = window.innerWidth;
+      const compact = w < 1040;
+      if (brandsub) brandsub.style.display = w < 900 ? 'none' : 'block';
+      if (navlinks) navlinks.style.display = compact ? 'none' : 'flex';
+      if (dock) dock.style.display = compact ? 'flex' : 'none';
+      // El dock es fijo: el hero le reserva su huella para no tapar el CTA
+      if (hero) {
+        // El hero centra su contenido: reserva la huella real de cabecera y dock fijos
+        const header = root.querySelector('header');
+        hero.style.paddingTop = ((header ? header.offsetHeight : 88) + 24) + 'px';
+        hero.style.paddingBottom = (compact && dock ? (dock.offsetHeight || 63) + 28 : 0) + 'px';
+      }
+      // En compacto el dock ya comunica la invitación a bajar: la señal se retira
+      const cue = root.querySelector('[data-scrollcue]');
+      if (cue) cue.style.display = compact ? 'none' : 'flex';
+    };
+    this._fitNav();
+    window.addEventListener('resize', this._fitNav, { passive: true });
+
+    this._onScroll = () => { if (!ticking) { ticking = true; requestAnimationFrame(update); } };
+    // capture:true para recibir también el scroll de un contenedor (no burbujea)
+    this._scrollOpts = { passive: true, capture: true };
+    window.addEventListener('scroll', this._onScroll, this._scrollOpts);
+    window.addEventListener('resize', this._onScroll, { passive: true });
+    update();
+
+    // Reveal: el contenido nace visible; la animación es sólo realce y se
+    // maneja desde el mismo bucle de scroll (sin depender de IntersectionObserver).
+    const reveals = Array.from(root.querySelectorAll('[data-reveal]'));
+    reveals.forEach((el, i) => {
+      const delay = (i % 4) * 90;
+      el.style.transition = 'opacity .95s cubic-bezier(.16,1,.3,1) ' + delay + 'ms, transform 1.05s cubic-bezier(.16,1,.3,1) ' + delay + 'ms, filter .95s ease ' + delay + 'ms';
+      const r = el.getBoundingClientRect();
+      if (!this._reduced && r.top > window.innerHeight * 0.96) {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(30px) scale(0.985)';
+        el.style.filter = 'blur(6px)';
+        el.dataset.pending = '1';
+      }
+    });
+    const showReveals = () => {
+      for (const el of reveals) {
+        if (el.dataset.pending !== '1') continue;
+        if (el.getBoundingClientRect().top < window.innerHeight * 0.96) {
+          el.dataset.pending = '0';
+          el.style.opacity = '1';
+          el.style.transform = 'none';
+          el.style.filter = 'none';
+        }
+      }
+    };
+    this._showReveals = showReveals;
+    // Red de seguridad: nada queda oculto nunca.
+    this._safety = setTimeout(() => {
+      reveals.forEach(el => { el.style.opacity = '1'; el.style.transform = 'none'; el.style.filter = 'none'; el.dataset.pending = '0'; });
+    }, 2600);
+
+    // Contadores (se lanzan al acercarse, con arranque garantizado)
+    const counters = Array.from(root.querySelectorAll('[data-count]'));
+    const runCount = (el) => {
+      if (el.dataset.ran === '1') return;
+      el.dataset.ran = '1';
+      const to = Number(el.dataset.count) || 0;
+      const suffix = el.dataset.suffix || '';
+      const start = performance.now();
+      const tick = (now) => {
+        const p = Math.min((now - start) / 1600, 1);
+        el.textContent = Math.round((1 - Math.pow(1 - p, 3)) * to).toLocaleString('es-EC') + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    this._runCounters = () => {
+      for (const el of counters) {
+        const r = el.getBoundingClientRect();
+        if (r.top < window.innerHeight * 0.85 && r.bottom > 0) runCount(el);
+      }
+    };
+
+    // Hover de tarjetas y nav (sin clases CSS)
+    root.querySelectorAll('[data-card]').forEach(c => {
+      c.addEventListener('mouseenter', () => {
+        c.style.transform = 'translateY(-6px)';
+        c.style.borderColor = 'rgba(0,168,150,0.4)';
+        c.style.boxShadow = '0 40px 80px -30px rgba(0,168,150,0.35)';
+      });
+      c.addEventListener('mouseleave', () => {
+        c.style.transform = 'none';
+        c.style.boxShadow = 'none';
+      });
+    });
+    const links = Array.from(root.querySelectorAll('[data-navlinks] a'));
+    links.forEach(a => {
+      a.addEventListener('mouseenter', () => { a.style.background = 'rgba(255,255,255,0.08)'; a.style.color = '#fff'; });
+      a.addEventListener('mouseleave', () => { if (a.dataset.active !== '1') { a.style.background = 'transparent'; a.style.color = '#cbd5e1'; } });
+    });
+
+    // Sección activa en el nav (desde el bucle de scroll)
+    const sections = ['blindaje', 'sistema', 'resultados', 'cobertura', 'servicios', 'faq']
+      .map(id => root.querySelector('#' + id)).filter(Boolean);
+    const dockLinks = Array.from(root.querySelectorAll('[data-mobiledock] a[href^="#"]'));
+    this._syncNav = () => {
+      const mid = window.innerHeight * 0.45;
+      let activeId = '';
+      for (const s of sections) {
+        const r = s.getBoundingClientRect();
+        if (r.top <= mid && r.bottom > mid) activeId = s.id;
+      }
+      dockLinks.forEach(a => {
+        const on = activeId && a.getAttribute('href') === '#' + activeId;
+        a.style.color = on ? '#00A896' : '#94a3b8';
+        a.style.background = on ? 'rgba(0,168,150,0.12)' : 'transparent';
+      });
+      links.forEach(a => {
+        const on = activeId && a.getAttribute('href') === '#' + activeId;
+        a.dataset.active = on ? '1' : '0';
+        a.style.background = on ? '#00A896' : 'transparent';
+        a.style.color = on ? '#031310' : '#cbd5e1';
+      });
+    };
+    this._syncNav();
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('scroll', this._onScroll, this._scrollOpts);
+    window.removeEventListener('resize', this._onScroll);
+    window.removeEventListener('resize', this._fitNav);
+    clearTimeout(this._safety);
+    this._sio && this._sio.disconnect();
+    this._mio && this._mio.disconnect();
+  }
+
+  renderVals() {
+    return { showAgro: this.props.showAgro ?? true };
+  }
+}
+</script>
+</body>
+</html>
