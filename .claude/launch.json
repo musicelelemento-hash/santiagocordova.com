@@ -13,6 +13,18 @@
       "port": 3000
     },
     {
+      "name": "landing-3d-lujo",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8792",
+        "--directory",
+        "C:\\Programacion\\Paginas Web\\SantiagoCordova.com\\Landing 3D Lujo"
+      ],
+      "port": 8792
+    },
+    {
       "name": "bancos-extension",
       "runtimeExecutable": "python",
       "runtimeArgs": [
