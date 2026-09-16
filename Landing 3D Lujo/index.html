@@ -14,6 +14,8 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
+  :root { --coberturaDrift: 150px; }
+  @media (max-width: 640px) { :root { --coberturaDrift: 26px; } }
   body { margin: 0; background: #020617; color: #e2e8f0; font-family: Inter, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
   a { color: #00A896; text-decoration: none; }
   a:hover { color: #4edea3; }
@@ -39,7 +41,7 @@
 </style>
 </helmet>
 
-<div style="position:relative;background:#020617">
+<div style="position:relative;background:#020617;max-width:100vw;overflow-x:clip">
 
   <header style="position:fixed;top:0;left:0;right:0;z-index:90;display:flex;flex-direction:column;align-items:center;padding:14px 16px 0;pointer-events:none">
     <div style="width:100%;max-width:1160px;height:2px;background:rgba(255,255,255,0.08);border-radius:999px;overflow:hidden;margin-bottom:12px">
@@ -134,7 +136,7 @@
   </section>
 
   <section id="blindaje" data-act="" data-screen-label="Acto I · Blindaje" style="position:relative;overflow:clip;height:var(--aSecH1,300vh)">
-    <div style="position:var(--aPos1,sticky);top:0;height:var(--aH1,100vh);overflow:hidden;display:grid;justify-items:center;align-content:var(--aAl1,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
+    <div style="position:var(--aPos1,sticky);top:0;height:var(--aH1,100vh);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:var(--aAl1,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
       <img data-act-media="" loading="lazy" decoding="async" src="media/poster-shield-circuit.png" data-anim="media/shield-circuit.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.5;transform:translate3d(calc(var(--p,0) * 5vw),0,0) scale(calc(1.26 - 0.18 * var(--p,0)));clip-path:polygon(0 0, calc(34% + var(--p,0) * 76%) 0, calc(8% + var(--p,0) * 100%) 100%, 0 100%);will-change:transform,clip-path" />
       <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 62% 50%,rgba(0,168,150,0.20),transparent 68%),linear-gradient(to right,rgba(2,6,23,0.95) 0%,rgba(2,6,23,0.72) 48%,rgba(2,6,23,0.35) 100%)"></div>
       <span data-act-num="" style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">01</span>
@@ -192,7 +194,7 @@
   </section>
 
   <section id="resultados" data-act="" data-screen-label="Acto II · Resultados" style="position:relative;overflow:clip;height:var(--aSecH2,300vh)">
-    <div style="position:var(--aPos2,sticky);top:0;height:var(--aH2,100vh);overflow:hidden;display:grid;justify-items:center;align-content:var(--aAl2,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
+    <div style="position:var(--aPos2,sticky);top:0;height:var(--aH2,100vh);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:var(--aAl2,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
       <img data-act-media="" loading="lazy" decoding="async" src="media/poster-financial-bars.png" data-anim="media/financial-bars.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.46;transform:translate3d(calc(var(--p,0) * -6vw),0,0) scale(calc(1.1 + 0.16 * var(--p,0)));will-change:transform" />
       <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 38% 50%,rgba(43,106,255,0.18),transparent 68%),linear-gradient(to left,rgba(2,6,23,0.94) 0%,rgba(2,6,23,0.7) 50%,rgba(2,6,23,0.4) 100%)"></div>
       <span style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">02</span>
@@ -216,14 +218,14 @@
   </section>
 
   <section id="cobertura" data-act="" data-screen-label="Acto III · Cobertura" style="position:relative;overflow:clip;height:var(--aSecH3,320vh)">
-    <div style="position:var(--aPos3,sticky);top:0;height:var(--aH3,100vh);overflow:hidden;display:grid;justify-items:center;align-content:var(--aAl3,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
+    <div style="position:var(--aPos3,sticky);top:0;height:var(--aH3,100vh);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:var(--aAl3,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
       <img data-act-media="" loading="lazy" decoding="async" src="media/poster-ecuador-map.png" data-anim="media/ecuador-map.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.52;transform:scale(calc(1.18 - 0.14 * var(--p,0)));will-change:transform" />
       <div style="position:absolute;inset:0;background:radial-gradient(ellipse 70% 70% at 50% 50%,rgba(0,168,150,0.14),transparent 72%),linear-gradient(to bottom,rgba(2,6,23,0.9) 0%,rgba(2,6,23,0.55) 45%,rgba(2,6,23,0.92) 100%)"></div>
       <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;text-align:center;opacity:calc(0.12 + 0.88 * var(--q,1));transform:translateY(calc((0.5 - var(--p,0)) * -46px)) scale(calc(0.94 + var(--p,0) * 0.11))">
         <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:0.3em;color:#00A896">ACTO III — COBERTURA NACIONAL</span>
         <h2 style="margin:20px auto 0;max-width:900px;font-family:Manrope,sans-serif;font-weight:800;letter-spacing:-0.03em;line-height:1.04;font-size:clamp(2.1rem,5vw,4.2rem);color:#fff;display:flex;flex-wrap:wrap;justify-content:center;gap:0 0.35em">
-          <span style="transform:translateX(min(0px, calc((var(--p,0) - 0.5) * 150px)))">Base en Pasaje,</span>
-          <span style="transform:translateX(max(0px, calc((0.5 - var(--p,0)) * 150px)))">alcance en todo el Ecuador</span>
+          <span style="min-width:0;max-width:100%;transform:translateX(min(0px, calc((var(--p,0) - 0.5) * var(--coberturaDrift,150px))))">Base en Pasaje,</span>
+          <span style="min-width:0;max-width:100%;transform:translateX(max(0px, calc((0.5 - var(--p,0)) * var(--coberturaDrift,150px))))">alcance en todo el Ecuador</span>
         </h2>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px;max-width:940px;margin:38px auto 0;text-align:left">
           <div style="padding:18px;border:1px solid rgba(255,255,255,0.09);border-radius:18px;background:rgba(5,20,36,0.55);backdrop-filter:blur(16px)"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.2em;color:#00A896">EL ORO · BASE</div><div style="margin-top:8px;font-family:Manrope,sans-serif;font-weight:700;font-size:17px;color:#fff">Pasaje</div><div style="margin-top:6px;font-size:13px;font-weight:300;line-height:1.55;color:#9fadc0">Atención presencial y tu contabilidad siempre al día.</div></div>
@@ -238,7 +240,7 @@
 
   <sc-if value="{{ showAgro }}" hint-placeholder-val="{{ true }}">
   <section id="raices" data-act="" data-screen-label="Acto IV · Agro" style="position:relative;overflow:clip;height:var(--aSecH4,300vh)">
-    <div style="position:var(--aPos4,sticky);top:0;height:var(--aH4,100vh);overflow:hidden;display:grid;justify-items:center;align-content:var(--aAl4,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
+    <div style="position:var(--aPos4,sticky);top:0;height:var(--aH4,100vh);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:var(--aAl4,center);padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
       <img data-act-media="" loading="lazy" decoding="async" src="media/poster-cacao-fields.png" data-anim="media/cacao-fields.webp" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.58;transform:translate3d(calc(var(--p,0) * -4vw),calc(var(--p,0) * 3vh),0) scale(calc(1.26 - 0.16 * var(--p,0)));will-change:transform" />
       <div style="position:absolute;inset:0;background:linear-gradient(to top,rgba(2,6,23,0.96) 0%,rgba(2,6,23,0.5) 45%,rgba(2,6,23,0.8) 100%)"></div>
       <span style="position:absolute;inset:0;display:grid;place-items:center;font-family:Manrope,sans-serif;font-weight:800;font-size:clamp(9rem,26vw,22rem);color:rgba(255,255,255,0.035);pointer-events:none;user-select:none;transform:translateY(calc((0.5 - var(--p,0)) * 70px))">04</span>
@@ -317,7 +319,7 @@
   </section>
 
   <section id="criterio" data-act="" data-screen-label="Interludio claro" style="position:relative;overflow:clip;height:var(--aSecH5,200vh);background:#f2ece0">
-    <div style="position:var(--aPos5,sticky);top:0;height:var(--aH5,100vh);overflow:hidden;display:grid;justify-items:center;align-content:var(--aAl5,center);background:#f2ece0;padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
+    <div style="position:var(--aPos5,sticky);top:0;height:var(--aH5,100vh);overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;align-content:var(--aAl5,center);background:#f2ece0;padding-top:var(--resTop,0px);padding-bottom:var(--resBot,0px)">
       <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 55% at 70% 40%,rgba(201,169,110,0.30),transparent 68%)"></div>
       <div style="position:absolute;top:0;left:0;right:0;height:120px;background:linear-gradient(to bottom,rgba(2,6,23,0.22),transparent)"></div>
       <div style="position:relative;z-index:2;width:100%;box-sizing:border-box;max-width:1160px;padding:0 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:clamp(28px,5vw,64px);align-items:center;">
