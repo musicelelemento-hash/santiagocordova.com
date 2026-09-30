@@ -2,6 +2,44 @@
 // Escucha mensajes de SantiagoCordova.com y sincroniza la Matriz Completa y Credenciales de Declaración
 console.log("⚡ [SC PRO Bridge Nueva Luz 3.0] Conectado al Sistema Web SantiagoCordova.com");
 
+// La web marca "aún no empieza a declarar" con clientStartPeriod (primer período
+// en el que el cliente tiene obligación). Si se especifica un período de referencia,
+// se valida contra él; de lo contrario, se usa el mes calendario anterior.
+function clientAunNoEmpiezaADeclarar(c, tp, targetPeriodRef) {
+  const startPeriod = (tp && tp.clientStartPeriod) || (c && (c.client_start_period || c.clientStartPeriod)) || '';
+  if (!startPeriod) return false;
+  let targetKey = '';
+  if (targetPeriodRef) {
+    if (typeof targetPeriodRef === 'string') {
+      targetKey = targetPeriodRef.split(':')[0].trim();
+    } else if (typeof targetPeriodRef === 'object' && targetPeriodRef.year && typeof targetPeriodRef.monthIndex === 'number') {
+      targetKey = `${targetPeriodRef.year}-${String(targetPeriodRef.monthIndex + 1).padStart(2, '0')}`;
+    }
+  }
+  if (!targetKey) {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    targetKey = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+  }
+  return String(startPeriod) > targetKey;
+}
+
+function extractPeriodFromData(data) {
+  if (!data) return null;
+  if (data.workflowPeriod && data.workflowPeriod.year && typeof data.workflowPeriod.monthIndex === 'number') {
+    return { year: data.workflowPeriod.year, monthIndex: data.workflowPeriod.monthIndex };
+  }
+  const pStr = data.period || data.targetPeriod;
+  if (typeof pStr === 'string') {
+    const clean = pStr.split(':')[0].trim();
+    const match = clean.match(/^(\d{4})-(\d{2})$/);
+    if (match) {
+      return { year: parseInt(match[1], 10), monthIndex: parseInt(match[2], 10) - 1 };
+    }
+  }
+  return null;
+}
+
 function isMensual(c) {
   if (!c || !c.ruc) return false;
   if (c.isDeleted || c.is_deleted) return false;
@@ -13,6 +51,7 @@ function isMensual(c) {
   const type = (c.client_type || c.clientType || tp.clientType || '').toLowerCase();
 
   if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) return false;
+  if (clientAunNoEmpiezaADeclarar(c, tp)) return false;
   if (freq === 'mensual') return true;
   if (freq === 'semestral' || freq === 'ninguno' || freq === 'anual') return false;
   if (reg.includes('popular')) return false;
@@ -48,6 +87,8 @@ function processAndSaveClientsList(clientsList) {
           declMap.set(cleanPeriod, { ...d, period: cleanPeriod });
         });
 
+        const startPeriod = tp.clientStartPeriod || c.client_start_period || prev.clientStartPeriod || '';
+
         return {
           id: c.id,
           name: c.name || prev.name || 'Cliente SRI',
@@ -57,9 +98,10 @@ function processAndSaveClientsList(clientsList) {
           sriPassword: pass,
           declarations: Array.from(declMap.values()),
           regime: c.regime || prev.regime || 'Régimen General',
-          tax_profile: { ...tp, ivaFrequency: 'Mensual' },
-          taxProfile: { ...tp, ivaFrequency: 'Mensual' },
-          ivaFrequency: 'Mensual'
+          tax_profile: { ...tp, ivaFrequency: 'Mensual', clientStartPeriod: startPeriod },
+          taxProfile: { ...tp, ivaFrequency: 'Mensual', clientStartPeriod: startPeriod },
+          ivaFrequency: 'Mensual',
+          clientStartPeriod: startPeriod
         };
       });
 
@@ -105,10 +147,14 @@ function syncFullClientsMatrix() {
     if (rawActive) {
       const activeData = JSON.parse(rawActive);
       if (activeData.ruc) {
-        const now = new Date();
-        let cMonth = now.getMonth() - 1;
-        let cYear = now.getFullYear();
-        if (cMonth < 0) { cMonth = 11; cYear--; }
+        let periodToUse = extractPeriodFromData(activeData);
+        if (!periodToUse) {
+          const now = new Date();
+          let cMonth = now.getMonth() - 1;
+          let cYear = now.getFullYear();
+          if (cMonth < 0) { cMonth = 11; cYear--; }
+          periodToUse = { year: cYear, monthIndex: cMonth };
+        }
 
         chrome.storage.local.set({
           pending_sri_autofill: {
@@ -118,11 +164,24 @@ function syncFullClientsMatrix() {
             timestamp: Date.now(),
             manual: true
           },
+          accionDeQuien: activeData.ruc,
           pendingAction: 'verifyProfile',
-          workflowPeriod: { year: cYear, monthIndex: cMonth },
+          workflowPeriod: periodToUse,
           actionTimestamp: Date.now(),
           sri_master_switch_on: true,
-          sriAutomationPaused: false
+          sri_auto_mode: true,
+          autoDeclaration: true,
+          sriAutomationPaused: false,
+          sc_loop: {
+            estado: 'CORRIENDO',
+            cola: [{ ruc: activeData.ruc, name: activeData.name || 'Cliente SRI', password: activeData.password || activeData.sriPassword || '' }],
+            indice: 0,
+            periodo: periodToUse,
+            latido: Date.now(),
+            motivo: 'Iniciado vía activeData en Web',
+            paso: false,
+            ultimaFase: ''
+          }
         });
         
         // Limpiar para evitar bucles infinitos
@@ -190,10 +249,14 @@ window.addEventListener("message", (event) => {
     if (data.type === 'SRI_AUTOFILL_DATA' && data.data) {
       console.log("🚀 Credenciales SRI recibidas para RUC:", data.data.ruc);
       
-      const now = new Date();
-      let cMonth = now.getMonth() - 1;
-      let cYear = now.getFullYear();
-      if (cMonth < 0) { cMonth = 11; cYear--; }
+      let periodToUse = extractPeriodFromData(data.data);
+      if (!periodToUse) {
+        const now = new Date();
+        let cMonth = now.getMonth() - 1;
+        let cYear = now.getFullYear();
+        if (cMonth < 0) { cMonth = 11; cYear--; }
+        periodToUse = { year: cYear, monthIndex: cMonth };
+      }
 
       chrome.storage.local.set({
         pending_sri_autofill: {
@@ -203,11 +266,24 @@ window.addEventListener("message", (event) => {
           timestamp: Date.now(),
           manual: true
         },
+        accionDeQuien: data.data.ruc,
         pendingAction: 'verifyProfile',
-        workflowPeriod: { year: cYear, monthIndex: cMonth },
+        workflowPeriod: periodToUse,
         actionTimestamp: Date.now(),
         sri_master_switch_on: true,
-        sriAutomationPaused: false
+        sri_auto_mode: true,
+        autoDeclaration: true,
+        sriAutomationPaused: false,
+        sc_loop: {
+          estado: 'CORRIENDO',
+          cola: [{ ruc: data.data.ruc, name: data.data.name || 'Cliente SRI', password: data.data.password || data.data.sriPassword || '' }],
+          indice: 0,
+          periodo: periodToUse,
+          latido: Date.now(),
+          motivo: 'Iniciado desde Web (Individual)',
+          paso: false,
+          ultimaFase: ''
+        }
       });
     }
 
@@ -216,24 +292,46 @@ window.addEventListener("message", (event) => {
       const queue = (data.data.clients || []).map(c => ({
         ruc: c.ruc,
         password: c.sriPassword || c.password,
-        name: c.name
+        name: c.name,
+        period: c.period || undefined
       }));
       
-      const now = new Date();
-      let cMonth = now.getMonth() - 1;
-      let cYear = now.getFullYear();
-      if (cMonth < 0) { cMonth = 11; cYear--; }
+      let periodToUse = extractPeriodFromData(data.data);
+      if (queue.length > 0 && queue[0].period && /^\d{4}-\d{2}$/.test(queue[0].period)) {
+        const parts = queue[0].period.split('-');
+        periodToUse = { year: parseInt(parts[0], 10), monthIndex: parseInt(parts[1], 10) - 1 };
+      }
+      if (!periodToUse) {
+        const now = new Date();
+        let cMonth = now.getMonth() - 1;
+        let cYear = now.getFullYear();
+        if (cMonth < 0) { cMonth = 11; cYear--; }
+        periodToUse = { year: cYear, monthIndex: cMonth };
+      }
 
       const payload = {
         auto_batch_enabled: true,
         auto_batch_queue: queue,
         auto_batch_index: 0,
-        auto_batch_period: { year: cYear, monthIndex: cMonth },
+        auto_batch_period: periodToUse,
+        auto_batch_mode: 'turbo_step1_facturas',
         pendingAction: 'verifyProfile',
-        workflowPeriod: { year: cYear, monthIndex: cMonth },
+        workflowPeriod: periodToUse,
         actionTimestamp: Date.now(),
         sri_master_switch_on: true,
-        sriAutomationPaused: false
+        sri_auto_mode: true,
+        autoDeclaration: true,
+        sriAutomationPaused: false,
+        sc_loop: {
+          estado: 'CORRIENDO',
+          cola: queue,
+          indice: 0,
+          periodo: periodToUse,
+          latido: Date.now(),
+          motivo: 'Iniciado desde Web SantiagoCordova.com (Cadena)',
+          paso: false,
+          ultimaFase: ''
+        }
       };
 
       // Si hay al menos un cliente en el lote, prepararlo para el auto-login del primer paso
@@ -246,11 +344,14 @@ window.addEventListener("message", (event) => {
           manual: true,
           isBatch: true
         };
+        payload.accionDeQuien = queue[0].ruc;
       }
 
       chrome.storage.local.set(payload, () => {
-        // Abrir pestaña automáticamente para iniciar el bucle
-        window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+        console.log("✅ Lote guardado en storage de Nueva Luz 3.0 con sc_loop CORRIENDO.");
+        if (!data.data.portalAlreadyOpened) {
+          window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+        }
       });
     }
   }
@@ -263,6 +364,7 @@ window.addEventListener("sriAutofillReady", (e) => {
     let cYear = now.getFullYear();
     if (cMonth < 0) { cMonth = 11; cYear--; }
 
+    const p = { year: cYear, monthIndex: cMonth };
     chrome.storage.local.set({
       pending_sri_autofill: {
         ruc: e.detail.ruc,
@@ -271,11 +373,45 @@ window.addEventListener("sriAutofillReady", (e) => {
         timestamp: Date.now(),
         manual: true
       },
+      accionDeQuien: e.detail.ruc,
       pendingAction: 'verifyProfile',
-      workflowPeriod: { year: cYear, monthIndex: cMonth },
+      workflowPeriod: p,
       actionTimestamp: Date.now(),
       sri_master_switch_on: true,
-      sriAutomationPaused: false
+      sri_auto_mode: true,
+      autoDeclaration: true,
+      sriAutomationPaused: false,
+      sc_loop: {
+        estado: 'CORRIENDO',
+        cola: [{ ruc: e.detail.ruc, name: e.detail.name || 'Cliente SRI', password: e.detail.password || e.detail.sriPassword || '' }],
+        indice: 0,
+        periodo: p,
+        latido: Date.now(),
+        motivo: 'Iniciado vía sriAutofillReady',
+        paso: false,
+        ultimaFase: ''
+      }
     });
   }
 });
+
+// 📢 Sincronización en tiempo real: cuando el robot en el portal del SRI termina una declaración y guarda el PDF,
+// este listener captura el evento y lo retransmite al dashboard de SantiagoCordova.com sin requerir recargar la página.
+try {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.last_declaration_completed && changes.last_declaration_completed.newValue) {
+        const item = changes.last_declaration_completed.newValue;
+        console.log("📢 [SC PRO Bridge] Retransmitiendo comprobante completado a la web:", item.ruc, item.period);
+        window.postMessage({
+          source: 'SC_PRO_EXTENSION',
+          type: 'SRI_DECLARATION_COMPLETED_SYNC',
+          data: item
+        }, '*');
+      }
+    });
+  }
+} catch (e) {
+  console.warn("⚠️ [SC PRO Bridge] No se pudo inicializar storage.onChanged:", e);
+}
+

@@ -11,6 +11,7 @@ let allRawClients = [];
 let allClients = [];
 let otrosClients = [];
 let clientesBaja = [];        // is_deleted === true (solo legible con el GRANT de Supabase)
+let declaracionesLocales = {}; // registro local del lote: "ruc|YYYY-MM" -> {pdfSubido, ...}
 let currentMonth = 0;
 let currentYear = 2026;
 let visiblePasswords = {}; // Mapa para recordar qué claves están visibles
@@ -18,6 +19,7 @@ let flaggedErrors = {}; // Mapa de contribuyentes con error
 let listaBendita = null;   // null = Bendita inactiva · array de RUC = activa
 let syncBajasBloqueado = false; // true si Supabase rechazó leer is_deleted (falta el GRANT)
 let syncUltimoTs = null;   // timestamp de la última sincronización exitosa
+let ordenMeses = {};       // 🗓️ RUC → Set de 'AAAA-MM' que se declaran en orden (popup)
 document.addEventListener('DOMContentLoaded', () => {
     initSelectors();
     bindEvents();
@@ -26,37 +28,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initSelectors() {
     const now = new Date();
-    currentMonth = now.getMonth() - 1;
-    currentYear = now.getFullYear();
-    
-    if (currentMonth < 0) {
-        currentMonth = 11;
-        currentYear--;
-    }
+    // Período objetivo por defecto: el mes anterior. Pero si hay una preferencia
+    // guardada (sri_target_period, elegida a mano o con "🎯 Mes que falta"), esa manda.
+    chrome.storage.local.get(['sri_target_period'], (res) => {
+        const t = res.sri_target_period;
+        let y = now.getFullYear(), m = now.getMonth() - 1;
+        if (m < 0) { m = 11; y--; }
+        if (t && t.year && typeof t.monthIndex === 'number') {
+            currentYear = t.year;
+            currentMonth = t.monthIndex;
+        } else {
+            currentYear = y;
+            currentMonth = m;
+        }
 
-    const monthSel = document.getElementById('periodMonth');
-    const yearSel = document.getElementById('periodYear');
+        const monthSel = document.getElementById('periodMonth');
+        const yearSel = document.getElementById('periodYear');
+        if (!monthSel || !yearSel) return;
 
-    for (let y = now.getFullYear(); y >= 2020; y--) {
-        const opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        yearSel.appendChild(opt);
-    }
+        for (let yy = now.getFullYear(); yy >= 2020; yy--) {
+            const opt = document.createElement('option');
+            opt.value = yy;
+            opt.textContent = yy;
+            yearSel.appendChild(opt);
+        }
 
-    monthSel.value = currentMonth;
-    yearSel.value = currentYear;
+        monthSel.value = currentMonth;
+        if (currentYear > now.getFullYear()) currentYear = now.getFullYear();
+        yearSel.value = currentYear;
+    });
 }
 
 function bindEvents() {
     document.getElementById('periodMonth').addEventListener('change', (e) => {
         currentMonth = parseInt(e.target.value);
+        persistirMesSeleccionado();
         renderClients();
     });
 
     document.getElementById('periodYear').addEventListener('change', (e) => {
         currentYear = parseInt(e.target.value);
+        persistirMesSeleccionado();
         renderClients();
+    });
+
+    // 🔑 Clave SRI de un solo cliente, escrita a mano (el hermano chico de la
+    // importación CSV). Se guarda SOLO en la caché local y desbloquea al cliente.
+    document.getElementById('btnGuardarClave')?.addEventListener('click', async () => {
+        const ruc = document.getElementById('rucClaveInput').value;
+        const clave = document.getElementById('claveInput').value;
+        const ok = await guardarClaveManual(ruc, clave);
+        if (ok) {
+            document.getElementById('rucClaveInput').value = '';
+            document.getElementById('claveInput').value = '';
+            document.getElementById('claveInput').focus();
+        }
+    });
+    document.getElementById('claveInput')?.addEventListener('keydown', async (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        document.getElementById('btnGuardarClave')?.click();
+    });
+
+    // 🎯 Prende el primer período (hacia atrás) con clientes sin declarar.
+    document.getElementById('btnMesQueFalta')?.addEventListener('click', () => {
+        detectarMesQueFalta();
     });
 
     document.getElementById('searchInput').addEventListener('input', () => {
@@ -179,6 +215,19 @@ function evaluarRegimenCliente(c) {
 
     if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) {
         return { esMensual: false, label: 'Solo Plan (Sin Declaraciones)', motivo: 'solo_plan' };
+    }
+
+    // Aún no empieza a declarar: el primer período de obligación (clientStartPeriod,
+    // marcado en la web como "Al día desde"/"Inicio de Obligaciones") es posterior
+    // al período objetivo del bucle (el mes calendario anterior).
+    const startPeriod = tp.clientStartPeriod || c.client_start_period || c.clientStartPeriod || '';
+    if (startPeriod) {
+        const now = new Date();
+        const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const targetKey = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+        if (String(startPeriod) > targetKey) {
+            return { esMensual: false, label: `Empieza a declarar desde ${startPeriod}`, motivo: 'aun_no_empieza' };
+        }
     }
 
     if (freq === 'mensual') {
@@ -481,11 +530,31 @@ function hasPdfForPeriod(client, year, monthIndex) {
 }
 
 function loadClientsFromCacheOrFetch() {
-    chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', SC_BENDITA_KEY, SC_CACHE_TS_KEY, SC_BAJAS_KEY], (res) => {
+    chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', SC_BENDITA_KEY, SC_CACHE_TS_KEY, SC_BAJAS_KEY, 'sc_declaraciones_locales', 'sri_target_period', 'sc_orden_meses_popup'], (res) => {
         flaggedErrors = res.flagged_errors || {};
         listaBendita = Array.isArray(res[SC_BENDITA_KEY]) ? res[SC_BENDITA_KEY] : null;
         syncUltimoTs = res[SC_CACHE_TS_KEY] || null;
         clientesBaja = Array.isArray(res[SC_BAJAS_KEY]) ? res[SC_BAJAS_KEY] : [];
+        declaracionesLocales = res.sc_declaraciones_locales || {};
+        // 🗓️ Restaurar la orden de meses que quedó marcada (RUC → Set de 'AAAA-MM').
+        try {
+            const guardada = res.sc_orden_meses_popup || {};
+            ordenMeses = {};
+            for (const [k, v] of Object.entries(guardada)) {
+                if (Array.isArray(v) && v.length) ordenMeses[k] = new Set(v);
+            }
+        } catch (e) { ordenMeses = {}; }
+        // Si hay una preferencia de período guardada, la caché va a pisar los
+        // selects que initSelectors ya prefijó al mes anterior: aplicarla de nuevo.
+        const t = res.sri_target_period;
+        if (t && t.year && typeof t.monthIndex === 'number') {
+            currentYear = t.year;
+            currentMonth = t.monthIndex;
+            const ms = document.getElementById('periodMonth');
+            const ys = document.getElementById('periodYear');
+            if (ms) ms.value = currentMonth;
+            if (ys) ys.value = currentYear;
+        }
         if (Array.isArray(res.sc_clients_cache) && res.sc_clients_cache.length > 0) {
             console.log("⚡ [Nueva Luz 3.0] Carga instantánea desde caché local:", res.sc_clients_cache.length, "clientes");
             allRawClients = res.sc_clients_cache;
@@ -495,6 +564,139 @@ function loadClientsFromCacheOrFetch() {
             fetchClients();
         }
     });
+}
+
+/** Persiste el mes elegido en los selects como preferencia del período objetivo. */
+function persistirMesSeleccionado() {
+    return chrome.storage.local.set({ sri_target_period: { year: currentYear, monthIndex: currentMonth } });
+}
+
+/** Equivalente local a SriLoop.declaracionLocal(): ¿declaramos a este RUC este período? */
+function declaracionLocalPopup(ruc, year, monthIndex) {
+    const clave = `${ruc}|${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+    return declaracionesLocales[clave] || null;
+}
+
+/** Mensuales que faltan declarar un período dado (mismo criterio que los Pendientes del popup). */
+function faltantesParaPeriodo(year, monthIndex) {
+    return allClients.filter(c =>
+        !flaggedErrors[c.ruc] &&
+        !hasPdfForPeriod(c, year, monthIndex) &&
+        !declaracionLocalPopup(c.ruc, year, monthIndex));
+}
+
+/** 🗓️ Los meses PENDIENTES de UN cliente, en orden cronológico ascendente.
+ *  Barre hasta 24 meses hacia atrás desde el periodo seleccionado y devuelve
+ *  los que todavía no tiene declarados (ni con PDF ni con registro local). */
+function mesesPendientesDeCliente(cliente) {
+    if (!cliente || !cliente.ruc) return [];
+    const baseY = currentYear, baseM = currentMonth;
+    const meses = [];
+    for (let back = 0; back < 24; back++) {
+        const d = new Date(baseY, baseM - back, 1);
+        const y = d.getFullYear(), m = d.getMonth();
+        const ya = hasPdfForPeriod(cliente, y, m) || !!declaracionLocalPopup(cliente.ruc, y, m);
+        if (!ya) {
+            const periodo = `${y}-${String(m + 1).padStart(2, '0')}`;
+            meses.push({ year: y, monthIndex: m, periodo, label: periodoLabelLocal(y, m) });
+        }
+    }
+    return meses.reverse();   // ascendente: el más antiguo primero
+}
+
+/** Etiqueta «mes año» a partir de year + monthIndex (sin tocar selects). */
+function periodoLabelLocal(year, monthIndex) {
+    const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                   'agosto','septiembre','octubre','noviembre','diciembre'];
+    return `${MESES[monthIndex]} ${year}`;
+}
+
+/** 🎯 Detecta el primer período (empezando por el seleccionado, hacia atrás)
+ *  con clientes sin declarar y lo deja elegido. null si todo está al día. */
+async function detectarMesQueFalta() {
+    const base = { year: currentYear, monthIndex: currentMonth };
+    for (let back = 0; back < 24; back++) {
+        const d = new Date(base.year, base.monthIndex - back, 1);
+        const y = d.getFullYear(), m = d.getMonth();
+        const faltan = faltantesParaPeriodo(y, m);
+        if (faltan.length > 0) {
+            currentYear = y;
+            currentMonth = m;
+            const ms = document.getElementById('periodMonth');
+            const ys = document.getElementById('periodYear');
+            if (ms) ms.value = m;
+            if (ys) ys.value = y;
+            await persistirMesSeleccionado();
+            renderClients();
+            showToast(`🎯 Mes que falta: ${periodoLabel()} (${faltan.length} pendientes)`);
+            return { found: true, year: y, monthIndex: m, pendientes: faltan.length };
+        }
+    }
+    showToast('🎉 Todo al día: no hay períodos pendientes hacia atrás.');
+    return { found: false };
+}
+
+/** 🔑 Guarda la clave SRI de UN cliente a mano (sin CSV), lo desbloquea y lo
+ *  agrega a la caché si todavía no estaba. Solo queda en este navegador. */
+async function guardarClaveManual(ruc, clave) {
+    ruc = String(ruc || '').trim();
+    clave = String(clave || '').trim();
+    if (!/^\d{10,13}$/.test(ruc)) { showToast('⚠️ RUC inválido: 10 a 13 dígitos.'); return false; }
+    if (!clave) { showToast('⚠️ Escribí la clave SRI del cliente.'); return false; }
+
+    const cacheRes = await chrome.storage.local.get([
+        'sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos', 'sc_declaraciones_locales'
+    ]);
+    let cacheList = Array.isArray(cacheRes.sc_clients_cache) ? cacheRes.sc_clients_cache : [];
+    let cliente = cacheList.find(c => c.ruc === ruc);
+
+    if (cliente) {
+        cliente.password = clave;
+        cliente.sri_password = clave;
+    } else {
+        // ¿Estaba en la caché como baja? Se revive (escrito a mano manda) en
+        // vez de duplicar el RUC. Si no estaba del todo: cliente del contador.
+        const previo = allRawClients.find(c => c.ruc === ruc);
+        if (previo) {
+            cliente = { ...previo, is_deleted: false, isDeleted: false, force_mensual: true,
+                        password: clave, sri_password: clave };
+        } else {
+            // Cliente nuevo que el contador escribe a mano: entra como mensual
+            // forzado (es quien quiere declararlo) para que aparezca en Pendientes.
+            cliente = { ruc, name: 'Cliente manual', password: clave, sri_password: clave, force_mensual: true, regime: 'mensual', tax_profile: {} };
+        }
+        cacheList = cacheList.filter(c => c.ruc !== ruc);   // si estaba, el previo marcado como baja ya no
+        cacheList.push(cliente);
+    }
+
+    // Actualizar la clave libera bloqueos previos (clave rechazada, omitido).
+    const errs = cacheRes.flagged_errors || {};
+    delete errs[ruc];
+    const tried = cacheRes.sri_tried_credentials || {};
+    delete tried[ruc];
+    const omit = cacheRes.sc_omitidos || {};
+    delete omit[ruc];
+    declaracionesLocales = cacheRes.sc_declaraciones_locales || {};
+    await chrome.storage.local.set({
+        sc_clients_cache: cacheList,
+        flagged_errors: errs,
+        sri_tried_credentials: tried,
+        sc_omitidos: omit
+    });
+
+    // Reflejar también en memoria para que el popup pinte al instante.
+    const enRaw = allRawClients.find(c => c.ruc === ruc);
+    if (enRaw) {
+        enRaw.password = clave;
+        enRaw.sri_password = clave;
+    } else {
+        allRawClients.push(cliente);
+    }
+    flaggedErrors = errs;
+    separarPorRegimen();
+    renderClients();
+    showToast(`🔑 Clave guardada para ${cliente.name === 'Cliente manual' ? ruc : cliente.name} (solo en este navegador).`);
+    return true;
 }
 
 /** Parte allRawClients en mensuales / otros / bajas según régimen y estado. */
@@ -861,8 +1063,80 @@ function createClientCard(client, statusType) {
             ${badgeHtml}
         </div>
         ${actionBtnHtml}
+        ${isDone || isError ? '' : buildOrdenMesesBlock(client)}
     `;
     return card;
+}
+
+/** 🗓️ Bloque «Orden de meses»: checkboxes con los meses pendientes del
+ *  cliente + botón para marcarlos todos. La selección vive en `ordenMeses`
+ *  (RUC → Set de 'AAAA-MM') y no se pierde al re-render. */
+/** Guarda la orden de meses en storage (RUC → array de 'AAAA-MM') para que
+ *  sobreviva al cierre del popup. */
+function persistirOrdenMeses() {
+    const obj = {};
+    for (const [k, v] of Object.entries(ordenMeses)) {
+        if (v && v.size) obj[k] = [...v].sort();
+    }
+    return chrome.storage.local.set({ sc_orden_meses_popup: obj });
+}
+
+/** 🔄 Alterna la selección de un mes en la orden del cliente y repinta. */
+function toggleMesOrden(ruc, periodo) {
+    if (!ruc || !periodo) return;
+    const set = new Set(ordenMeses[ruc] || []);
+    if (set.has(periodo)) set.delete(periodo);
+    else set.add(periodo);
+    if (set.size === 0) delete ordenMeses[ruc];
+    else ordenMeses[ruc] = set;
+    persistirOrdenMeses();
+    renderClients();
+    const n = set.size;
+    showToast(n > 0 ? `🗓️ ${n} mes(es) en la orden de ${ruc}.` : '🗓️ Orden vacía: se declara solo el mes del selector.');
+}
+
+/** 🎯 Marca TODOS los meses pendientes del cliente en la orden. */
+function marcarTodosPendientes(ruc) {
+    const client = allClients.find(c => c.ruc === ruc);
+    if (!client) return;
+    const pendientes = mesesPendientesDeCliente(client);
+    if (pendientes.length === 0) {
+        showToast('🎉 Este cliente ya declaró todos los meses pendientes.');
+        return;
+    }
+    ordenMeses[ruc] = new Set(pendientes.map(p => p.periodo));
+    persistirOrdenMeses();
+    renderClients();
+    showToast(`🎯 ${pendientes.length} mes(es) marcados: ${pendientes.map(p => p.label).join(', ')}`);
+}
+
+function buildOrdenMesesBlock(client) {
+    const ruc = client.ruc;
+    const pendientes = mesesPendientesDeCliente(client);
+    const sel = ordenMeses[ruc] || new Set();
+    if (pendientes.length === 0) return '';
+    const chips = pendientes.map(p => {
+        const on = sel.has(p.periodo);
+        return `
+            <label class="mes-orden-chip" data-action="toggle-mes-orden" data-ruc="${ruc}" data-periodo="${p.periodo}"
+                   style="display:inline-flex; align-items:center; gap:4px; margin:2px 3px 2px 0; padding:3px 7px; border-radius:6px; font-size:10px; cursor:pointer; user-select:none; border:1px solid ${on ? 'rgba(99,102,241,0.7)' : 'rgba(255,255,255,0.12)'}; background:${on ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)'}; color:${on ? '#c7d2fe' : '#94a3b8'}; font-weight:700; transition:0.15s;" title="Incluir ${p.label} en la orden">
+                <span style="font-size:11px;">${on ? '☑️' : '⬜'}</span> ${p.label}
+            </label>`;
+    }).join('');
+    const count = sel.size;
+    return `
+        <div class="orden-meses" style="margin-top:8px; padding:7px 9px; border:1px solid rgba(99,102,241,0.25); border-radius:9px; background:rgba(99,102,241,0.06);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+                <span style="font-size:10px; font-weight:800; color:#a5b4fc; letter-spacing:0.4px;">🗓️ ORDEN DE MESES</span>
+                <span data-action="marcar-todos-pendientes" data-ruc="${ruc}" style="cursor:pointer; font-size:10px; font-weight:800; color:#4edea3; background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.35); padding:2px 7px; border-radius:6px;" title="Marcar todos los meses pendientes de este cliente">🎯 Todos los pendientes</span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap;">${chips}</div>
+            <div style="font-size:9px; color:#64748b; margin-top:4px; line-height:1.4;">
+                ${count > 0
+                    ? `<b id="orden-count-${ruc}" style="color:#a5b4fc;">${count} mes(es)</b> se declararán en bucle con ▶. Hacé clic en un mes para quitarlo.`
+                    : `Sin selección: ▶ declara solo el mes del selector. Tocá un mes para armarla.`}
+            </div>
+        </div>`;
 }
 
 // 🛡️ DELEGACIÓN GLOBAL DE EVENTOS (Compatible 100% con CSP de Chrome MV3 sin onclick inline)
@@ -874,6 +1148,10 @@ document.addEventListener('click', async (e) => {
 
     if (action === 'iniciar') {
         iniciarCliente(ruc);
+    } else if (action === 'toggle-mes-orden') {
+        toggleMesOrden(ruc, el.dataset.periodo);
+    } else if (action === 'marcar-todos-pendientes') {
+        marcarTodosPendientes(ruc);
     } else if (action === 'toggle-bendito') {
         toggleBendito(ruc);
     } else if (action === 'bendecir-pendientes') {
@@ -1054,6 +1332,61 @@ async function iniciarCliente(ruc) {
         });
     } catch (e) {}
 
+    // 🗓️ ORDEN DE MESES: si este cliente tiene meses marcados en el bloque
+    // «Orden de meses», se arma una cola de UN ítem por mes (el mismo RUC
+    // repetido con `period` distinto). El motor ya respeta `item.period` al
+    // saltar, y acá queda la clave que lo activa: habrá bucle multi-mes.
+    // La orden es una decisión explícita de una persona sobre un cliente:
+    // va ANTES de la Bendita y del modo lote, y no pregunta nada.
+    const ordenSel = ordenMeses[ruc];
+    if (ordenSel && ordenSel.size > 0) {
+        const periodos = [...ordenSel].sort();   // cronológico ascendente
+        const queueOrden = periodos.map(p0 => ({
+            ruc: client.ruc,
+            name: client.name || 'Cliente SRI',
+            password: client.password,
+            period: p0
+        }));
+        const [py, pm] = periodos[0].split('-').map(Number);
+        const perPrimero = { year: py, monthIndex: pm - 1 };
+        const targetStrOrden = periodos[0];
+        chrome.storage.local.remove(['declaration_synced_flag'], () => {
+            chrome.storage.local.set({
+                pending_sri_autofill: {
+                    ruc: client.ruc,
+                    password: client.password,
+                    name: client.name,
+                    timestamp: Date.now(),
+                    manual: true,
+                    isBatch: true
+                },
+                auto_batch_enabled: true,
+                auto_batch_queue: queueOrden,
+                auto_batch_index: 0,
+                auto_batch_period: perPrimero,
+                sri_target_period: perPrimero,
+                sri_period_order: { ruc: client.ruc, periodos },
+                sc_loop: {
+                    estado: 'CORRIENDO', cola: queueOrden, indice: 0,
+                    periodo: perPrimero,
+                    latido: Date.now(), motivo: ''
+                },
+                pendingAction: 'verifyProfile',
+                workflowPeriod: perPrimero,
+                actionTimestamp: Date.now(),
+                sri_master_switch_on: true,
+                sriAutomationPaused: false,
+                ghost_manual_mode: false,
+                autoDeclaration: true,
+                sri_auto_mode: true
+            }, () => {
+                chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&state=956332a7-6de0-48d7-8f53-a635625c30a5&nonce=4c3d7ddb-c8f7-4227-8186-babb562e36b3&response_mode=fragment&response_type=code&scope=openid' });
+            });
+        });
+        showToast(`🗓️ Orden armada: ${periodos.length} mes(es) de ${client.name} (${targetStrOrden} → último).`);
+        return;
+    }
+
     const isBatchActive = document.getElementById('chkAutoBatch')?.checked || false;
 
     // 🕯️ LA LISTA BENDITA. En modo lote sólo corren los benditos.
@@ -1132,6 +1465,8 @@ async function iniciarCliente(ruc) {
             auto_batch_queue: isBatchActive ? queue : [],
             auto_batch_index: 0,
             auto_batch_period: { year: currentYear, monthIndex: currentMonth },
+            sri_target_period: { year: currentYear, monthIndex: currentMonth },
+            sri_period_order: null,
             // 🚦 El semáforo es la autoridad del bucle. Sin esto el content
             // script descarta el lote apenas carga la pantalla de login.
             sc_loop: isBatchActive

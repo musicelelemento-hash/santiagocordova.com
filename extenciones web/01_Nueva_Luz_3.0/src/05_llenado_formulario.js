@@ -186,15 +186,31 @@ async function llenarVentas(data) {
     try {
         console.log('🔍 [Ventas] Extrayendo Valores Sugeridos de Ventas para las métricas...');
         const base15 = await leerCampo('401') || 0;
-        const base0 = await leerCampo('403') || 0;
+        const base0 = (await leerCampo('403') || 0) + (await leerCampo('402') || 0);
+        const base5 = await leerCampo('404') || 0;
+        const base8 = await leerCampo('405') || 0;
         const iva15 = await leerCampo('421') || (base15 * 0.15);
-        
+        const iva5 = await leerCampo('422') || (base5 * 0.05);
+        const iva8 = await leerCampo('424') || (base8 * 0.08);
+
+        // Retenciones en formulario si están disponibles en pantalla
+        const retIvaForm = await leerCampo('609') || 0;
+        const retRentaForm = await leerCampo('610') || 0;
+
         await GhostMemory.set('ventasExtraidas', {
             base15,
             base0,
-            iva15
+            base5,
+            base8,
+            iva15,
+            iva5,
+            iva8,
+            retIvaForm,
+            retRentaForm
         });
-        console.log('✅ [Ventas] Valores de Ventas guardados en GhostMemory:', { base15, base0, iva15 });
+        console.log('✅ [Ventas] Valores de Ventas y Retenciones guardados en GhostMemory:', {
+            base15, base0, base5, base8, iva15, iva5, iva8, retIvaForm, retRentaForm
+        });
     } catch(e) {
         console.warn('⚠️ [Ventas] Error extrayendo métricas de ventas:', e);
     }

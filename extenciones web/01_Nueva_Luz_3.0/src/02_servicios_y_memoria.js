@@ -328,9 +328,32 @@ const SriLoop = {
         try {
             const r = await SafeStorage.get([
                 this._KEY, 'auto_batch_enabled', 'sri_auto_mode',
-                'autoDeclaration', 'sri_master_switch_on'
+                'autoDeclaration', 'sri_master_switch_on', 'actionTimestamp', 'pendingAction'
             ]);
             if (r[this._KEY]) return false;   // ya migrado
+
+            // 🛡️ Auto-reparación: Si la acción fue solicitada recientemente (< 2 min), es una corrida nueva
+            // disparada desde la web. No es estado viejo/basura: inicializamos el semáforo en CORRIENDO.
+            const recienIniciada = r.actionTimestamp && (Date.now() - r.actionTimestamp < 120000);
+            if (recienIniciada && (r.pendingAction || r.auto_batch_enabled)) {
+                console.log('🚦 [BUCLE] Acción recién iniciada desde web sin semáforo previo. Inicializando semáforo en CORRIENDO...');
+                const qRes = await SafeStorage.get(['auto_batch_queue', 'workflowPeriod', 'auto_batch_period', 'pending_sri_autofill']);
+                const q = qRes.auto_batch_queue || (qRes.pending_sri_autofill ? [qRes.pending_sri_autofill] : []);
+                const p = qRes.workflowPeriod || qRes.auto_batch_period || this.periodoPorDefecto();
+                await SafeStorage.set({
+                    [this._KEY]: {
+                        estado: 'CORRIENDO',
+                        cola: q,
+                        indice: 0,
+                        periodo: p,
+                        latido: Date.now(),
+                        motivo: 'Auto-migrado de acción activa reciente',
+                        paso: false,
+                        ultimaFase: ''
+                    }
+                });
+                return false;
+            }
 
             const basura = !!(r.auto_batch_enabled || r.sri_auto_mode ||
                               r.autoDeclaration || r.sri_master_switch_on);
@@ -454,6 +477,91 @@ const SriLoop = {
     },
 
     /**
+     * El período que MANDA en el lote. Preferencia del usuario primero
+     * (sri_target_period, elegido en el popup o el HUD con ◀ ▶ /🎯), después lo
+     * que el flujo activo dejó en workflowPeriod, y por último el mes anterior.
+     */
+    async resolverPeriodoObjetivo() {
+        const r = await SafeStorage.get(['sri_target_period', 'workflowPeriod']);
+        const t = r.sri_target_period;
+        if (t && t.year && typeof t.monthIndex === 'number') {
+            return { year: t.year, monthIndex: t.monthIndex };
+        }
+        return r.workflowPeriod || this.periodoPorDefecto();
+    },
+
+    /** Cuenta cuántos clientes de la caché faltan declarar ESTE período (sin
+     *  efectos secundarios: no anota Omitidos ni consulta la bóveda). Replica la
+     *  decisión de armarCola() para que «mes que falta» diga lo mismo que el lote. */
+    async pendientesDePeriodo(periodo) {
+        const r = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_declaraciones_locales']);
+        let lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+        const errs = r.flagged_errors || {};
+        const tried = r.sri_tried_credentials || {};
+        const regs = r.sc_declaraciones_locales || {};
+        const pStr = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
+        const claveDecl = (ruc) => `${ruc}|${pStr}`;
+
+        let aDeclarar = 0, sinPdf = 0, sinClave = 0;
+        for (const c of lista) {
+            if (!c || !c.ruc) continue;
+            if (typeof clientAunNoEmpiezaADeclarar === 'function' &&
+                clientAunNoEmpiezaADeclarar(c, c.tax_profile || c.taxProfile || {}, periodo)) continue;
+            if (errs[c.ruc] === 'cuenta_bloqueada' || tried[c.ruc]?.status === 'locked') continue;
+            const clave = c.password || c.sri_password || c.sriPassword || '';
+            if (!clave) { sinClave++; continue; }
+
+            const reg = regs[claveDecl(c.ruc)];
+            if (reg) {
+                if (!reg.pdfSubido) sinPdf++;   // declaró, pero el comprobante no quedó: también falta
+                continue;
+            }
+            const decs = Array.isArray(c.declarations) ? c.declarations
+                       : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
+            const hecho = decs.some((d) => d &&
+                (d.proof_file || d.pdfUrl || d.proofFile) &&
+                String(d.period || '').includes(pStr));
+            if (hecho) continue;
+            aDeclarar++;
+        }
+        return { periodo: pStr, aDeclarar, sinPdf, sinClave, total: aDeclarar + sinPdf };
+    },
+
+    /** 🎯 Primer período más antiguo pendiente (hasta 24 meses hacia atrás desde `desde`)
+     *  con clientes sin declarar. Permite desahogar períodos atrasados en orden cronológico. */
+    async mesQueFalta(desde) {
+        const base = desde || await this.resolverPeriodoObjetivo();
+        for (let back = 24; back >= 0; back--) {
+            const d = new Date(base.year, base.monthIndex - back, 1);
+            const p = { year: d.getFullYear(), monthIndex: d.getMonth() };
+            const c = await this.pendientesDePeriodo(p);
+            if (c.total > 0) {
+                return { encontrado: true, year: p.year, monthIndex: p.monthIndex, ...c };
+            }
+        }
+        return { encontrado: false };
+    },
+
+    /** Fija el período objetivo del lote como preferencia (popup y HUD). */
+    async fijarPeriodo(p) {
+        if (!p || !p.year || typeof p.monthIndex !== 'number') return { ok: false };
+        await SafeStorage.set({ sri_target_period: { year: p.year, monthIndex: p.monthIndex } });
+        return { ok: true };
+    },
+
+    /** Mueve el período objetivo ±N meses (◀ ▶ del HUD). */
+    async moverPeriodo(delta) {
+        const base = await this.resolverPeriodoObjetivo();
+        const d = new Date(base.year, base.monthIndex + delta, 1);
+        return this.fijarPeriodo({ year: d.getFullYear(), monthIndex: d.getMonth() });
+    },
+
+    /** Vuelve al comportamiento normal (el mes anterior). */
+    async quitarPeriodoManual() {
+        await SafeStorage.remove(['sri_target_period']);
+    },
+
+    /**
      * Arma la cola con los clientes que TODAVÍA no tienen comprobante del
      * periodo. Excluye los marcados con error y los que no tienen clave
      * guardada (sin clave el auto-login es imposible).
@@ -512,6 +620,13 @@ const SriLoop = {
 
         for (const c of lista) {
             if (!c || !c.ruc) continue;
+            // Aún no empieza a declarar: clientStartPeriod (web) es posterior al
+            // período del lote. Defensa en profundidad — la caché ya viene filtrada
+            // desde bridge_content.js, pero si entró por otro camino no debe colarse.
+            if (typeof clientAunNoEmpiezaADeclarar === 'function' &&
+                clientAunNoEmpiezaADeclarar(c, c.tax_profile || c.taxProfile || {}, periodo)) {
+                continue;
+            }
             if (errs[c.ruc] === 'cuenta_bloqueada' || tried[c.ruc]?.status === 'locked') {
                 excluidosSeguridad++;
                 await Omitidos.anotar(c.ruc, 'cuenta_bloqueada', {
@@ -630,6 +745,8 @@ const SriLoop = {
             return;
         }
 
+        const pToUse = cliente.periodo || periodo;
+
         if (cliente.soloRecuperar) {
             console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
             await SafeStorage.set({
@@ -641,11 +758,11 @@ const SriLoop = {
                 // declaraciones. Nada de abrir el wizard de recepción.
                 pendingAction: 'recuperar_comprobante',
                 recuperarComprobante: {
-                    ruc: cliente.ruc, nombre: cliente.name, periodo,
-                    per: `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`,
+                    ruc: cliente.ruc, nombre: cliente.name, periodo: pToUse,
+                    per: `${pToUse.year}-${String(pToUse.monthIndex + 1).padStart(2, '0')}`,
                     intentos: 0
                 },
-                workflowPeriod: periodo,
+                workflowPeriod: pToUse,
                 actionTimestamp: Date.now(),
                 autoDeclaration: false,
                 sri_auto_mode: true,
@@ -678,10 +795,10 @@ const SriLoop = {
                 pendingAction: 'bajar_todos_comprobantes',
                 bajarTodos: {
                     ruc: cliente.ruc, nombre: cliente.name, soloFaltantes: true,
-                    continuarCon: 'turbo_step1_facturas', continuarPeriodo: periodo
+                    continuarCon: 'turbo_step1_facturas', continuarPeriodo: pToUse
                 },
                 accionDeQuien: cliente.ruc,
-                workflowPeriod: periodo,
+                workflowPeriod: pToUse,
                 actionTimestamp: Date.now(),
                 autoDeclaration: true,
                 sri_auto_mode: true,
@@ -717,7 +834,7 @@ const SriLoop = {
             checkFacturas: true,
             checkRetenciones: true,
             checkNC: true,
-            workflowPeriod: periodo,
+            workflowPeriod: pToUse,
             autoDeclaration: true,
             sri_auto_mode: true,
             sri_master_switch_on: true,
@@ -869,7 +986,7 @@ if (typeof window !== 'undefined') {
             return false;
         }
 
-        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+        const periodo = await SriLoop.resolverPeriodoObjetivo();
         await SriLoop.iniciar([{ ruc: c.ruc, name: c.name, password: pass }], periodo);
         await SriLoop.prepararCliente({ ruc: c.ruc, name: c.name, password: pass }, periodo);
 
@@ -3489,15 +3606,48 @@ window.addEventListener('message', async (event) => {
 
     if (event.data.type === 'SRI_START_BATCH_DECLARATION' && event.data.data) {
         const d = event.data.data;
-        let queue = (d.clients || []).map(c => ({ ruc: c.ruc, password: c.sriPassword || c.password, name: c.name }));
+        let queue = (d.clients || []).map(c => ({
+            ruc: c.ruc,
+            password: c.sriPassword || c.password,
+            name: c.name,
+            period: c.period
+        }));
         queue = await filtrarColaPorBendita(queue);
         const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'turbo_step1_facturas';
+        let pToUse = d.workflowPeriod;
+        if (!pToUse && queue.length > 0 && queue[0].period && /^\d{4}-\d{2}$/.test(queue[0].period)) {
+            const parts = queue[0].period.split('-');
+            pToUse = { year: parseInt(parts[0], 10), monthIndex: parseInt(parts[1], 10) - 1 };
+        }
+        if (!pToUse) {
+            pToUse = (typeof SriLoop !== 'undefined' && SriLoop.periodoPorDefecto) ? SriLoop.periodoPorDefecto() : { year: new Date().getFullYear(), monthIndex: new Date().getMonth() - 1 };
+        }
+
         await SafeStorage.set({
             auto_batch_enabled: queue.length > 0,
             auto_batch_queue: queue,
             auto_batch_index: 0,
-            auto_batch_mode: actionType
+            auto_batch_mode: actionType,
+            auto_batch_period: pToUse,
+            workflowPeriod: pToUse,
+            sri_master_switch_on: true,
+            sri_auto_mode: true,
+            autoDeclaration: true,
+            sriAutomationPaused: false,
+            sc_loop: {
+                estado: 'CORRIENDO',
+                cola: queue,
+                indice: 0,
+                periodo: pToUse,
+                latido: Date.now(),
+                motivo: 'Iniciado desde SRI_START_BATCH_DECLARATION',
+                paso: false,
+                ultimaFase: ''
+            }
         });
+        if (queue.length > 0) {
+            await SafeStorage.set({ accionDeQuien: queue[0].ruc });
+        }
         if (isSRILoginPage()) {
             const items = await SafeStorage.get(null);
             renderAnticipationWidget(items);

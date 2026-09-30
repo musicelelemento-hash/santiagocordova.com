@@ -68,9 +68,16 @@
   if (curMonth < 0) { curMonth = 11; curYear--; }
   const PER = `${curYear}-${(curMonth + 1).toString().padStart(2, '0')}`;
 
+  // iva_frequency: 'mensual' explícito — desde el 10-sep-2026 (§9c de
+  // AGENTS.md) un cliente sin frecuencia marcada NO cuenta como mensual, ni
+  // en isClientMensual() (content script) ni en evaluarRegimenCliente() de
+  // este mismo popup.js (commit 22fd521). Un cliente real la trae marcada
+  // desde la web; estos fixtures deben reflejar eso.
   const pendiente = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    iva_frequency: 'mensual',
     password: 'clave-de-prueba', declarations: [] });
   const completado = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',
+    iva_frequency: 'mensual',
     password: 'clave-de-prueba',
     declarations: [{ period: PER, proof_file: 'x', status: 'Enviada' }] });
   const dadoDeBaja = (ruc, name) => ({ id: ruc, ruc, name, regime: 'Régimen General',

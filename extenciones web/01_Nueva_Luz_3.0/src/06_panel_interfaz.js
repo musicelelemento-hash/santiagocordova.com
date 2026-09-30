@@ -1384,7 +1384,16 @@ class SriAssistantPanel {
             'ARTICULO 68',
             'ART. 68',
             'NO PRESENTA INCONSISTENCIAS',
-            'INFORMATIVO'
+            'INFORMATIVO',
+            'FUERA DE PLAZO',
+            'TARDIA',
+            'TARDIO',
+            'MULTA',
+            'INTERES',
+            'MORA',
+            'PLAZO VENCIDO',
+            'PRESENTACION TARDIA',
+            'EXTEMPORANEA'
         ];
 
         // Función para limpiar texto y comparar de forma robusta
@@ -1462,9 +1471,47 @@ class SriAssistantPanel {
                 
                 if (!ok) {
                     this.log('⚠️ Advertencias desconocidas o no permitidas. Guardando borrador...');
-                    const btnGuardar = findByText('Guardar borrador', 'span');
-                    if (btnGuardar) btnGuardar.click();
+                    const btnGuardar = findByText('Guardar borrador', 'span') ||
+                                       findByText('Guardar borrador', 'button') ||
+                                       findByText('Guardar borrador') ||
+                                       document.querySelector('button[id*="btnGuardar"], button[id*="guardar"], input[value*="Guardar"]');
+                    if (btnGuardar) {
+                        const clickable = btnGuardar.closest('button, a, input') || btnGuardar;
+                        clickable.click();
+                        this.log('💾 Borrador guardado por seguridad.');
+                    }
                     await GhostMemory.set('workflowState', 'STOPPED_WARNING'); // Sincronía Popup
+
+                    const sigueElLote = await loteDebeContinuar();
+                    if (sigueElLote) {
+                        const info = this.extractClientInfo ? this.extractClientInfo() : {};
+                        if (info && info.ruc && typeof Omitidos !== 'undefined') {
+                            await Omitidos.anotar(info.ruc, 'advertencia_desconocida', {
+                                nombre: info.name, detalle: 'Advertencia no permitida en pantalla de advertencias' });
+                        }
+                        if (info && info.ruc && typeof syncDeclarationToSupabase === 'function') {
+                            const targetPeriodStr = await this.getCanonicalPeriodStr();
+                            await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, {}, "por_pagar");
+                        }
+                        this.showEliteToast({
+                            title: '⏩ Omitiendo (advertencia)',
+                            msg: 'Se guardó borrador. Pasando al siguiente cliente...',
+                            duration: 3500
+                        });
+                        setTimeout(async () => {
+                            await GhostMemory.clearCurrent();
+                            if (typeof handleBatchNextClient === 'function') {
+                                const batchNext = await handleBatchNextClient();
+                                if (!batchNext) {
+                                    await SafeStorage.set({ sri_auto_mode: false });
+                                    await cerrarSesionSRI();
+                                }
+                            } else {
+                                await cerrarSesionSRI();
+                            }
+                        }, 4000);
+                        return;
+                    }
                     return;
                 }
 
@@ -1594,10 +1641,12 @@ class SriAssistantPanel {
                         // 🧾 Dejar constancia ANTES de intentar subir nada: el portal
                         // tarda ~20 min en quitar la obligación y la subida puede
                         // fallar. Sin esto, el bot volvía a declarar (sustitutiva).
-                        // El periodo sale del lote, no de recalcular la fecha: es el que se está
+// El periodo sale del lote, no de recalcular la fecha: es el que se está
                         // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
                         // todavía no existen: ReferenceError que abortaba el cierre entero.)
-                        const perDecl = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+                        // En una orden multi-mes el item de la cola manda: resolverPeriodoObjetivo()
+                        // leería el sri_target_period global (el primer mes) y marcaría mal todo lo demás.
+                        const perDecl = await this.periodoDesdeStr(targetPeriodStr) || await SriLoop.resolverPeriodoObjetivo();
                         await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
 
                         let preFetchedGhostData = {};
@@ -1721,9 +1770,14 @@ class SriAssistantPanel {
                 }
                 
                 // Intentar guardar borrador antes de salir
-                const btnGuardar = findByText('Guardar borrador', 'span');
+                const btnGuardar = findByText('Guardar borrador', 'span') ||
+                                   findByText('Guardar borrador', 'button') ||
+                                   findByText('Guardar borrador') ||
+                                   document.querySelector('button[id*="btnGuardar"], button[id*="guardar"], input[value*="Guardar"]');
                 if (btnGuardar) {
-                    btnGuardar.click();
+                    const clickable = btnGuardar.closest('button, a, input') || btnGuardar;
+                    if (typeof clickElement === 'function') clickElement(clickable, 'Guardar borrador');
+                    else clickable.click();
                     this.log('💾 Borrador guardado por seguridad.');
                 }
                 
@@ -1761,7 +1815,7 @@ class SriAssistantPanel {
                     this.showEliteToast({
                         title: faltaCampo ? '⏩ Omitiendo (falta un campo)' : '⏩ Omitiendo (Por Pagar)',
                         msg: faltaCampo ? escapeHtml(detalleOmision) + ' — se guardó borrador. Cerrando sesión...'
-                                        : 'Impuestos detectados. Cerrando sesión...',
+                                        : 'Impuestos/multas detectados. Borrador guardado. Avanzando al siguiente mes...',
                         duration: 3500 });
                     
                     setTimeout(async () => {
@@ -3815,7 +3869,8 @@ class SriAssistantPanel {
             // El periodo sale del lote, no de recalcular la fecha: es el que se está
                         // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
                         // todavía no existen: ReferenceError que abortaba el cierre entero.)
-                        const perDecl = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+                        // En una orden multi-mes manda el periodo real del item, no el global.
+                        const perDecl = await this.periodoDesdeStr(targetPeriodStr) || await SriLoop.resolverPeriodoObjetivo();
                         await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
             await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, preFetchedGhostData, "completado");
         }
@@ -3898,6 +3953,17 @@ class SriAssistantPanel {
         console.warn(`⚠️ [PERÍODO] Ni la pantalla ni el lote dijeron el período. ` +
                      `Se supone ${supuesto} (el mes anterior). Revisá dónde quedó el comprobante.`);
         return supuesto;
+    }
+
+    /**
+     * Convierte `AAAA-MM` a { year, monthIndex }. null si el formato no sirve.
+     * Es el puente entre lo que getCanonicalPeriodStr() archiva y lo que
+     * marcarDeclarado() espera ({ year, monthIndex }).
+     */
+    periodoDesdeStr(str) {
+        const m = /^(\d{4})-(\d{2})$/.exec(String(str || '').trim());
+        if (!m) return null;
+        return { year: parseInt(m[1], 10), monthIndex: parseInt(m[2], 10) - 1 };
     }
 
     /**

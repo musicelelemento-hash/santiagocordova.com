@@ -900,6 +900,29 @@ function getSriDueDateDay(ninthDigit) {
   return map[ninthDigit] || 28;
 }
 
+function clientAunNoEmpiezaADeclarar(c, tp, targetPeriodRef) {
+  // La web marca "aún no empieza a declarar" con clientStartPeriod (primer período
+  // de obligación: "Al día desde"/"Inicio de Obligaciones"). Si se especifica un
+  // período de referencia (ej. el del lote o celda), se valida contra él; de lo
+  // contrario, se usa el mes calendario anterior.
+  const startPeriod = (tp && tp.clientStartPeriod) || (c && (c.client_start_period || c.clientStartPeriod)) || '';
+  if (!startPeriod) return false;
+  let targetKey = '';
+  if (targetPeriodRef) {
+    if (typeof targetPeriodRef === 'string') {
+      targetKey = targetPeriodRef.split(':')[0].trim();
+    } else if (typeof targetPeriodRef === 'object' && targetPeriodRef.year && typeof targetPeriodRef.monthIndex === 'number') {
+      targetKey = `${targetPeriodRef.year}-${String(targetPeriodRef.monthIndex + 1).padStart(2, '0')}`;
+    }
+  }
+  if (!targetKey) {
+    const now = new Date();
+    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    targetKey = prev.getFullYear() + '-' + String(prev.getMonth() + 1).padStart(2, '0');
+  }
+  return String(startPeriod) > targetKey;
+}
+
 function isClientMensual(db) {
   if (!db || !db.ruc) return false;
   if (db.isDeleted || db.is_deleted) return false;
@@ -911,6 +934,7 @@ function isClientMensual(db) {
   const type = (db.client_type || db.clientType || tp.clientType || '').toLowerCase();
 
   if (type === 'solo_plan' || db.requires_declarations === false || tp.requiresDeclarations === false) return false;
+  if (clientAunNoEmpiezaADeclarar(db, tp)) return false;
   if (freq === 'mensual') return true;
   if (freq === 'semestral' || freq === 'ninguno' || freq === 'anual') return false;
   if (reg.includes('popular')) return false;
@@ -1414,7 +1438,19 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
         esVisible(el)
       );
     });
-    if (confirmedPrintBtn && esVisible(confirmedPrintBtn) && !printBtns.includes(confirmedPrintBtn)) {
+    // 🎯 PRIORIDAD CEP: Si existe el botón específico "Imprimir comprobante de pago",
+    // ése es el comprobante oficial de pago que el SRI emite con código de barras y valor.
+    const btnComprobantePago = printBtns.find((el) => {
+      const txt = (el.innerText || el.value || el.textContent || "").toLowerCase();
+      return txt.includes("comprobante de pago") || txt.includes("comprobante para pago");
+    });
+
+    if (btnComprobantePago) {
+      const idx = printBtns.indexOf(btnComprobantePago);
+      if (idx !== -1) printBtns.splice(idx, 1);
+      printBtns.unshift(btnComprobantePago);
+      console.log("🎯 [PDF MASTER] Botón 'Imprimir comprobante de pago' priorizado sobre formulario.");
+    } else if (confirmedPrintBtn && esVisible(confirmedPrintBtn) && !printBtns.includes(confirmedPrintBtn)) {
       printBtns.unshift(confirmedPrintBtn);
     }
 
@@ -1911,10 +1947,13 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
     const cli = filas[0];
     const perfil = (cli.tax_profile && typeof cli.tax_profile === 'object') ? cli.tax_profile : {};
 
-    // Si vuelve a andar, se limpia la marca en vez de dejar un aviso viejo.
+    // Si vuelve a andar o ingresa con éxito, registramos el timestamp de último acceso verificado
     if (estado === 'ok') {
-      if (!perfil.sriCredencial) return true;
-      delete perfil.sriCredencial;
+      perfil.sriCredencial = {
+        estado: 'ok',
+        ultimo_ingreso: new Date().toISOString(),
+        marcado_por: 'Nueva Luz'
+      };
     } else {
       perfil.sriCredencial = {
         estado,
@@ -1932,7 +1971,7 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
 
     if (!p.ok) { console.warn(`⚠️ [WEB] No pude marcar a ${ruc}: HTTP ${p.status}`); return false; }
     console.log(estado === 'ok'
-      ? `🌐 [WEB] ${ruc}: aviso de clave retirado, la credencial funciona.`
+      ? `🌐 [WEB] ${ruc}: clave verificada OK, último ingreso registrado en Supabase.`
       : `🌐 [WEB] ${ruc} marcado en la web: clave ${estado}.`);
     return true;
   } catch (e) {
@@ -2162,28 +2201,34 @@ async function syncDeclarationToSupabase(
         sriId:
           (document.body.innerText.match(/CEP.*?(\d{10,})/i) || [])[1] || "",
 
-        // Ventas: Extraídas directamente de los casilleros del formulario (401, 403, 421)
+        // Ventas: Extraídas directamente de los casilleros del formulario (401, 403, 404, 405, 421, 422, 424)
         ventas15: ventasData.base15 || 0,
+        ventas5: ventasData.base5 || 0,
+        ventas8: ventasData.base8 || 0,
         ventas0: ventasData.base0 || 0,
         montoIvaVentas: ventasData.iva15 || (ventasData.base15 || 0) * 0.15,
+        montoIva5: ventasData.iva5 || 0,
+        montoIva8: ventasData.iva8 || 0,
 
         // Compras: Extraídas por el Extractor V1 de las Facturas Recibidas
         compras15: facturas.iva15?.baseImponible || 0,
         compras5: facturas.iva5?.baseImponible || 0,
+        compras8: facturas.iva8?.baseImponible || 0,
         compras0: facturas.iva0?.baseImponible || 0,
         // El IVA de compras se SUMA, no se recalcula: multiplicar la base por
         // 0.15 estaba dando de más en cuanto aparecía una compra al 5%.
         montoIvaCompras:
           (facturas.iva15?.montoIva ?? (facturas.iva15?.baseImponible || 0) * 0.15) +
-          (facturas.iva5?.montoIva ?? 0),
+          (facturas.iva5?.montoIva ?? 0) +
+          (facturas.iva8?.montoIva ?? 0),
         // Cuántas facturas quedaron sin tarifa reconocible. Un cero acá no es
         // «no había»: es «todas se pudieron ubicar». La diferencia importa
         // cuando alguien mire estos números dentro de un año.
         comprasDudosas: Array.isArray(facturas.ambiguas) ? facturas.ambiguas.length : 0,
 
-        // Retenciones: Extraídas por el Extractor V1
-        retIva: retenciones.ivaRetenido?.total ?? retenciones.retIva ?? 0,
-        retRenta: retenciones.rentaRetenida?.total ?? retenciones.retRenta ?? 0,
+        // Retenciones: Extraídas por el Extractor V1 o leídas del formulario si están disponibles
+        retIva: (retenciones.ivaRetenido?.total ?? retenciones.retIva ?? 0) || ventasData.retIvaForm || 0,
+        retRenta: (retenciones.rentaRetenida?.total ?? retenciones.retRenta ?? 0) || ventasData.retRentaForm || 0,
         retBaseTotal: (retenciones.ivaRetenido?.baseTotal ?? 0)
                     + (retenciones.rentaRetenida?.baseTotal ?? 0)
                     || retenciones.baseImponible || 0,
@@ -2319,6 +2364,21 @@ async function syncDeclarationToSupabase(
           await SafeStorage.set({ sc_clients_cache: updatedCache });
         }
       }
+
+      // 📢 Notificar en tiempo real a la pestaña de SantiagoCordova.com
+      if (typeof SafeStorage !== 'undefined' && SafeStorage.set) {
+        await SafeStorage.set({
+          last_declaration_completed: {
+            ruc,
+            period: canonicalPeriod,
+            type: decType,
+            success: true,
+            pdfUrl: pdfUrl,
+            proof_file: proofFileObj,
+            timestamp: Date.now()
+          }
+        });
+      }
     } catch (cacheErr) {
       console.warn("⚠️ Local cache sync error:", cacheErr);
     }
@@ -2357,10 +2417,16 @@ async function handleBatchNextClient() {
     "sc_clients_cache",
     "sri_tried_credentials",
     "sc_declaraciones_locales",
+    "sri_period_order",
   ]);
   let queue = Array.isArray(res.auto_batch_queue) ? res.auto_batch_queue : [];
   let currentIndex = res.auto_batch_index || 0;
   let batchEnabled = !!res.auto_batch_enabled;
+  // 🗓️ ORDEN DE MESES: { ruc, periodos: ['AAAA-MM', ...] } armada desde el popup.
+  // Mientras exista, la cola es UNA orden del mismo contribuyente en varios
+  // meses consecutivos: se desactiva el ferrocarril (nada de meter clientes
+  // sueltos en medio) y entre ítems del mismo RUC NO se cierra la sesión.
+  const ordenActiva = res.sri_period_order || null;
 
     if (typeof SriLoop !== 'undefined') {
       const loopData = await SriLoop.get();
@@ -2407,6 +2473,11 @@ async function handleBatchNextClient() {
   // 🚂 FERROCARRIL DINÁMICO: Si el usuario agregó clientes nuevos a la caché local o web
   // mientras el tren estaba corriendo, los añadimos a la cola para no parar nunca.
   // 🕯️ Pero la Lista Bendita manda: si está activa, solo entran los benditos.
+  // 🗓️ Y si hay una ORDEN DE MESES activa, el tren se frena: la orden es del
+  // cliente elegido y no queremos que se metan clientes sueltos en el medio.
+  if (ordenActiva) {
+    console.log('🗓️ [ORDEN MESES] Ferrocarril desactivado: la cola es una orden del mismo contribuyente.');
+  } else {
   const benditaActiva = await leerBendita();   // null = inactiva = todos entran
   const benditaSet = benditaActiva === null ? null : new Set(benditaActiva.map(String));
   const existingRucs = new Set(queue.map(q => q && q.ruc).filter(Boolean));
@@ -2418,6 +2489,8 @@ async function handleBatchNextClient() {
     const clave = c.password || c.sri_password || c.sriPassword;
     if (!clave) continue;
     if (flaggedErrs[c.ruc] || tried[c.ruc]?.status === 'failed' || tried[c.ruc]?.status === 'locked') continue;
+    if (typeof clientAunNoEmpiezaADeclarar === 'function' &&
+        clientAunNoEmpiezaADeclarar(c, c.tax_profile || c.taxProfile || {}, targetPeriodStr)) continue;
 
     const decs = Array.isArray(c.declarations) ? c.declarations
                : (Array.isArray(c.declaration_history) ? c.declaration_history : []);
@@ -2439,12 +2512,14 @@ async function handleBatchNextClient() {
       }
     }
   }
+  }
 
   const registroLocal = res.sc_declaraciones_locales || {};
 
   const isClientDoneOrError = (item) => {
     const clientRuc = item && item.ruc;
     if (!clientRuc || flaggedErrs[clientRuc]) return true;
+    const clientPer = item.period || targetPeriodStr;
     // 🧾 Constancia de esta misma corrida: si ya declaró el periodo, no se
     // vuelve. BUG real (10-sep-2026): esto trataba CUALQUIER registro local
     // como "ya está", con o sin `pdfSubido`. Un cliente en cola marcado
@@ -2453,9 +2528,9 @@ async function handleBatchNextClient() {
     // silencio de acá en cuanto no era el primero del lote: nunca llegaba a
     // la rama que lo recupera. Ahora sólo cuenta como "hecho" si el PDF ya
     // subió, o si el cliente no estaba marcado para recuperar nada.
-    const reg = registroLocal[`${clientRuc}|${targetPeriodStr}`];
+    const reg = registroLocal[`${clientRuc}|${clientPer}`];
     if (reg && (reg.pdfSubido || !item.soloRecuperar)) {
-      console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${targetPeriodStr} en esta corrida.`);
+      console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${clientPer} en esta corrida.`);
       return true;
     }
     if (tried[clientRuc] && (tried[clientRuc].status === 'failed' || tried[clientRuc].status === 'locked' || tried[clientRuc].status === 'blocked')) return true;
@@ -2470,7 +2545,7 @@ async function handleBatchNextClient() {
         if (!d) return false;
         const hasProof = !!(d.proof_file || d.pdfUrl || d.proofFile);
         if (!hasProof) return false;
-        return (d.period || "").includes(targetPeriodStr);
+        return (d.period || "").includes(clientPer);
       });
     }
     return false;
@@ -2488,11 +2563,12 @@ async function handleBatchNextClient() {
 
   if (nextIndex < queue.length) {
     const nextClient = queue[nextIndex];
+    const clientPer = nextClient.period || targetPeriodStr;
     console.log(
-      `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
+      `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Período: ${clientPer}] [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
     );
 
-    const pParts = targetPeriodStr.split("-");
+    const pParts = clientPer.split("-");
     const pYear = parseInt(pParts[0]);
     const pMonth = parseInt(pParts[1]) - 1; // monthIndex 0..11 para workflowPeriod
     const periodoSiguiente = { year: pYear, monthIndex: pMonth };
@@ -2541,7 +2617,7 @@ async function handleBatchNextClient() {
         pendingAction: 'recuperar_comprobante',
         recuperarComprobante: {
           ruc: nextClient.ruc, nombre: nextClient.name, periodo: periodoSiguiente,
-          per: targetPeriodStr, intentos: 0,
+          per: clientPer, intentos: 0,
         },
         workflowPeriod: periodoSiguiente,
         actionTimestamp: Date.now(),
@@ -2623,6 +2699,25 @@ async function handleBatchNextClient() {
 
 
     await GhostMemory.clearCurrent();
+
+    // 🗓️ ORDEN DE MESES: si el siguiente item es del MISMO contribuyente y hay
+    // sesión abierta, no hace falta salir y volver a entrar: se mantiene la
+    // sesión y se navega directo a Comprobantes Recibidos con el periodo nuevo.
+    // El flujo semi-inmutable (03) replanta turbo_step1_facturas con el
+    // workflowPeriod que ya dejamos escrito acá. Si el SRI se complica (exige
+    // re-login), el auto-login con pending_sri_autofill ya puesto lo resuelve.
+    const itemAnterior = queue[currentIndex] || {};
+    const mismosRuc = !!(ordenActiva && nextClient.ruc && itemAnterior.ruc === nextClient.ruc);
+    if (mismosRuc && !window.location.href.toLowerCase().includes('/auth/realms/')) {
+      console.log(
+        '🗓️ [ORDEN MESES] Mismo contribuyente, siguiente mes sin cerrar sesión: navegando a Comprobantes...',
+        `${nextClient.period || targetPeriodStr}`,
+      );
+      await sleep(1000);
+      window.location.href = SRI_RECIBIDOS_URL;
+      return true;
+    }
+
     console.log(
       "🔒 Cerrando sesión SRI para iniciar con el siguiente cliente...",
     );
@@ -2638,6 +2733,9 @@ async function handleBatchNextClient() {
       "auto_batch_queue",
       "auto_batch_index",
     ]);
+    // 🗓️ La orden de meses terminó: se limpia para que el siguiente arranque
+    // vuelva al comportamiento normal (cola de todo el periodo).
+    if (ordenActiva) await SafeStorage.remove(['sri_period_order']);
     await GhostMemory.clearCurrent();
     
     // Usar notificación no bloqueante para no detener el hilo de ejecución

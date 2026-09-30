@@ -1,0 +1,157 @@
+<!doctype html><meta charset="utf-8"><title>La orden de meses</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Orden de meses: un cliente, varios períodos, sin cerrar sesión</h3>
+<p style="max-width:82ch;line-height:1.6;color:#9fb4d4">
+  El usuario pidió (27-sep-2026) declarar varios meses atrasados de UN cliente
+  desde el popup: marcar en la «orden de meses», y el bucle salta entre meses
+  del MISMO RUC sin cerrar sesión (con fallback al auto-login si el SRI lo
+  pide). Este banco cuida:
+  <br><br>
+  A) <code>sri_period_order</code> + cola con <code>period</code> por ítem:
+  <code>handleBatchNextClient</code> arma el <code>workflowPeriod</code> del
+  MES DEL ÍTEM, no del período global del lote. Es el corazón de la orden:
+  de ese número salen la clave en Supabase y la ruta del comprobante.
+  <br>
+  B) el salto al mismo RUC NO pasa por <code>cerrarSesionSRI</code> (se navega
+  directo a Comprobantes). No se puede ejecutar acá (navegaría de verdad):
+  se verifica el cableado en el bundle, como en los otros bancos.
+  <br>
+  C) con la orden activa, el ferrocarril NO mete clientes sueltos en la cola.
+  <br>
+  D) al terminar la orden se limpia <code>sri_period_order</code> (el siguiente
+  arranque vuelve al comportamiento normal) y se cierra sesión.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[]; window.__cerroSesion=0;
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:(m,cb)=>{cb&&cb({ok:false});return Promise.resolve({ok:false})},id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const limpiar = async () => {
+    for (const k of ['sc_clients_cache','flagged_errors','sri_tried_credentials','sc_declaraciones_locales',
+                      'sc_loop','auto_batch_queue','auto_batch_index','auto_batch_enabled','auto_batch_period',
+                      'auto_batch_mode','pendingAction','pending_sri_autofill','recuperarComprobante',
+                      'bajarTodos','workflowPeriod','declaration_synced_flag','iva_sin_ubicar',
+                      'sc_lista_bendita','sri_period_order','ghost_data']) {
+      await SafeStorage.remove([k]);
+    }
+  };
+
+  // El logout real purga cookies y navega; acá se cuenta.
+  window.cerrarSesionSRI = async () => { window.__cerroSesion = (window.__cerroSesion||0) + 1; };
+
+  // El período global del lote (lo que arma antes la orden) es el PRIMER mes.
+  // El crash que este banco caza: `periodoSiguiente` sale del MES DEL ÍTEM.
+  const colaOrden = [
+    { ruc: '0750103442001', name: 'ENCALADA', password: 'x', period: '2026-08' },
+    { ruc: '0750103442001', name: 'ENCALADA', password: 'x', period: '2026-09' },
+    { ruc: '0750103442001', name: 'ENCALADA', password: 'x', period: '2026-10' },
+  ];
+
+  // ── A · el avance usa el período del ítem, no el global ─────────────────
+  sec('A · handleBatchNextClient respeta el period de cada ítem de la orden');
+  await limpiar();
+  window.__cerroSesion = 0;
+  await SriLoop.iniciar(colaOrden, { year: 2026, monthIndex: 7 }); // 2026-08
+  await SafeStorage.set({
+    auto_batch_queue: colaOrden, auto_batch_index: 0, auto_batch_enabled: true,
+    auto_batch_mode: 'turbo_step1_facturas',
+    auto_batch_period: { year: 2026, monthIndex: 7 },
+    sri_target_period: { year: 2026, monthIndex: 7 },
+    sri_period_order: { ruc: '0750103442001', periodos: ['2026-08','2026-09','2026-10'] },
+  });
+
+  // El siguiente ítem es el MES 2026-09, aunque el período global diga 08.
+  // Para que D/B el avance llegue hasta el write de workflowPeriod sin
+  // navegar, la barra de dirección lleva un hueco de login (la rama misma-RUC
+  // exige estar FUERA de /auth/realms/ para saltar directo; si estamos en
+  // login, cae al fallback —ver sección B—). Así este banco toca el write y
+  // el avance, y deja la navegación para la prueba en vivo.
+  history.replaceState({}, '', '#/auth/realms/Internet/INICIADO-TEST');
+  const av1 = await handleBatchNextClient();
+  push('el avance devolvió true (hay siguiente)',  av1, true);
+  const s1 = await SafeStorage.get(['pending_sri_autofill','pendingAction','workflowPeriod','auto_batch_index']);
+  push('el siguiente sigue siendo el MISMO RUC',    s1.pending_sri_autofill.ruc, '0750103442001');
+  push('con la acción de declarar',                 s1.pendingAction, 'turbo_step1_facturas');
+  push('workflowPeriod = 2026-09 (el mes del ítem, no el 08 global)',
+       s1.workflowPeriod && `${s1.workflowPeriod.year}-${('0'+(s1.workflowPeriod.monthIndex+1)).slice(-2)}`, '2026-09');
+  push('el índice avanzó a 1',                      s1.auto_batch_index, 1);
+
+  // ── B · mismo RUC = no cerrar sesión (cableado; la navegación no se puede
+  // ejecutar en el banco porque se sale de esta página) ─────────────────────
+  sec('B · mismo RUC: sin cerrar sesión, directo a Comprobantes');
+  const bundle = await (await fetch('../build/content.js', {cache:'no-store'})).text();
+  push('la condición mismo-RUC existe en el bundle (minificada)',
+       /h\.ruc===w\.ruc/.test(bundle), true);
+  push('exige estar FUERA de la pantalla de login',
+       /h\.ruc===w\.ruc[\s\S]{0,160}\/auth\/realms\//.test(bundle), true);
+  push('navega directo a Comprobantes y devuelve true sin cerrar sesión',
+       /window\.location\.href=SRI_RECIBIDOS_URL,!0/.test(bundle), true);
+  push('y si el SRI lo complica, el auto-login ya quedó escrito como fallback',
+       /pending_sri_autofill[\s\S]{0,1200}SRI_RECIBIDOS_URL,!0/.test(bundle), true);
+
+  // ── C · ferrocarril apagado con la orden activa ─────────────────────────
+  sec('C · con orden activa no se meten clientes sueltos');
+  await limpiar();
+  await SafeStorage.set({
+    sc_clients_cache: [
+      { ruc: '0999999999001', name: 'CLIENTE SUELTO (recién agregado)', password: 'pw', ivaFrequency: 'Mensual' },
+    ],
+    auto_batch_queue: colaOrden, auto_batch_index: 0, auto_batch_enabled: true,
+    auto_batch_mode: 'turbo_step1_facturas',
+    auto_batch_period: { year: 2026, monthIndex: 7 },
+    sri_period_order: { ruc: '0750103442001', periodos: ['2026-08','2026-09','2026-10'] },
+  });
+  history.replaceState({}, '', '#/auth/realms/Internet/');
+  await handleBatchNextClient();
+  await SriLoop.iniciar(colaOrden, { year: 2026, monthIndex: 7 });
+  await handleBatchNextClient();
+  const s2 = await SafeStorage.get(['sc_loop','auto_batch_index']);
+  const colaTrasAvance = (s2.sc_loop && s2.sc_loop.cola) || [];
+  push('la cola del semáforo no creció',            colaTrasAvance.length, 3);
+  push('y el cliente suelto no aparece',            colaTrasAvance.some(c=>c.ruc==='0999999999001'), false);
+
+  // ── D · fin de la orden: limpia sri_period_order y cierra sesión ────────
+  sec('D · al terminar se limpia sri_period_order');
+  await limpiar();
+  window.__cerroSesion = 0;
+  const colaUnMes = [{ ruc: '0750103442001', name: 'ENCALADA', password: 'x', period: '2026-08' }];
+  await SriLoop.iniciar(colaUnMes, { year: 2026, monthIndex: 7 });
+  await SafeStorage.set({
+    auto_batch_queue: colaUnMes, auto_batch_index: 0, auto_batch_enabled: true,
+    auto_batch_mode: 'turbo_step1_facturas',
+    auto_batch_period: { year: 2026, monthIndex: 7 },
+    sri_period_order: { ruc: '0750103442001', periodos: ['2026-08'] },
+  });
+  const avu = await handleBatchNextClient();
+  push('sin más ítems devuelve false (lote completo)', avu, false);
+  const s3 = await SafeStorage.get(['sri_period_order','auto_batch_enabled']);
+  push('sri_period_order fue limpiado',             s3.sri_period_order || null, null);
+  push('el lote se apagó',                          s3.auto_batch_enabled || false, false);
+  push('y se cerró la sesión una vez',              window.__cerroSesion, 1);
+
+  await SriLoop.detener('fin del banco');
+  await limpiar();
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    '\n\n'+ (window.__errors.length? 'ERRORES:\n'+window.__errors.join('\n') : 'sin errores de runtime');
+
+  document.body.style.color = fallos ? '#fecaca' : '#d5e4fa';
+})();
+</script>

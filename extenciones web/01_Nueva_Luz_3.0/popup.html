@@ -34,7 +34,7 @@
             overflow-x: hidden;
             display: flex;
             flex-direction: column;
-            height: 590px;
+            height: 640px;
         }
 
         .header {
@@ -105,6 +105,7 @@
             display: flex;
             gap: 8px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         select, input {
@@ -406,6 +407,15 @@
     </div>
     <input type="file" id="inputCsvClaves" accept=".csv,.txt" style="display:none">
 
+    <!-- Clave SRI por cliente, a mano: sin pasar por CSV. Solo queda en el navegador. -->
+    <div id="formClaveManual" style="padding:8px 18px; background:rgba(99,102,241,0.06); border-bottom:1px solid var(--border); display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <input id="rucClaveInput" placeholder="RUC (13 dígitos)" maxlength="13" style="flex:1; min-width:110px; font-family:'JetBrains Mono',monospace;">
+        <input id="claveInput" type="password" placeholder="Clave SRI del cliente" style="flex:1.2; min-width:130px;">
+        <button id="btnGuardarClave" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.5); color:#c7d2fe; padding:7px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap;" title="Guarda la clave del cliente en la caché local y lo desbloquea (sin subirla a la nube)">
+            💾 Guardar clave
+        </button>
+    </div>
+
     <div class="auto-bar">
         <div style="display: flex; flex-direction: column;">
             <span style="font-size: 11px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 4px;">
@@ -437,6 +447,10 @@
             <option value="11">Diciembre</option>
         </select>
         <select id="periodYear"></select>
+
+        <button id="btnMesQueFalta" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; padding:7px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap; transition:all 0.2s;" title="Detecta el primer período con clientes sin declarar y lo deja seleccionado para el lote">
+            🎯 Mes que falta
+        </button>
 
         <div class="search-container">
             <span class="search-icon">🔍</span>

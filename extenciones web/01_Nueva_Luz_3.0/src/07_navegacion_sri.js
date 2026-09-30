@@ -633,12 +633,16 @@ if (typeof window !== 'undefined') {
     window.sriRecuperarComprobante = async (ruc, year, month) => {
         const per = (year && month)
             ? { year: Number(year), monthIndex: Number(month) - 1 }
-            : ((await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto());
+            : (await SriLoop.resolverPeriodoObjetivo());
         const cache = (await SafeStorage.get(['sc_clients_cache'])).sc_clients_cache || [];
         const c = cache.find((x) => x && x.ruc === String(ruc).trim());
         return irARecuperarComprobante(String(ruc).trim(), per, c ? c.name : '');
     };
 }
+
+const MESES_LARGOS = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                      'agosto','septiembre','octubre','noviembre','diciembre'];
+const MESES_CORTOS = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
 
 const SriLoopHUD = {
     _el: null,
@@ -712,6 +716,11 @@ const SriLoopHUD = {
             '<button id="slh-probarclaves" aria-label="Probar claves: entra con cada clave guardada y sale, sin declarar nada" title="Probar claves: recorre la cartera, entra con cada clave guardada y sale — nunca declara" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🔑</button>',
             '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
+            // Período objetivo del lote: qué mes se va a declarar. El popup y este
+            // botón comparten la preferencia (sri_target_period); si falta, es el
+            // mes anterior. Se abre en su propio panel para ◀ ▶, 🎯 mes que falta
+            // y ✖ para volver al predeterminado.
+            '<button id="slh-periodo" aria-label="Período objetivo del lote" title="Período objetivo del lote: qué mes se va a declarar (con ◀ ▶ o 🎯)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:12px;cursor:pointer;background:rgba(245,158,11,0.16);color:#fbbf24">🗓 —</button>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
             // Éste va rotulado: si es el que hay que apretar cuando algo va
@@ -738,7 +747,21 @@ const SriLoopHUD = {
             '<div id="slh-notas-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px"></div>',
             '<div id="slh-chequeo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
             '<div id="slh-probarclaves-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:280px;overflow:auto"></div>',
-            '<div id="slh-auditoria-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:320px;overflow:auto"></div>'
+            '<div id="slh-auditoria-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:320px;overflow:auto"></div>',
+            '<div id="slh-periodo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:10px">',
+            '  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">',
+            '    <span style="font-size:10px;opacity:0.6;font-family:monospace;letter-spacing:0.05em">PERÍODO OBJETIVO</span>',
+            '    <b id="slh-periodo-etiq" style="color:#fbbf24;font-size:14px">—</b>',
+            '    <span id="slh-periodo-default" style="font-size:10px;opacity:0.55;font-family:monospace"></span>',
+            '  </div>',
+            '  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">',
+            '    <button id="slh-per-prev" title="Mes anterior" style="border:none;border-radius:8px;padding:6px 11px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">◀ Anterior</button>',
+            '    <button id="slh-per-missing" title="Detectar el primer período (hacia atrás) con clientes sin declarar" style="border:none;border-radius:8px;padding:6px 11px;font-weight:800;font-size:12px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">🎯 Mes que falta</button>',
+            '    <button id="slh-per-next" title="Mes siguiente" style="border:none;border-radius:8px;padding:6px 11px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">▶ Siguiente</button>',
+            '    <button id="slh-per-reset" title="Volver al comportamiento normal (el mes anterior)" style="border:none;border-radius:8px;padding:6px 11px;font-weight:800;font-size:12px;cursor:pointer;background:transparent;border:1px dashed rgba(148,163,184,0.35);color:#94a3b8">✖ Default</button>',
+            '  </div>',
+            '  <div id="slh-periodo-info" style="font-size:10px;opacity:0.6;margin-top:8px;font-family:monospace"></div>',
+            '</div>'
         ].join('');
 
         if (!document.getElementById('slh-anim')) {
@@ -798,6 +821,63 @@ const SriLoopHUD = {
                      : 'El lote vuelve a avanzar sin parar.', 4500);
             this.pintar();
         });
+
+        // ── Período objetivo (🗓): qué mes se va a declarar ────────────────
+        el.querySelector('#slh-periodo').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-periodo-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            this.soloUnPanel('slh-periodo-panel');
+            panel.style.display = 'block';
+            await this.pintarPeriodo();
+        });
+
+        el.querySelector('#slh-per-prev').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            await SriLoop.moverPeriodo(-1);
+            this._periodoAviso('◀ Mes anterior');
+            this.pintar();
+        });
+
+        el.querySelector('#slh-per-next').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            await SriLoop.moverPeriodo(1);
+            this._periodoAviso('▶ Mes siguiente');
+            this.pintar();
+        });
+
+        el.querySelector('#slh-per-reset').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            await SriLoop.quitarPeriodoManual();
+            this._periodoAviso('✖ Vuelve al mes anterior');
+            this.pintar();
+        });
+
+        el.querySelector('#slh-per-missing').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const btn = ev.currentTarget;
+            const previo = btn.textContent;
+            btn.textContent = '⏳';
+            try {
+                const r = await SriLoop.mesQueFalta();
+                if (r.encontrado) {
+                    await SriLoop.fijarPeriodo({ year: r.year, monthIndex: r.monthIndex });
+                    this._aviso('🎯 Mes que falta',
+                        `${MESES_LARGOS[r.monthIndex]} ${r.year} — ${r.aDeclarar} a declarar${r.sinPdf ? `, ${r.sinPdf} sin comprobante` : ''}${r.sinClave ? `, ${r.sinClave} sin clave` : ''}`, 6000);
+                    await this.pintarPeriodo(false);
+                    this.pintar();
+                } else {
+                    this._aviso('🎉 Todo al día', 'No hay períodos con clientes sin declarar hacia atrás.', 6000);
+                }
+            } catch (err) {
+                console.error('🎯 [PERÍODO] No se pudo detectar el mes que falta:', err);
+                this._aviso('⚠️ No se pudo', err.message, 7000);
+            }
+            btn.textContent = previo;
+        });
+
+        // Primera pintada del período objetivo, antes de que pase nada.
+        this.pintarPeriodo().catch(() => {});
 
         el.querySelector('#slh-aqui').addEventListener('click', async (ev) => {
             ev.stopPropagation();
@@ -1231,8 +1311,10 @@ const SriLoopHUD = {
 
         try {
             chrome.storage.onChanged.addListener(async (c) => {
-                if (!c.sc_loop) return;
+                if (!c.sc_loop && !c.sri_target_period) return;
                 this.pintar();
+                if (c.sri_target_period) this.pintarPeriodo().catch(() => {});
+                if (!c.sc_loop) return;
 
                 const antes = c.sc_loop.oldValue || {};
                 const ahora = c.sc_loop.newValue || {};
@@ -1715,7 +1797,7 @@ const SriLoopHUD = {
             }
         }
 
-        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod || SriLoop.periodoPorDefecto();
+        const periodo = await SriLoop.resolverPeriodoObjetivo();
         const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
                        'agosto','septiembre','octubre','noviembre','diciembre'];
 
@@ -1758,8 +1840,7 @@ const SriLoopHUD = {
      * navegador durante un buen rato.
      */
     async _arrancarTodo() {
-        const guardado = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod;
-        const periodo = guardado || SriLoop.periodoPorDefecto();
+        const periodo = await SriLoop.resolverPeriodoObjetivo();
         const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio',
                        'agosto','septiembre','octubre','noviembre','diciembre'];
         const etiqueta = `${MESES[periodo.monthIndex]} ${periodo.year}`;
@@ -1889,8 +1970,7 @@ const SriLoopHUD = {
             return;
         }
 
-        const periodo = (await SafeStorage.get(['workflowPeriod'])).workflowPeriod
-                        || SriLoop.periodoPorDefecto();
+        const periodo = await SriLoop.resolverPeriodoObjetivo();
         const omitidos = {};
         try { (await Omitidos.lista()).forEach((o) => { omitidos[o.ruc] = o; }); } catch (e) {}
 
@@ -1924,6 +2004,41 @@ const SriLoopHUD = {
             filas.join('');
     },
 
+    /** 🗓 Pinta el panel del período objetivo y el rótulo del botón del HUD.
+     *  Los botones viven fijos en el panel (bindeados una vez): acá solo
+     *  cambia el texto, así que no hay delegación de eventos que mantener. */
+    async pintarPeriodo() {
+        const el = this._el;
+        if (!el) return;
+        const boton = el.querySelector('#slh-periodo');
+        const etiq = el.querySelector('#slh-periodo-etiq');
+        const defTxt = el.querySelector('#slh-periodo-default');
+        const info = el.querySelector('#slh-periodo-info');
+        // El conteo lee la caché entera: solo cuando el panel está abierto.
+        const panel = el.querySelector('#slh-periodo-panel');
+        const panelVisible = !!panel && panel.style.display === 'block';
+
+        try {
+            const objetivo = await SriLoop.resolverPeriodoObjetivo();
+            const def = SriLoop.periodoPorDefecto();
+            const esManual = objetivo.year !== def.year || objetivo.monthIndex !== def.monthIndex;
+
+            if (boton) boton.textContent = `🗓 ${MESES_CORTOS[objetivo.monthIndex]} ${String(objetivo.year).slice(2)}`;
+            if (etiq) etiq.textContent = `${MESES_LARGOS[objetivo.monthIndex].toUpperCase()} ${objetivo.year}`;
+            if (defTxt) defTxt.textContent = esManual
+                ? `· default: ${MESES_LARGOS[def.monthIndex]} ${def.year}`
+                : '· el mes anterior (predeterminado)';
+            if (info && panelVisible) {
+                const c = await SriLoop.pendientesDePeriodo(objetivo);
+                info.textContent = `${c.aDeclarar} a declarar · ${c.sinPdf} solo comprobante · ${c.sinClave} sin clave · ${c.total} pendientes en ${c.periodo}`;
+            }
+        } catch (e) {
+            console.warn('🗓 No se pudo pintar el período:', e);
+            if (etiq) etiq.textContent = '—';
+            if (info) info.textContent = '';
+        }
+    },
+
     /**
      * La bitácora, para leerla acá en vez de copiarla a ciegas.
      */
@@ -1940,7 +2055,7 @@ const SriLoopHUD = {
          'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
          'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel',
          'slh-chequeo-panel', 'slh-probarclaves-panel', 'slh-auditoria-panel',
-         'slh-migrar-panel']
+         'slh-migrar-panel', 'slh-periodo-panel']
             .filter((id) => id !== cual && id !== 'slh-plan')   // null cierra todos
             .forEach((id) => {
                 const p = this._el.querySelector('#' + id);
@@ -2897,6 +3012,9 @@ const SriLoopHUD = {
         const play = this._el.querySelector('#slh-play');
         const est = this._el.querySelector('#slh-estado');
         const det = this._el.querySelector('#slh-detalle');
+
+        // El rótulo del período objetivo no se queda atrás.
+        this.pintarPeriodo().catch(() => {});
         this.pintarPlan(e).catch(() => {});
         this.anunciarEnPerfil(e).catch(() => {});
 

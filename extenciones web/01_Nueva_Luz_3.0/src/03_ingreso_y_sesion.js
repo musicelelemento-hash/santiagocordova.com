@@ -979,8 +979,6 @@ SafeStorage.get(null).then(async (items) => {
 });
 
 async function ejecutarAccionPendiente(items) {
-    if (!items || !items.pendingAction) return;
-
     // 🚪 Página puente del SSO: solo redirige. No hay nada que hacer acá.
     if (location.search.includes('token=') &&
         !document.getElementById('frmPrincipal:ano') &&
@@ -989,6 +987,27 @@ async function ejecutarAccionPendiente(items) {
         await SafeStorage.set({ actionTimestamp: Date.now() });
         return;
     }
+
+    // 🔄 AUTO-RECOVERY: Si estamos en Comprobantes Recibidos con lote en marcha pero sin pendingAction
+    if ((!items || !items.pendingAction) && window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
+        let sem = null;
+        if (typeof SriLoop !== 'undefined') {
+            try { sem = await SriLoop.get(); } catch (e) {}
+        }
+        if (sem && sem.estado === 'CORRIENDO') {
+            console.log('🔄 [AUTO-RECOVERY] En Comprobantes Recibidos con lote activo. Restaurando turbo_step1_facturas...');
+            if (!items) items = {};
+            items.pendingAction = 'turbo_step1_facturas';
+            if (!items.workflowPeriod && sem.periodo) items.workflowPeriod = sem.periodo;
+            await SafeStorage.set({
+                pendingAction: 'turbo_step1_facturas',
+                workflowPeriod: items.workflowPeriod,
+                actionTimestamp: Date.now()
+            });
+        }
+    }
+
+    if (!items || !items.pendingAction) return;
 
     // ELITE v10.5: TIMESTAMP CHECK (STALE ACTION PROTECTION)
     if (items.actionTimestamp) {
