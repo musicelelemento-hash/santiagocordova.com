@@ -1,5 +1,5 @@
 # ESTADO DEL PROYECTO — COLABORACIÓN ANTIGRAVITY & CLAUDE CODE
-> **Fecha de actualización:** 10-sep-2026  
+> **Fecha de actualización:** 22-sep-2026  
 > **Entorno de trabajo:** Multi-agente (Antigravity IDE + Claude Code en paralelo)  
 > **Rama activa en repositorio raíz:** `extension/nueva-luz-control-bucle`  
 > **Sub-repositorio web (`santiagocordova-main`):** `main`
@@ -41,7 +41,198 @@
 
 ---
 
-## 🏆 2₀. HITOS DE HOY (10-SEP-2026)
+## 🏆 2₁. HITOS DE HOY (28-SEP-2026)
+
+### 1. Mesa de Despacho Inmediato en Dashboard (`AdminDashboardScreen.tsx`)
+- **Implementación**:
+  - Activada la pestaña principal `⚡ Despacho Inmediato` (`hubTab = 'despacho'`) como vista por defecto del Centro de Mando Ejecutivo.
+  - Conmutador de periodicidad (IVA Mensual vs. IVA Semestral) y 4 filtros tácticos rápidos: `🚨 Vence Hoy / Urgentes`, `📄 Sin Comprobante PDF`, `💰 Por Cobrar`, `📋 Todos los Pendientes`.
+  - Acciones tácticas integradas fila por fila:
+    - `🚀 Declarar RPA`: envío directo del contribuyente a la extensión [Nueva Luz 3.0](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0) vía `sendBatchDeclarationToExtension`.
+    - `📤 Subir PDF`: carga directa del comprobante oficial, asignación al período, marcado `Enviada` y apertura inmediata del modal de WhatsApp.
+    - `💬 WhatsApp`: plantilla automatizada con honorario, período y estado.
+    - `✓ Marcar Cobrado`: toggle en 1 clic.
+    - `👁️ Expediente`: acceso directo al perfil del cliente.
+
+### 2. Telemetría RPA en Vivo y Despacho Masivo
+- **Implementación**:
+  - Badge dinámico en el Top Stripe: `🟢 RPA Nueva Luz 3.0 · En Línea` con pulso de sincronización.
+  - Botón de acción táctica `⚡ Lote RPA (N)` en la cabecera superior y dentro de la mesa de despacho para inyectar la cola de pendientes del día a la extensión en un solo clic.
+
+### 3. Reorganización de la Navegación en 4 Hubs Funcionales (`Sidebar.tsx`)
+- **Problema resuelto**: 22 opciones planas en el menú lateral generaban dispersión y desorden visual.
+- **Implementación**:
+  - Reestructurado `NAV_GROUPS` en [Sidebar.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/components/layout/Sidebar.tsx) y propagado automáticamente a [MobileDrawer.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/components/layout/MobileDrawer.tsx):
+    1. **Operaciones Tributarias**: Dashboard (`home`), Declaraciones SRI (`declaraciones`), Directorio Clientes (`clients`), Firmas .P12 (`firmas`).
+    2. **Facturación & Cobranza**: Cartera y Cobranza (`cobranza`), Facturación SRI (`sri_facturacion`), Caja Chica TPV (`caja_chica`), Facturadores (`facturadores`), Cotizaciones (`cotizaciones`), Refinanciación (`refinanciacion`), Licencias (`licencias`).
+    3. **Taller & Comercial**: CRM Embudo (`crm_pipeline`), Tienda Web (`web_orders`), Tareas (`tasks`), Agenda (`calendar`), 3D Studio (`3d-studio`).
+    4. **Sistema & Auditoría**: Reportes IA (`reports`), Auditoría (`audit_log`), Ajustes (`settings`), Servicios (`services`).
+- **Verificación**: `npm run build` finalizado con éxito (código de salida 0).
+
+### 4. Despacho de Lotes Inteligente con Auditoría de Credenciales SRI (`AdminDashboardScreen.tsx`)
+- **Problema resuelto**: Contribuyentes con contraseñas no válidas, caducadas o rechazadas (caso emblemático **LABANDA ARMIJOS**, con clave caducada en el SRI) o sin contraseña entraban al lote de RPA causando fallos de sesión o riesgo de bloqueo en el portal SRI.
+- **Implementación**:
+  - **Botón `⚡ Lote RPA` con Telemetría**: Ahora exhibe en tiempo real cuántos clientes están listos vs. cuántos tienen problemas (`X listos · Y no válidos`).
+  - **Sub-barra de Filtro de Credenciales**: Chips de acceso inmediato en la Mesa de Despacho: `Todas`, `🟢 Habilitados (X)`, `🔴 Con Problema (Y)`, `⚠️ No Vale Clave (Z)` y `⚪ Faltan (W)`.
+  - **Insignia de Clave en Cada Fila**: Distintivo `🟢 Operativa` (verificada), `🔴 Rechazada`, `🟡 Caducada`, `⛔ Bloqueada`, o `⚪ Falta Clave`. Clic directo para abrir el actualizador sin salir de la mesa.
+  - **Modal de Pre-Despacho Táctico (`⚡ Despacho Táctico Lote RPA`)**:
+    - Tarjetas KPI: Desglose exacto de Habilitados, No Válidas/Caducadas y Faltantes.
+    - Advertencia anti-bloqueo destacando a clientes como **LABANDA**.
+    - Pre-selección inteligente: sólo los habilitados quedan marcados para envío por defecto.
+    - Sub-pestañas en el modal (`Todos`, `🟢 Listos`, `🔴 Revisar`) y botones de corrección inmediata (`[🔑 Corregir Clave]`).
+  - **Integración con [SriPasswordChangerModal.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/components/features/SriPasswordChangerModal.tsx)**:
+    - Enfoque automático al cliente seleccionado (`clientToFocus`).
+    - Input para ingresar/pegar nueva clave manualmente y guardarla con 1 clic.
+    - Actualización automática de `sriCredencial.estado = 'ok'` para limpiar estados de error previos (como el de LABANDA).
+  - **Protección individual**: Al pulsar `⚡ Declarar RPA` en una fila con clave no válida, el sistema alerta de inmediato y abre el actualizador de credencial en lugar de lanzar una petición condenada al rechazo.
+- **Verificación**: `npm run build` finalizado con éxito (código de salida 0).
+
+---
+
+## 🏆 2₀. HITOS ANTERIORES (22-SEP-2026)
+
+### 1. Clientes con Inicio Posterior: "No Aplica" (`clientStartPeriod`)
+- **Problema resuelto**: Clientes recién cambiados de contador (ej. **ANDRADE MALLA ANGEL GEOVANNI**, RUC `0705197481001`, `clientStartPeriod = "2026-09"`) salían como `🚨 Pendiente` en el reporte diario de Telegram y en la matriz para ciclos anteriores (`2026-08`).
+- **Implementación**:
+  - `isPeriodBeforeClientStart(clientStartPeriod, activeIvaPeriod)` implementada en `telegram-bot/src/database_ops.ts`.
+  - `generateDailyOperationalReport()` excluye de pendientes a quienes inicien después y los desglosa en `• No Aplica (Inicio posterior): X clientes`.
+  - Purgado el registro huérfano de `2026-08` en Supabase (`sri_declaraciones` y `declaration_history`).
+
+### 2. Telemetría de Auditoría de Claves SRI con Fecha de Último Ingreso
+- **Problema resuelto**: Saber con certeza qué claves funcionan y cuándo fue la última verificación real de la extensión Nueva Luz 3.0 en el portal.
+- **Implementación**:
+  - En `extenciones web/01_Nueva_Luz_3.0/src/01_utilidades_y_pdf.js`: en login exitoso (`ok`), guarda `perfil.sriCredencial = { estado: 'ok', ultimo_ingreso: new Date().toISOString(), marcado_por: 'Nueva Luz' }`. Recompilado `build/content.js`.
+  - En `santiagocordova-main/services/sri.ts`: `isSriPasswordUpdated(client)` lee la telemetría y expone `Operativa` con fecha y hora (`dd/MM/yyyy HH:mm`), `Rechazada`, `Bloqueada`, `Caducada` o `Sin Clave`.
+  - Badges visuales integrados en `ClientHeader.tsx`, `VirtualClientTable.tsx`, `TaxComplianceMatrix.tsx` y en el bot `/cliente <ruc>`.
+
+### 3. Deudas de Años Anteriores vs. Año Actual en Cobranza y Declaraciones
+- **Problema resuelto**: Clientes como **RAMIREZ ALVARADO ALEIDA MARLENE** tenían obligaciones por pagar de años anteriores (ej. `2025-12`) que quedaban ocultas en `CobranzaScreen` por el `slice(0, 6)` o en `TaxComplianceMatrix` porque la vista estaba fijada en `2026`.
+- **Implementación**:
+  - En `CobranzaScreen.tsx`:
+    - Filtro `📅 Años Anteriores` con contador en vivo.
+    - Desglose financiero en 4 métricas: Deuda Total, Año Actual, Años Previos (ámbar) y Días Máx Mora.
+    - Banner interactivo con botón `⚡ Liquidar Años Anteriores ($XX)` para liquidar en 1 clic y sincronizar Supabase.
+    - Scroller ampliado a 12 períodos (`slice(0, 12)`).
+  - En `TaxComplianceMatrix.tsx`:
+    - Filtro `📅 Años Anteriores` en la barra de herramientas.
+    - En modo tarjetas (`cards`): banner ámbar con chips de cada período anterior adeudado, botón individual `✓`, clic para cambiar el año de la matriz a ese ciclo, y botón `⚡ Liquidar (N)`.
+    - En modo matriz (`matrix`): tag `⚠️ N prev.` con tooltip de períodos adeudados.
+- **Verificación**: `npm run build` en `santiagocordova-main` y `telegram-bot` exitoso con código 0.
+
+### 4. Liquidación Global Masiva: "⚡ Liquidar Años Anteriores ($XX) De Una Sola"
+- **Problema resuelto**: Poder liquidar de un solo clic todas las deudas u obligaciones acumuladas de años pasados en toda la cartera de clientes, sin tener que ir uno por uno.
+- **Implementación**:
+  - En `CobranzaScreen.tsx`:
+    - `allPastYearsDebtsSummary` totaliza clientes, períodos adeudados (< 2026) y monto acumulado.
+    - `handleLiquidateAllPastYears()` marca masivamente las declaraciones como `Pagada`, sincroniza Zustand y persiste en Supabase con `SupabaseService.upsertClient()`.
+    - Botón `⚡ Liquidar Años Anteriores ($XX.XX) De Una Sola` en la barra superior de acciones y banner consolidado en la cabecera de la lista de cartera.
+  - En `TaxComplianceMatrix.tsx`:
+    - `allPastYearsDebtsTotalAmount` calcula el total consolidado de deudas pasadas de los clientes filtrados.
+    - `handleLiquidateAllPastYearsGlobal()` ejecuta la liquidación en lote marcando como pagados los períodos y persistiendo en el store.
+    - Botón global `⚡ Liquidar Años Anteriores ($XX.XX) De Una Sola` en la barra de herramientas y banner con botón de acción directa en la cabecera del modo tarjetas (`cards`).
+- **Verificación**: `npm run build` en `santiagocordova-main` finalizado con éxito (código de salida 0).
+
+### 5. Rediseño Táctico y Blindaje: "⚡ Sincronizar con Matriz"
+- **Diagnóstico original**: El botón recorría la cartera y marcaba como `Pagada` cualquier declaración en estado `Enviada` o con comprobante PDF (`proof_file`), pero:
+  1. Se ejecutaba a ciegas sin diálogo de confirmación ni recuento previo de dinero ($).
+  2. Podía marcar como cobrados honorarios que el cliente todavía debía.
+  3. No persistía atómicamente en Supabase (`SupabaseService.upsertClient`).
+  4. No dejaba rastro de auditoría contable (`transactionId`).
+- **Implementación mejorada**:
+  - En `CobranzaScreen.tsx`:
+    - `matrixSyncCandidates` calcula en tiempo real los clientes con declaraciones presentadas con comprobante pendientes de cobro, total de comprobantes y monto en dólares.
+    - El botón en el header muestra en vivo: `⚡ Sincronizar con Matriz ($XX.XX · N)` o conmuta a chip esmeralda `⚡ Matriz al Día (0 pend.)`.
+    - Modal Táctico `isSyncMatrixModalOpen` con desglose visual de clientes, períodos, insignias de comprobante PDF y honorarios pendientes.
+    - Acción Dual:
+      - `⚡ Liquidar y Cobrar Todo ($XX.XX)`: marca declaraciones como pagadas con `paymentMethod: 'Sincronización Matriz'`, `transactionId: SYNC-MATRIZ-...`, actualiza Zustand y respalda de inmediato en Supabase vía `SupabaseService.upsertClient()`.
+      - `🔄 Solo Refrescar Datos Nube`: recarga datos de Supabase vía `store.loadFromDB()` sin alterar ningún estado de cobro.
+- **Verificación**: `npm run build` en `santiagocordova-main` exitoso con código de salida 0.
+
+### 6. Diagnóstico, Purgado en Supabase y Blindaje de Período Fiscal "MAY 2026" en Clientes Semestrales
+- **Problema reportado**: Clientes semestrales tenían por error un registro y cobro de "Período Fiscal: MAY 2026".
+- **Causa Raíz Identificada**:
+  - El 8 de junio de 2026 (02:28 - 02:29 AM), un proceso masivo generó automáticamente declaraciones `2026-05` a 46 clientes.
+  - 40 clientes eran legítimos mensuales de Régimen General.
+  - Exactamente 6 clientes eran de frecuencia `Semestral` (`PINEDA SOLANO`, `SUMBA QUITO`, `ZHUMI ZHUMI`, `MOSCOSO GALARZA`, `MALLA MAYAGUARI`, `ANDRADE RODRIGUEZ`) + 1 cliente `Ninguno`/Renta (`MOROCHO YUNGA`).
+  - En julio de 2026, los semestrales presentaron ante el SRI su `2026-S1` con PDF oficial y pago al día.
+  - El registro fantasma `2026-05` (sin PDF) quedó huérfano; en SUMBA QUITO y MOSCOSO GALARZA figuraba como pendiente de pago, detonando deudas de "MAY 2026" en Cobranza y WhatsApp.
+- **Acciones Ejecutadas**:
+  - **Limpieza en Supabase**: Se purgó el registro `2026-05` huérfano de los 6 clientes semestrales y de MOROCHO YUNGA en `clients.declaration_history`. Los 40 clientes mensuales no sufrieron alteraciones.
+  - **Blindaje en `CobranzaScreen.tsx`**: En `financialData`, `consolidatedClients` y `matrixSyncCandidates`, se implementó una regla que descarta períodos mensuales (`YYYY-MM`) sin comprobante oficial (`proof_file`) en clientes configurados como `Semestral` o `Popular`.
+- **Verificación**: `npm run build` en `santiagocordova-main` exitoso con código 0.
+
+### 7. Corrección de Error TDZ ('L' en Cobranza) y Rediseño Táctico del Directorio de Clientes
+- **Problema 1 (Menú Cobranza)**: Crash en producción al ingresar a `CobranzaScreen`: `ReferenceError: Cannot access 'L' before initialization`.
+  - **Causa Raíz**: `const getClientIvaFrequency` estaba declarada dentro del componente funcional pero debajo del hook `useMemo` de `financialData`. En el bundle de producción minificado por Rollup/Vite, las funciones declaradas con `const` dentro de closures sufren la Zona Muerta Temporal (TDZ) y son renombradas a identificadores de una sola letra (como `L`), detonando un error al evaluarse el hook antes de la inicialización de la constante.
+  - **Solución**:
+    - Hoisting de `getClientIvaFrequency(client: Client)` al alcance del módulo (`export function getClientIvaFrequency...`), blindando la función contra TDZ.
+    - Corrección de sintaxis en `defaultBusinessProfile` (cierre `};` restablecido).
+    - Desacoplamiento de ciclo de dependencias: se exportó `arePeriodsEqual` desde `services/complianceEngine.ts` y se importó directamente en `CobranzaScreen.tsx` y `TaxComplianceMatrix.tsx`.
+- **Problema 2 (Directorio de Clientes)**:
+  - **Diagnóstico**:
+    - *Trampa del Directorio*: En `ClientsScreen.tsx`, al seleccionar la pestaña "Directorio Clientes" (`activeGroupTab === 'all'`), se forzaba incondicionalmente el renderizado de `ClientsDashboard` (limitado a 60 clientes en tarjetas estáticas), ignorando por completo el conmutador de Tabla / Tarjetas.
+    - Falta de interactividad en botones de acción y ausencia de atajos de 1 clic para operaciones fiscales (WhatsApp, Bóveda, Facturar, Declarar, Copia de claves con telemetría, Pausar/Reactivar).
+  - **Solución e Innovaciones**:
+    - **Conmutador Tripartito de Vistas**: 📋 Tabla Detallada (`VirtualClientTable`), 🗂️ Tarjetas Tácticas (`VirtualClientList` con `ClientCard`), 📊 Panel Analítico (`ClientsDashboard`).
+    - **Barra Táctica de 9no Dígito del RUC (Vencimientos SRI)**: Segmentador interactivo del dígito 1 al 0 (Día 10 al 28 del mes) con insignias dinámicas con el conteo exacto de clientes por dígito.
+    - **Cinta Ejecutiva de KPIs en Vivo**: Muestra en tiempo real Clientes en vista, Facturación Proyectada ($), Al Día, Pendientes, Claves SRI Operativas y Firmas por Vencer.
+    - **Suite de Botones 100% Interactivos por Cliente**:
+      - 💬 *WhatsApp Directo*: Apertura inmediata con saludo contextual o estado deshabilitado si carece de teléfono.
+      - 🔐 *Bóveda de Credenciales*: Acceso directo al vault del cliente.
+      - 🧾 *Facturación SRI*: Enrutamiento a pantalla de facturación con RUC, datos y honorarios precargados.
+      - ✏️ *Editar Cliente*: Apertura directa de la pestaña de perfil del expediente.
+      - ⏸️ / ▶️ *Pausar / Reactivar*: Conmutación instantánea del estado activo/inactivo con sincronización.
+      - ⚡ *Declarar*: Enrutamiento a la Matriz de Cumplimiento con filtro preaplicado del cliente.
+      - *Copia de 1 clic*: Para RUC y Clave SRI, acompañados de insignias de telemetría de acceso al portal y días restantes para la caducidad del certificado .P12 de firma electrónica.
+- **Verificación**: `npm run build` en `santiagocordova-main` finalizado con éxito (código de salida 0).
+
+### 8. Auditoría del Menú Ajustes y Habilitación de Carga de Contraseñas SRI del Navegador (Chrome/Edge) a Supabase
+- **Análisis de Ajustes y Funciones Obsoletas**:
+  - **Google Sheets Sync (`backendUrl` y "Recuperación Forzada (Sheets)")**: Identificado como **OBSOLETO (Legacy v1/v2)**. El sistema migró a **Supabase Postgres v5.0** e IndexedDB. Se etiquetó claramente con advertencia de que la recuperación forzada solo debe usarse para rescate de datos antiguos de 2024 o anteriores, evitando sobreescrituras accidentales.
+  - **Marketplace de Extensiones (`SriExtensionsStore`)**: Identificado como **SUPERADO**. Ofrecía 3 zips viejos separados, los cuales fueron consolidados y reemplazados en su totalidad por la extensión unificada **Nueva Luz 3.0** (`extenciones web/01_Nueva_Luz_3.0`).
+  - **Módulos Activos y Vigentes**: Flujo & Pantalla de Inicio, Arquitectura de Honorarios y Servicios, Herramientas del Estudio (Paz y Salvo / Tarjeta de Datos Bancarios), Combos & Facturadores, y Alertas de Cobranza (WhatsApp).
+- **Problema de las Contraseñas del Navegador (¿Por qué no se encontraban?)**:
+  - El código de lectura de contraseñas de navegador (`parseCredentialsCSV`, `parseBrowserPasswordsCSV`, `handlePasswordFileChange`, `handleAutoLinkPasswords`) existía en el backend del componente pero **los botones habían quedado omitidos del JSX en la pestaña Bóveda & Backups**.
+  - Aunque existía un botón `CLAVES SRI` en el Directorio de Clientes, en el menú Ajustes (donde el usuario naturalmente busca la configuración y bóveda) la funcionalidad estaba ausente.
+- **Implementación & Solución en [SettingsScreen.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/SettingsScreen.tsx)**:
+  - Se agregó la tarjeta de **Bóveda de Contraseñas SRI (Navegador ➔ Sistema)** con:
+    1. Botón **"SUBIR CSV CONTRASEÑAS NAVEGADOR"**: Lee archivos CSV exportados desde `chrome://password-manager/settings` de Google Chrome o Edge, actualiza `sriCredentials` en la bóveda, asigna la clave a cada cliente coincidente, actualiza `sriPasswordUpdatedAt` y persiste en bloque en **Supabase Postgres** vía `db.bulkUpdate('sc_pro_clients')`, sincronizando en tiempo real con la extensión Nueva Luz 3.0.
+    2. Botón **"ABRIR GESTOR DE CLAVES SRI"**: Despliega `SriPasswordChangerModal` directamente desde Ajustes para rotación (`* ➔ @`), copiado y verificación.
+    3. Botón **"VINCULAR CLAVES CON CLIENTES"**: Auto-link de credenciales de bóveda con la cartera.
+    4. Guía visual paso a paso de exportación en Chrome en 3 clics.
+    5. Restauración de botones para importar clientes desde CSV y desde PDFs oficiales de RUC.
+- **Verificación**: `npm run build` en `santiagocordova-main` finalizado con éxito (código de salida 0, `✓ built in 1m 30s`).
+
+### 9. Estadísticas y Filtros Interactivos en Menú Clientes (Cinta Ejecutiva, 9no Dígito, Dashboard y Banner Explicativo de Filtro Activo)
+- **Problema planteado**:
+  En el Menú Clientes se mostraban diversas estadísticas y tarjetas numéricas:
+  - **Cinta Ejecutiva:** `Clientes (123)`, `Fact. Proyectada ($1027)`, `Al Día (86)`, `Pendientes (16)`, `Claves SRI OK (51 / 123)`, `Firmas Vencen (0)`.
+  - **Filtro por 9no Dígito:** `Todos (133)`, `Díg 1 (17)` ... `Díg 0 (14)`.
+  - **Dashboard Analítico (`ClientsDashboard`):** `Clientes Activos (123)`, `Al Día (85)`, `Con Deuda (16)`, `Honorarios/Mes ($1027)`, Distribución por Régimen (`Régimen General 105`, `Rimpe Emprendedor 9`, `Rimpe Negocio Popular 9`), e IVA & Estado General (`IVA Mensual 44`, `IVA Semestral 69`, `Exentos 10`, `Vencidos 23`, `En Proceso 1`, `Al Día 85`).
+  El usuario solicitó: *"al dar clic me muestre de manera clara lo que insinua"*. Anteriormente eran elementos estáticos (`<div>`) no interactivos.
+- **Implementación y Solución**:
+  1. **Interactividad Total en Cinta Ejecutiva (`ClientsScreen.tsx`)**:
+     - Las 6 tarjetas se transformaron en `<button>` interactivos con hover animado, microinteracción, y estado activo resaltado (`ring-2 ring-primary bg-primary/10` y badge `Activo`).
+     - Cálculo de métricas ejecutivas estabilizado sobre el pool activo para que los conteos globales no colapsen al seleccionar una tarjeta.
+     - Clickeables para alternar (`toggle`) el filtro. Si se presiona desde la vista analítica, conmuta automáticamente a la tabla de clientes.
+  2. **Interactividad Total en Dashboard Analítico (`ClientsDashboard.tsx`)**:
+     - Las 4 tarjetas superiores de KPIs (`Clientes Activos`, `Al Día`, `Con Deuda`, `Honorarios/Mes`) ahora son botones interactivos con hover pointer y badge de activación.
+     - Las 3 barras de Distribución por Régimen (`Régimen General`, `Rimpe Emprendedor`, `Rimpe Negocio Popular`) ahora son clickeables.
+     - Los 6 chips de IVA & Estado General (`IVA Mensual`, `IVA Semestral`, `Exentos`, `Vencidos`, `En Proceso`, `Al Día`) ahora son clickeables.
+     - Al hacer clic en cualquiera de ellos, activa el filtro específico y redirige de inmediato a la vista de tabla para ver a los clientes exactos.
+  3. **Banner Explicativo de Filtro Activo (`QUICK_FILTER_META`)**:
+     - Al activarse cualquier filtro (o 9no dígito), aparece un banner de alto impacto estético (estilo Obsidian/Slate Glass) sobre la lista/tabla.
+     - Explica con claridad cristalina el significado del filtro (título, icono, descripción legal/contable detallada, y conteo exacto de clientes resultantes).
+     - Incluye conmutador rápido entre `Tabla`, `Tarjetas` y `Dashboard`, y botón destacado `[✕ Quitar Filtro]` para regresar a la vista completa con 1 clic.
+  4. **Filtro Rápido por 9no Dígito del RUC**:
+     - Integrado de forma cooperativa con los filtros rápidos: permite filtrar por ejemplo *"Clientes con Deuda"* y simultáneamente *"Dígito 1"* sin conflictos.
+- **Verificación**: `npm run build` en `santiagocordova-main` finalizado con éxito (código de salida 0, `✓ built in 1m 16s`).
+
+---
+
+
+
+## 🏆 2₁. HITOS ANTERIORES (10-SEP-2026)
 
 ### El SRI se está cayendo, y el bot no se enteraba (Claude, commit `f6c91fa`)
 
