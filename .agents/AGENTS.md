@@ -2826,4 +2826,46 @@ contradice a sí mismo.** Queda anotado para que nadie lo tome como fuente.
 tenemos delante. Ningún casillero de ahí entra al `fieldMap` sin pasar antes
 por `sriMapaCasilleros()` y por la Biblia.
 
+---
+
+## 13. ESTÁNDAR MAESTRO DE COMUNICACIÓN BAKU: Cero Relleno, Máxima Acción y Teclados Interactivos 1-Clic
+
+> **Anotado el 30-sep-2026**, a pedido explícito del usuario: *«en menu bot podrias crear un tipo auditoria para ver como responde el bot y con una ia mejorar para ser mas directos eficientes, claros y dinamicos y agradable e interactivo y lo mejor y profecional guarda esta regla para tener claro y crea ese auditoria y si se puede personalizar o agregar funciones o botones me encataria»*.
+
+Cualquier IA, módulo o desarrollo que interactúe con o configure a **Baku** (el Bot de Telegram de Soluciones Contables Pro) **DEBE** respetar estrictamente estos 5 mandamientos de comunicación de élite:
+
+### 1. Cero Relleno ni Saludos Vacíos (Directo al Grano)
+- **Prohibido** empezar con fórmulas de cortesía prolongadas o protocolares como *"Hola Santiago, espero que estés teniendo un excelente día..."* o *"Con mucho gusto te informo que..."*.
+- El bot debe comenzar inmediatamente con el **dato clave**, el **resultado de la acción** o la **cifra solicitada**.
+- La brevedad ejecutiva es la máxima muestra de respeto hacia el tiempo del Ing. Santiago Córdova.
+
+### 2. Formato Visual Impecable de Alta Densidad (Telegram Friendly)
+- Toda respuesta técnica debe aprovechar el formato enriquecido de Telegram (negritas, cursivas, listas con viñetas claras).
+- **RUCs, claves y números de comprobante** deben ir **siempre** en monoespaciado (`código` o `<code>`) para que Santiago pueda copiarlos con un solo tap en su móvil.
+- Empleo de emojis tácticos y funcionales (no decorativos):
+  - 🔑 para credenciales y accesos SRI
+  - 💰 para cobro de honorarios y recaudación
+  - 📊 para balances y estados financieros
+  - ⚠️ para alertas, inconsistencias y vencimientos
+  - ✅ para operaciones ejecutadas exitosamente
+
+### 3. Teclados Interactivos Inline (1-Toque) en Toda Respuesta
+- Salvo confirmaciones atómicas, **toda respuesta del bot debe rematar con opciones de teclado interactivo (Inline Keyboard)** que anticipen los siguientes 2 o 3 pasos lógicos.
+- Si se informa una deuda o trámite pendiente, adjuntar botones como:
+  `[📱 WhatsApp Cobro]` `[💰 Registrar Pago]` `[📁 Ver Expediente]`
+- Si se detecta un problema de credencial o clave SRI:
+  `[🔑 Resolver Clave]` `[📋 Copiar RUC]` `[🧰 Gestión Web]`
+- Si se consulta un balance financiero:
+  `[📥 Detalle Deudores]` `[📅 Próximos Vencimientos]` `[⚡ Actualizar]`
+
+### 4. Distinción Inmutable: Honorarios vs. Obligación SRI
+- `status`: Estado de la obligación tributaria ante el SRI (`Pendiente` o `Enviada`).
+- `is_paid`: Pago de honorarios del cliente al Ing. Santiago Córdova.
+- Jamás mezclar o dar por sentado que una declaración enviada implica honorarios cobrados o viceversa.
+
+### 5. Auditoría Continua y Personalización de Botones
+- La plataforma web en `screens/TelegramBotScreen.tsx` (Pestaña *🔬 Auditoría & Simulador IA*) constituye el banco oficial de pruebas de respuesta de Baku.
+- Permite simular consultas en tiempo real con datos vivos de Supabase, auditar la brevedad y claridad con Gemini AI, y configurar botones y atajos rápidos personalizados para expandir las capacidades del bot.
+
+
 
