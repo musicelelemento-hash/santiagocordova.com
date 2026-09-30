@@ -37,7 +37,8 @@
       "resources": [
         "libs/pdf.worker.mjs",
         "libs/pdf.worker.js",
-        "libs/pdf.mjs"
+        "libs/pdf.mjs",
+        "libs/injected_bypass.js"
       ],
       "matches": [
         "<all_urls>"

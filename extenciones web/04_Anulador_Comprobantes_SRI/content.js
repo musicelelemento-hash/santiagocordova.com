@@ -89,7 +89,7 @@ async function handleSriLoginAutoFillAndFocus() {
 
     if (!isLoginPage) return;
 
-    injectOperatingIndicator("🔴 OPERANDO EN VIVO · Pantalla de Credenciales SRI");
+    injectOperatingIndicator("🔵 Anulador SRI · Pantalla de Credenciales");
 
     const userInput = document.querySelector('#usuario') || 
                       document.querySelector('input[name="usuario"]') || 
@@ -111,36 +111,11 @@ async function handleSriLoginAutoFillAndFocus() {
         userInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['pending_sri_autofill', 'activeClient', 'ruc', 'sriPassword'], (items) => {
-            let rucToFill = items.ruc || (items.activeClient && items.activeClient.ruc) || (items.pending_sri_autofill && items.pending_sri_autofill.ruc) || '';
-            let passToFill = items.sriPassword || (items.activeClient && items.activeClient.sriPassword) || (items.pending_sri_autofill && (items.pending_sri_autofill.password || items.pending_sri_autofill.sriPassword)) || '';
-
-            if (passToFill && passToFill.endsWith('*')) {
-                passToFill = passToFill.slice(0, -1) + '@';
-            }
-
-            if (userInput && rucToFill && !userInput.value) {
-                userInput.value = rucToFill;
-                userInput.dispatchEvent(new Event('input', { bubbles: true }));
-                userInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            if (passInput && passToFill && !passInput.value) {
-                passInput.value = passToFill;
-                passInput.dispatchEvent(new Event('input', { bubbles: true }));
-                passInput.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-
-            setTimeout(() => {
-                if (passInput && passInput.value) {
-                    passInput.focus();
-                } else if (userInput) {
-                    userInput.focus();
-                }
-            }, 400);
-        });
-    }
+    setTimeout(() => {
+        if (userInput) {
+            userInput.focus();
+        }
+    }, 400);
 }
 
 // Ejecutar autodetección de login
@@ -476,8 +451,7 @@ function createUploadWidget() {
         <div class="sri-widget-container" id="sri-widget-box">
             <div class="widget-header">
                 <div class="widget-title-box">
-                    <span class="widget-logo-badge">SC PRO</span>
-                    <span class="widget-title">SRI Anulador HUD</span>
+                    <span class="widget-title">Anulador de Comprobantes SRI</span>
                 </div>
                 <div class="widget-close" id="widget-close">×</div>
             </div>
@@ -669,17 +643,6 @@ function bypassConfirmDialog() {
     let isSubmittingStep1 = false;
     let isSubmittingStep2 = false;
 
-    function syncRecordToWebApp(record) {
-        try {
-            window.postMessage({
-                type: 'SRI_CANCELLATION_SYNC',
-                source: 'SRI_EXTENSION_PRO',
-                data: record
-            }, '*');
-            console.log("SRI Asistente: Registro enviado a SantiagoCordova.com ->", record);
-        } catch(e){}
-    }
-
     function handleBatchItemError(doneItem, errorMsg) {
         chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results', 'sri_cancellation_history'], (resRes) => {
             const queue = resRes.sri_batch_queue || [];
@@ -708,8 +671,6 @@ function bypassConfirmDialog() {
 
             results.push(record);
             history.push(record);
-
-            syncRecordToWebApp(record);
 
             chrome.storage.local.set({ 
                 sri_batch_queue: queue,
@@ -994,8 +955,6 @@ function showProfileMismatchModal(emisorName, emisorRuc, profileName, profileRuc
 
                     results.push(record);
                     history.push(record);
-
-                    syncRecordToWebApp(record);
 
                     chrome.storage.local.set({ 
                         sri_batch_queue: queue,

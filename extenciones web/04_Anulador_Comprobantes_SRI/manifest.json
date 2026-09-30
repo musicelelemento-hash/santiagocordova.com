@@ -1,75 +1,47 @@
 {
   "manifest_version": 3,
-  "name": "🚫 [SC PRO 04] - Anulador Masivo Comprobantes PDF",
-  "version": "2.1.0",
-  "description": "Llenador y procesador automático para solicitud de anulación de comprobantes SRI. Soluciones Tributarias Estratégicas - Santiago Córdova.",
+  "name": "Anulador de Comprobantes SRI",
+  "version": "2.2.0",
+  "description": "Llena automáticamente la solicitud de anulación de comprobantes electrónicos del SRI (Ecuador), extrayendo los datos de tus PDFs.",
   "permissions": [
     "storage",
-    "activeTab",
-    "scripting"
+    "activeTab"
   ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "images.png",
-      "48": "images.png",
-      "128": "images.png"
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
     }
   },
   "icons": {
-    "16": "images.png",
-    "48": "images.png",
-    "128": "images.png"
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   },
   "host_permissions": [
-    "https://srienlinea.sri.gob.ec/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*",
-    "https://*.santiago-cordova.com/*"
+    "https://srienlinea.sri.gob.ec/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://srienlinea.sri.gob.ec/*"
+        "https://srienlinea.sri.gob.ec/*"
       ],
       "js": [
         "content.js"
       ],
       "run_at": "document_end"
-    },
-    {
-      "matches": [
-        "*://srienlinea.sri.gob.ec/*"
-      ],
-      "js": [
-        "libs/injected_bypass.js"
-      ],
-      "world": "MAIN",
-      "run_at": "document_start"
-    },
-    {
-      "matches": [
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-        "https://*.santiago-cordova.com/*",
-        "file:///*"
-      ],
-      "js": [
-        "bridge_content.js"
-      ],
-      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
         "libs/pdf.worker.mjs",
-        "libs/pdf.worker.js",
-        "libs/pdf.mjs",
-        "libs/injected_bypass.js"
+        "libs/pdf.mjs"
       ],
       "matches": [
-        "<all_urls>"
+        "https://srienlinea.sri.gob.ec/*"
       ]
     }
   ]

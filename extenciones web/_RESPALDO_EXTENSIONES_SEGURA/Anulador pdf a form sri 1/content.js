@@ -112,22 +112,23 @@ function initObserver() {
 // ========== WIDGET ==========
 const UI_STATE = { injected: false };
 
-// --- BYPASS SRI CONFIRMATION POPUPS ---
-// Content scripts run in an isolated world. To override window.confirm for the main page,
-// we must inject a standard script tag directly into the DOM so it runs in the page context.
-/* 
-// Bloque deshabilitado temporalmente para evitar errores de CSP en el portal del SRI
-const bypassScript = document.createElement('script');
-bypassScript.textContent = `
-    window.originalConfirm = window.confirm;
-    window.confirm = function(msg) {
-        console.log("SRI Asistente Turbo: Auto-aceptando popup ->", msg);
-        return true; 
-    };
-`;
-(document.head || document.documentElement).appendChild(bypassScript);
-bypassScript.remove(); 
-*/
+// --- BYPASS SRI CONFIRMATION POPUPS (MAIN WORLD) ---
+// El bypass NO se inyecta como texto inline (lo bloquea la CSP del portal).
+// Se carga como <script src> externo vía web_accessible_resources, que sí pasa
+// la CSP, y sobreescribe window.confirm en el contexto de la página.
+function injectMainWorldBypass() {
+    if (document.getElementById('sri-bypass-script')) return;
+    try {
+        const script = document.createElement('script');
+        script.id = 'sri-bypass-script';
+        script.src = chrome.runtime.getURL('libs/injected_bypass.js');
+        (document.head || document.documentElement).appendChild(script);
+        console.log("SRI Asistente: Main World Bypass inyectado correctamente");
+    } catch (e) {
+        console.error("SRI Asistente: Error inyectando script bypass", e);
+    }
+}
+injectMainWorldBypass();
 
 function createUploadWidget() {
     const widget = document.createElement('div');
