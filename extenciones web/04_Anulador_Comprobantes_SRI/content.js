@@ -15,9 +15,10 @@ let pdfjsLib = null;
         pdfjsLib = module;
         pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('libs/pdf.worker.mjs');
         console.log("SRI Asistente: Librería PDF cargada correctamente");
-        initObserver();
     } catch (e) {
         console.error("SRI AsistenteError: No se pudo cargar pdf.mjs", e);
+    } finally {
+        initObserver();
     }
 })();
 
@@ -639,6 +640,100 @@ function bypassConfirmDialog() {
     } catch (e) { console.warn("Confirm bypass warning:", e); }
 }
 
+function iniciarPollerResultadoAnulacion() {
+    if (window.sriPoller) clearInterval(window.sriPoller);
+    
+    let intentos = 0;
+    const maxIntentos = 50; // ~30 segundos
+    console.log("⚡ [SC SUITE ANULADOR] Poller iniciado: esperando confirmación AJAX del SRI...");
+    
+    window.sriPoller = setInterval(() => {
+        intentos++;
+        
+        // 1. Selector prioritario: span.ui-messages-fatal-summary o mensajes JSF
+        const msgSummary = document.querySelector('.ui-messages-fatal-summary, .ui-messages-info-summary, .ui-messages-error-summary, [id*="messages"], .sri-mensaje');
+        const fullBodyText = (msgSummary ? msgSummary.innerText : '') + ' ' + (document.body ? document.body.innerText : '');
+        
+        // Detección de ÉXITO
+        if (fullBodyText.includes('enviada con éxito') || fullBodyText.includes('estado ANULADO')) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            
+            console.log("🎉 [SC SUITE ANULADOR] ¡Confirmación de ÉXITO recibida del SRI!");
+            const claveMatch = fullBodyText.match(/\b\d{49}\b/);
+            const claveAnulada = claveMatch ? claveMatch[0] : '';
+            
+            setButtonState('success', '<span>✨</span> ¡ANULADO CON ÉXITO!');
+            if (typeof injectOperatingIndicator === 'function') {
+                injectOperatingIndicator(`🎉 Comprobante ANULADO con éxito${claveAnulada ? ': ' + claveAnulada.slice(-8) : ''}`);
+            }
+            
+            chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results', 'sri_cancellation_history'], (resRes) => {
+                const queue = resRes.sri_batch_queue || [];
+                const results = resRes.sri_batch_results || [];
+                const history = resRes.sri_cancellation_history || [];
+                const doneItem = queue.shift() || {};
+
+                const record = {
+                    claveAcceso: claveAnulada || doneItem.claveAcceso,
+                    facturaDisplay: doneItem.facturaDisplay || (doneItem.claveAcceso ? doneItem.claveAcceso.substring(24, 39) : 'N/A'),
+                    receptorRuc: doneItem.idReceptor,
+                    receptorNombre: doneItem.razonSocial || 'Cliente',
+                    receptorEmail: doneItem.email,
+                    fecha: doneItem.fecha,
+                    monto: doneItem.importeTotal || '0.00',
+                    status: 'SUCCESS',
+                    message: 'Anulada con éxito en portal SRI',
+                    timestamp: new Date().toISOString()
+                };
+
+                results.push(record);
+                history.push(record);
+
+                chrome.storage.local.set({ 
+                    sri_batch_queue: queue,
+                    sri_batch_results: results,
+                    sri_cancellation_history: history
+                }, () => {
+                    isSubmittingStep1 = false;
+                    isSubmittingStep2 = false;
+                    if (queue.length > 0) {
+                        setButtonState('success', `✅ Factura ${results.length} lista. Siguiente...`);
+                        setTimeout(() => {
+                            window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf';
+                        }, 1200);
+                    } else {
+                        chrome.storage.local.set({ sri_active_batch: false });
+                        showFinalReport();
+                    }
+                });
+            });
+            return;
+        }
+
+        // Detección de ERROR en confirmación
+        if (fullBodyText.includes('no corresponde a un Comprobante') || fullBodyText.includes('Error al procesar') || fullBodyText.includes('no se encuentra autorizado')) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            console.warn("⚠️ [SC SUITE ANULADOR] Error reportado por SRI durante el envío");
+            chrome.storage.local.get(['sri_batch_queue'], (res) => {
+                const queue = res.sri_batch_queue || [];
+                if (queue.length > 0) {
+                    handleBatchItemError(queue[0], 'Error en confirmación SRI: Comprobante no autorizado o ya anulado');
+                }
+            });
+            return;
+        }
+
+        if (intentos >= maxIntentos) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            console.warn("⏱️ [SC SUITE ANULADOR] Timeout esperando respuesta de anulación AJAX.");
+            setButtonState('idle', '⏱️ Tiempo de espera agotado');
+        }
+    }, 600);
+}
+
     let lastFilledClaveAcceso = '';
     let isSubmittingStep1 = false;
     let isSubmittingStep2 = false;
@@ -854,11 +949,18 @@ function showProfileMismatchModal(emisorName, emisorRuc, profileName, profileRuc
             isSubmittingStep2 = true;
             bypassConfirmDialog();
             
-            btnEnviar.setAttribute('onclick', 'RichFaces.ajax("frmPrincipal:btnEnviar",event,{"incId":"1"});return false;');
+            const originalOnClick = btnEnviar.getAttribute('onclick') || '';
+            if (originalOnClick.includes('confirm')) {
+                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
+                btnEnviar.setAttribute('onclick', cleanOnClick);
+            } else {
+                btnEnviar.setAttribute('onclick', 'RichFaces.ajax("frmPrincipal:btnEnviar",event,{"incId":"1"});return false;');
+            }
             setButtonState('verifying', '<span>🚀</span> Enviando solicitud final...');
             
             setTimeout(() => {
                 try { btnEnviar.click(); } catch(e){}
+                iniciarPollerResultadoAnulacion();
                 setTimeout(() => { isSubmittingStep2 = false; }, 4000);
             }, 300);
             return;
@@ -1360,17 +1462,31 @@ function checkBatchStatus() {
         if (btnEnviar) {
             updateProgressBar(2);
             setButtonState('confirming', `🚀 Confirmar ${index}/${total}`);
-            fillForm(current);
+            if (typeof injectOperatingIndicator === 'function') {
+                injectOperatingIndicator(`🚀 Confirmando anulación ${index}/${total}`);
+            }
+
+            const originalOnClick = btnEnviar.getAttribute('onclick') || '';
+            if (originalOnClick.includes('confirm')) {
+                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
+                btnEnviar.setAttribute('onclick', cleanOnClick);
+            }
+
             setTimeout(() => {
-                const processBtn = document.getElementById('btn-process');
-                if (processBtn) processBtn.click();
-            }, 1000); // Auto-fire!
+                console.log("⚡ [SC SUITE ANULADOR] Ejecutando envío de confirmación...");
+                try { btnEnviar.click(); } catch(e){}
+                setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
+                iniciarPollerResultadoAnulacion();
+            }, 800);
             return;
         }
 
-        // 2. Detect AJAX Success explicitly if page was reloaded by chance
-        if (bodyText.includes('enviada con éxito')) {
-            // Usually handled by poller, but just in case
+        // 2. Detectar Éxito si la página ya lo cargó
+        if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO')) {
+            console.log("🎉 [SC SUITE ANULADOR] Éxito detectado en pantalla en checkBatchStatus.");
+            const claveMatch = bodyText.match(/\b\d{49}\b/);
+            saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveMatch ? claveMatch[0] : (current ? current.claveAcceso : ''));
+            return;
         }
 
         // 3. Standard Form Start
@@ -1864,8 +1980,8 @@ async function fillForm(data) {
                             document.querySelector('input[id*="ClaveAcceso"]');
         await fillInput(inputClave, data.claveAcceso);
 
-        // 4. NO. AUTORIZACIÓN
-        const validAuthKey = (data.numAutorizacion && data.numAutorizacion.length >= 37) ? data.numAutorizacion : data.claveAcceso;
+        // 4. NO. AUTORIZACIÓN (En Ecuador es exactamente la clave de acceso de 49 dígitos)
+        const validAuthKey = (data.claveAcceso && data.claveAcceso.length === 49) ? data.claveAcceso : ((data.numAutorizacion && data.numAutorizacion.length >= 37) ? data.numAutorizacion : (data.claveAcceso || ''));
         const inputAuth = document.getElementById('frmPrincipal:itxtNoAutorizacion') ||
                            document.querySelector('input[id*="NoAutorizacion"]');
         await fillInput(inputAuth, validAuthKey);

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "⚡ [SC MOTOR PRO] Anulador SRI — Llenador & Envío Bucle",
-  "version": "2.5.0",
-  "description": "Motor oficial de anulación de comprobantes SRI: extracción de PDFs, auto-llenado con clave de 49 dígitos, confirmación y envío automático en bucle. Santiago Córdova.",
+  "name": "SRI Llenador - Anulación de Comprobantes",
+  "version": "1.0",
+  "description": "Llenador automático para solicitud de anulación de comprobantes. Soluciones Tributarias Estratégicas - Santiago Córdova.",
   "permissions": [
     "storage",
     "activeTab",
@@ -22,16 +22,6 @@
     "128": "images.png"
   },
   "content_scripts": [
-    {
-      "matches": [
-        "*://srienlinea.sri.gob.ec/*"
-      ],
-      "js": [
-        "libs/injected_bypass.js"
-      ],
-      "world": "MAIN",
-      "run_at": "document_start"
-    },
     {
       "matches": [
         "*://srienlinea.sri.gob.ec/*"

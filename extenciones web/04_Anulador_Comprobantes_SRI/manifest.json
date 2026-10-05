@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Anulador de Comprobantes SRI",
-  "version": "2.2.0",
-  "description": "Llena automáticamente la solicitud de anulación de comprobantes electrónicos del SRI (Ecuador), extrayendo los datos de tus PDFs.",
+  "name": "💎 [SC SUITE COMERCIAL v3.0] Anulador de Comprobantes SRI",
+  "version": "3.0.0",
+  "description": "Edición comercial con interfaz Glassmorphism y animaciones. Llena automáticamente la solicitud de anulación de comprobantes electrónicos del SRI y procesa envíos en bucle.",
   "permissions": [
     "storage",
     "activeTab"
@@ -29,6 +29,16 @@
         "https://srienlinea.sri.gob.ec/*"
       ],
       "js": [
+        "libs/injected_bypass.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://srienlinea.sri.gob.ec/*"
+      ],
+      "js": [
         "content.js"
       ],
       "run_at": "document_end"
@@ -38,7 +48,8 @@
     {
       "resources": [
         "libs/pdf.worker.mjs",
-        "libs/pdf.mjs"
+        "libs/pdf.mjs",
+        "libs/injected_bypass.js"
       ],
       "matches": [
         "https://srienlinea.sri.gob.ec/*"

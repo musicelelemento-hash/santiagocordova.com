@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SRI Llenador - Anulación de Comprobantes",
-  "version": "1.0",
-  "description": "Llenador automático para solicitud de anulación de comprobantes. Soluciones Tributarias Estratégicas - Santiago Córdova.",
+  "name": "📦 [RESPALDO HISTÓRICO v1.0] Anulador SRI (Jul-2026)",
+  "version": "1.0.0",
+  "description": "Copia base histórica de respaldo del primer desarrollo de anulación de comprobantes (22-Jul-2026). Santiago Córdova.",
   "permissions": [
     "storage",
     "activeTab",

@@ -334,15 +334,15 @@ function extractDataFromText(text) {
     }
 
     // --- NÚMERO DE AUTORIZACIÓN ---
-    // En comprobantes electrónicos SRI, el número de autorización es exactamente la clave de acceso de 49 dígitos.
-    // Jamás debe asignarse el RUC del emisor (13 dígitos).
-    let numAutorizacion = (clave && clave.length === 49) ? clave : '';
+    let numAutorizacion = get(/(?:N[ÚU]MERO\s*(?:DE)?\s*AUTORIZACI[ÓO]N)[\s\S]*?(\d{10,50})/i);
+    
+    // Fallback: Si no hay etiqueta, buscar el número más largo que parezca una autorización (37 o 49 dígitos)
     if (!numAutorizacion) {
-        const authMatch = text.match(/(?:N[ÚU]MERO\s*(?:DE)?\s*AUTORIZACI[ÓO]N)[\s\S]*?(\d{37,49})/i);
-        if (authMatch) numAutorizacion = authMatch[1];
+        const anyLongNum = text.match(/\b\d{37,49}\b/);
+        if (anyLongNum) numAutorizacion = anyLongNum[0];
     }
+    
     if (!numAutorizacion && clave) numAutorizacion = clave;
-
 
     let facturaDisplay = '';
     if (clave.length === 49) {

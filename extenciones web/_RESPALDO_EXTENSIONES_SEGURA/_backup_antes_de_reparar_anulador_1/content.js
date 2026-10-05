@@ -21,79 +21,6 @@ let pdfjsLib = null;
     }
 })();
 
-// ========== INDICADOR VISUAL FLOTANTE (ANIMACIONES ELITE) ==========
-function injectOperatingIndicator(statusMsg, type = 'running') {
-    let indicator = document.getElementById('sri-operating-indicator-root');
-    if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.id = 'sri-operating-indicator-root';
-        indicator.style.cssText = `
-            position: fixed;
-            top: 15px;
-            right: 25px;
-            background: rgba(15, 23, 42, 0.94);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(239, 68, 68, 0.6);
-            border-radius: 30px;
-            padding: 10px 20px;
-            z-index: 9999999;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            box-shadow: 0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(239, 68, 68, 0.35);
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            color: white;
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            transition: all 0.3s ease;
-        `;
-        indicator.innerHTML = `
-            <style>
-                @keyframes pulse-dot-anulador {
-                    0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-                    70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-                    100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-                }
-                .sri-pulse-dot-anulador {
-                    width: 12px;
-                    height: 12px;
-                    background-color: #ef4444;
-                    border-radius: 50%;
-                    animation: pulse-dot-anulador 1.2s infinite ease-in-out;
-                    display: inline-block;
-                    flex-shrink: 0;
-                    transition: background-color 0.3s ease;
-                }
-            </style>
-            <span class="sri-pulse-dot-anulador" id="sri-pulse-dot"></span>
-            <span id="sri-operating-text">${statusMsg}</span>
-            <button id="btnHideSriOperating" style="background: rgba(255,255,255,0.1); border: none; color: #94a3b8; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 5px;">✕</button>
-        `;
-        document.body.appendChild(indicator);
-        document.getElementById('btnHideSriOperating')?.addEventListener('click', () => indicator.remove());
-    }
-    const textEl = document.getElementById('sri-operating-text');
-    if (textEl) textEl.textContent = statusMsg;
-    const dot = document.getElementById('sri-pulse-dot');
-    if (dot) {
-        if (type === 'success') {
-            dot.style.backgroundColor = '#10b981';
-            indicator.style.borderColor = 'rgba(16, 185, 129, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(16, 185, 129, 0.35)';
-        } else if (type === 'working') {
-            dot.style.backgroundColor = '#f59e0b';
-            indicator.style.borderColor = 'rgba(245, 158, 11, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(245, 158, 11, 0.35)';
-        } else {
-            dot.style.backgroundColor = '#ef4444';
-            indicator.style.borderColor = 'rgba(239, 68, 68, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(239, 68, 68, 0.35)';
-        }
-    }
-}
-
 // ========== OBSERVER & INJECTION ==========
 function initObserver() {
     if (document.getElementById('sri-upload-widget')) return;
@@ -143,20 +70,18 @@ function initObserver() {
         // 3. MENU PAGE LOGIC (Auto-Nav - Authorized Only)
         // User Request: "Enter the first option... and THERE ask for the pdf"
         if (menuLink && !hasFormFields) {
-            chrome.storage.local.get(['sri_auto_nav', 'sri_active_batch', 'sri_batch_queue'], (result) => {
+            chrome.storage.local.get(['sri_auto_nav'], (result) => {
                 const auth = result.sri_auto_nav;
-                const queue = result.sri_batch_queue || [];
-                const isBatchActive = result.sri_active_batch && queue.length > 0;
-                const isAuth = (auth && auth.target === 'solicitud_anulacion' && (Date.now() - auth.timestamp) < 60000) || isBatchActive;
+                const isAuth = auth && auth.target === 'solicitud_anulacion' && (Date.now() - auth.timestamp) < 60000;
 
                 if (isAuth) {
                     // AUTHORIZED: Auto-Navigate
                     const loader = document.createElement('div');
                     loader.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);z-index:999999;display:flex;justify-content:center;align-items:center;flex-direction:column;`;
-                    loader.innerHTML = `<div style="font-size:40px;">🚀</div><div style="margin-top:20px;font-family:sans-serif;color:#2563eb;font-weight:bold;">${isBatchActive ? `Procesando lote: siguiente factura (${queue.length} restantes)...` : 'Entrando a Solicitud...'}</div>`;
+                    loader.innerHTML = `<div style="font-size:40px;">🚀</div><div style="margin-top:20px;font-family:sans-serif;color:#2563eb;font-weight:bold;">Entrando a Solicitud...</div>`;
                     document.body.appendChild(loader);
 
-                    if (auth) chrome.storage.local.remove('sri_auto_nav');
+                    chrome.storage.local.remove('sri_auto_nav');
                     setTimeout(() => menuLink.click(), 500);
                 }
 
@@ -449,165 +374,62 @@ function createUploadWidget() {
         }
     }
 
-    function saveResultAndContinue(status, message, claveConfirmada = '') {
+    function saveResultAndContinue(status, message) {
         setButtonState('verifying', '<span>💾</span> Guardando resultado...');
-        chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results', 'sri_anulaciones_historial'], (res) => {
+        chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results'], (res) => {
             const queue = res.sri_batch_queue || [];
             const results = res.sri_batch_results || [];
-            const historial = res.sri_anulaciones_historial || [];
-            
-            const currentItem = queue.length > 0 ? queue[0] : (window.__sriLastProcessedItem || null);
-            const claveFinal = claveConfirmada || (currentItem ? currentItem.claveAcceso : '');
-            
-            const resultadoItem = {
-                item: currentItem,
-                clave: claveFinal,
-                status: status,
-                message: message,
-                fecha: new Date().toISOString(),
-                timestamp: Date.now()
-            };
-            
-            results.push(resultadoItem);
-            historial.push(resultadoItem);
             
             if (queue.length > 0) {
+                const currentItem = queue[0];
+                results.push({
+                    item: currentItem,
+                    status: status,
+                    message: message
+                });
+                
                 const nextQueue = queue.slice(1);
                 if (nextQueue.length > 0) {
-                    chrome.storage.local.set({ 
-                        sri_batch_queue: nextQueue, 
-                        sri_batch_results: results,
-                        sri_anulaciones_historial: historial,
-                        sri_active_batch: true
-                    }, () => {
-                        setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✅ Avanzando al siguiente...' : '⚠️ Avanzando...');
-                        if (typeof injectOperatingIndicator === 'function') {
-                            injectOperatingIndicator(`⏳ Avanzando a siguiente factura (${nextQueue.length} restantes)...`, 'working');
-                        }
-                        setTimeout(() => {
-                            window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf';
-                        }, 1200);
+                    chrome.storage.local.set({ sri_batch_queue: nextQueue, sri_batch_results: results }, () => {
+                        setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✅ Avanzando...' : '⚠️ Avanzando...');
+                        setTimeout(() => window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf', 1500);
                     });
                 } else {
-                    chrome.storage.local.set({ 
-                        sri_batch_queue: [], 
-                        sri_batch_results: results,
-                        sri_anulaciones_historial: historial,
-                        sri_active_batch: false 
-                    }, () => {
+                    chrome.storage.local.set({ sri_batch_queue: [], sri_batch_results: results }, () => {
                         setButtonState('success', '✨ Lote Completado');
-                        if (typeof injectOperatingIndicator === 'function') {
-                            injectOperatingIndicator('🎉 ¡Todas las solicitudes fueron procesadas con éxito!', 'success');
-                        }
                         setTimeout(showFinalReport, 1000);
                     });
                 }
-            } else {
-                // Caso documento individual
-                chrome.storage.local.set({ 
-                    sri_batch_results: results,
-                    sri_anulaciones_historial: historial
-                }, () => {
-                    setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✨ Anulado con éxito' : '❌ Falló anulación');
-                });
             }
         });
     }
 
-    // Poller activo para capturar la respuesta AJAX de RichFaces tras pulsar btnEnviar
-    function iniciarPollerResultadoAnulacion() {
-        if (window.sriPoller) clearInterval(window.sriPoller);
-        
-        let intentos = 0;
-        const maxIntentos = 50; // ~30 segundos
-        console.log("👀 [ANULADOR SRI] Poller iniciado: esperando confirmación AJAX del SRI...");
-        
-        window.sriPoller = setInterval(() => {
-            intentos++;
-            
-            // 1. Selector prioritario reportado por el usuario: span.ui-messages-fatal-summary o mensajes JSF
-            const msgSummary = document.querySelector('.ui-messages-fatal-summary, .ui-messages-info-summary, .ui-messages-error-summary, [id*="messages"], .sri-mensaje');
-            const fullBodyText = (msgSummary ? msgSummary.innerText : '') + ' ' + (document.body ? document.body.innerText : '');
-            
-            // Detección de ÉXITO
-            if (fullBodyText.includes('enviada con éxito') || fullBodyText.includes('estado ANULADO')) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                
-                console.log("🎉 [ANULADOR SRI] ¡Confirmación de ÉXITO recibida del SRI!");
-                const claveMatch = fullBodyText.match(/\b\d{49}\b/);
-                const claveAnulada = claveMatch ? claveMatch[0] : '';
-                
-                setButtonState('success', '<span>✅</span> ¡ANULADO CON ÉXITO!');
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`🟢 Comprobante ANULADO con éxito${claveAnulada ? ': ' + claveAnulada.slice(-8) : ''}`, 'success');
-                }
-                
-                saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveAnulada);
-                return;
-            }
-            
-            // Detección de ERROR
-            if (fullBodyText.includes('ha ocurrido un error') || fullBodyText.includes('no se encuentra autorizado') || fullBodyText.includes('ya se encuentra anulado') || fullBodyText.includes('no corresponde al emisor')) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                
-                const errDetalle = msgSummary ? msgSummary.innerText : 'Error reportado por el SRI';
-                console.warn("⚠️ [ANULADOR SRI] Error en respuesta del SRI:", errDetalle);
-                setButtonState('error', '<span>❌</span> Error SRI');
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`🔴 Error: ${errDetalle.slice(0, 35)}...`, 'error');
-                }
-                saveResultAndContinue('error', errDetalle);
-                return;
-            }
-            
-            if (intentos >= maxIntentos) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                console.warn("⏱️ [ANULADOR SRI] Timeout esperando respuesta de anulación.");
-                setButtonState('error', '<span>⚠️</span> Tiempo agotado');
-            }
-        }, 600);
-    }
-
     async function startProcessingItem(data) {
         if (!data) return;
-        window.__sriLastProcessedItem = data;
         setButtonState('processing', '<span>⚙️</span> Vinculando datos...');
         
-        // --- PASO 2: Pantalla de Confirmación con Botón Enviar ---
+        // --- PASO 2: Confirmación Final ---
         const btnEnviar = document.getElementById('frmPrincipal:btnEnviar');
         if (btnEnviar) {
-            console.log("⚡ [ANULADOR SRI] Pantalla de confirmación con btnEnviar detectada.");
-            setButtonState('confirming', '<span>🚀</span> Confirmando anulación...');
-            if (typeof injectOperatingIndicator === 'function') {
-                injectOperatingIndicator("🚀 Confirmando anulación en el SRI...", "working");
-            }
-            
-            // Bypass confirm en el onclick de RichFaces
+            console.log("SRI Asistente: Pantalla de confirmación detectada.");
+            // Hack para saltar el confirm() de RichFaces/JSF
             const originalOnClick = btnEnviar.getAttribute('onclick') || '';
             if (originalOnClick.includes('confirm')) {
-                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
+                const cleanOnClick = originalOnClick.replace(/if\(!confirm\(.*?\)\)return false;/, '/* confirm bypassed */');
                 btnEnviar.setAttribute('onclick', cleanOnClick);
             }
-            
             setTimeout(() => {
-                console.log("⚡ [ANULADOR SRI] Haciendo clic en btnEnviar...");
                 btnEnviar.click();
-                setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
-                iniciarPollerResultadoAnulacion();
-            }, 800);
+                setButtonState('verifying', '<span>👁️</span> Enviando solicitud...');
+            }, 1000);
             return;
         }
 
         // --- PASO 1: Llenado de Formulario ---
         const formInput = document.getElementById('frmPrincipal:itxtClaveAcceso');
         if (formInput) {
+            // Si el campo está vacío, llenamos. Si ya tiene datos, esperamos.
             if (!formInput.value) {
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`📝 Llenando solicitud de anulación...`, 'working');
-                }
                 await fillForm(data);
             } else {
                 console.log("SRI Asistente: El formulario ya parece estar lleno.");
@@ -626,14 +448,28 @@ function createUploadWidget() {
                 return;
             }
 
-            const bodyText = document.body ? document.body.innerText : '';
+            const bodyText = document.body.innerText;
             
-            // 1. Detectar Éxito si la página ya lo mostraba
+            // 1. Detectar Éxito
             if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO')) {
-                console.log("SRI Asistente: Éxito detectado en pantalla. Guardando y avanzando...");
-                const doneItem = queue[0];
-                const claveMatch = bodyText.match(/\b\d{49}\b/);
-                saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveMatch ? claveMatch[0] : (doneItem ? doneItem.claveAcceso : ''));
+                console.log("SRI Asistente: Éxito detectado. Pasando al siguiente...");
+                const doneItem = queue.shift(); 
+                
+                chrome.storage.local.get(['sri_batch_results'], (resRes) => {
+                    const results = resRes.sri_batch_results || [];
+                    results.push({
+                        clave: doneItem.claveAcceso,
+                        status: 'SUCCESS',
+                        msg: 'Anulado con éxito'
+                    });
+                    
+                    chrome.storage.local.set({ 
+                        sri_batch_queue: queue,
+                        sri_batch_results: results
+                    }, () => {
+                        window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf';
+                    });
+                });
                 return;
             }
 
@@ -820,39 +656,25 @@ function checkBatchStatus() {
         const current = queue[0];
         const index = total - queue.length + 1;
 
-        console.log(`⚡ [ANULADOR SRI] Estado de Lote: ${index}/${total}`);
+        console.log(`SRI Asistente: Batch Status ${index}/${total}`);
 
-        // 1. Detectar Pantalla de Confirmación (Paso 2 con btnEnviar)
+        // 1. Detect Confirmation Page Step 2
         const btnEnviar = document.getElementById('frmPrincipal:btnEnviar');
-        const bodyText = document.body ? document.body.innerText : '';
+        const bodyText = document.body.innerText;
 
         if (btnEnviar) {
             setButtonState('confirming', `🚀 Confirmar ${index}/${total}`);
-            if (typeof injectOperatingIndicator === 'function') {
-                injectOperatingIndicator(`🚀 Confirmando anulación ${index}/${total}`, 'working');
-            }
-            
-            const originalOnClick = btnEnviar.getAttribute('onclick') || '';
-            if (originalOnClick.includes('confirm')) {
-                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
-                btnEnviar.setAttribute('onclick', cleanOnClick);
-            }
-            
+            fillForm(current);
             setTimeout(() => {
-                console.log("⚡ [ANULADOR SRI] Ejecutando envío de confirmación...");
-                btnEnviar.click();
-                setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
-                iniciarPollerResultadoAnulacion();
-            }, 800);
+                const processBtn = document.getElementById('btn-process');
+                if (processBtn) processBtn.click();
+            }, 1000); // Auto-fire!
             return;
         }
 
-        // 2. Detectar Éxito si la página ya lo cargó
-        if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO')) {
-            console.log("🎉 [ANULADOR SRI] Éxito detectado en pantalla en checkBatchStatus.");
-            const claveMatch = bodyText.match(/\b\d{49}\b/);
-            saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveMatch ? claveMatch[0] : (current ? current.claveAcceso : ''));
-            return;
+        // 2. Detect AJAX Success explicitly if page was reloaded by chance
+        if (bodyText.includes('enviada con éxito')) {
+            // Usually handled by poller, but just in case
         }
 
         // 3. Standard Form Start
@@ -1107,15 +929,15 @@ function extractData(text) {
     }
 
     // --- NÚMERO DE AUTORIZACIÓN ---
-    // En comprobantes electrónicos SRI, el número de autorización es exactamente la clave de acceso de 49 dígitos.
-    // Jamás debe asignarse el RUC del emisor (13 dígitos).
-    let auth = (clave && clave.length === 49) ? clave : '';
+    let auth = get(/(?:N[ÚU]MERO\s*(?:DE)?\s*AUTORIZACI[ÓO]N)[\s\S]*?(\d{10,50})/i);
+    
+    // Fallback: Si no hay etiqueta, buscar el número más largo que parezca una autorización (37 o 49 dígitos)
     if (!auth) {
-        const authMatch = text.match(/(?:N[ÚU]MERO\s*(?:DE)?\s*AUTORIZACI[ÓO]N)[\s\S]*?(\d{37,49})/i);
-        if (authMatch) auth = authMatch[1];
+        const anyLongNum = text.match(/\b\d{37,49}\b/);
+        if (anyLongNum) auth = anyLongNum[0];
     }
+    
     if (!auth && clave) auth = clave;
-
 
     // Extract Sequential (Invoice Number)
     let facturaDisplay = '';
@@ -1337,9 +1159,7 @@ function fillForm(data) {
         await set('tipoComprobante', data.tipoComprobante);
         await set('fechaAutorizacion', data.fecha);
         await set('claveAcceso', data.claveAcceso);
-        // REGLA OBLIGATORIA: En No. Autorización va exactamente la misma Clave de Acceso de 49 dígitos
-        const authAsegurada = (data.claveAcceso && data.claveAcceso.length === 49) ? data.claveAcceso : (data.numAutorizacion || data.claveAcceso);
-        await set('noAutorizacion', authAsegurada);
+        await set('noAutorizacion', data.numAutorizacion);
         await set('Identificacion', data.idReceptor);
         await set('CorreoElectronico', data.email);
         
