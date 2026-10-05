@@ -1141,6 +1141,7 @@ async function cerrarSesionSRI(force = false) {
   console.log(
     "🔒 [LOGOUT] Cerrando sesión SRI con purga extrema (Cierre Limpio Radical)...",
   );
+  clearCapturedPdf('cerrarSesionSRI');
   await anotarBitacora('cierra sesión', force ? 'forzado' : 'fin de cliente');
 
   // 1. Destrucción de Caché (Bomba de Memoria)
@@ -1236,6 +1237,50 @@ async function cerrarSesionSRI(force = false) {
 // MOTOR MULTISISTEMA DE INTERCEPTACIÓN Y CAPTURA DE PDF OFICIAL SRI
 // ============================================================
 let capturedPdfBase64 = null;
+let capturedPdfRuc = null;
+let capturedPdfPeriod = null;
+
+function getActiveClientRuc() {
+  try {
+    if (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function') {
+      const info = window.sriAssistant.extractClientInfo();
+      if (info && info.ruc && /^\d{10,13}$/.test(String(info.ruc).trim())) {
+        return String(info.ruc).trim();
+      }
+    }
+  } catch (e) {}
+  try {
+    const el = document.querySelector('[id*="ruc"], [name*="ruc"], #lblRuc, .ruc-usuario, #usuario');
+    if (el) {
+      const val = (el.value || el.textContent || '').match(/\b(0[1-9]\d{8,11})\b/);
+      if (val && val[1]) return val[1];
+    }
+  } catch (e) {}
+  return null;
+}
+
+function setCapturedPdf(base64, origen = "") {
+  if (!base64 || typeof base64 !== "string") return;
+  capturedPdfBase64 = base64;
+  capturedPdfRuc = getActiveClientRuc();
+  console.log(
+    `📄 [PDF CAPTURE] ¡PDF Oficial SRI capturado mediante ${origen}! Tamaño: ${base64.length} chars | RUC activo: ${capturedPdfRuc || 'desconocido'}`
+  );
+}
+
+function clearCapturedPdf(motivo = "") {
+  if (capturedPdfBase64) {
+    console.log(
+      `🧹 [PDF PURGE] Limpiando PDF capturado en memoria (${capturedPdfBase64.length} chars, RUC: ${capturedPdfRuc || 'desconocido'}). Motivo: ${motivo || 'desconocido'}`
+    );
+  }
+  capturedPdfBase64 = null;
+  capturedPdfRuc = null;
+  capturedPdfPeriod = null;
+}
+if (typeof window !== "undefined") {
+  window.sriLimpiarPdfMemoria = clearCapturedPdf;
+}
 
 // Helper para convertir Blob a Base64
 function blobToBase64(blob) {
@@ -1263,11 +1308,7 @@ try {
             base64 &&
             (base64.startsWith("data:application/pdf") || base64.length > 5000)
           ) {
-            capturedPdfBase64 = base64;
-            console.log(
-              "📄 [PDF INTERCEPTOR] ¡PDF Oficial SRI capturado mediante createObjectURL! Tamaño:",
-              capturedPdfBase64.length,
-            );
+            setCapturedPdf(base64, "createObjectURL");
           }
         })
         .catch((e) => console.warn("Error convirtiendo Blob:", e));
@@ -1299,11 +1340,7 @@ try {
           if (blob && blob.size > 2000) {
             blobToBase64(blob).then((base64) => {
               if (base64 && base64.startsWith("data:application/pdf")) {
-                capturedPdfBase64 = base64;
-                console.log(
-                  "📄 [PDF INTERCEPTOR] ¡PDF Oficial SRI capturado mediante XHR! Tamaño:",
-                  capturedPdfBase64.length,
-                );
+                setCapturedPdf(base64, "XHR");
               }
             });
           }
@@ -1332,11 +1369,7 @@ try {
         if (blob && blob.size > 2000) {
           const base64 = await blobToBase64(blob);
           if (base64 && base64.startsWith("data:application/pdf")) {
-            capturedPdfBase64 = base64;
-            console.log(
-              "📄 [PDF INTERCEPTOR] ¡PDF Oficial SRI capturado mediante Fetch! Tamaño:",
-              capturedPdfBase64.length,
-            );
+            setCapturedPdf(base64, "Fetch");
           }
         }
       }
@@ -1362,11 +1395,7 @@ try {
         .then(async (blob) => {
           const base64 = await blobToBase64(blob);
           if (base64 && base64.startsWith("data:application/pdf")) {
-            capturedPdfBase64 = base64;
-            console.log(
-              "✅ [PDF INTERCEPTOR] PDF Base64 capturado exitosamente en window.open. Longitud:",
-              capturedPdfBase64.length,
-            );
+            setCapturedPdf(base64, "window.open");
           }
         })
         .catch((e) =>
@@ -1408,11 +1437,7 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
         if (blob && blob.size > 2000) {
           const base64 = await blobToBase64(blob);
           if (base64 && base64.startsWith("data:application/pdf")) {
-            capturedPdfBase64 = base64;
-            console.log(
-              "✅ [PDF SCRAPER] ¡PDF Oficial SRI capturado exitosamente desde el DOM! Tamaño:",
-              capturedPdfBase64.length,
-            );
+            setCapturedPdf(base64, "DOM Element");
             return true;
           }
         }
@@ -1482,11 +1507,7 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
           ) {
             const base64 = await blobToBase64(blob);
             if (base64 && base64.startsWith("data:application/pdf")) {
-              capturedPdfBase64 = base64;
-              console.log(
-                "✅ [PDF MASTER] ¡PDF Genuino SRI capturado con Fetch FormData! Tamaño:",
-                capturedPdfBase64.length,
-              );
+              setCapturedPdf(base64, "Fetch FormData");
 
               // Forzar descarga local para el usuario ya que interceptamos el botón nativo
               try {
@@ -2007,15 +2028,34 @@ async function syncDeclarationToSupabase(
   // u otro tipo, lo ignoramos en vez de romper .includes()/.split() más abajo.
   if (typeof pdfContentBase64 !== "string" || !pdfContentBase64) pdfContentBase64 = null;
 
-  // Esperar activamente hasta 8 segundos a que los interceptores de 5 capas capturen el PDF OFICIAL REAL del SRI
-  let realPdf = pdfContentBase64 || capturedPdfBase64;
+  // 🛡️ BLINDAJE CONTRA CONTAMINACIÓN CRUZADA DE COMPROBANTES:
+  // Si la declaración tiene saldo a pagar o inconsistencias, NO SE ENVIÓ AL SRI.
+  // Por ende, NO existe comprobante oficial de presentación para este período.
+  const noEsDeclaracionEnviada = (customStatus === 'por_pagar' || customStatus === 'inconsistencia' || customStatus === 'sin_declarar');
+  if (noEsDeclaracionEnviada) {
+    console.log(`🛑 [PDF GUARD] Declaración con estado '${customStatus}' (${ruc}, ${canonicalPeriod}): NO se adjunta comprobante PDF porque la declaración no fue presentada.`);
+    clearCapturedPdf('estado_no_enviado_' + customStatus);
+    pdfContentBase64 = null;
+  }
+
+  // Si hay un PDF capturado en memoria pero pertenece a OTRO contribuyente, descartarlo inmediatamente
+  if (capturedPdfBase64 && capturedPdfRuc && capturedPdfRuc !== ruc) {
+    console.warn(`🚨 [PDF CONTAMINATION GUARD] Descartando PDF de memoria: pertenece a RUC ${capturedPdfRuc}, pero estamos procesando ${ruc}.`);
+    clearCapturedPdf('ruc_mismatch');
+  }
+
+  // Esperar activamente hasta 8 segundos a que los interceptores de 5 capas capturen el PDF OFICIAL REAL del SRI (solo si fue enviada)
+  let realPdf = noEsDeclaracionEnviada ? null : (pdfContentBase64 || capturedPdfBase64);
   if (typeof realPdf !== "string") realPdf = null;
-  if (!realPdf) {
+  if (!noEsDeclaracionEnviada && !realPdf) {
     console.log(
       "⏳ [PDF SYNC] Esperando emisión y captura del PDF oficial del SRI...",
     );
     for (let attempt = 0; attempt < 16; attempt++) {
       await tryCaptureRealPdfFromDOM(attempt === 0);
+      if (capturedPdfRuc && capturedPdfRuc !== ruc) {
+        clearCapturedPdf('dom_capture_ruc_mismatch');
+      }
       realPdf = pdfContentBase64 || capturedPdfBase64;
       if (typeof realPdf !== "string") realPdf = null;
       if (realPdf && realPdf.length > 3000) {
@@ -2029,10 +2069,12 @@ async function syncDeclarationToSupabase(
     }
   }
 
-  // Sin comprobante oficial hay que maquetar uno de respaldo: recién ahí vale
-  // la pena traer jsPDF a memoria.
-  if (!realPdf) await ensureJsPdfLoaded();
-  const pdfData = realPdf || generateValidPdfBase64(ruc, canonicalPeriod, clientName);
+  // Sin comprobante oficial hay que maquetar uno de respaldo solo si fue enviada
+  let pdfData = null;
+  if (!noEsDeclaracionEnviada) {
+    if (!realPdf) await ensureJsPdfLoaded();
+    pdfData = realPdf || generateValidPdfBase64(ruc, canonicalPeriod, clientName);
+  }
 
   try {
     let pdfUrl = "";
@@ -2044,78 +2086,60 @@ async function syncDeclarationToSupabase(
     const publicUrlVault = `${SUPABASE_URL}/storage/v1/object/public/clients-vault/${vaultPath}`;
     const publicUrlProofs = `${SUPABASE_URL}/storage/v1/object/public/sri_proofs/${vaultPath}`;
 
-    // ── TIER 1: CLOUDFLARE R2 (.r2.cloudflarestorage.com + Worker Relay) ──
-    try {
-      console.log("⚡ [STORAGE TIER 1] Subiendo PDF a Cloudflare R2 Vault ($0 Egress)...");
-      const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
-      const byteCharacters = atob(cleanPdfData);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
-
-      pdfUrl = await uploadToCloudflareR2Direct(vaultPath, pdfBlob, "application/pdf");
-      storageProvider = "cloudflare_r2";
-      console.log("🚀 [STORAGE TIER 1] ¡PDF subido exitosamente a Cloudflare R2 ($0 Egress)! URL:", pdfUrl);
-    } catch (r2Err) {
-      console.warn("⚠️ [STORAGE TIER 1] Error subiendo a Cloudflare R2, recurriendo a Tier 2 (Supabase):", r2Err);
-    }
-
-    // ── TIER 2: SUPABASE STORAGE (Fallback Cloud) ────────────────────────────
-    if (!pdfUrl) {
-      // 💡 DELTA UPLOAD / TOKEN SAVER: Verificar si el PDF ya existe en Supabase Storage antes de subir
+    if (pdfData && !noEsDeclaracionEnviada) {
+      // ── TIER 1: CLOUDFLARE R2 (.r2.cloudflarestorage.com + Worker Relay) ──
       try {
-        const headVault = await fetch(publicUrlVault, { method: "HEAD" });
-        if (headVault.ok) {
-          pdfUrl = publicUrlVault;
-          console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault. Subida omitida.`);
-        } else {
-          const headProofs = await fetch(publicUrlProofs, { method: "HEAD" });
-          if (headProofs.ok) {
-            pdfUrl = publicUrlProofs;
-            console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs. Subida omitida.`);
-          }
+        console.log("⚡ [STORAGE TIER 1] Subiendo PDF a Cloudflare R2 Vault ($0 Egress)...");
+        const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
+        const byteCharacters = atob(cleanPdfData);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
         }
-      } catch (headErr) {
-        console.warn("⚠️ Check HEAD error:", headErr);
+        const byteArray = new Uint8Array(byteNumbers);
+        const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
+
+        pdfUrl = await uploadToCloudflareR2Direct(vaultPath, pdfBlob, "application/pdf");
+        storageProvider = "cloudflare_r2";
+        console.log("🚀 [STORAGE TIER 1] ¡PDF subido exitosamente a Cloudflare R2 ($0 Egress)! URL:", pdfUrl);
+      } catch (r2Err) {
+        console.warn("⚠️ [STORAGE TIER 1] Error subiendo a Cloudflare R2, recurriendo a Tier 2 (Supabase):", r2Err);
       }
 
+      // ── TIER 2: SUPABASE STORAGE (Fallback Cloud) ────────────────────────────
       if (!pdfUrl) {
-        console.log("⏳ [SUPABASE STORAGE] PDF faltante. Subiendo PDF a Storage...");
+        // 💡 DELTA UPLOAD / TOKEN SAVER: Verificar si el PDF ya existe en Supabase Storage antes de subir
         try {
-          const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
-          const byteCharacters = atob(cleanPdfData);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
-
-          // Intentar primero en el bucket primario 'clients-vault'
-          let uploadRes = await fetch(
-            `${SUPABASE_URL}/storage/v1/object/clients-vault/${vaultPath}`,
-            {
-              method: "POST",
-              headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
-                "Content-Type": "application/pdf",
-                "x-upsert": "true",
-              },
-              body: pdfBlob,
-            },
-          );
-
-          if (uploadRes.ok) {
+          const headVault = await fetch(publicUrlVault, { method: "HEAD" });
+          if (headVault.ok) {
             pdfUrl = publicUrlVault;
-            console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a clients-vault:", pdfUrl);
+            console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault. Subida omitida.`);
           } else {
-            // Fallback a bucket 'sri_proofs'
-            uploadRes = await fetch(
-              `${SUPABASE_URL}/storage/v1/object/sri_proofs/${vaultPath}`,
+            const headProofs = await fetch(publicUrlProofs, { method: "HEAD" });
+            if (headProofs.ok) {
+              pdfUrl = publicUrlProofs;
+              console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs. Subida omitida.`);
+            }
+          }
+        } catch (headErr) {
+          console.warn("⚠️ Check HEAD error:", headErr);
+        }
+
+        if (!pdfUrl) {
+          console.log("⏳ [SUPABASE STORAGE] PDF faltante. Subiendo PDF a Storage...");
+          try {
+            const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
+            const byteCharacters = atob(cleanPdfData);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
+
+            // Intentar primero en el bucket primario 'clients-vault'
+            let uploadRes = await fetch(
+              `${SUPABASE_URL}/storage/v1/object/clients-vault/${vaultPath}`,
               {
                 method: "POST",
                 headers: {
@@ -2129,14 +2153,34 @@ async function syncDeclarationToSupabase(
             );
 
             if (uploadRes.ok) {
-              pdfUrl = publicUrlProofs;
-              console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a sri_proofs:", pdfUrl);
+              pdfUrl = publicUrlVault;
+              console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a clients-vault:", pdfUrl);
             } else {
-              console.error("❌ [SUPABASE STORAGE] Error subiendo PDF en ambos buckets:", await uploadRes.text());
+              // Fallback a bucket 'sri_proofs'
+              uploadRes = await fetch(
+                `${SUPABASE_URL}/storage/v1/object/sri_proofs/${vaultPath}`,
+                {
+                  method: "POST",
+                  headers: {
+                    apikey: SUPABASE_KEY,
+                    Authorization: `Bearer ${SUPABASE_KEY}`,
+                    "Content-Type": "application/pdf",
+                    "x-upsert": "true",
+                  },
+                  body: pdfBlob,
+                },
+              );
+
+              if (uploadRes.ok) {
+                pdfUrl = publicUrlProofs;
+                console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a sri_proofs:", pdfUrl);
+              } else {
+                console.error("❌ [SUPABASE STORAGE] Error subiendo PDF en ambos buckets:", await uploadRes.text());
+              }
             }
+          } catch (storageErr) {
+            console.error("❌ [SUPABASE STORAGE] Excepción al subir PDF:", storageErr);
           }
-        } catch (storageErr) {
-          console.error("❌ [SUPABASE STORAGE] Excepción al subir PDF:", storageErr);
         }
       }
     }
@@ -2149,7 +2193,7 @@ async function syncDeclarationToSupabase(
         if (pdfUrl) {
           await SriLoop.marcarPdfSubido(ruc, per, { url: pdfUrl, provider: storageProvider });
           await anotarBitacora('comprobante guardado', storageProvider);
-        } else {
+        } else if (!noEsDeclaracionEnviada) {
           await anotarBitacora('⚠️ sin comprobante', 'la declaración quedó sin PDF en la nube');
         }
       } catch (e) { console.warn('No se pudo registrar el estado del PDF:', e); }
@@ -2184,7 +2228,7 @@ async function syncDeclarationToSupabase(
     const notasCredito = ghostData.notasCredito || {};
     const ventasData = ghostData.ventasExtraidas || {};
 
-    const proofFileObj = {
+    const proofFileObj = (pdfData && !noEsDeclaracionEnviada) ? {
       name: `Declaracion_IVA_${ruc}_${canonicalPeriod}.pdf`,
       type: "pdf",
       size: Math.round(pdfData.length * 0.75),
@@ -2244,7 +2288,7 @@ async function syncDeclarationToSupabase(
         nc0: notasCredito.iva0?.baseImponible || 0,
         ncTotal: notasCredito.totalGeneral || 0,
       },
-    };
+    } : null;
 
     const decType = canonicalPeriod.length === 7 ? 'IVA' : (canonicalPeriod.includes('ANEXO') ? 'ANEXO' : 'RENTA');
     // Canónico de estado: 'Enviada' es el enum estándar DeclarationStatus.Enviada en la app web y matriz
@@ -2384,6 +2428,8 @@ async function syncDeclarationToSupabase(
     }
   } catch (e) {
     console.warn("⚠️ Supabase sync error:", e);
+  } finally {
+    clearCapturedPdf('post_sync_complete');
   }
 }
 
@@ -2391,6 +2437,7 @@ async function syncDeclarationToSupabase(
 // PODERES DE AUTO ADMIN & MODO AUTO BUCLE
 // ============================================================
 async function handleBatchNextClient() {
+  clearCapturedPdf('handleBatchNextClient_start');
   // 🛑 El salto al siguiente cliente es el punto de corte de la pausa suave.
   // Antes este método reescribía sri_master_switch_on:true y
   // sriAutomationPaused:false en CADA salto, así que la pausa del usuario

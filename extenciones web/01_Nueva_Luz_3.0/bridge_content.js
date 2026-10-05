@@ -288,12 +288,14 @@ window.addEventListener("message", (event) => {
     }
 
     if (data.type === 'SRI_START_BATCH_DECLARATION' && data.data) {
-      console.log("🚀 Lote de Declaración recibido:", data.data);
+      console.log("🚀 Lote recibido en Bridge:", data.data);
+      const isTestKeys = !!data.data.testKeysOnly || data.data.mode === 'probar_clave';
       const queue = (data.data.clients || []).map(c => ({
         ruc: c.ruc,
         password: c.sriPassword || c.password,
         name: c.name,
-        period: c.period || undefined
+        period: c.period || undefined,
+        soloProbarClave: isTestKeys || !!c.soloProbarClave
       }));
       
       let periodToUse = extractPeriodFromData(data.data);
@@ -314,13 +316,13 @@ window.addEventListener("message", (event) => {
         auto_batch_queue: queue,
         auto_batch_index: 0,
         auto_batch_period: periodToUse,
-        auto_batch_mode: 'turbo_step1_facturas',
-        pendingAction: 'verifyProfile',
+        auto_batch_mode: isTestKeys ? 'probar_clave' : 'turbo_step1_facturas',
+        pendingAction: isTestKeys ? 'probar_clave' : 'verifyProfile',
         workflowPeriod: periodToUse,
         actionTimestamp: Date.now(),
         sri_master_switch_on: true,
         sri_auto_mode: true,
-        autoDeclaration: true,
+        autoDeclaration: !isTestKeys,
         sriAutomationPaused: false,
         sc_loop: {
           estado: 'CORRIENDO',
@@ -328,7 +330,7 @@ window.addEventListener("message", (event) => {
           indice: 0,
           periodo: periodToUse,
           latido: Date.now(),
-          motivo: 'Iniciado desde Web SantiagoCordova.com (Cadena)',
+          motivo: isTestKeys ? 'Pre-Vuelo Auditoría Claves (Web)' : 'Iniciado desde Web SantiagoCordova.com (Cadena)',
           paso: false,
           ultimaFase: ''
         }
@@ -348,7 +350,7 @@ window.addEventListener("message", (event) => {
       }
 
       chrome.storage.local.set(payload, () => {
-        console.log("✅ Lote guardado en storage de Nueva Luz 3.0 con sc_loop CORRIENDO.");
+        console.log(`✅ Lote (${isTestKeys ? 'Pre-Vuelo Claves' : 'Declaración'}) guardado en storage de Nueva Luz 3.0 con sc_loop CORRIENDO.`);
         if (!data.data.portalAlreadyOpened) {
           window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
         }
@@ -423,6 +425,22 @@ window.addEventListener("message", (event) => {
         });
       });
     }
+
+    if (data.type === 'SRI_REQUEST_PRUEBA_CLAVES') {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['sc_prueba_claves'], (st) => {
+          const resultado = st.sc_prueba_claves || {};
+          try {
+            localStorage.setItem('sc_prueba_claves', JSON.stringify(resultado));
+          } catch (e) {}
+          window.postMessage({
+            source: 'SC_PRO_EXTENSION',
+            type: 'SRI_PRUEBA_CLAVES_SYNC',
+            data: resultado
+          }, '*');
+        });
+      }
+    }
   }
 });
 
@@ -464,6 +482,19 @@ window.addEventListener("sriAutofillReady", (e) => {
   }
 });
 
+// Carga inicial pasiva de salud de claves al arrancar la página
+try {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['sc_prueba_claves'], (st) => {
+      if (st && st.sc_prueba_claves) {
+        try {
+          localStorage.setItem('sc_prueba_claves', JSON.stringify(st.sc_prueba_claves));
+        } catch (e) {}
+      }
+    });
+  }
+} catch (e) {}
+
 // 📢 Sincronización en tiempo real: cuando el robot en el portal del SRI termina una declaración y guarda el PDF,
 // este listener captura el evento y lo retransmite al dashboard de SantiagoCordova.com sin requerir recargar la página.
 try {
@@ -487,6 +518,28 @@ try {
           source: 'SC_PRO_EXTENSION',
           type: 'SRI_TELEMETRY_PULSE',
           data: pulso
+        }, '*');
+      }
+      if (area === 'local' && changes.sc_prueba_claves && changes.sc_prueba_claves.newValue) {
+        const pruebaClaves = changes.sc_prueba_claves.newValue;
+        try {
+          localStorage.setItem('sc_prueba_claves', JSON.stringify(pruebaClaves));
+        } catch (e) {}
+        window.postMessage({
+          source: 'SC_PRO_EXTENSION',
+          type: 'SRI_PRUEBA_CLAVES_SYNC',
+          data: pruebaClaves
+        }, '*');
+      }
+      if (area === 'local' && changes.sri_ultimo_arqueo_compras && changes.sri_ultimo_arqueo_compras.newValue) {
+        const compras = changes.sri_ultimo_arqueo_compras.newValue;
+        try {
+          localStorage.setItem(`sc_compras_${compras.ruc}`, JSON.stringify(compras));
+        } catch (e) {}
+        window.postMessage({
+          source: 'SC_PRO_EXTENSION',
+          type: 'SRI_PURCHASES_EXTRACTED',
+          data: compras
         }, '*');
       }
     });

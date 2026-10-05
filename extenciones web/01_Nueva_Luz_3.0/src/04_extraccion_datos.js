@@ -233,6 +233,48 @@ async function extraerTodasLasFacturas() {
         await resolverAmbiguasConXml(resumen, todasLasFacturas);
     }
 
+    try {
+        const clienteRuc = (typeof rucDelClienteActual === 'function') ? await rucDelClienteActual() : '';
+        if (clienteRuc && typeof SafeStorage !== 'undefined') {
+            const provMap = new Map();
+            todasLasFacturas.forEach(f => {
+                const nombre = String(f.razonSocial || f.nombre || f.rucRazon || 'Proveedor').trim();
+                const base = Number(f.valorSinImpuestos || f.base || 0);
+                const prev = provMap.get(nombre) || { nombre, total: 0, facturas: 0 };
+                prev.total += base;
+                prev.facturas += 1;
+                provMap.set(nombre, prev);
+            });
+            const topProveedores = Array.from(provMap.values())
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 3)
+                .map(p => ({
+                    nombre: p.nombre,
+                    total: Number(p.total.toFixed(2)),
+                    facturas: p.facturas
+                }));
+
+            await SafeStorage.set({
+                sri_ultimo_arqueo_compras: {
+                    ruc: clienteRuc,
+                    timestamp: Date.now(),
+                    totalFacturas: todasLasFacturas.length,
+                    totalBase: Number((resumen.baseTotal || 0).toFixed(2)),
+                    totalIva: Number((resumen.ivaTotal || 0).toFixed(2)),
+                    base15: Number((resumen.iva15?.base || 0).toFixed(2)),
+                    iva15: Number((resumen.iva15?.iva || 0).toFixed(2)),
+                    base5: Number((resumen.iva5?.base || (resumen.al5 || []).reduce((acc, x) => acc + (x.base || 0), 0)).toFixed(2)),
+                    iva5: Number((resumen.iva5?.iva || (resumen.al5 || []).reduce((acc, x) => acc + (x.iva || 0), 0)).toFixed(2)),
+                    base0: Number((resumen.tarifaCero?.base || 0).toFixed(2)),
+                    topProveedores
+                }
+            });
+            console.log(`📊 [ARQUEO COMPRAS] Resumen guardado para ${clienteRuc}: ${todasLasFacturas.length} facturas.`);
+        }
+    } catch (e) {
+        console.warn('📊 [ARQUEO COMPRAS] No se pudo guardar el arqueo:', e.message);
+    }
+
     return resumen;
 }
 

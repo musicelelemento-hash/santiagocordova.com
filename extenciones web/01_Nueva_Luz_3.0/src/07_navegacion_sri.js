@@ -149,7 +149,8 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
         }
 
         console.log(`   ⬇️ ${d.periodoTexto}${d.cep ? ' · CEP ' + d.cep : ''}...`);
-        capturedPdfBase64 = null;
+        if (typeof clearCapturedPdf === 'function') clearCapturedPdf('bajar_comprobante_fila');
+        else capturedPdfBase64 = null;
         clickElement(boton, `Comprobante ${d.periodoTexto}`);
 
         for (let i = 0; i < 25 && !capturedPdfBase64; i++) await sleep(700);
@@ -573,13 +574,18 @@ async function ejecutarRecuperacionComprobante() {
     }
 
     console.log(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
-    capturedPdfBase64 = null;
+    if (typeof clearCapturedPdf === 'function') clearCapturedPdf('recuperar_comprobante');
+    else capturedPdfBase64 = null;
 
     // Primero se REPRODUCE el POST del botón. Pulsarlo hace que el navegador
     // se lleve el PDF a la carpeta de descargas, donde el bot no lo ve: por
     // eso el 07-sep-2026 decía «se pulsó la descarga pero no llegó ningún
     // PDF» aunque el archivo hubiera bajado.
-    capturedPdfBase64 = await traerPdfDelComprobantePresentado(disparador);
+    const pdfRecuperado = await traerPdfDelComprobantePresentado(disparador);
+    if (pdfRecuperado) {
+        if (typeof setCapturedPdf === 'function') setCapturedPdf(pdfRecuperado, 'traerPdfDelComprobantePresentado');
+        else capturedPdfBase64 = pdfRecuperado;
+    }
 
     // Y si el POST no salió, se pulsa igual: el interceptor del módulo 01
     // levanta el PDF cuando el portal lo entrega por `createObjectURL`.

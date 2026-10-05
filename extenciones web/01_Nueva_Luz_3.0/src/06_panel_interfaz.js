@@ -281,6 +281,8 @@ class SriAssistantPanel {
                         const cacheRes = await chrome.storage.local.get(['sc_clients_cache']);
                         let cacheList = cacheRes.sc_clients_cache || [];
                         let updated = false;
+                        const clientPdf = (typeof capturedPdfRuc !== 'undefined' && capturedPdfRuc && capturedPdfRuc !== info.ruc)
+                            ? '' : (capturedPdfBase64 || '');
                         cacheList = cacheList.map(c => {
                             if (c.ruc === info.ruc) {
                                 updated = true;
@@ -290,9 +292,9 @@ class SriAssistantPanel {
                                     proof_file: {
                                         name: `Declaracion_IVA_${info.ruc}_${periodStr}.pdf`,
                                         type: 'pdf',
-                                        size: capturedPdfBase64 ? Math.round(capturedPdfBase64.length * 0.75) : 2048,
+                                        size: clientPdf ? Math.round(clientPdf.length * 0.75) : 2048,
                                         lastModified: Date.now(),
-                                        content: capturedPdfBase64 || '',
+                                        content: clientPdf,
                                         metadata: { period: periodStr, uploadedAt: new Date().toISOString() }
                                     },
                                     date: Date.now()
@@ -305,7 +307,8 @@ class SriAssistantPanel {
                             await chrome.storage.local.set({ sc_clients_cache: cacheList });
                         }
                         // Sincronizar en la nube con Supabase incluyendo el objeto de PDF de respaldo
-                        await syncDeclarationToSupabase(info.ruc, periodStr, capturedPdfBase64, info.name, preFetchedGhostData);
+                        await syncDeclarationToSupabase(info.ruc, periodStr, clientPdf || null, info.name, preFetchedGhostData);
+                        if (typeof clearCapturedPdf === 'function') clearCapturedPdf('declaration_success_cleanup');
                     } catch(e) { console.warn('Error al actualizar historial:', e); }
                 }
 
@@ -1778,15 +1781,49 @@ class SriAssistantPanel {
                     const clickable = btnGuardar.closest('button, a, input') || btnGuardar;
                     if (typeof clickElement === 'function') clickElement(clickable, 'Guardar borrador');
                     else clickable.click();
-                    this.log('💾 Borrador guardado por seguridad.');
+                    this.log('💾 Borrador guardado por seguridad en el portal del SRI.');
+                    await sleep(2000);
                 }
                 
                 // 💎 ELITE FIX: Sincronizar estado y métricas a Supabase ANTES de detenerse
                 const info = this.extractClientInfo();
+                const targetPeriodStr = await this.getCanonicalPeriodStr();
+                const faltaCampo = pide.textos.length > 0;
+                const motivoOmision = faltaCampo ? 'formulario_incompleto' : (totalValor > 0 ? 'saldo_a_pagar' : 'inconsistencia');
+                const detalleOmision = faltaCampo
+                    ? (pide.casilleros.length ? 'casillero ' + pide.casilleros.join(', ') : 'campos sin completar')
+                    : (totalValor > 0 ? `Valor a pagar $${totalValor.toFixed(2)} (no se envió por requerir revisión)` : motivo);
+
+                // 💾 Siempre registrar en Omitidos para auditoría y HUD
+                if (info.ruc && typeof Omitidos !== 'undefined') {
+                    await Omitidos.anotar(info.ruc, motivoOmision, {
+                        nombre: info.name,
+                        detalle: detalleOmision,
+                        periodo: targetPeriodStr,
+                        totalPagar: totalValor
+                    });
+                }
+
+                // 🔔 Recordar aviso explícito para el usuario/dashboard de que NO se envió por valor a pagar
+                if (info.ruc && totalValor > 0) {
+                    try {
+                        const resAvisos = await SafeStorage.get(['sc_declaraciones_por_pagar_aviso']);
+                        const avisos = resAvisos.sc_declaraciones_por_pagar_aviso || {};
+                        avisos[info.ruc] = {
+                            ruc: info.ruc,
+                            name: info.name,
+                            period: targetPeriodStr,
+                            totalPagar: totalValor,
+                            mensaje: `⚠️ Declaración de ${info.name || info.ruc} (${targetPeriodStr}) NO se envió: tiene un valor a pagar de $${totalValor.toFixed(2)}. El borrador fue guardado en el portal del SRI para su revisión manual.`,
+                            fecha: Date.now(),
+                            revisado: false
+                        };
+                        await SafeStorage.set({ sc_declaraciones_por_pagar_aviso: avisos });
+                    } catch (eAvisos) { console.warn('Error guardando aviso persistente:', eAvisos); }
+                }
+
                 if (info.ruc && typeof syncDeclarationToSupabase === 'function') {
-                    this.log('✨ Subiendo estado PENDIENTE DE PAGO a Supabase...');
-                    const targetPeriodStr = await this.getCanonicalPeriodStr();
-                    
+                    this.log('✨ Subiendo estado PENDIENTE DE PAGO a Supabase (sin PDF)...');
                     let preFetchedGhostData = {};
                     if (typeof GhostMemory !== 'undefined') {
                         preFetchedGhostData = await GhostMemory.getData().catch(() => ({}));
@@ -1797,29 +1834,21 @@ class SriAssistantPanel {
                 
                 await GhostMemory.set('workflowState', totalValor > 0 ? 'STOPPED_BALANCE' : 'STOPPED_WARNING'); // Sincronía Popup
 
-                // MODO AUTO BUCLE CHECK: Si hay saldo a pagar pero estamos automático, SALTAMOS al siguiente
+                // MODO AUTO BUCLE & CONTINUACIÓN:
+                // Si estamos en lote O hay valor a pagar con cola pendiente, se guarda borrador y se continúa
                 const sigueElLote = await loteDebeContinuar();
-                if (sigueElLote) {
-                    // El motivo que se anota tiene que ser el de verdad: es lo
-                    // único que el contador va a leer en el botón ⚠, y de ahí
-                    // sale qué hacer con este contribuyente.
-                    const faltaCampo = pide.textos.length > 0;
-                    const motivoOmision = faltaCampo ? 'formulario_incompleto' : 'saldo_a_pagar';
-                    const detalleOmision = faltaCampo
-                        ? (pide.casilleros.length ? 'casillero ' + pide.casilleros.join(', ') : 'campos sin completar')
-                        : `saldo $${totalValor}`;
-
-                    this.log(`🔄 [MODO AUTO BUCLE] ${info.name || info.ruc}: ${motivo}. Borrador guardado. Avanzando al siguiente...`);
-                    await Omitidos.anotar(info.ruc, motivoOmision, {
-                        nombre: info.name, detalle: detalleOmision });
+                if (sigueElLote || totalValor > 0) {
+                    this.log(`🔄 [AVANCE CONTINUO] ${info.name || info.ruc}: ${motivo}. Borrador guardado y aviso registrado. Continuando...`);
                     this.showEliteToast({
-                        title: faltaCampo ? '⏩ Omitiendo (falta un campo)' : '⏩ Omitiendo (Por Pagar)',
-                        msg: faltaCampo ? escapeHtml(detalleOmision) + ' — se guardó borrador. Cerrando sesión...'
-                                        : 'Impuestos/multas detectados. Borrador guardado. Avanzando al siguiente mes...',
-                        duration: 3500 });
+                        title: totalValor > 0 ? `⚠️ Saldo por pagar detectado ($${totalValor.toFixed(2)})` : (faltaCampo ? '⏩ Omitiendo (falta un campo)' : '⏩ Omitiendo'),
+                        msg: totalValor > 0
+                            ? `Borrador guardado en el SRI. Se registró aviso de revisión ($${totalValor.toFixed(2)}). Avanzando al siguiente...`
+                            : (faltaCampo ? escapeHtml(detalleOmision) + ' — se guardó borrador. Cerrando sesión...' : 'Impuestos/multas detectados. Borrador guardado. Avanzando...'),
+                        duration: 4000 });
                     
                     setTimeout(async () => {
                         await GhostMemory.clearCurrent();
+                        if (typeof clearCapturedPdf === 'function') clearCapturedPdf('saldo_a_pagar_avance_siguiente');
                         if (typeof handleBatchNextClient === 'function') {
                             const batchNext = await handleBatchNextClient();
                             if (!batchNext) {
@@ -1829,7 +1858,7 @@ class SriAssistantPanel {
                         } else {
                             await cerrarSesionSRI();
                         }
-                    }, 4000);
+                    }, 3500);
                     return;
                 }
 

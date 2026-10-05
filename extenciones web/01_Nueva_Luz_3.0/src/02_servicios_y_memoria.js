@@ -3206,6 +3206,7 @@ const GhostMemory = {
     },
 
     async clearCurrent() {
+        if (typeof clearCapturedPdf === 'function') clearCapturedPdf('GhostMemory.clearCurrent');
         const keys = await this.getKeys();
         await SafeStorage.remove(Object.values(keys));
     }
