@@ -3328,7 +3328,7 @@ async function renderAnticipationWidget(items) {
             <div style="display: flex; align-items: center; gap: 14px;">
                 <div style="font-size: 15px; font-weight: 800; color: #4edea3; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em;">
                     <span class="sri-toggle-icon">▼</span>
-                    💎 NUEVA LUZ 3.0
+                    ⚡ SC TAXPILOT PRO
                 </div>
                 
                 <div class="sri-switch-container" id="sri-switch-wrap">

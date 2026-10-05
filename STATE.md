@@ -41,7 +41,59 @@
 
 ---
 
-## 🏆 2₁. HITOS DE HOY (28-SEP-2026)
+## 🏆 2₂. HITOS DE HOY (02-OCT-2026)
+
+### 1. Rebranding Ejecutivo Oficial: `⚡ SC TaxPilot PRO`
+- **Implementación**:
+  - Extensión renombrada a `⚡ SC TaxPilot PRO — Declaración IVA & Robot SRI` en [manifest.json](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/manifest.json), [popup.html](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/popup.html) y [options.html](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/options.html).
+  - Títulos del HUD flotante y la minibar en portal SRI actualizados a `SC TAXPILOT PRO` en [03_ingreso_y_sesion.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/03_ingreso_y_sesion.js) y [01_utilidades_y_pdf.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/01_utilidades_y_pdf.js).
+  - Telemetría en vivo del Dashboard web actualizada a `SC TaxPilot PRO · En Línea` en [AdminDashboardScreen.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/AdminDashboardScreen.tsx).
+  - Verificado: `build/content.js` compilado con éxito (código de salida 0).
+
+### 2. Auditoría Pre-Vuelo y Blindaje de Lote para Septiembre 2026
+- **Resultados de la base de datos (Supabase)**:
+  - Total clientes régimen IVA Mensual: **58**.
+  - **55 clientes con clave operativa listos para declarar** el período `2026-09`.
+  - **3 clientes omitidos automáticamente sin riesgo** (por falta de contraseña): `VERA PALADINES MARIUXI EDITH` (RUC `0918013715001`), `Roberto Santiago Córdova Ramirez` y perfil de prueba.
+  - Blindaje anti-colisión activo: `SriLoop` secuencial, purga de `GhostMemory` entre contribuyentes y cierre automático de sesión en Keycloak.
+### 3. Modal Flotante de Lujo para Notas de Venta & Pulsos de Telemetría Web en Tiempo Real (Costo $0)
+- **Implementación**:
+  - **Ventana Modal Flotante de Notas de Venta ([07_navegacion_sri.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/07_navegacion_sri.js))**:
+    - Tamaño amplio de 520px centrado con overlay `backdrop-filter: blur(18px)`.
+    - Estética Obsidian & Emerald Glow, tipografía monospace grande para montos ($ 508 y # 117).
+    - Temporizador inteligente con barra progresiva y congelamiento automático mientras el usuario escribe.
+    - Soporte completo de teclado: `Enter` para guardar, `Esc` para «No tuvo», `+` para +1 min adicional.
+  - **Pulsos de Telemetría Web ⇄ Robot ([02_servicios_y_memoria.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/02_servicios_y_memoria.js), [bridge_content.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/bridge_content.js), [AdminDashboardScreen.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/AdminDashboardScreen.tsx))**:
+    - Cada avance del robot emite `sc_telemetria_pulso` a costo $0 (0 tokens, 0 egress).
+    - `bridge_content.js` retransmite por `window.postMessage`.
+    - El Top Stripe del Dashboard web renderiza en vivo a qué cliente está declarando y en qué paso (`⚡ MACHUCA · Facturas 15% (1/55)`).
+
+### 4. Pregunta Crítica del SRI: «¿Requiere informar valores en su declaración de este período?»
+- **Problema resuelto**:
+  - Cuando un contribuyente no tiene ventas/facturación electrónica en el período, el SRI presenta la pregunta con **NO** marcado por defecto en PrimeFaces (`.ui-state-active` con `.ui-icon-bullet`).
+  - Al pulsar "Ver formulario completo" dejando "NO", el SRI renderiza una pantalla reducida/en blanco sin casilleros (`concepto401`, etc.) y la automatización se colgaba esperando 15s.
+- **Implementación**:
+  - Creada la función `asegurarRequiereInformarValoresSi()` en [07_navegacion_sri.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/07_navegacion_sri.js).
+  - Detecta la pregunta, verifica si "NO" está activo o "SÍ" inactivo, pulsa el radio visual de PrimeFaces, actualiza el input oculto con eventos `change`/`click` y espera la respuesta AJAX antes de abrir el formulario.
+  - Conectada como candado de seguridad en el Paso 5 y justo antes del Paso 6 (apertura de formulario completo).
+
+### 5. Resiliencia ante Desconexión o Caídas de Internet (Punto de Recuperación & Reanudación)
+- **Implementación**:
+  - En [02_servicios_y_memoria.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/02_servicios_y_memoria.js): `sc_ultimo_punto_recuperacion` persiste cliente actual, índice, total de la cola y último hito alcanzado. Creado `SriLoop.reanudarDesdeCorte()`.
+  - En [bridge_content.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/bridge_content.js): persiste el pulso en `localStorage` y atiende la acción `SRI_RESUME_BATCH`.
+  - En [AdminDashboardScreen.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/AdminDashboardScreen.tsx): si la conexión se interrumpe durante un lote, el radar cambia a advertencia ámbar interactiva (`⚠️ Interrumpido: Cliente (X/Y) · ▶ Reanudar`) y permite reanudar el lote con un solo clic exactamente donde se quedó.
+
+### 6. Límite de Años a Máximo 2 Años (2025 y 2026) y Rediseño Espacioso del Popup
+- **Implementación**:
+  - **Límite Temporal Estricto**: Limitados el selector de año, el cálculo de meses pendientes (`mesesPendientesDeCliente`), la detección de meses faltantes (`detectarMesQueFalta`) y el barrido histórico de comprobantes (`barrerTodosLosAnios`) a un piso mínimo absoluto de **2025** (solamente 2025 y 2026; nunca 2024 ni años anteriores).
+  - **Diseño sin Solapamientos**:
+    - Ancho del popup ampliado de 440px a **520px** en [popup.html](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/popup.html).
+    - Tarjeta reestructurada con `.client-card-main` (info y RUC a la izquierda, botón `▶ Ingresar` a la derecha) y bloque `.orden-meses` a ancho completo abajo en [popup.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/popup.js).
+    - Erradicado cualquier solapamiento visual entre botones y datos de acceso.
+
+---
+
+## 🏆 2₁. HITOS ANTERIORES (28-SEP-2026)
 
 ### 1. Mesa de Despacho Inmediato en Dashboard (`AdminDashboardScreen.tsx`)
 - **Implementación**:

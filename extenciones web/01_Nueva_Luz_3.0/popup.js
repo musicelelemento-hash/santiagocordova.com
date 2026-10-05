@@ -46,7 +46,9 @@ function initSelectors() {
         const yearSel = document.getElementById('periodYear');
         if (!monthSel || !yearSel) return;
 
-        for (let yy = now.getFullYear(); yy >= 2020; yy--) {
+        // 🎯 Límite estricto: máximo 2 años (2025 y 2026), no incluir 2024 ni anteriores
+        const anioTope = Math.max(now.getFullYear(), 2026);
+        for (let yy = anioTope; yy >= 2025; yy--) {
             const opt = document.createElement('option');
             opt.value = yy;
             opt.textContent = yy;
@@ -54,7 +56,8 @@ function initSelectors() {
         }
 
         monthSel.value = currentMonth;
-        if (currentYear > now.getFullYear()) currentYear = now.getFullYear();
+        if (currentYear > anioTope) currentYear = anioTope;
+        if (currentYear < 2025) currentYear = 2025;
         yearSel.value = currentYear;
     });
 }
@@ -586,22 +589,26 @@ function faltantesParaPeriodo(year, monthIndex) {
 }
 
 /** 🗓️ Los meses PENDIENTES de UN cliente, en orden cronológico ascendente.
- *  Barre hasta 24 meses hacia atrás desde el periodo seleccionado y devuelve
- *  los que todavía no tiene declarados (ni con PDF ni con registro local). */
+ *  Barre los meses pendientes hacia atrás respetando el tope estricto de
+ *  máximo 2 años (2025 y 2026), nunca 2024 ni anteriores. */
 function mesesPendientesDeCliente(cliente) {
     if (!cliente || !cliente.ruc) return [];
     const baseY = currentYear, baseM = currentMonth;
     const meses = [];
+    const MIN_YEAR = 2025; // 🎯 Límite estricto: máximo 2 años (2025 y 2026)
+
     for (let back = 0; back < 24; back++) {
         const d = new Date(baseY, baseM - back, 1);
         const y = d.getFullYear(), m = d.getMonth();
+        if (y < MIN_YEAR) break; // 🛑 Frenar en 2025: nunca 2024 ni antes
+
         const ya = hasPdfForPeriod(cliente, y, m) || !!declaracionLocalPopup(cliente.ruc, y, m);
         if (!ya) {
             const periodo = `${y}-${String(m + 1).padStart(2, '0')}`;
             meses.push({ year: y, monthIndex: m, periodo, label: periodoLabelLocal(y, m) });
         }
     }
-    return meses.reverse();   // ascendente: el más antiguo primero
+    return meses.reverse();   // ascendente: el más antiguo (de 2025) primero
 }
 
 /** Etiqueta «mes año» a partir de year + monthIndex (sin tocar selects). */
@@ -611,13 +618,17 @@ function periodoLabelLocal(year, monthIndex) {
     return `${MESES[monthIndex]} ${year}`;
 }
 
-/** 🎯 Detecta el primer período (empezando por el seleccionado, hacia atrás)
+/** 🎯 Detecta el primer período (empezando por el seleccionado, hacia atrás hasta 2025)
  *  con clientes sin declarar y lo deja elegido. null si todo está al día. */
 async function detectarMesQueFalta() {
     const base = { year: currentYear, monthIndex: currentMonth };
+    const MIN_YEAR = 2025; // 🎯 Límite estricto: solo 2025 y 2026
+
     for (let back = 0; back < 24; back++) {
         const d = new Date(base.year, base.monthIndex - back, 1);
         const y = d.getFullYear(), m = d.getMonth();
+        if (y < MIN_YEAR) break; // 🛑 No bajar a 2024
+
         const faltan = faltantesParaPeriodo(y, m);
         if (faltan.length > 0) {
             currentYear = y;
@@ -632,7 +643,7 @@ async function detectarMesQueFalta() {
             return { found: true, year: y, monthIndex: m, pendientes: faltan.length };
         }
     }
-    showToast('🎉 Todo al día: no hay períodos pendientes hacia atrás.');
+    showToast('🎉 Todo al día: no hay períodos pendientes en 2025-2026.');
     return { found: false };
 }
 
@@ -1003,66 +1014,64 @@ function createClientCard(client, statusType) {
     }
 
     let actionBtnHtml = `
-        <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
-            <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}">
-                ▶ Ingresar
-            </button>
-            <span data-action="marcar-error" data-ruc="${client.ruc}" style="font-size:10px; color:#f87171; cursor:pointer; font-weight:700; opacity:0.8; transition:0.2s;" title="Mover a pestaña de Errores para omitir del bucle">
-                ⚠️ Omitir
-            </span>
-        </div>
+        <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="white-space:nowrap;">
+            ▶ Ingresar
+        </button>
+        <span data-action="marcar-error" data-ruc="${client.ruc}" style="font-size:10px; color:#f87171; cursor:pointer; font-weight:700; opacity:0.8; transition:0.2s;" title="Mover a pestaña de Errores para omitir del bucle">
+            ⚠️ Omitir
+        </span>
     `;
 
     if (isDone) {
         actionBtnHtml = `
-            <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="opacity:0.6; filter:grayscale(0.5);">
+            <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="opacity:0.6; filter:grayscale(0.5); white-space:nowrap;">
                 ▶ Ingresar
             </button>
         `;
     } else if (isError) {
         actionBtnHtml = `
-            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
-                <button class="btn-start" data-action="desbloquear-clave" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #6366f1, #4f46e5); color:white; font-size:10px; padding:4px 8px;" title="Actualizar clave y desbloquear cliente">
-                    ✏️ Nueva Clave
-                </button>
-                <button class="btn-start" data-action="reintentar" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #ffb95f, #d97706); color:#2a1700; font-size:10px; padding:4px 8px;">
-                    🔄 Reintentar
-                </button>
-            </div>
+            <button class="btn-start" data-action="desbloquear-clave" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #6366f1, #4f46e5); color:white; font-size:10px; padding:4px 8px; white-space:nowrap;" title="Actualizar clave y desbloquear cliente">
+                ✏️ Nueva Clave
+            </button>
+            <button class="btn-start" data-action="reintentar" data-ruc="${client.ruc}" style="background:linear-gradient(135deg, #ffb95f, #d97706); color:#2a1700; font-size:10px; padding:4px 8px; white-space:nowrap;">
+                🔄 Reintentar
+            </button>
         `;
     } else if (isOtro) {
         actionBtnHtml = `
-            <div style="display:flex; flex-direction:column; gap:5px; align-items:flex-end;">
-                <button class="btn-start" data-action="forzar-mensual" data-ruc="${client.ruc}" style="background:rgba(99,102,241,0.2); border:1px solid #6366f1; color:#c7d2fe; font-size:10px; padding:5px 8px;" title="Incluir en el lote de IVA Mensual para esta corrida">
-                    ⚡ Forzar Mensual
-                </button>
-                <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="font-size:10px; padding:4px 8px; opacity:0.8;">
-                    ▶ Ingresar
-                </button>
-            </div>
+            <button class="btn-start" data-action="forzar-mensual" data-ruc="${client.ruc}" style="background:rgba(99,102,241,0.2); border:1px solid #6366f1; color:#c7d2fe; font-size:10px; padding:5px 8px; white-space:nowrap;" title="Incluir en el lote de IVA Mensual para esta corrida">
+                ⚡ Forzar Mensual
+            </button>
+            <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="font-size:10px; padding:4px 8px; opacity:0.8; white-space:nowrap;">
+                ▶ Ingresar
+            </button>
         `;
     }
 
     card.innerHTML = `
-        <div class="client-info">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:3px;">
-                <div class="client-name" title="${client.name}">${client.name}</div>
-                <span class="due-badge" title="Vence el día ${dueDay} del mes">Día ${dueDay}</span>
+        <div class="client-card-main">
+            <div class="client-info">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+                    <div class="client-name" title="${client.name}">${client.name}</div>
+                    <span class="due-badge" title="Vence el día ${dueDay} del mes">Día ${dueDay}</span>
+                </div>
+                <div class="client-meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">
+                    <span class="client-ruc-badge" data-action="copiar-ruc" data-ruc="${client.ruc}" style="cursor:pointer; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:2px 7px; border-radius:5px; font-weight:700; font-size:11px; color:#cbd5e1; font-family:'JetBrains Mono',monospace; transition:0.2s;" title="Copiar RUC">
+                        📋 ${client.ruc}
+                    </span>
+                    ${passUi}
+                    <span data-action="toggle-bendito" data-ruc="${client.ruc}"
+                          style="cursor:pointer; font-size:13px; line-height:1; padding:3px 6px; border-radius:6px; border:1px solid ${esBend ? 'rgba(78,222,163,0.45)' : 'rgba(255,255,255,0.12)'}; background:${esBend ? 'rgba(78,222,163,0.15)' : 'rgba(255,255,255,0.03)'}; transition:0.2s;"
+                          title="${esBend ? 'En lista bendita para el lote' : 'Agregar al lote'}">
+                        ${esBend ? '🙏' : '🤍'}
+                    </span>
+                    ${badgeHtml}
+                </div>
             </div>
-            <div class="client-meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">
-                <span class="client-ruc-badge" data-action="copiar-ruc" data-ruc="${client.ruc}" style="cursor:pointer; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); padding:2px 7px; border-radius:5px; font-weight:700; font-size:11px; color:#94a3b8; transition:0.2s; font-family:'JetBrains Mono',monospace;" title="Copiar RUC">
-                    📋 ${client.ruc}
-                </span>
-                ${passUi}
-                <span data-action="toggle-bendito" data-ruc="${client.ruc}"
-                      style="cursor:pointer; font-size:13px; line-height:1; padding:3px 5px; border-radius:6px; border:1px solid ${esBend ? 'rgba(78,222,163,0.45)' : 'rgba(255,255,255,0.12)'}; background:${esBend ? 'rgba(78,222,163,0.12)' : 'transparent'}; transition:0.2s;"
-                      title="${esBend ? 'Quitar de la Lista Bendita (no correrá en el lote)' : 'Agregar a la Lista Bendita (correrá en el lote)'}">
-                    ${esBend ? '🙏' : '🤍'}
-                </span>
+            <div class="client-actions" style="display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0;">
+                ${actionBtnHtml}
             </div>
-            ${badgeHtml}
         </div>
-        ${actionBtnHtml}
         ${isDone || isError ? '' : buildOrdenMesesBlock(client)}
     `;
     return card;
@@ -1119,22 +1128,22 @@ function buildOrdenMesesBlock(client) {
         const on = sel.has(p.periodo);
         return `
             <label class="mes-orden-chip" data-action="toggle-mes-orden" data-ruc="${ruc}" data-periodo="${p.periodo}"
-                   style="display:inline-flex; align-items:center; gap:4px; margin:2px 3px 2px 0; padding:3px 7px; border-radius:6px; font-size:10px; cursor:pointer; user-select:none; border:1px solid ${on ? 'rgba(99,102,241,0.7)' : 'rgba(255,255,255,0.12)'}; background:${on ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)'}; color:${on ? '#c7d2fe' : '#94a3b8'}; font-weight:700; transition:0.15s;" title="Incluir ${p.label} en la orden">
+                   style="display:inline-flex; align-items:center; gap:4px; margin:2px 4px 2px 0; padding:4px 8px; border-radius:6px; font-size:10px; cursor:pointer; user-select:none; border:1px solid ${on ? 'rgba(78,222,163,0.7)' : 'rgba(255,255,255,0.12)'}; background:${on ? 'rgba(78,222,163,0.2)' : 'rgba(255,255,255,0.04)'}; color:${on ? '#4edea3' : '#94a3b8'}; font-weight:700; transition:0.15s;" title="Incluir ${p.label} en la orden">
                 <span style="font-size:11px;">${on ? '☑️' : '⬜'}</span> ${p.label}
             </label>`;
     }).join('');
     const count = sel.size;
     return `
-        <div class="orden-meses" style="margin-top:8px; padding:7px 9px; border:1px solid rgba(99,102,241,0.25); border-radius:9px; background:rgba(99,102,241,0.06);">
+        <div class="orden-meses" style="width:100%; margin-top:4px; padding:7px 10px; border:1px solid rgba(99,102,241,0.25); border-radius:9px; background:rgba(99,102,241,0.06);">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
-                <span style="font-size:10px; font-weight:800; color:#a5b4fc; letter-spacing:0.4px;">🗓️ ORDEN DE MESES</span>
-                <span data-action="marcar-todos-pendientes" data-ruc="${ruc}" style="cursor:pointer; font-size:10px; font-weight:800; color:#4edea3; background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.35); padding:2px 7px; border-radius:6px;" title="Marcar todos los meses pendientes de este cliente">🎯 Todos los pendientes</span>
+                <span style="font-size:10px; font-weight:800; color:#a5b4fc; letter-spacing:0.4px;">🗓️ ORDEN DE MESES (2025 - 2026)</span>
+                <span data-action="marcar-todos-pendientes" data-ruc="${ruc}" style="cursor:pointer; font-size:10px; font-weight:800; color:#4edea3; background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.35); padding:2px 8px; border-radius:6px;" title="Marcar todos los meses pendientes de este cliente">🎯 Todos los pendientes</span>
             </div>
-            <div style="display:flex; flex-wrap:wrap;">${chips}</div>
-            <div style="font-size:9px; color:#64748b; margin-top:4px; line-height:1.4;">
+            <div style="display:flex; flex-wrap:wrap; gap:3px;">${chips}</div>
+            <div style="font-size:9.5px; color:#94a3b8; margin-top:4px; line-height:1.4;">
                 ${count > 0
                     ? `<b id="orden-count-${ruc}" style="color:#a5b4fc;">${count} mes(es)</b> se declararán en bucle con ▶. Hacé clic en un mes para quitarlo.`
-                    : `Sin selección: ▶ declara solo el mes del selector. Tocá un mes para armarla.`}
+                    : `Sin selección: ▶ declara solo el mes del selector. Tocá un mes para armar la secuencia.`}
             </div>
         </div>`;
 }

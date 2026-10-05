@@ -2232,8 +2232,8 @@ async function renderLoginCockpit(items) {
 
         minibar.innerHTML = `
             <div style="display: flex; align-items: center; gap: 7px;">
-                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">💎</span>
-                <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em; background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NUEVA LUZ 3.0</span>
+                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">⚡</span>
+                <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em; background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
                 <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-size: 10px; font-family: monospace; font-weight: 800; padding: 2px 7px; border-radius: 10px;">${pendientes.length} pend.</span>
                 <span style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #ffffff; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; margin-left: 2px;">Mostrar ▾</span>
             </div>
@@ -2241,8 +2241,8 @@ async function renderLoginCockpit(items) {
 
         island.innerHTML = `
             <div style="display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 11px; letter-spacing: 0.06em; color: #00A896; padding: 2px 4px;">
-                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">💎</span>
-                <span style="background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">NUEVA LUZ 3.0</span>
+                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">⚡</span>
+                <span style="background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
             </div>
 
             <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.12); margin: 0 1px;"></div>

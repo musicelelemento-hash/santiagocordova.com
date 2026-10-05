@@ -220,8 +220,9 @@ async function barrerTodosLosAnios({ ruc, nombre = '', soloFaltantes = true } = 
     let r = await bajarTodosLosComprobantes({ ruc, nombre, soloFaltantes });
     sumarResumen(total, r, anioEnPantalla);
 
+    // 🎯 Límite estricto del usuario: máximo 2 años (2025 y 2026), nunca 2024 ni antes
     const pendientes = ANIOS_OFRECIDOS
-        .filter((a) => a !== anioEnPantalla)
+        .filter((a) => a !== anioEnPantalla && a >= 2025)
         .slice(0, MAX_ANIOS_BARRIDO - 1);
 
     if (!pendientes.length) {
@@ -2152,62 +2153,71 @@ const SriLoopHUD = {
 
         // En el DOM del portal va sólo lo que hace falta ver. Nunca una clave.
         panel.innerHTML =
-            '<div style="font-size:12px;font-weight:800;margin-bottom:2px">📒 Notas de venta (papel)</div>' +
-            `<div style="font-size:11px;opacity:0.8;margin-bottom:6px">${esc(nombre || ruc)} · ${esc(periodo)}</div>` +
-
-            // Por qué se pregunta. Sin esto, la pregunta aparece de la nada en
-            // medio de un lote y no se sabe si es importante o se puede ignorar.
-            '<div style="background:rgba(56,189,248,0.10);border-radius:8px;padding:7px 9px;' +
-            'font-size:11px;line-height:1.5;opacity:0.9;margin-bottom:10px">' +
-            'Son las de <b>papel</b>: no están en comprobantes electrónicos y el bot no tiene ' +
-            'de dónde sacarlas. Si no las cargás, el 508 y el 117 quedan <b>vacíos</b> — ' +
-            'no en cero.</div>' +
-
-            // `autocomplete="off"` NO es decoración. El id es el mismo en cada
-            // contribuyente, así que sin esto el navegador ofrecía lo tecleado
-            // para el cliente anterior — y un número de otro aceptado sin
-            // querer es una declaración mal hecha. Lo avisó el usuario:
-            // «la sugerencia es para cada cliente, si no pone nada por defecto
-            // vacío».
-            '<div style="display:grid;grid-template-columns:1fr 92px;gap:10px;align-items:end">' +
-            '  <label style="font-size:11px;opacity:0.85;font-weight:700">Valor total' +
-            '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 508 · en dólares</span>' +
-            `    <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
-            '  <label style="font-size:11px;opacity:0.85;font-weight:700">Cuántas' +
-            '    <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">casillero 117</span>' +
-            `    <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" placeholder="0" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
-            '</div>' +
-
-            // El 518 es el NETO del 508: «menos las notas de crédito». Sin
-            // esto quedaba vacío con el 508 lleno — el mismo error que el
-            // 550, y el crédito tributario sale del neto.
-            //
-            // Se deja vacío a propósito: la mayoría de las veces no hay notas
-            // de crédito de notas de venta, y ahí el 518 vale lo mismo que el
-            // 508. Un cero escrito acá y un campo vacío significan lo mismo
-            // para el formulario, pero el vacío no le pone al contador un
-            // número que él no puso.
-            '<label style="display:block;margin-top:10px;font-size:11px;opacity:0.85;font-weight:700">' +
-            '  Notas de crédito de esas notas de venta' +
-            '  <span style="display:block;font-size:10px;opacity:0.6;font-weight:400">' +
-            '    casillero 518 · dejalo vacío si no hubo</span>' +
-            `  <input id="slh-nv-nc" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="display:block;width:100%;margin-top:4px;box-sizing:border-box;${caja}"></label>` +
-
-            // Lo que se va a escribir, en palabras, antes de escribirlo.
-            '<div id="slh-nv-eco" style="font-size:11px;margin-top:8px;min-height:16px;color:#7dd3fc"></div>' +
-
-            '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
-            `  <button id="slh-nv-ok" style="${boton('rgba(16,185,129,0.22)', '#5eead4')};flex:1">✓ Guardar</button>` +
-            `  <button id="slh-nv-no" style="${boton('rgba(148,163,184,0.18)', '#cbd5e1')}">No tuvo</button>` +
-            `  <button id="slh-nv-mas" style="${boton('rgba(148,163,184,0.12)', '#94a3b8')}" title="Otro minuto para buscar el dato">+1 min</button>` +
-            '</div>' +
-
-            // La barra dice cuánto queda de un vistazo; el texto, qué pasa si
-            // se acaba. Las dos cosas, porque una sola no alcanza.
-            '<div style="height:4px;background:rgba(255,255,255,0.10);border-radius:3px;margin-top:12px;overflow:hidden">' +
-            '  <div id="slh-nv-barra" style="height:100%;width:100%;background:#38bdf8;transition:width 0.9s linear"></div>' +
-            '</div>' +
-            '<div id="slh-nv-reloj" style="font-size:10px;opacity:0.7;margin-top:6px;line-height:1.45"></div>';
+            '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999999;' +
+            'display:flex;align-items:center;justify-content:center;background:rgba(3,7,18,0.78);' +
+            'backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-sizing:border-box;padding:16px;' +
+            'font-family:\'Manrope\',\'Inter\',system-ui,sans-serif;">' +
+            '  <div style="width:520px;max-width:94vw;background:linear-gradient(145deg,#0b1c2e 0%,#040d1a 100%);' +
+            'border:1px solid rgba(255,255,255,0.14);border-radius:24px;box-shadow:0 25px 60px -12px rgba(0,0,0,0.85),0 0 35px rgba(52,211,153,0.18);' +
+            'padding:24px 26px;color:#f8fafc;box-sizing:border-box;text-align:left">' +
+            '    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">' +
+            '      <div>' +
+            '        <div style="display:flex;align-items:center;gap:8px">' +
+            '          <span style="font-size:16px">📒</span>' +
+            '          <span style="font-size:12px;font-weight:900;letter-spacing:0.06em;background:linear-gradient(135deg,#34d399,#00A896);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-transform:uppercase">SC TAXPILOT PRO</span>' +
+            '          <span style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#fbbf24;font-size:10px;font-weight:800;padding:2px 8px;border-radius:12px">RIMPE NEGOCIO POPULAR</span>' +
+            '        </div>' +
+            '        <div style="font-size:15px;font-weight:800;color:#f8fafc;margin-top:6px">' + esc(nombre || ruc) + '</div>' +
+            '        <div style="font-size:11px;color:#94a3b8;font-family:monospace;margin-top:1px">RUC: ' + esc(ruc) + ' · Período: <span style="color:#fbbf24;font-weight:700">' + esc(periodo) + '</span></div>' +
+            '      </div>' +
+            '    </div>' +
+            '    <div style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.22);border-radius:12px;padding:9px 12px;font-size:11px;line-height:1.5;color:#bae6fd;margin-bottom:16px">' +
+            '      <b>Comprobantes Físicos de Papel:</b> Notas de venta RISE / Negocio Popular recibidas en el mes. No constan en electrónicos del SRI. Si no tuvo compras en papel, pulsa <b>«No tuvo»</b> o <b>Esc</b>.' +
+            '    </div>' +
+            '    <div style="display:grid;grid-template-columns:1fr 130px;gap:14px;margin-bottom:12px">' +
+            '      <div>' +
+            '        <label style="display:block;font-size:11px;font-weight:800;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px">' +
+            '          Valor Total Compras (0%)' +
+            '          <span style="display:block;font-size:10px;color:#94a3b8;font-weight:400;text-transform:none">Casillero 508 SRI · en dólares</span>' +
+            '        </label>' +
+            '        <div style="position:relative;display:flex;align-items:center">' +
+            '          <span style="position:absolute;left:12px;font-size:16px;font-weight:800;color:#34d399;font-family:monospace">$</span>' +
+            '          <input id="slh-nv-monto" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.18);border-radius:12px;padding:12px 14px 12px 30px;color:#f8fafc;font-family:ui-monospace,monospace;font-size:18px;font-weight:800;outline:none">' +
+            '        </div>' +
+            '      </div>' +
+            '      <div>' +
+            '        <label style="display:block;font-size:11px;font-weight:800;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px">' +
+            '          Cantidad' +
+            '          <span style="display:block;font-size:10px;color:#94a3b8;font-weight:400;text-transform:none">Casillero 117</span>' +
+            '        </label>' +
+            '        <div style="position:relative;display:flex;align-items:center">' +
+            '          <span style="position:absolute;left:12px;font-size:15px;font-weight:800;color:#38bdf8;font-family:monospace">#</span>' +
+            '          <input id="slh-nv-cant" type="number" step="1" min="0" inputmode="numeric" placeholder="0" autocomplete="off" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.18);border-radius:12px;padding:12px 14px 12px 30px;color:#f8fafc;font-family:ui-monospace,monospace;font-size:18px;font-weight:800;outline:none;text-align:right">' +
+            '        </div>' +
+            '      </div>' +
+            '    </div>' +
+            '    <div style="margin-bottom:12px">' +
+            '      <label style="display:block;font-size:11px;font-weight:800;color:#e2e8f0;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">' +
+            '        Notas de crédito de estas notas de venta' +
+            '        <span style="font-size:10px;color:#94a3b8;font-weight:400;text-transform:none">(Casillero 518 Neto · dejar vacío si no hubo)</span>' +
+            '      </label>' +
+            '      <div style="position:relative;display:flex;align-items:center">' +
+            '        <span style="position:absolute;left:12px;font-size:14px;font-weight:700;color:#f43f5e;font-family:monospace">- $</span>' +
+            '        <input id="slh-nv-nc" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0.00" autocomplete="off" style="width:100%;box-sizing:border-box;background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.14);border-radius:10px;padding:9px 12px 9px 36px;color:#f8fafc;font-family:ui-monospace,monospace;font-size:14px;font-weight:700;outline:none">' +
+            '      </div>' +
+            '    </div>' +
+            '    <div id="slh-nv-eco" style="font-size:12px;font-weight:700;min-height:20px;color:#38bdf8;margin-bottom:14px;font-family:monospace"></div>' +
+            '    <div style="display:flex;gap:10px;align-items:center">' +
+            '      <button id="slh-nv-ok" style="flex:2;background:linear-gradient(135deg,#10b981,#059669);color:#ffffff;border:none;border-radius:12px;padding:12px 18px;font-size:13px;font-weight:900;cursor:pointer;box-shadow:0 4px 14px rgba(16,185,129,0.35)">✓ Guardar y Continuar (Enter)</button>' +
+            '      <button id="slh-nv-no" style="flex:1.2;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#e2e8f0;border-radius:12px;padding:12px 14px;font-size:12px;font-weight:800;cursor:pointer">No tuvo (Esc)</button>' +
+            '      <button id="slh-nv-mas" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:12px;padding:12px 14px;font-size:12px;font-weight:800;cursor:pointer" title="Otro minuto">+1 min</button>' +
+            '    </div>' +
+            '    <div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:16px;overflow:hidden">' +
+            '      <div id="slh-nv-barra" style="height:100%;width:100%;background:#38bdf8;transition:width 0.9s linear"></div>' +
+            '    </div>' +
+            '    <div id="slh-nv-reloj" style="font-size:11px;opacity:0.8;margin-top:6px;font-family:monospace;line-height:1.4"></div>' +
+            '  </div>' +
+            '</div>';
 
         this.soloUnPanel('slh-notas-panel');
         panel.style.display = 'block';
@@ -2327,11 +2337,23 @@ const SriLoopHUD = {
                 quedan += 60;
                 pintarReloj();
             });
-            // Enter en cualquiera de los dos campos guarda.
-            panel.querySelectorAll('input').forEach((i) => {
-                i.addEventListener('keydown', (ev) => {
-                    if (ev.key === 'Enter') panel.querySelector('#slh-nv-ok').click();
+            const btnClose = panel.querySelector('#slh-nv-close');
+            if (btnClose) {
+                btnClose.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    panel.querySelector('#slh-nv-no').click();
                 });
+            }
+            // Enter o Escape en cualquiera de los campos o teclado.
+            const handleKeyNav = (ev) => {
+                if (ev.key === 'Enter') {
+                    panel.querySelector('#slh-nv-ok').click();
+                } else if (ev.key === 'Escape') {
+                    panel.querySelector('#slh-nv-no').click();
+                }
+            };
+            panel.querySelectorAll('input').forEach((i) => {
+                i.addEventListener('keydown', handleKeyNav);
             });
         });
     },
@@ -3149,6 +3171,210 @@ function estaEnFormularioIva(url = window.location.href) {
     return url.includes('recibirDeclaracion.jsf') || url.includes('declaracionImpuesto.jsf');
 }
 
+/**
+ * 🎯 PREGUNTA CRÍTICA DEL SRI ANTES DE "VER FORMULARIO COMPLETO":
+ * "¿Requiere informar valores en su declaración de este período?"
+ *
+ * Cuando el contribuyente no ha facturado (sin ventas electrónicas en el período),
+ * el SRI muestra esta pregunta con "NO" seleccionado por defecto en PrimeFaces:
+ * (<div class="ui-radiobutton-box ... ui-state-active"><span class="ui-icon-bullet"></span></div>).
+ * Si se hace clic en "Ver formulario completo" dejando "NO", el SRI renderiza una pantalla
+ * en blanco o colapsada sin casilleros y el robot se cuelga.
+ *
+ * Esta función:
+ * 1. Detecta si la pregunta está presente en pantalla.
+ * 2. Comprueba si el radio "NO" está activo (o "SÍ" inactivo).
+ * 3. Activa "SÍ" haciendo clic en el box/label de PrimeFaces y disparando eventos change/click.
+ * 4. Espera la reactividad/AJAX de PrimeFaces y verifica que "SÍ" quedó con .ui-state-active.
+ *
+ * @returns {Promise<boolean>} true si encontró la pregunta y la cambió a SÍ.
+ */
+async function asegurarRequiereInformarValoresSi() {
+    try {
+        const textosCandidatos = [
+            'requiere informar valores',
+            'informa valores en su declaración',
+            'desea informar valores',
+            'valores en su declaración de este período'
+        ];
+
+        // 1. Buscar si la pregunta existe en el DOM
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        let nodoPregunta = null;
+        let nodo;
+        while ((nodo = walker.nextNode())) {
+            const txt = (nodo.textContent || '').toLowerCase();
+            if (textosCandidatos.some(cand => txt.includes(cand))) {
+                nodoPregunta = nodo;
+                break;
+            }
+        }
+
+        if (!nodoPregunta) {
+            const elementos = Array.from(document.querySelectorAll('label, td, span, div, p'));
+            const hallado = elementos.find(el => {
+                const t = (el.innerText || el.textContent || '').toLowerCase();
+                return textosCandidatos.some(cand => t.includes(cand)) && t.length < 250;
+            });
+            if (hallado) nodoPregunta = hallado;
+        }
+
+        if (!nodoPregunta) {
+            // Pregunta no presente en esta pantalla (ej. caso habitual con facturación previa)
+            return false;
+        }
+
+        console.log('🔍 [WIZARD] Pregunta detectada: "¿Requiere informar valores en su declaración de este período?"');
+
+        // 2. Localizar el contenedor de la pregunta y sus radiobuttons
+        let contenedor = (nodoPregunta.nodeType === Node.TEXT_NODE ? nodoPregunta.parentElement : nodoPregunta);
+        let grupoRadio = null;
+
+        for (let i = 0; i < 6 && contenedor; i++) {
+            const radios = contenedor.querySelectorAll('.ui-radiobutton, input[type="radio"], .ui-selectoneradio');
+            if (radios.length >= 2) {
+                grupoRadio = contenedor;
+                break;
+            }
+            contenedor = contenedor.parentElement;
+        }
+
+        if (!grupoRadio) {
+            const form = document.getElementById('frmFlujoDeclaracion') || document.querySelector('form');
+            if (form) {
+                const radios = form.querySelectorAll('.ui-radiobutton, input[type="radio"]');
+                if (radios.length >= 2) grupoRadio = form;
+            }
+        }
+
+        const scope = grupoRadio || document;
+
+        // 3. Localizar las opciones SÍ y NO
+        let boxSi = null;
+        let inputSi = null;
+        let labelSi = null;
+        let boxNo = null;
+
+        // Método A: Por etiquetas de texto "SÍ" / "SI" y "NO"
+        const labels = Array.from(scope.querySelectorAll('label'));
+        for (const lbl of labels) {
+            const txt = (lbl.innerText || lbl.textContent || '').trim().toUpperCase();
+            if (txt === 'SÍ' || txt === 'SI' || txt === 'S') {
+                labelSi = lbl;
+                const parent = lbl.closest('td, div.ui-g, div.ui-radiobutton, tr, div') || lbl.parentElement;
+                boxSi = parent ? parent.querySelector('.ui-radiobutton-box') : null;
+                inputSi = parent ? parent.querySelector('input[type="radio"]') : null;
+                if (!boxSi && lbl.htmlFor) {
+                    const inp = document.getElementById(lbl.htmlFor);
+                    if (inp) {
+                        inputSi = inp;
+                        boxSi = inp.closest('.ui-radiobutton')?.querySelector('.ui-radiobutton-box');
+                    }
+                }
+            } else if (txt === 'NO' || txt === 'N') {
+                const parent = lbl.closest('td, div.ui-g, div.ui-radiobutton, tr, div') || lbl.parentElement;
+                boxNo = parent ? parent.querySelector('.ui-radiobutton-box') : null;
+            }
+        }
+
+        // Método B: Por valores del input (S, SI, 1, TRUE)
+        if (!boxSi) {
+            const inputs = Array.from(scope.querySelectorAll('input[type="radio"]'));
+            for (const inp of inputs) {
+                const val = (inp.value || '').trim().toUpperCase();
+                const parent = inp.closest('.ui-radiobutton') || inp.parentElement;
+                const box = parent ? parent.querySelector('.ui-radiobutton-box') : null;
+                if (val === 'S' || val === 'SI' || val === 'TRUE' || val === '1') {
+                    inputSi = inp;
+                    boxSi = box;
+                } else if (val === 'N' || val === 'NO' || val === 'FALSE' || val === '0') {
+                    boxNo = box;
+                }
+            }
+        }
+
+        // Método C: Heurística posicional PrimeFaces (la primera caja suele ser SÍ, la segunda NO)
+        if (!boxSi) {
+            const allBoxes = Array.from(scope.querySelectorAll('.ui-radiobutton-box'));
+            if (allBoxes.length >= 2) {
+                boxSi = allBoxes[0];
+                boxNo = allBoxes[1];
+            }
+        }
+
+        if (!boxSi) {
+            console.warn('⚠️ [WIZARD] Se detectó la pregunta pero no se pudo ubicar el selector "SÍ".');
+            return false;
+        }
+
+        // 4. Evaluar estado actual: ¿está ya en SÍ?
+        const siEstaActivo = boxSi.classList.contains('ui-state-active') ||
+            (inputSi && inputSi.checked) ||
+            !!boxSi.querySelector('.ui-icon-bullet');
+
+        if (siEstaActivo) {
+            console.log('✅ [WIZARD] La pregunta "¿Requiere informar valores...?" ya se encuentra en SÍ.');
+            return false;
+        }
+
+        console.log('⚡ [WIZARD] Pregunta detectada en NO. Activando "SÍ" para desbloquear formulario completo...');
+        if (typeof safeStatus === 'function') {
+            safeStatus('📝 Activando "SÍ" en informar valores...');
+        }
+
+        // 5. Clickeo reactivo en SÍ (Multi-layer PrimeFaces trigger)
+        if (typeof clickElement === 'function') {
+            clickElement(boxSi, 'Radio SÍ Informar Valores');
+        } else {
+            boxSi.click();
+        }
+
+        if (labelSi) {
+            try { labelSi.click(); } catch (e) {}
+        }
+
+        if (inputSi) {
+            inputSi.checked = true;
+            inputSi.dispatchEvent(new Event('change', { bubbles: true }));
+            inputSi.dispatchEvent(new Event('click', { bubbles: true }));
+        }
+
+        // 6. Esperar la reactividad / AJAX de PrimeFaces
+        if (typeof waitForPortal === 'function') {
+            await waitForPortal();
+        }
+        await sleep(800);
+
+        // 7. Verificación de confirmación
+        const siQuedoActivo = boxSi.classList.contains('ui-state-active') ||
+            (inputSi && inputSi.checked) ||
+            !!boxSi.querySelector('.ui-icon-bullet');
+
+        if (!siQuedoActivo) {
+            console.log('🔄 [WIZARD] Reintento de activación en "SÍ"...');
+            boxSi.click();
+            if (labelSi) try { labelSi.click(); } catch (e) {}
+            if (inputSi) {
+                inputSi.checked = true;
+                inputSi.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            await sleep(600);
+        }
+
+        console.log('✅ [WIZARD] Pregunta cambiada a "SÍ" con éxito. Formulario completo habilitado.');
+        return true;
+    } catch (err) {
+        console.warn('⚠️ [WIZARD] Error verificando pregunta de valores:', err);
+        return false;
+    }
+}
+
 async function ejecutarNavegacionDeclaracion(periodData) {
     if (typeof SafeStorage !== 'undefined' && SafeStorage.remove) {
         await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
@@ -3791,6 +4017,10 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         // PASO 5: PREGUNTAS (Si aparecen - SMART SKIP)
         console.log('🔍 Paso 5: Preguntas...');
+
+        // 🎯 Candado preventivo: Si la pregunta de informar valores aparece en el paso de preguntas, activar SÍ
+        await asegurarRequiereInformarValoresSi();
+
         const btnPreguntasSiguiente = await waitFor(async () => {
             const btn = document.getElementById('frmFlujoDeclaracion:btnPreguntasSiguiente');
             if (btn) return btn;
@@ -3815,6 +4045,17 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         // PASO 6: VER FORMULARIO COMPLETO (ELITE CLICK)
         console.log('🔍 Paso 6: Abrir Formulario...');
+
+        // 🎯 Candado de Oro Definitivo: Justo antes de aplastar "Ver formulario completo",
+        // si la pregunta "¿Requiere informar valores en su declaración de este período?"
+        // está presente en NO, cambiarla a SÍ para que el SRI cargue todos los casilleros del formulario 104
+        // y no salga en blanco ni se cuelgue.
+        const cambioSi = await asegurarRequiereInformarValoresSi();
+        if (cambioSi) {
+            console.log('⏳ Esperando actualización reactiva del portal tras marcar SÍ...');
+            await sleep(600);
+        }
+
         // ID REAL confirmado: frmFlujoDeclaracion:clkFormularioCompleto (es un <a>
         // ui-commandlink, no un botón). Saltea el paso 2 "Preguntas": su propio
         // aria-label dice "No es necesario contestar las preguntas del perfilamiento".

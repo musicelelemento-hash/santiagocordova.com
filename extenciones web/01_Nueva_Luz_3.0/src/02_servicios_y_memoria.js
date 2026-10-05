@@ -908,6 +908,93 @@ const SriLoop = {
             sri_auto_mode: !!encendido,
             autoDeclaration: !!encendido
         });
+    },
+
+    /**
+     * Devuelve el estado de recuperación tras un corte o desconexión.
+     * Permite saber qué cliente estaba corriendo, cuántos faltan, y reanudar con un clic.
+     */
+    async obtenerEstadoRecuperacion() {
+        const st = await SafeStorage.get(['sc_loop', 'sc_ultimo_punto_recuperacion', 'sc_telemetria_pulso', 'sc_declaraciones_locales']);
+        const loop = st.sc_loop || {};
+        const rec = st.sc_ultimo_punto_recuperacion || {};
+        const pulso = st.sc_telemetria_pulso || {};
+        const decls = st.sc_declaraciones_locales || {};
+
+        const cola = loop.cola || [];
+        const indice = typeof loop.indice === 'number' ? loop.indice : (rec.indice || 0);
+        const clienteActual = cola[indice] || null;
+
+        let yaDeclarado = false;
+        if (clienteActual && clienteActual.ruc) {
+            const p = loop.periodo || this.periodoPorDefecto();
+            const pStr = typeof p === 'string' ? p : `${p.year}-${String((p.monthIndex || 0) + 1).padStart(2, '0')}`;
+            const k = `${clienteActual.ruc}_${pStr}`;
+            yaDeclarado = !!decls[k];
+        }
+
+        return {
+            interrumpido: loop.estado === 'CORRIENDO' && Date.now() - (loop.latido || 0) > 60000,
+            estado: loop.estado || 'DETENIDO',
+            indice,
+            total: cola.length,
+            clienteActual,
+            yaDeclarado,
+            periodo: loop.periodo,
+            ultimoHito: pulso.evento || rec.ultimoHito || '',
+            tiempoUltimoPulso: pulso.t || rec.t || 0
+        };
+    },
+
+    /**
+     * Reanuda un lote que quedó interrumpido por caída de internet o cierre de ventana.
+     * Garantiza que el índice avance si el cliente actual ya quedó declarado,
+     * reactiva las credenciales del cliente pendiente y despierta el portal.
+     */
+    async reanudarDesdeCorte() {
+        const loop = await this.get();
+        const queue = loop.cola || [];
+        if (!queue.length) {
+            console.warn('⚠️ [BUCLE] No hay cola previa para reanudar.');
+            return { ok: false, motivo: 'Cola vacía' };
+        }
+
+        let idx = typeof loop.indice === 'number' ? loop.indice : 0;
+        const st = await SafeStorage.get(['sc_declaraciones_locales']);
+        const decls = st.sc_declaraciones_locales || {};
+        const p = loop.periodo || this.periodoPorDefecto();
+        const pStr = typeof p === 'string' ? p : `${p.year}-${String((p.monthIndex || 0) + 1).padStart(2, '0')}`;
+
+        while (idx < queue.length) {
+            const c = queue[idx];
+            const k = `${c.ruc}_${pStr}`;
+            if (decls[k]) {
+                console.log(`⏩ [BUCLE] Cliente ${c.name || c.ruc} ya completado previamente. Saltando a siguiente...`);
+                idx++;
+            } else {
+                break;
+            }
+        }
+
+        if (idx >= queue.length) {
+            console.log('🏁 [BUCLE] Todos los clientes de la cola ya fueron completados.');
+            await this.detener('Lote completado');
+            return { ok: true, completado: true };
+        }
+
+        const clientePendiente = queue[idx];
+        console.log(`▶️ [BUCLE] Reanudando lote en cliente ${idx + 1}/${queue.length}: ${clientePendiente.name || clientePendiente.ruc}`);
+
+        await this.prepararCliente(clientePendiente, p);
+        await this._set({
+            estado: 'CORRIENDO',
+            indice: idx,
+            latido: Date.now(),
+            motivo: `Reanudado desde corte en cliente ${idx + 1}`
+        });
+        await this._sincronizarLegado(true);
+
+        return { ok: true, indice: idx, total: queue.length, cliente: clientePendiente.name || clientePendiente.ruc };
     }
 };
 
@@ -2791,7 +2878,41 @@ const Bitacora = {
             });
 
             while (lista.length > this.MAX) lista.shift();
-            await SafeStorage.set({ [this._KEY]: lista });
+
+            const totalCola = (sem.cola && sem.cola.length) || 0;
+            const indiceActual = typeof sem.indice === 'number' ? sem.indice : 0;
+            const periodoStr = (typeof sem.periodo === 'string' ? sem.periodo : (sem.periodo ? `${sem.periodo.year}-${String((sem.periodo.monthIndex || 0) + 1).padStart(2, '0')}` : '')) || '';
+
+            const pulso = {
+                t: Date.now(),
+                evento,
+                detalle: String(detalle).slice(0, 180),
+                cliente: af.name || (sem.cola && sem.cola[indiceActual]?.name) || '',
+                ruc: af.ruc || (sem.cola && sem.cola[indiceActual]?.ruc) || '',
+                indice: indiceActual,
+                total: totalCola,
+                paso: totalCola ? `${indiceActual + 1}/${totalCola}` : '',
+                periodo: periodoStr,
+                estado: sem.estado || 'CORRIENDO',
+                fase: sem.ultimaFase || ''
+            };
+
+            const puntoRecuperacion = {
+                t: Date.now(),
+                ruc: pulso.ruc,
+                cliente: pulso.cliente,
+                indice: indiceActual,
+                total: totalCola,
+                periodo: periodoStr,
+                estado: sem.estado || 'CORRIENDO',
+                ultimoHito: evento
+            };
+
+            await SafeStorage.set({
+                [this._KEY]: lista,
+                sc_telemetria_pulso: pulso,
+                sc_ultimo_punto_recuperacion: puntoRecuperacion
+            });
         } catch (e) { /* nunca romper el flujo por anotar */ }
     },
 

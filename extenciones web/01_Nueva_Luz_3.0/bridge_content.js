@@ -354,6 +354,75 @@ window.addEventListener("message", (event) => {
         }
       });
     }
+
+    if (data.type === 'SRI_RESUME_BATCH') {
+      console.log("▶️ [SC PRO Bridge] Orden de reanudación de lote recibida desde Web...");
+      chrome.storage.local.get(['sc_loop', 'auto_batch_queue', 'auto_batch_index', 'sc_declaraciones_locales'], (st) => {
+        const loop = st.sc_loop || {};
+        const queue = loop.cola || st.auto_batch_queue || [];
+        if (!queue.length) {
+          console.warn("⚠️ [SC PRO Bridge] No hay cola previa para reanudar.");
+          return;
+        }
+
+        let idx = typeof loop.indice === 'number' ? loop.indice : (st.auto_batch_index || 0);
+        const decls = st.sc_declaraciones_locales || {};
+        const p = loop.periodo || { year: new Date().getFullYear(), monthIndex: new Date().getMonth() - 1 };
+        const pStr = typeof p === 'string' ? p : `${p.year}-${String((p.monthIndex || 0) + 1).padStart(2, '0')}`;
+
+        while (idx < queue.length) {
+          const c = queue[idx];
+          if (c && c.ruc && decls[`${c.ruc}_${pStr}`]) {
+            idx++;
+          } else {
+            break;
+          }
+        }
+
+        if (idx >= queue.length) {
+          console.log("🏁 [SC PRO Bridge] Todos los clientes de la cola ya fueron declarados.");
+          return;
+        }
+
+        const cliente = queue[idx];
+        const patch = {
+          auto_batch_enabled: true,
+          auto_batch_queue: queue,
+          auto_batch_index: idx,
+          sri_master_switch_on: true,
+          sri_auto_mode: true,
+          autoDeclaration: true,
+          sriAutomationPaused: false,
+          pendingAction: 'verifyProfile',
+          workflowPeriod: p,
+          actionTimestamp: Date.now(),
+          pending_sri_autofill: {
+            ruc: cliente.ruc,
+            password: cliente.password || cliente.sriPassword || '',
+            name: cliente.name || 'Cliente SRI',
+            timestamp: Date.now(),
+            manual: true,
+            isBatch: true
+          },
+          accionDeQuien: cliente.ruc,
+          sc_loop: {
+            ...loop,
+            estado: 'CORRIENDO',
+            cola: queue,
+            indice: idx,
+            periodo: p,
+            latido: Date.now(),
+            motivo: 'Reanudado desde Dashboard Web tras desconexión/pausa',
+            paso: false
+          }
+        };
+
+        chrome.storage.local.set(patch, () => {
+          console.log(`✅ [SC PRO Bridge] Lote reanudado en cliente ${idx + 1}/${queue.length}: ${cliente.name || cliente.ruc}`);
+          window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+        });
+      });
+    }
   }
 });
 
@@ -407,6 +476,17 @@ try {
           source: 'SC_PRO_EXTENSION',
           type: 'SRI_DECLARATION_COMPLETED_SYNC',
           data: item
+        }, '*');
+      }
+      if (area === 'local' && changes.sc_telemetria_pulso && changes.sc_telemetria_pulso.newValue) {
+        const pulso = changes.sc_telemetria_pulso.newValue;
+        try {
+          localStorage.setItem('sc_ultimo_pulso_rpa', JSON.stringify(pulso));
+        } catch (e) {}
+        window.postMessage({
+          source: 'SC_PRO_EXTENSION',
+          type: 'SRI_TELEMETRY_PULSE',
+          data: pulso
         }, '*');
       }
     });

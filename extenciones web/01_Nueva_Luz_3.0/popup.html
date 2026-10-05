@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nueva Luz 3.0</title>
+    <title>SC TaxPilot PRO</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -27,7 +27,7 @@
         }
 
         body {
-            width: 440px;
+            width: 520px;
             font-family: 'Manrope', sans-serif;
             background: var(--bg-deep);
             color: var(--text-main);
@@ -208,17 +208,26 @@
             border-radius: 12px;
             padding: 12px 14px;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 8px;
             transition: all 0.25s;
             backdrop-filter: blur(10px);
+            width: 100%;
         }
 
         .client-card:hover {
-            background: rgba(78, 222, 163, 0.03);
-            border-color: rgba(78, 222, 163, 0.3);
+            background: rgba(78, 222, 163, 0.04);
+            border-color: rgba(78, 222, 163, 0.35);
             transform: translateY(-1px);
             box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        .client-card-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
         }
 
         .client-info {
@@ -393,7 +402,7 @@
 
     <div class="header">
         <div>
-            <div class="header-title">💎 Nueva Luz 3.0</div>
+            <div class="header-title">⚡ SC TaxPilot PRO</div>
             <div class="header-subtitle">SRI ENGINE • COCKPIT</div>
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
