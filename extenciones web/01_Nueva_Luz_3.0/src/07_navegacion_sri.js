@@ -1227,6 +1227,16 @@ const SriLoopHUD = {
         });
 
         el.querySelector('#slh-omitidos-panel').addEventListener('click', async (ev) => {
+            const btnTodos = ev.target.closest('[data-reintentar-todos]');
+            if (btnTodos) {
+                ev.stopPropagation();
+                const total = await Omitidos.reintentarTodos();
+                this._aviso('♻️ Todos a la cola',
+                    `Se limpiaron las marcas y banderas de error de ${total} clientes omitidos.`, 5000);
+                await this.pintarOmitidos();
+                this.pintar();
+                return;
+            }
             const btn = ev.target.closest('[data-reintentar]');
             if (!btn) return;
             ev.stopPropagation();
@@ -1957,7 +1967,10 @@ const SriLoopHUD = {
         }).join('');
 
         panel.innerHTML =
-            `<div style="font-size:10px;opacity:0.7;margin-bottom:4px">${lista.length} sin declarar</div>` + filas;
+            `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">` +
+            `  <span style="font-size:10px;opacity:0.7">${lista.length} sin declarar</span>` +
+            `  <button data-reintentar-todos="true" style="border:none;border-radius:6px;padding:3px 8px;background:rgba(56,189,248,0.22);color:#38bdf8;font-size:10px;font-weight:800;cursor:pointer">♻️ Reintentar todos</button>` +
+            `</div>` + filas;
     },
 
     /**

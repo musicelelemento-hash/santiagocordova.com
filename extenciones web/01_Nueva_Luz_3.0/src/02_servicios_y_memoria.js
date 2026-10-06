@@ -1266,6 +1266,22 @@ const Omitidos = {
         return habia;
     },
 
+    /** Saca a TODOS los clientes de la lista Y limpia sus banderas de error en la bóveda. */
+    async reintentarTodos() {
+        const r = await SafeStorage.get([this._KEY, 'flagged_errors', 'sri_tried_credentials']);
+        const lista = r[this._KEY] || {};
+        const errs = r.flagged_errors || {};
+        const tried = r.sri_tried_credentials || {};
+        const rucs = Object.keys(lista);
+        for (const ruc of rucs) {
+            delete errs[ruc];
+            delete tried[ruc];
+        }
+        await SafeStorage.set({ [this._KEY]: {}, flagged_errors: errs, sri_tried_credentials: tried });
+        console.log(`♻️ [OMITIDOS] Se limpiaron las marcas y banderas de error para ${rucs.length} clientes. Todos vuelven a la cola.`);
+        return rucs.length;
+    },
+
     async limpiar() {
         await SafeStorage.remove([this._KEY]);
         console.log('🧹 Lista de omitidos vaciada. Las banderas de error NO se tocaron.');
