@@ -326,35 +326,55 @@ async function llenarCompras(data) {
     }
 
 
-    // ─── PASO 2: Compras con IVA (casilleros 500 y 510) ──────────────────────
+    // ─── PASO 2: Compras con IVA (15%) - Segregación 500 (Crédito) vs 502 (Sin Crédito) ────
     console.log('\n🔍 Paso 2: Compras con IVA (15%)...');
-    const base15 = parseDecimal(facturas.iva15?.baseImponible || 0);
+    const base15Total = parseDecimal(facturas.iva15?.baseImponible || 0);
     const nc15 = parseDecimal(notasCredito?.iva15?.baseImponible || 0);
 
-    if (base15 > 0 || nc15 > 0) {
-        console.log(`  Base Imponible 15%: $${base15.toFixed(2)} | NC: $${nc15.toFixed(2)}`);
+    // Segregación de compras con y sin crédito tributario (Art. 66 LRTI)
+    const base15SinCredito = parseDecimal(facturas.base15SinCredito || facturas.sinCredito || 0);
+    const base15ConCredito = (base15SinCredito > 0 && base15Total >= base15SinCredito)
+        ? Math.round((base15Total - base15SinCredito) * 100) / 100
+        : (facturas.base15ConCredito !== undefined ? parseDecimal(facturas.base15ConCredito) : base15Total);
 
-        console.log('  📝 Casillero 500 (Compras 15% - Bruto)...');
-        if (await llenarCampo('500', base15)) {
+    if (base15ConCredito > 0 || nc15 > 0) {
+        console.log(`  Base Imponible 15% con Crédito (500): $${base15ConCredito.toFixed(2)} | NC: $${nc15.toFixed(2)}`);
+
+        console.log('  📝 Casillero 500 (Compras 15% con Crédito - Bruto)...');
+        if (await llenarCampo('500', base15ConCredito)) {
             camposLlenados++;
             console.log('  ⏳ Pausa para recálculo SRI tras 500...');
             await sleep(1500);
         }
 
-        const valor510 = Math.max(0, base15 - nc15);
-        console.log(`  📝 Casillero 510 = $${base15.toFixed(2)} - $${nc15.toFixed(2)} (NC) = $${valor510.toFixed(2)}`);
+        const valor510 = Math.max(0, base15ConCredito - nc15);
+        console.log(`  📝 Casillero 510 = $${base15ConCredito.toFixed(2)} - $${nc15.toFixed(2)} (NC) = $${valor510.toFixed(2)}`);
         if (await llenarCampo('510', valor510)) camposLlenados++;
         await sleep(800);
 
         // ─── ELITE v13.2: Notas de Crédito por compensar (15% -> 544) ─────────
-        const valor544 = Math.max(0, nc15 - base15);
+        const valor544 = Math.max(0, nc15 - base15ConCredito);
         if (valor544 > 0) {
-            console.log(`  📝 [NC SURPLUS] Casillero 544 (Compensación 15%): $${valor544.toFixed(2)} (NC:$${nc15.toFixed(2)} > Base:$${base15.toFixed(2)})`);
+            console.log(`  📝 [NC SURPLUS] Casillero 544 (Compensación 15%): $${valor544.toFixed(2)} (NC:$${nc15.toFixed(2)} > Base:$${base15ConCredito.toFixed(2)})`);
             if (await llenarCampo('544', valor544)) camposLlenados++;
             await sleep(600);
         }
     } else {
-        console.log('  ℹ️ Sin compras ni NC con IVA (15%).');
+        console.log('  ℹ️ Sin compras ni NC con IVA (15%) con derecho a crédito.');
+    }
+
+    // ─── PASO 2.2: Adquisiciones 15% SIN Derecho a Crédito Tributario (502 y 512) ────
+    if (base15SinCredito > 0) {
+        console.log(`\n🔍 Paso 2.2: Compras 15% SIN derecho a crédito tributario (502/512)... $${base15SinCredito.toFixed(2)}`);
+        const input502 = await encontrarInputPorCasillero('502');
+        if (await llenarCampo('502', base15SinCredito, input502)) {
+            camposLlenados++;
+            console.log('  ⏳ Pausa para recálculo SRI tras 502...');
+            await sleep(1000);
+            const input512 = await encontrarInputPorCasillero('512');
+            if (await llenarCampo('512', base15SinCredito, input512)) camposLlenados++;
+            await sleep(800);
+        }
     }
 
     // ─── PASO 2.5: Compras al 5% (casilleros 540 y 550) ──────────────────────
