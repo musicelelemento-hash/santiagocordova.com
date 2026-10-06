@@ -1272,19 +1272,122 @@ const Omitidos = {
         const lista = r[this._KEY] || {};
         const errs = r.flagged_errors || {};
         const tried = r.sri_tried_credentials || {};
-        const rucs = Object.keys(lista);
-        for (const ruc of rucs) {
-            delete errs[ruc];
-            delete tried[ruc];
-        }
-        await SafeStorage.set({ [this._KEY]: {}, flagged_errors: errs, sri_tried_credentials: tried });
-        console.log(`♻️ [OMITIDOS] Se limpiaron las marcas y banderas de error para ${rucs.length} clientes. Todos vuelven a la cola.`);
-        return rucs.length;
+        const rucs = new Set([...Object.keys(lista), ...Object.keys(errs), ...Object.keys(tried)]);
+        await SafeStorage.set({ [this._KEY]: {}, flagged_errors: {}, sri_tried_credentials: {} });
+        console.log(`♻️ [OMITIDOS] Se limpiaron las marcas y banderas de error para ${rucs.size} clientes. Todos vuelven a la cola.`);
+        return rucs.size;
     },
 
     async limpiar() {
         await SafeStorage.remove([this._KEY]);
         console.log('🧹 Lista de omitidos vaciada. Las banderas de error NO se tocaron.');
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SINCRONIZADOR DE CLAVES DESDE LA NUBE (UNIFICACIÓN WEB ↔ EXTENSIÓN)
+// ═══════════════════════════════════════════════════════════════════════════
+const SriSincronizadorClaves = {
+    async sincronizar() {
+        if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
+            console.error('❌ [SINCRONIZAR] Falta URL o Key de Supabase configurada.');
+            return { ok: false, error: 'Faltan credenciales de Supabase' };
+        }
+        console.log('🔄 [SINCRONIZAR CLAVES] Consultando base de datos central en Supabase...');
+        try {
+            const url = `${SC_SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=id,ruc,name,sri_password,is_active,tax_profile`;
+            const res = await fetch(url, {
+                headers: {
+                    apikey: SC_SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`
+                }
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(`Error Supabase ${res.status}: ${txt}`);
+            }
+            const dbClients = await res.json();
+            console.log(`📦 [SINCRONIZAR CLAVES] Descargados ${dbClients.length} clientes desde la nube.`);
+
+            const storageRes = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
+            let cacheList = Array.isArray(storageRes.sc_clients_cache) ? [...storageRes.sc_clients_cache] : [];
+            let errs = storageRes.flagged_errors || {};
+            let tried = storageRes.sri_tried_credentials || {};
+
+            let actualizadas = 0;
+            let agregados = 0;
+            let omitidosInactivos = 0;
+
+            const dbMap = new Map();
+            for (const c of dbClients) {
+                if (c && c.ruc) dbMap.set(c.ruc.trim(), c);
+            }
+
+            // 1. Actualizar clientes existentes en caché
+            cacheList = cacheList.map(c => {
+                const dbC = dbMap.get(c.ruc);
+                if (!dbC) return c;
+
+                // Excluir si está inactivo en la web
+                if (dbC.is_active === false) {
+                    omitidosInactivos++;
+                    return null;
+                }
+
+                const nuevaClave = (dbC.sri_password || '').trim();
+                const claveAnterior = (c.password || c.sri_password || c.sriPassword || '').trim();
+
+                if (nuevaClave && nuevaClave !== claveAnterior) {
+                    actualizadas++;
+                    delete errs[c.ruc];
+                    delete tried[c.ruc];
+                }
+
+                return {
+                    ...c,
+                    name: dbC.name || c.name,
+                    password: nuevaClave || claveAnterior,
+                    sri_password: nuevaClave || claveAnterior,
+                    sriPassword: nuevaClave || claveAnterior,
+                    tax_profile: dbC.tax_profile || c.tax_profile,
+                    taxProfile: dbC.tax_profile || c.taxProfile
+                };
+            }).filter(Boolean);
+
+            // 2. Incorporar clientes de la base que no estaban en la caché
+            for (const dbC of dbClients) {
+                if (!dbC.is_active) continue;
+                const yaEsta = cacheList.some(x => x && x.ruc === dbC.ruc.trim());
+                if (!yaEsta) {
+                    const pass = (dbC.sri_password || '').trim();
+                    cacheList.push({
+                        id: dbC.id,
+                        name: dbC.name || `Cliente ${dbC.ruc}`,
+                        ruc: dbC.ruc.trim(),
+                        password: pass,
+                        sri_password: pass,
+                        sriPassword: pass,
+                        tax_profile: dbC.tax_profile || { ivaFrequency: 'Mensual' },
+                        taxProfile: dbC.tax_profile || { ivaFrequency: 'Mensual' },
+                        regime: 'Régimen General',
+                        declarations: []
+                    });
+                    agregados++;
+                }
+            }
+
+            await SafeStorage.set({
+                sc_clients_cache: cacheList,
+                flagged_errors: errs,
+                sri_tried_credentials: tried
+            });
+
+            console.log(`✅ [SINCRONIZAR CLAVES] Listo: ${actualizadas} actualizadas, ${agregados} agregados, ${omitidosInactivos} inactivos depurados.`);
+            return { ok: true, actualizadas, agregados, total: cacheList.length };
+        } catch (err) {
+            console.error('❌ [SINCRONIZAR CLAVES] Error al sincronizar:', err);
+            return { ok: false, error: err.message };
+        }
     }
 };
 
@@ -1304,6 +1407,7 @@ if (typeof window !== 'undefined') {
     };
     window.sriReintentar = (ruc) => Omitidos.reintentar(String(ruc).trim());
     window.sriOmitidosLimpiar = () => Omitidos.limpiar();
+    window.sriSincronizarClaves = () => SriSincronizadorClaves.sincronizar();
 }
 
 const SriApi = {

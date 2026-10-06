@@ -720,6 +720,7 @@ const SriLoopHUD = {
             '<button id="slh-ir" aria-label="Ir a una pantalla del SRI" title="Ir a: comprobantes recibidos · formulario de IVA · consulta de declaraciones · perfil" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;cursor:pointer;background:transparent;color:#cbd5e1;opacity:0.5">🧭</button>',
             '<button id="slh-casilleros" aria-label="Ver los casilleros que tiene este formulario" title="Ver TODOS los casilleros de este formulario con su id real (para confirmar el 540, el 502 y los que falten)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">📐</button>',
             '<button id="slh-chequeo" aria-label="Chequeo: ver si está todo listo para correr el lote" title="Chequeo: la subida, las claves, el catastro, los proveedores y las marcas que frenan el envío" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🩺</button>',
+            '<button id="slh-sincronizar" aria-label="Sincronizar claves desde la nube (Web)" title="Sincronizar claves: descarga las contraseñas vigentes de la web a la extensión y limpia bloqueos obsoletos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(52,211,153,0.18);color:#6ee7b7">🔄</button>',
             '<button id="slh-probarclaves" aria-label="Probar claves: entra con cada clave guardada y sale, sin declarar nada" title="Probar claves: recorre la cartera, entra con cada clave guardada y sale — nunca declara" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🔑</button>',
             '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
@@ -1170,6 +1171,21 @@ const SriLoopHUD = {
             await this.pintarRegistro();
         });
 
+        el.querySelector('#slh-sincronizar').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            this._aviso('🔄 Sincronizando', 'Consultando claves vigentes en la base de datos...', 3000);
+            if (typeof SriSincronizadorClaves !== 'undefined') {
+                const res = await SriSincronizadorClaves.sincronizar();
+                if (res.ok) {
+                    this._aviso('✅ Claves Sincronizadas',
+                        `Sincronización completa: ${res.actualizadas} actualizadas, ${res.total} clientes listos en cartera.`, 6000);
+                    this.pintar();
+                } else {
+                    this._aviso('❌ Error Sincronizando', res.error || 'No se pudo conectar a la base.', 6000);
+                }
+            }
+        });
+
         el.querySelector('#slh-probarclaves').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             const panel = el.querySelector('#slh-probarclaves-panel');
@@ -1270,6 +1286,7 @@ const SriLoopHUD = {
             ['slh-casilleros',  'Casilleros'],
             ['slh-ir',          'Ir a…'],
             ['slh-chequeo',     'Chequeo'],
+            ['slh-sincronizar', 'Sincronizar'],
             ['slh-probarclaves','Probar claves'],
             ['slh-auditoria',   'Períodos'],
             ['slh-subida',      'Probar subida'],
