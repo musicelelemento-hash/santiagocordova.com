@@ -183,12 +183,16 @@ const SriCredentialVault = {
     };
   },
 
-  async canAttemptLogin(ruc, password) {
+  async canAttemptLogin(ruc, password, options = {}) {
     if (!ruc) return { allowed: false, reason: 'RUC no especificado' };
     const { tried, flagged } = await this.getRegistry();
     const entry = tried[ruc];
 
     if (entry && (entry.status === 'locked' || entry.status === 'blocked')) {
+      if (options.isManual || options.force) {
+        console.log(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado por el usuario.`);
+        return { allowed: true, manualOverride: true };
+      }
       return {
         allowed: false,
         reason: `Cuenta reportada como bloqueada/inactiva en el portal SRI. Omitida para proteger al cliente.`
@@ -196,6 +200,10 @@ const SriCredentialVault = {
     }
 
     if (flagged[ruc] === 'error_credenciales' || (entry && entry.status === 'failed')) {
+      if (options.isManual || options.force) {
+        console.log(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado con la clave actual.`);
+        return { allowed: true, manualOverride: true };
+      }
       const currentSig = this.getSignature(password);
       // Si la clave no ha cambiado respecto a la fallida, BLOQUEO TOTAL
       if (!currentSig || !entry || !entry.signature || entry.signature === currentSig) {
@@ -2351,6 +2359,8 @@ async function syncDeclarationToSupabase(
 
     // 2. Doble sincronización en clients.declaration_history para máxima compatibilidad con el dashboard web
     try {
+      const nowIso = new Date().toISOString();
+      const nowTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const updatedHistory = [
         ...existingHistory.filter(d => !(d && (d.period === canonicalPeriod || d.period === periodStr) && (d.type === decType || !d.type))),
         {
@@ -2358,7 +2368,9 @@ async function syncDeclarationToSupabase(
           type: decType,
           status: finalStatus,
           proof_file: proofFileObj,
-          updated_at: new Date().toISOString()
+          declaredAt: nowIso,
+          declaredTime: nowTime,
+          updated_at: nowIso
         }
       ];
 
@@ -2580,6 +2592,10 @@ async function handleBatchNextClient() {
       console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${clientPer} en esta corrida.`);
       return true;
     }
+    if (item.hasPdf === true) {
+      console.log(`🛡️ [BUCLE FERROCARRIL] ${clientRuc} ya posee comprobante confirmado (${clientPer}). Saltando.`);
+      return true;
+    }
     if (tried[clientRuc] && (tried[clientRuc].status === 'failed' || tried[clientRuc].status === 'locked' || tried[clientRuc].status === 'blocked')) return true;
     const found = cacheList.find((c) => c.ruc === clientRuc);
     if (found) {
@@ -2615,6 +2631,15 @@ async function handleBatchNextClient() {
       `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Período: ${clientPer}] [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
     );
 
+    try {
+      const rbRes = await SafeStorage.get(['sc_rebotes']);
+      const rb = rbRes.sc_rebotes || {};
+      if (rb[nextClient.ruc] !== undefined) {
+        delete rb[nextClient.ruc];
+        await SafeStorage.set({ sc_rebotes: rb });
+      }
+    } catch (e) {}
+
     const pParts = clientPer.split("-");
     const pYear = parseInt(pParts[0]);
     const pMonth = parseInt(pParts[1]) - 1; // monthIndex 0..11 para workflowPeriod
@@ -2631,6 +2656,25 @@ async function handleBatchNextClient() {
     // (el freno lo evita) pero quemaba minutos por cada uno de esos clientes.
     // El orden «primero el comprobante» pedido por el usuario depende de que
     // ESTA rama también lo respete, no sólo la del primer cliente.
+    if (nextClient.soloEstarAdentro || nextClient.pendingAction === 'solo_perfil') {
+      console.log(`🌐 [SOLO SESIÓN SRI] ${nextClient.name || nextClient.ruc}: solo entra al portal y permanece en escritorio.`);
+      await SafeStorage.set({
+        auto_batch_index: nextIndex,
+        pending_sri_autofill: {
+          ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
+          timestamp: Date.now(), manual: true, isBatch: true, soloEstarAdentro: true,
+          loginAttempted: false
+        },
+        pendingAction: 'solo_perfil',
+        actionTimestamp: Date.now(),
+        ghost_manual_mode: false,
+      });
+      await GhostMemory.clearCurrent();
+      await sleep(1000);
+      await cerrarSesionSRI();
+      return true;
+    }
+
     if (nextClient.soloProbarClave) {
       console.log(`🔑 [PROBAR CLAVES] ${nextClient.name || nextClient.ruc}: sólo entra y sale, no declara nada.`);
       await SafeStorage.set({
@@ -2638,6 +2682,7 @@ async function handleBatchNextClient() {
         pending_sri_autofill: {
           ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
           timestamp: Date.now(), manual: true, isBatch: true,
+          loginAttempted: false
         },
         pendingAction: 'probar_clave',
         actionTimestamp: Date.now(),
@@ -2660,6 +2705,7 @@ async function handleBatchNextClient() {
         pending_sri_autofill: {
           ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
           timestamp: Date.now(), manual: true, isBatch: true,
+          loginAttempted: false
         },
         pendingAction: 'recuperar_comprobante',
         recuperarComprobante: {
@@ -2694,6 +2740,7 @@ async function handleBatchNextClient() {
         pending_sri_autofill: {
           ruc: nextClient.ruc, password: nextClient.password, name: nextClient.name,
           timestamp: Date.now(), manual: true, isBatch: true,
+          loginAttempted: false
         },
         pendingAction: 'bajar_todos_comprobantes',
         bajarTodos: {
@@ -2727,6 +2774,7 @@ async function handleBatchNextClient() {
         timestamp: Date.now(),
         manual: true,
         isBatch: true,
+        loginAttempted: false
       },
       pendingAction: batchAction,
       workflowPeriod: periodoSiguiente,
@@ -3167,8 +3215,20 @@ async function renderAnticipationWidget(items) {
     defaultYear--;
   }
 
-  let selectedMonth = items.selected_period_month !== undefined ? parseInt(items.selected_period_month) : (items.workflowPeriod?.monthIndex ?? defaultMonth);
-  let selectedYear = items.selected_period_year !== undefined ? parseInt(items.selected_period_year) : (items.workflowPeriod?.year ?? defaultYear);
+  // 🗓️ Periodo que corresponde declarar:
+  // 1. Si hay workflowPeriod activo (de lote o web), se respeta ese.
+  // 2. Si hay selected_period_month guardado RECIENTEMENTE (< 1 hora, misma sesión), se respeta.
+  // 3. De lo contrario, SIEMPRE el mes que toca por defecto (ahora octubre -> sep).
+  let selectedMonth = defaultMonth;
+  let selectedYear = defaultYear;
+
+  if (items.workflowPeriod && typeof items.workflowPeriod.monthIndex === 'number' && items.workflowPeriod.year) {
+    selectedMonth = items.workflowPeriod.monthIndex;
+    selectedYear = items.workflowPeriod.year;
+  } else if (items.selected_period_updated_at && (Date.now() - items.selected_period_updated_at < 3600000) && items.selected_period_month !== undefined) {
+    selectedMonth = parseInt(items.selected_period_month);
+    selectedYear = items.selected_period_year !== undefined ? parseInt(items.selected_period_year) : defaultYear;
+  }
 
   const getTargetPeriodStr = (y, m) => `${y}-${(m + 1).toString().padStart(2, "0")}`;
 
@@ -3452,7 +3512,9 @@ async function renderAnticipationWidget(items) {
     await SafeStorage.set({
       selected_period_month: selectedMonth,
       selected_period_year: selectedYear,
-      workflowPeriod: { year: selectedYear, monthIndex: selectedMonth }
+      selected_period_updated_at: Date.now(),
+      workflowPeriod: { year: selectedYear, monthIndex: selectedMonth },
+      sri_target_period: { year: selectedYear, monthIndex: selectedMonth }
     });
 
     const res = computeLists(selectedYear, selectedMonth);

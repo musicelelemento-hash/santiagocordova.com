@@ -30,11 +30,15 @@ function initSelectors() {
     const now = new Date();
     // Período objetivo por defecto: el mes anterior. Pero si hay una preferencia
     // guardada (sri_target_period, elegida a mano o con "🎯 Mes que falta"), esa manda.
-    chrome.storage.local.get(['sri_target_period'], (res) => {
+    chrome.storage.local.get(['sri_target_period', 'workflowPeriod', 'selected_period_updated_at'], (res) => {
         const t = res.sri_target_period;
         let y = now.getFullYear(), m = now.getMonth() - 1;
         if (m < 0) { m = 11; y--; }
-        if (t && t.year && typeof t.monthIndex === 'number') {
+        const isRecent = res.selected_period_updated_at && (Date.now() - res.selected_period_updated_at < 3600000);
+        if (res.workflowPeriod && typeof res.workflowPeriod.monthIndex === 'number' && res.workflowPeriod.year) {
+            currentYear = res.workflowPeriod.year;
+            currentMonth = res.workflowPeriod.monthIndex;
+        } else if (isRecent && t && t.year && typeof t.monthIndex === 'number') {
             currentYear = t.year;
             currentMonth = t.monthIndex;
         } else {
@@ -571,7 +575,13 @@ function loadClientsFromCacheOrFetch() {
 
 /** Persiste el mes elegido en los selects como preferencia del período objetivo. */
 function persistirMesSeleccionado() {
-    return chrome.storage.local.set({ sri_target_period: { year: currentYear, monthIndex: currentMonth } });
+    return chrome.storage.local.set({
+        sri_target_period: { year: currentYear, monthIndex: currentMonth },
+        selected_period_month: currentMonth,
+        selected_period_year: currentYear,
+        selected_period_updated_at: Date.now(),
+        workflowPeriod: { year: currentYear, monthIndex: currentMonth }
+    });
 }
 
 /** Equivalente local a SriLoop.declaracionLocal(): ¿declaramos a este RUC este período? */

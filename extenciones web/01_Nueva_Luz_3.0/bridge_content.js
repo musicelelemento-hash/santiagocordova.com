@@ -156,32 +156,55 @@ function syncFullClientsMatrix() {
           periodToUse = { year: cYear, monthIndex: cMonth };
         }
 
-        chrome.storage.local.set({
-          pending_sri_autofill: {
-            ruc: activeData.ruc,
-            password: activeData.password || activeData.sriPassword || '',
-            name: activeData.name || 'Cliente SRI',
-            timestamp: Date.now(),
-            manual: true
-          },
-          accionDeQuien: activeData.ruc,
-          pendingAction: 'verifyProfile',
-          workflowPeriod: periodToUse,
-          actionTimestamp: Date.now(),
-          sri_master_switch_on: true,
-          sri_auto_mode: true,
-          autoDeclaration: true,
-          sriAutomationPaused: false,
-          sc_loop: {
-            estado: 'CORRIENDO',
-            cola: [{ ruc: activeData.ruc, name: activeData.name || 'Cliente SRI', password: activeData.password || activeData.sriPassword || '' }],
-            indice: 0,
-            periodo: periodToUse,
-            latido: Date.now(),
-            motivo: 'Iniciado vía activeData en Web',
-            paso: false,
-            ultimaFase: ''
-          }
+        chrome.storage.local.get(['sc_rebotes', 'sri_tried_credentials', 'flagged_errors', 'sc_omitidos'], (rbRes) => {
+          const rb = rbRes?.sc_rebotes || {};
+          delete rb[activeData.ruc];
+
+          // 🔓 Si el usuario lo disparó explícitamente desde la Web, REINICIAR el bloqueo preventivo
+          // para permitir el intento manual supervisado con la clave actual:
+          const tried = rbRes?.sri_tried_credentials || {};
+          const flagged = rbRes?.flagged_errors || {};
+          const omitidos = rbRes?.sc_omitidos || {};
+          delete tried[activeData.ruc];
+          delete flagged[activeData.ruc];
+          delete omitidos[activeData.ruc];
+
+          chrome.storage.local.set({
+            sc_rebotes: rb,
+            sri_tried_credentials: tried,
+            flagged_errors: flagged,
+            sc_omitidos: omitidos,
+            pending_sri_autofill: {
+              ruc: activeData.ruc,
+              password: activeData.password || activeData.sriPassword || '',
+              name: activeData.name || 'Cliente SRI',
+              timestamp: Date.now(),
+              manual: true,
+              loginAttempted: false
+            },
+            accionDeQuien: activeData.ruc,
+            pendingAction: 'verifyProfile',
+            workflowPeriod: periodToUse,
+            selected_period_month: periodToUse.monthIndex,
+            selected_period_year: periodToUse.year,
+            sri_target_period: periodToUse,
+            selected_period_updated_at: Date.now(),
+            actionTimestamp: Date.now(),
+            sri_master_switch_on: true,
+            sri_auto_mode: true,
+            autoDeclaration: true,
+            sriAutomationPaused: false,
+            sc_loop: {
+              estado: 'CORRIENDO',
+              cola: [{ ruc: activeData.ruc, name: activeData.name || 'Cliente SRI', password: activeData.password || activeData.sriPassword || '' }],
+              indice: 0,
+              periodo: periodToUse,
+              latido: Date.now(),
+              motivo: 'Iniciado vía activeData en Web',
+              paso: false,
+              ultimaFase: ''
+            }
+          });
         });
         
         // Limpiar para evitar bucles infinitos
@@ -258,51 +281,79 @@ window.addEventListener("message", (event) => {
         periodToUse = { year: cYear, monthIndex: cMonth };
       }
 
-      chrome.storage.local.set({
-        pending_sri_autofill: {
-          ruc: data.data.ruc,
-          password: data.data.password || data.data.sriPassword || '',
-          name: data.data.name || 'Cliente SRI',
-          timestamp: Date.now(),
-          manual: true
-        },
-        accionDeQuien: data.data.ruc,
-        pendingAction: 'verifyProfile',
-        workflowPeriod: periodToUse,
-        actionTimestamp: Date.now(),
-        sri_master_switch_on: true,
-        sri_auto_mode: true,
-        autoDeclaration: true,
-        sriAutomationPaused: false,
-        sc_loop: {
-          estado: 'CORRIENDO',
-          cola: [{ ruc: data.data.ruc, name: data.data.name || 'Cliente SRI', password: data.data.password || data.data.sriPassword || '' }],
-          indice: 0,
-          periodo: periodToUse,
-          latido: Date.now(),
-          motivo: 'Iniciado desde Web (Individual)',
-          paso: false,
-          ultimaFase: ''
-        }
+      chrome.storage.local.get(['sc_rebotes'], (rbRes) => {
+        const rb = rbRes?.sc_rebotes || {};
+        delete rb[data.data.ruc];
+        chrome.storage.local.set({
+          sc_rebotes: rb,
+          pending_sri_autofill: {
+            ruc: data.data.ruc,
+            password: data.data.password || data.data.sriPassword || '',
+            name: data.data.name || 'Cliente SRI',
+            timestamp: Date.now(),
+            manual: true,
+            loginAttempted: false
+          },
+          accionDeQuien: data.data.ruc,
+          pendingAction: 'verifyProfile',
+          workflowPeriod: periodToUse,
+          selected_period_month: periodToUse.monthIndex,
+          selected_period_year: periodToUse.year,
+          sri_target_period: periodToUse,
+          selected_period_updated_at: Date.now(),
+          actionTimestamp: Date.now(),
+          sri_master_switch_on: true,
+          sri_auto_mode: true,
+          autoDeclaration: true,
+          sriAutomationPaused: false,
+          sc_loop: {
+            estado: 'CORRIENDO',
+            cola: [{ ruc: data.data.ruc, name: data.data.name || 'Cliente SRI', password: data.data.password || data.data.sriPassword || '' }],
+            indice: 0,
+            periodo: periodToUse,
+            latido: Date.now(),
+            motivo: 'Iniciado desde Web (Individual)',
+            paso: false,
+            ultimaFase: ''
+          }
+        });
+      });
+    }
+
+    if (data.type === 'SRI_ENTER_PORTAL_SESSION' && data.data) {
+      console.log("🌐 [Bridge] Sesión directa al SRI recibida para:", data.data.name, data.data.ruc);
+      chrome.storage.local.get(['sc_rebotes'], (rbRes) => {
+        const rb = rbRes?.sc_rebotes || {};
+        delete rb[data.data.ruc];
+        chrome.storage.local.set({
+          sc_rebotes: rb,
+          pending_sri_autofill: {
+            ruc: data.data.ruc,
+            password: data.data.password || data.data.sriPassword || '',
+            name: data.data.name || 'Cliente SRI',
+            timestamp: Date.now(),
+            manual: true,
+            soloEstarAdentro: true,
+            loginAttempted: false
+          },
+          accionDeQuien: data.data.ruc,
+          pendingAction: 'solo_perfil',
+          actionTimestamp: Date.now(),
+          sri_master_switch_on: false,
+          sri_auto_mode: false,
+          autoDeclaration: false,
+          auto_batch_enabled: false,
+          sriAutomationPaused: true
+        });
       });
     }
 
     if (data.type === 'SRI_START_BATCH_DECLARATION' && data.data) {
       console.log("🚀 Lote recibido en Bridge:", data.data);
       const isTestKeys = !!data.data.testKeysOnly || data.data.mode === 'probar_clave';
-      const queue = (data.data.clients || []).map(c => ({
-        ruc: c.ruc,
-        password: c.sriPassword || c.password,
-        name: c.name,
-        period: c.period || undefined,
-        soloProbarClave: isTestKeys || !!c.soloProbarClave
-      }));
-      
+      const isRecoverOnly = data.data.mode === 'recover_pdf_only';
+
       let periodToUse = extractPeriodFromData(data.data);
-      if (queue.length > 0 && queue[0].period && /^\d{4}-\d{2}$/.test(queue[0].period)) {
-        const parts = queue[0].period.split('-');
-        periodToUse = { year: parseInt(parts[0], 10), monthIndex: parseInt(parts[1], 10) - 1 };
-      }
       if (!periodToUse) {
         const now = new Date();
         let cMonth = now.getMonth() - 1;
@@ -310,6 +361,33 @@ window.addEventListener("message", (event) => {
         if (cMonth < 0) { cMonth = 11; cYear--; }
         periodToUse = { year: cYear, monthIndex: cMonth };
       }
+      const pStr = `${periodToUse.year}-${String(periodToUse.monthIndex + 1).padStart(2, '0')}`;
+
+      const queue = (data.data.clients || [])
+        .filter(c => {
+          if (isTestKeys) return true;
+          if (c.hasPdf === true) {
+            console.log(`🛡️ [BRIDGE BUCLE] ${c.name || c.ruc} ya posee comprobante para ${pStr}. Omitido preventivamente.`);
+            return false;
+          }
+          const decs = c.declarations || c.declaration_history || [];
+          const yaTienePdf = decs.some(d => 
+            d && (d.proof_file?.url || d.proof_file?.name || d.pdfUrl) && String(d.period || '').includes(pStr)
+          );
+          if (yaTienePdf) {
+            console.log(`🛡️ [BRIDGE BUCLE] ${c.name || c.ruc} tiene comprobante existente (${pStr}). Omitido.`);
+            return false;
+          }
+          return true;
+        })
+        .map(c => ({
+          ruc: c.ruc,
+          password: c.sriPassword || c.password,
+          name: c.name,
+          period: c.period || undefined,
+          soloRecuperar: isRecoverOnly || !!c.soloRecuperar,
+          soloProbarClave: isTestKeys || !!c.soloProbarClave
+        }));
 
       const payload = {
         auto_batch_enabled: true,
@@ -319,6 +397,10 @@ window.addEventListener("message", (event) => {
         auto_batch_mode: isTestKeys ? 'probar_clave' : 'turbo_step1_facturas',
         pendingAction: isTestKeys ? 'probar_clave' : 'verifyProfile',
         workflowPeriod: periodToUse,
+        selected_period_month: periodToUse.monthIndex,
+        selected_period_year: periodToUse.year,
+        sri_target_period: periodToUse,
+        selected_period_updated_at: Date.now(),
         actionTimestamp: Date.now(),
         sri_master_switch_on: true,
         sri_auto_mode: true,
@@ -344,16 +426,22 @@ window.addEventListener("message", (event) => {
           name: queue[0].name,
           timestamp: Date.now(),
           manual: true,
-          isBatch: true
+          isBatch: true,
+          loginAttempted: false
         };
         payload.accionDeQuien = queue[0].ruc;
       }
 
-      chrome.storage.local.set(payload, () => {
-        console.log(`✅ Lote (${isTestKeys ? 'Pre-Vuelo Claves' : 'Declaración'}) guardado en storage de Nueva Luz 3.0 con sc_loop CORRIENDO.`);
-        if (!data.data.portalAlreadyOpened) {
-          window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
-        }
+      chrome.storage.local.get(['sc_rebotes'], (rbRes) => {
+        const rb = rbRes?.sc_rebotes || {};
+        queue.forEach(c => { delete rb[c.ruc]; });
+        payload.sc_rebotes = rb;
+        chrome.storage.local.set(payload, () => {
+          console.log(`✅ Lote (${isTestKeys ? 'Pre-Vuelo Claves' : 'Declaración'}) guardado en storage de Nueva Luz 3.0 con sc_loop CORRIENDO.`);
+          if (!data.data.portalAlreadyOpened) {
+            window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+          }
+        });
       });
     }
 

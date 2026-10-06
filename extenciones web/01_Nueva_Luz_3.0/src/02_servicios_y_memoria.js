@@ -482,12 +482,16 @@ const SriLoop = {
      * que el flujo activo dejó en workflowPeriod, y por último el mes anterior.
      */
     async resolverPeriodoObjetivo() {
-        const r = await SafeStorage.get(['sri_target_period', 'workflowPeriod']);
+        const r = await SafeStorage.get(['sri_target_period', 'workflowPeriod', 'selected_period_updated_at']);
+        if (r.workflowPeriod && r.workflowPeriod.year && typeof r.workflowPeriod.monthIndex === 'number') {
+            return { year: r.workflowPeriod.year, monthIndex: r.workflowPeriod.monthIndex };
+        }
         const t = r.sri_target_period;
-        if (t && t.year && typeof t.monthIndex === 'number') {
+        const isRecent = r.selected_period_updated_at && (Date.now() - r.selected_period_updated_at < 3600000);
+        if (isRecent && t && t.year && typeof t.monthIndex === 'number') {
             return { year: t.year, monthIndex: t.monthIndex };
         }
-        return r.workflowPeriod || this.periodoPorDefecto();
+        return this.periodoPorDefecto();
     },
 
     /** Cuenta cuántos clientes de la caché faltan declarar ESTE período (sin
@@ -545,7 +549,13 @@ const SriLoop = {
     /** Fija el período objetivo del lote como preferencia (popup y HUD). */
     async fijarPeriodo(p) {
         if (!p || !p.year || typeof p.monthIndex !== 'number') return { ok: false };
-        await SafeStorage.set({ sri_target_period: { year: p.year, monthIndex: p.monthIndex } });
+        await SafeStorage.set({
+            sri_target_period: { year: p.year, monthIndex: p.monthIndex },
+            selected_period_month: p.monthIndex,
+            selected_period_year: p.year,
+            selected_period_updated_at: Date.now(),
+            workflowPeriod: { year: p.year, monthIndex: p.monthIndex }
+        });
         return { ok: true };
     },
 
@@ -558,7 +568,7 @@ const SriLoop = {
 
     /** Vuelve al comportamiento normal (el mes anterior). */
     async quitarPeriodoManual() {
-        await SafeStorage.remove(['sri_target_period']);
+        await SafeStorage.remove(['sri_target_period', 'selected_period_updated_at']);
     },
 
     /**
@@ -726,12 +736,33 @@ const SriLoop = {
             }
         } catch (e) { /* un contador no puede tumbar el arranque */ }
 
+        if (cliente.soloEstarAdentro || cliente.pendingAction === 'solo_perfil') {
+            console.log(`🌐 [SOLO SESIÓN SRI] ${cliente.name || cliente.ruc}: solo entrar al portal y quedarse en el escritorio.`);
+            await SafeStorage.set({
+                pending_sri_autofill: {
+                    ruc: cliente.ruc, password: cliente.password, name: cliente.name,
+                    timestamp: Date.now(), manual: true, soloEstarAdentro: true,
+                    loginAttempted: false
+                },
+                pendingAction: 'solo_perfil',
+                actionTimestamp: Date.now(),
+                autoDeclaration: false,
+                sri_auto_mode: false,
+                sri_master_switch_on: false,
+                sriAutomationPaused: true,
+                ghost_manual_mode: false
+            });
+            await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
+            return;
+        }
+
         if (cliente.soloProbarClave) {
             console.log(`🔑 [PROBAR CLAVES] ${cliente.name || cliente.ruc}: sólo entra y sale, no declara nada.`);
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
-                    timestamp: Date.now(), manual: true, isBatch: true
+                    timestamp: Date.now(), manual: true, isBatch: true,
+                    loginAttempted: false
                 },
                 pendingAction: 'probar_clave',
                 actionTimestamp: Date.now(),
@@ -752,7 +783,8 @@ const SriLoop = {
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
-                    timestamp: Date.now(), manual: true, isBatch: true
+                    timestamp: Date.now(), manual: true, isBatch: true,
+                    loginAttempted: false
                 },
                 // Entra, y apenas haya sesión el flujo cruza a Consulta de
                 // declaraciones. Nada de abrir el wizard de recepción.
@@ -790,7 +822,8 @@ const SriLoop = {
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
-                    timestamp: Date.now(), manual: true, isBatch: true
+                    timestamp: Date.now(), manual: true, isBatch: true,
+                    loginAttempted: false
                 },
                 pendingAction: 'bajar_todos_comprobantes',
                 bajarTodos: {
@@ -817,7 +850,8 @@ const SriLoop = {
                 name: cliente.name,
                 timestamp: Date.now(),
                 manual: true,
-                isBatch: true
+                isBatch: true,
+                loginAttempted: false
             },
             pendingAction: 'turbo_step1_facturas',
             // ── De quién es esta acción ──────────────────────────────────
@@ -3864,7 +3898,11 @@ window.addEventListener('message', async (event) => {
         const localRegs = cacheRes.sc_declaraciones_locales || {};
 
         let queue = (d.clients || []).filter(c => {
-            if (d.mode === 'recover_pdf_only') return true;
+            // Si el cliente ya viene marcado con hasPdf === true explícitamente desde la web, omitirlo
+            if (c.hasPdf === true) {
+                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante confirmado desde la web (${pStr}). Se omite.`);
+                return false;
+            }
 
             // 1. Registro local
             const local = localRegs[`${c.ruc}|${pStr}`];
@@ -3888,7 +3926,8 @@ window.addEventListener('message', async (event) => {
             ruc: c.ruc,
             password: c.sriPassword || c.password,
             name: c.name,
-            period: c.period
+            period: c.period,
+            soloRecuperar: d.mode === 'recover_pdf_only' || !!c.soloRecuperar
         }));
         queue = await filtrarColaPorBendita(queue);
 

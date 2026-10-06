@@ -127,14 +127,11 @@ SafeStorage.get(null).then(async (items) => {
         // CUALQUIER visita al login del SRI —así el usuario esté ahí por otra
         // razón, con la extensión dormida— precargaba RUC y CLAVE REAL de un
         // cliente pendiente en el formulario, sin que nadie lo pidiera. Un
-        // autofill manual pendiente (`pending_sri_autofill.manual`) ya cuenta
-        // como "despierta" adentro de extensionDespierta(), así que el ▶
-        // del popup y el lote siguen funcionando igual que siempre.
-        const despierta = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
-        if (despierta) {
-            renderLoginCockpit(items);
-            initLoginCockpitWatcher();
-        }
+        // La barra flotante SC TAXPILOT PRO (Dynamic Island) y su observador de montaje
+        // se cargan SIEMPRE en la pantalla de login para que la barra no desaparezca y el usuario
+        // pueda ver el período que toca (ej. septiembre en octubre), seleccionar clientes y operar.
+        renderLoginCockpit(items);
+        initLoginCockpitWatcher();
     }
 
     const isAutoFlow = await SriLoop.puedeAvanzar();
@@ -227,7 +224,30 @@ SafeStorage.get(null).then(async (items) => {
         ? loQueDiceElFormularioDeAcceso() : { aviso: '', texto: '' };
     const feedbackText = dicho.aviso;
     const textoDelPortal = dicho.texto;
-    const yaIntentoLogin = isLoginPage && isExplicitlyOutside && !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted);
+    // Un REBOTE real es cuando el contribuyente ya había entrado al portal
+    // (estuvo en /perfil o dentro del SRI, marcado con haEntradoAlPortal) y el portal
+    // lo expulsó de vuelta al login. Si aún no entró, está en proceso de login: NO es rebote.
+    const haEntradoAlPortal = !!(items.pending_sri_autofill && items.pending_sri_autofill.haEntradoAlPortal);
+    const loginAttemptTime = items.pending_sri_autofill?.loginAttemptTime || 0;
+    const tiempoDesdeEnvio = Date.now() - loginAttemptTime;
+
+    // Si el formulario fue enviado recientemente (< 8s), Keycloak está procesando o navegando:
+    // no se considera rebote bajo ningún concepto.
+    const enviandoAhora = loginAttemptTime > 0 && tiempoDesdeEnvio < 8000;
+
+    const yaIntentoLogin = isLoginPage && isExplicitlyOutside &&
+        !enviandoAhora &&
+        !!(items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted) &&
+        haEntradoAlPortal;
+
+    // Si el cliente está en el login de Keycloak y su formulario expiró sin respuesta ni error (> 8s):
+    if (isLoginPage && isExplicitlyOutside && items.pending_sri_autofill?.loginAttempted && !haEntradoAlPortal && !enviandoAhora) {
+        console.warn('⏳ [LOGIN] Formulario de Keycloak sin respuesta tras 8s. Reintentando inyección de credenciales...');
+        items.pending_sri_autofill.loginAttempted = false;
+        await SafeStorage.set({
+            pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
+        });
+    }
     const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || textoDelPortal) ||
         /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || textoDelPortal);
     // El portal DIJO que la credencial no sirve. Es lo único que autoriza a
@@ -387,7 +407,8 @@ SafeStorage.get(null).then(async (items) => {
 
         // 🛡️ VERIFICACIÓN PREVENTIVA DE BÓVEDA (ANTES DE TOCAR EL DOM)
         if (typeof SriCredentialVault !== 'undefined') {
-            const checkVault = await SriCredentialVault.canAttemptLogin(clientRuc, clientPass);
+            const isManual = !!(items.pending_sri_autofill && (items.pending_sri_autofill.manual || items.pending_sri_autofill.soloEstarAdentro));
+            const checkVault = await SriCredentialVault.canAttemptLogin(clientRuc, clientPass, { isManual });
             if (!checkVault.allowed) {
                 console.warn(`🛑 [BLINDAJE SEGURIDAD PREVENTIVO] Omitiendo login de ${clientRuc}: ${checkVault.reason}`);
                 await Omitidos.anotar(clientRuc, 'cuenta_bloqueada', {
@@ -531,7 +552,11 @@ SafeStorage.get(null).then(async (items) => {
                 });
 
                 await SafeStorage.set({
-                    pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: true }
+                    pending_sri_autofill: {
+                        ...items.pending_sri_autofill,
+                        loginAttempted: true,
+                        loginAttemptTime: Date.now()
+                    }
                 });
 
                 if (!targetPass) {
@@ -675,9 +700,15 @@ SafeStorage.get(null).then(async (items) => {
         if (items.pending_sri_autofill?.ruc) {
             SafeStorage.get(['sc_rebotes']).then((rb) => {
                 const rebotes = rb.sc_rebotes || {};
-                if (rebotes[items.pending_sri_autofill.ruc] === undefined) return;
                 delete rebotes[items.pending_sri_autofill.ruc];
-                return SafeStorage.set({ sc_rebotes: rebotes });
+                return SafeStorage.set({
+                    sc_rebotes: rebotes,
+                    pending_sri_autofill: {
+                        ...items.pending_sri_autofill,
+                        haEntradoAlPortal: true,
+                        loginAttempted: false
+                    }
+                });
             }).catch(() => {});
         }
         // Entró: el rescate (si lo hubo) cumplió. Contador a cero.
@@ -707,6 +738,45 @@ SafeStorage.get(null).then(async (items) => {
             await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
             if (typeof handleBatchNextClient === 'function') {
                 setTimeout(() => handleBatchNextClient(), 1000);
+            }
+            return;
+        }
+
+        // 🌐 Modo «solo estar adentro» / perfil directo (sin wizards ni bucle):
+        // El usuario pidió entrar al perfil del SRI de este cliente para trabajar manualmente.
+        // Se registra el ingreso, se limpian las acciones pendientes para que NO se ejecute ninguna
+        // automatización, y el navegador permanece en el escritorio/inicio del SRI.
+        if (items.pendingAction === 'solo_perfil' || quienEntro.soloEstarAdentro) {
+            const ruc = quienEntro.ruc;
+            const nombre = quienEntro.name || ruc || 'este contribuyente';
+            console.log(`🌐 [SOLO SESIÓN SRI] ${nombre} (${ruc}): Acceso completado con éxito. Permaneciendo en escritorio SRI.`);
+            if (ruc && typeof marcarCredencialEnLaWeb === 'function') {
+                marcarCredencialEnLaWeb(ruc, 'ok', 'Ingreso manual autorizado');
+            }
+            if (ruc && typeof PruebaClaves !== 'undefined') {
+                await PruebaClaves.anotar(ruc, 'ok', 'Sesión manual iniciada', nombre);
+            }
+            try {
+                const ingresos = (await SafeStorage.get(['sc_ultimo_ingreso_sri'])).sc_ultimo_ingreso_sri || {};
+                ingresos[ruc] = new Date().toISOString();
+                await SafeStorage.set({ sc_ultimo_ingreso_sri: ingresos });
+            } catch (e) {}
+
+            await SafeStorage.remove([
+                'pending_sri_autofill',
+                'pendingAction',
+                'actionTimestamp',
+                'sc_loop',
+                'auto_batch_queue',
+                'auto_batch_enabled'
+            ]);
+            await SafeStorage.set({
+                sri_auto_mode: false,
+                autoDeclaration: false,
+                sri_master_switch_on: false
+            });
+            if (typeof showSriToast === 'function') {
+                showSriToast(`🌐 Sesión iniciada para ${nombre}. Puedes operar libremente en el portal SRI.`);
             }
             return;
         }
@@ -2140,7 +2210,7 @@ async function renderLoginCockpit(items) {
     if (!rucInput || !loginBtn) return;
 
     // Obtener clientes de la memoria local
-    const cacheRes = await SafeStorage.get(['sc_clients_cache', 'workflowPeriod', 'flagged_errors', 'selected_period_month', 'selected_period_year']);
+    const cacheRes = await SafeStorage.get(['sc_clients_cache', 'workflowPeriod', 'flagged_errors', 'selected_period_month', 'selected_period_year', 'selected_period_updated_at']);
     let rawClients = Array.isArray(cacheRes.sc_clients_cache) ? cacheRes.sc_clients_cache : [];
     if (rawClients.length === 0 && typeof fetchClientsDirectly === 'function') {
         rawClients = await fetchClientsDirectly();
@@ -2151,8 +2221,21 @@ async function renderLoginCockpit(items) {
     let defaultMonth = now.getMonth() - 1;
     let defaultYear = now.getFullYear();
     if (defaultMonth < 0) { defaultMonth = 11; defaultYear--; }
-    let targetMonth = cacheRes.selected_period_month !== undefined ? parseInt(cacheRes.selected_period_month) : (cacheRes.workflowPeriod?.monthIndex ?? defaultMonth);
-    let targetYear = cacheRes.selected_period_year !== undefined ? parseInt(cacheRes.selected_period_year) : (cacheRes.workflowPeriod?.year ?? defaultYear);
+
+    // 🗓️ Periodo que corresponde declarar:
+    // 1. Si hay workflowPeriod activo (de lote o web), se respeta ese.
+    // 2. Si hay selected_period_month guardado RECIENTEMENTE (misma sesión), se respeta.
+    // 3. De lo contrario, SIEMPRE el mes que toca por defecto (ahora octubre -> sep).
+    let targetMonth = defaultMonth;
+    let targetYear = defaultYear;
+
+    if (cacheRes.workflowPeriod && typeof cacheRes.workflowPeriod.monthIndex === 'number' && cacheRes.workflowPeriod.year) {
+        targetMonth = cacheRes.workflowPeriod.monthIndex;
+        targetYear = cacheRes.workflowPeriod.year;
+    } else if (cacheRes.selected_period_updated_at && (Date.now() - cacheRes.selected_period_updated_at < 3600000) && cacheRes.selected_period_month !== undefined) {
+        targetMonth = parseInt(cacheRes.selected_period_month);
+        targetYear = cacheRes.selected_period_year !== undefined ? parseInt(cacheRes.selected_period_year) : defaultYear;
+    }
 
     const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -2221,6 +2304,9 @@ async function renderLoginCockpit(items) {
     }
 
     const renderIslandInner = () => {
+        if (items?.pending_sri_autofill) {
+            sessionStorage.removeItem('sri_island_hidden');
+        }
         const isHidden = sessionStorage.getItem('sri_island_hidden') === '1';
         if (isHidden) {
             island.style.display = 'none';
@@ -2378,7 +2464,9 @@ async function renderLoginCockpit(items) {
             await SafeStorage.set({
                 selected_period_month: targetMonth,
                 selected_period_year: targetYear,
-                workflowPeriod: { year: targetYear, monthIndex: targetMonth }
+                selected_period_updated_at: Date.now(),
+                workflowPeriod: { year: targetYear, monthIndex: targetMonth },
+                sri_target_period: { year: targetYear, monthIndex: targetMonth }
             });
             pendientes = validClients.filter(c => !isClientDone(c, targetYear, targetMonth) && !flaggedErrs[c.ruc]).sort(sortBy9th);
             if (pendientes.length > 0) currentClient = pendientes[0];
