@@ -119,12 +119,27 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
                 lista.map((d) => d.periodoTexto).join(', '));
     await anotarBitacora('comprobantes a bajar', `${lista.length} periodos de ${nombre || ruc}`);
 
+    const _cacheRes = await SafeStorage.get(['sc_clients_cache']);
+    const _clientCache = (_cacheRes.sc_clients_cache || []).find((x) => x && x.ruc === ruc);
+    const _declaracionesGuardadas = (_clientCache && (_clientCache.declarations || _clientCache.declaration_history)) || [];
+
     for (const d of lista) {
-        // ¿Ya tenemos este? El registro local lo sabe.
-        if (soloFaltantes && typeof SriLoop !== 'undefined') {
-            const reg = await SriLoop.declaracionLocal(ruc, d.periodo);
-            if (reg && reg.pdfSubido) {
-                console.log(`   ✓ ${d.periodoTexto} ya está guardado.`);
+        // ¿Ya tenemos este comprobante? Comprobar tanto el registro local como la base central (Supabase / R2)
+        if (soloFaltantes) {
+            if (typeof SriLoop !== 'undefined') {
+                const reg = await SriLoop.declaracionLocal(ruc, d.periodo);
+                if (reg && reg.pdfSubido) {
+                    console.log(`   ✓ ${d.periodoTexto} ya está guardado en registro local.`);
+                    resumen.yaEstaban++;
+                    continue;
+                }
+            }
+            const pStr = `${d.periodo.year}-${String(d.periodo.monthIndex + 1).padStart(2, '0')}`;
+            const yaEnSistema = _declaracionesGuardadas.some((dec) =>
+                dec && (dec.proof_file?.url || dec.proof_file || dec.pdfUrl) && String(dec.period || '').includes(pStr)
+            );
+            if (yaEnSistema) {
+                console.log(`   ✓ ${d.periodoTexto} ya tiene comprobante guardado en el sistema (Supabase/R2). Se omite descarga redundante.`);
                 resumen.yaEstaban++;
                 continue;
             }

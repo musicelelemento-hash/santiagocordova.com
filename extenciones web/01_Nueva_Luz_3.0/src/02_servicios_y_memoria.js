@@ -864,7 +864,7 @@ const SriLoop = {
         const histBarrido = (await SafeStorage.get(['sc_barrido_historico'])).sc_barrido_historico || {};
         const colaFinal = [
             ...(sinPdf || []).map((c) => ({ ...c, soloRecuperar: true })),
-            ...cola.map((c) => histBarrido[c.ruc] ? { ...c } : { ...c, barrerAntes: true })
+            ...cola.map((c) => (histBarrido[c.ruc] || (Array.isArray(c.declarations) && c.declarations.length > 0)) ? { ...c } : { ...c, barrerAntes: true })
         ];
 
         if (total === 0) {
@@ -3847,23 +3847,50 @@ window.addEventListener('message', async (event) => {
     }
 
     if (event.data.type === 'SRI_START_BATCH_DECLARATION' && event.data.data) {
-        const d = event.data.data;
-        let queue = (d.clients || []).map(c => ({
+        const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'turbo_step1_facturas';
+        let pToUse = d.workflowPeriod;
+        if (!pToUse && d.clients && d.clients.length > 0 && d.clients[0].period && /^\d{4}-\d{2}$/.test(d.clients[0].period)) {
+            const parts = d.clients[0].period.split('-');
+            pToUse = { year: parseInt(parts[0], 10), monthIndex: parseInt(parts[1], 10) - 1 };
+        }
+        if (!pToUse) {
+            pToUse = (typeof SriLoop !== 'undefined' && SriLoop.periodoPorDefecto) ? SriLoop.periodoPorDefecto() : { year: new Date().getFullYear(), monthIndex: new Date().getMonth() - 1 };
+        }
+        const pStr = `${pToUse.year}-${String(pToUse.monthIndex + 1).padStart(2, '0')}`;
+
+        // 🛡️ Filtro de seguridad: excluir clientes que YA tienen comprobante guardado para este período
+        const cacheRes = await SafeStorage.get(['sc_clients_cache', 'sc_declaraciones_locales']);
+        const cacheList = Array.isArray(cacheRes.sc_clients_cache) ? cacheRes.sc_clients_cache : [];
+        const localRegs = cacheRes.sc_declaraciones_locales || {};
+
+        let queue = (d.clients || []).filter(c => {
+            if (d.mode === 'recover_pdf_only') return true;
+
+            // 1. Registro local
+            const local = localRegs[`${c.ruc}|${pStr}`];
+            if (local && local.pdfSubido) {
+                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en registro local (${pStr}). Se omite del lote.`);
+                return false;
+            }
+
+            // 2. Base de datos / Caché del sistema
+            const enCache = cacheList.find(x => x && x.ruc === c.ruc);
+            const decs = (enCache && (enCache.declarations || enCache.declaration_history)) || (c && (c.declarations || c.declaration_history)) || [];
+            const yaTienePdf = decs.some(dec => 
+                dec && (dec.proof_file?.url || dec.proof_file || dec.pdfUrl) && String(dec.period || '').includes(pStr)
+            );
+            if (yaTienePdf) {
+                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en el sistema (${pStr}). Se omite para no repetir.`);
+                return false;
+            }
+            return true;
+        }).map(c => ({
             ruc: c.ruc,
             password: c.sriPassword || c.password,
             name: c.name,
             period: c.period
         }));
         queue = await filtrarColaPorBendita(queue);
-        const actionType = d.mode === 'recover_pdf_only' ? 'recoverPDF' : 'turbo_step1_facturas';
-        let pToUse = d.workflowPeriod;
-        if (!pToUse && queue.length > 0 && queue[0].period && /^\d{4}-\d{2}$/.test(queue[0].period)) {
-            const parts = queue[0].period.split('-');
-            pToUse = { year: parseInt(parts[0], 10), monthIndex: parseInt(parts[1], 10) - 1 };
-        }
-        if (!pToUse) {
-            pToUse = (typeof SriLoop !== 'undefined' && SriLoop.periodoPorDefecto) ? SriLoop.periodoPorDefecto() : { year: new Date().getFullYear(), monthIndex: new Date().getMonth() - 1 };
-        }
 
         await SafeStorage.set({
             auto_batch_enabled: queue.length > 0,
