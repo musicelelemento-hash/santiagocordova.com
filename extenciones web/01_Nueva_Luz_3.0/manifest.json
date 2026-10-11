@@ -21,7 +21,9 @@
         "https://*.santiagocordova.com/*",
         "https://santiago-cordova.com/*",
         "https://*.santiago-cordova.com/*",
-        "https://generativelanguage.googleapis.com/*"
+        "https://generativelanguage.googleapis.com/*",
+        "https://zifact.com/*",
+        "https://*.zifact.com/*"
     ],
     "action": {
         "default_popup": "popup.html",
@@ -74,6 +76,16 @@
             "js": [
                 "shared_config.js",
                 "bridge_content.js"
+            ],
+            "run_at": "document_idle"
+        },
+        {
+            "matches": [
+                "https://zifact.com/*",
+                "https://*.zifact.com/*"
+            ],
+            "js": [
+                "zifact_autologin.js"
             ],
             "run_at": "document_idle"
         }

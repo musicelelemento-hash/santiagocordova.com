@@ -348,6 +348,18 @@ window.addEventListener("message", (event) => {
       });
     }
 
+    if (data.type === 'ZIFAC_AUTOFILL_DATA' && data.data) {
+      console.log("⚡ [Bridge] Credenciales Zifact recibidas para:", data.data.username);
+      chrome.storage.local.set({
+        sc_zifact_pending_login: {
+          username: data.data.username,
+          password: data.data.password,
+          clientName: data.data.clientName || '',
+          timestamp: Date.now()
+        }
+      });
+    }
+
     if (data.type === 'SRI_START_BATCH_DECLARATION' && data.data) {
       console.log("🚀 Lote recibido en Bridge:", data.data);
       const isTestKeys = !!data.data.testKeysOnly || data.data.mode === 'probar_clave';
