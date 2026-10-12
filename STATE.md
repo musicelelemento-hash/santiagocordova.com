@@ -63,6 +63,21 @@
   - `asegurarDescargaComprobanteNativo()`: dispara el botón nativo `#frmFlujoDeclaracion:btnDescargarComprobante`.
   - Integración en `syncDeclarationToSupabase` con `credentials: "include"` y marcado de `COMPROBANTE_SUBIDO` y `COMPLETADO` en `SriAuditor`.
 
+### 3. Garantía del Comprobante Oficial del SRI y Optimización de Almacenamiento (Ahorro de Datos y Evitar Pagos)
+- **Eliminación Total de Fallback a Comprobante de Prueba ("generateValidPdfBase64")**:
+  - En el pasado, si `realPdf` tardaba en capturarse, el bot generaba un PDF sintético con jsPDF y número ficticio (`873083...`), subiéndolo como comprobante.
+  - Se eliminó completamente este reemplazo: **NUNCA** se sube un comprobante de prueba/sintético. Solo se aceptan PDFs auténticos emitidos por el SRI (con sello, código de barras y CEP).
+  - Si el PDF no se captura en el paso final, se registra sin comprobante (`comprobanteSubido: false`), detonando la recuperación limpia en *Consulta de declaraciones*, donde el SRI dispone del documento genuino presentado.
+- **Blindaje Estricto de Contaminación Cruzada**:
+  - `setActiveWorkflowClient(ruc, period)` fija el cliente y período activo de forma determinista en `handleBatchNextClient()`, `SriLoop.prepararCliente()`, `bajarTodosLosComprobantes()` y `recuperar_comprobante()`.
+  - Almacenamiento de PDF valida `capturedPdfRuc === ruc` y `capturedPdfPeriod === canonicalPeriod`; cualquier discordancia purga inmediatamente la memoria con `clearCapturedPdf()`.
+- **Ahorro de Datos en Supabase y Base de Datos PostgreSQL**:
+  - En `proof_file`, la propiedad `content` se mantiene siempre en `null` (en vez de Base64 de megabytes) porque el documento ya reside en Cloudflare R2 ($0 egress) o Supabase Storage.
+  - Sanitización automática del historial previo (`sanitizedExistingHistory`), removiendo cadenas Base64 antiguas cuando ya existe URL pública.
+  - Token Saver: comprobación `HEAD` en Supabase Storage verificando tamaño mayor a 4000 bytes para evitar re-subidas innecesarias sin aceptar archivos de 0 bytes.
+- **Protección contra Pagos Sorpresa del SRI**:
+  - Blindaje reforzado: si `totalValor > 0` o se detecta saldo por pagar, la extensión **NUNCA** envía la declaración. Guarda el borrador en el portal, notifica al usuario con aviso persistente (`sc_declaraciones_por_pagar_aviso`) y registra en Supabase como `status: "por_pagar"`.
+
 ---
 
 ## 🏆 2₂. HITOS ANTERIORES (02-OCT-2026)

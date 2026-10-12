@@ -166,6 +166,7 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
         console.log(`   ⬇️ ${d.periodoTexto}${d.cep ? ' · CEP ' + d.cep : ''}...`);
         if (typeof clearCapturedPdf === 'function') clearCapturedPdf('bajar_comprobante_fila');
         else capturedPdfBase64 = null;
+        if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(ruc, d.per);
         clickElement(boton, `Comprobante ${d.periodoTexto}`);
 
         for (let i = 0; i < 25 && !capturedPdfBase64; i++) await sleep(700);
@@ -591,6 +592,7 @@ async function ejecutarRecuperacionComprobante() {
     console.log(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
     if (typeof clearCapturedPdf === 'function') clearCapturedPdf('recuperar_comprobante');
     else capturedPdfBase64 = null;
+    if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(st.ruc, st.per);
 
     // Primero se REPRODUCE el POST del botón. Pulsarlo hace que el navegador
     // se lleve el PDF a la carpeta de descargas, donde el bot no lo ve: por

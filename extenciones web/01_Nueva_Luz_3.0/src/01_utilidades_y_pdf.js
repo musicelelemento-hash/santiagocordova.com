@@ -1247,8 +1247,27 @@ async function cerrarSesionSRI(force = false) {
 let capturedPdfBase64 = null;
 let capturedPdfRuc = null;
 let capturedPdfPeriod = null;
+let __sriCurrentWorkflowRuc = null;
+let __sriCurrentWorkflowPeriod = null;
+
+function setActiveWorkflowClient(ruc, period = null) {
+  __sriCurrentWorkflowRuc = ruc ? String(ruc).trim() : null;
+  if (period) {
+    if (typeof SriAuditor !== 'undefined' && SriAuditor.normalizarPeriodo) {
+      __sriCurrentWorkflowPeriod = SriAuditor.normalizarPeriodo(period);
+    } else {
+      __sriCurrentWorkflowPeriod = String(period).trim();
+    }
+  }
+}
+if (typeof window !== "undefined") {
+  window.sriSetActiveWorkflowClient = setActiveWorkflowClient;
+}
 
 function getActiveClientRuc() {
+  if (__sriCurrentWorkflowRuc && /^\d{10,13}$/.test(__sriCurrentWorkflowRuc)) {
+    return __sriCurrentWorkflowRuc;
+  }
   try {
     if (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function') {
       const info = window.sriAssistant.extractClientInfo();
@@ -1269,10 +1288,20 @@ function getActiveClientRuc() {
 
 function setCapturedPdf(base64, origen = "") {
   if (!base64 || typeof base64 !== "string") return;
+
+  // 🛡️ VALIDACIÓN ESTRUCTURAL: Asegurar que sea un PDF binario legítimo (inicia con %PDF / JVBERi)
+  const esPdfValido = base64.startsWith("data:application/pdf") || base64.includes("JVBERi");
+  if (!esPdfValido || base64.length < 2500) {
+    console.warn(`⚠️ [PDF CAPTURE RECHAZADO] Objeto capturado desde ${origen} no es un PDF legítimo o es demasiado pequeño (${base64.length} chars).`);
+    return;
+  }
+
+  const rucDetectado = getActiveClientRuc();
   capturedPdfBase64 = base64;
-  capturedPdfRuc = getActiveClientRuc();
+  capturedPdfRuc = rucDetectado;
+  capturedPdfPeriod = __sriCurrentWorkflowPeriod;
   console.log(
-    `📄 [PDF CAPTURE] ¡PDF Oficial SRI capturado mediante ${origen}! Tamaño: ${base64.length} chars | RUC activo: ${capturedPdfRuc || 'desconocido'}`
+    `📄 [PDF CAPTURE] ¡PDF Oficial SRI capturado mediante ${origen}! Tamaño: ${base64.length} chars | RUC certificado: ${capturedPdfRuc || 'desconocido'} | Período: ${capturedPdfPeriod || 'desconocido'}`
   );
 }
 
@@ -2049,10 +2078,18 @@ async function syncDeclarationToSupabase(
     pdfContentBase64 = null;
   }
 
-  // Si hay un PDF capturado en memoria pero pertenece a OTRO contribuyente, descartarlo inmediatamente
-  if (capturedPdfBase64 && capturedPdfRuc && capturedPdfRuc !== ruc) {
-    console.warn(`🚨 [PDF CONTAMINATION GUARD] Descartando PDF de memoria: pertenece a RUC ${capturedPdfRuc}, pero estamos procesando ${ruc}.`);
-    clearCapturedPdf('ruc_mismatch');
+  // 🛡️ BLINDAJE DE AUTENTICIDAD Y CERO CONTAMINACIÓN CRUZADA:
+  setActiveWorkflowClient(ruc, canonicalPeriod);
+
+  // Si hay un PDF capturado en memoria pero pertenece a OTRO contribuyente o período, descartarlo inmediatamente
+  if (capturedPdfBase64) {
+    const rucValido = !capturedPdfRuc || capturedPdfRuc === ruc;
+    const periodoValido = !capturedPdfPeriod || capturedPdfPeriod === canonicalPeriod;
+    if (!rucValido || !periodoValido) {
+      console.warn(`🚨 [PDF CONTAMINATION GUARD] Descartando PDF de memoria: RUC=${capturedPdfRuc || 'null'} (esperado: ${ruc}), Período=${capturedPdfPeriod || 'null'} (esperado: ${canonicalPeriod}).`);
+      clearCapturedPdf('ruc_o_periodo_mismatch');
+      if (pdfContentBase64 === capturedPdfBase64) pdfContentBase64 = null;
+    }
   }
 
   // Esperar activamente hasta 8 segundos a que los interceptores de 5 capas capturen el PDF OFICIAL REAL del SRI (solo si fue enviada)
@@ -2067,6 +2104,9 @@ async function syncDeclarationToSupabase(
       if (capturedPdfRuc && capturedPdfRuc !== ruc) {
         clearCapturedPdf('dom_capture_ruc_mismatch');
       }
+      if (capturedPdfPeriod && capturedPdfPeriod !== canonicalPeriod) {
+        clearCapturedPdf('dom_capture_period_mismatch');
+      }
       realPdf = pdfContentBase64 || capturedPdfBase64;
       if (typeof realPdf !== "string") realPdf = null;
       if (realPdf && realPdf.length > 3000) {
@@ -2080,11 +2120,16 @@ async function syncDeclarationToSupabase(
     }
   }
 
-  // Sin comprobante oficial hay que maquetar uno de respaldo solo si fue enviada
+  // 🛡️ GARANTÍA DEL COMPROBANTE OFICIAL DEL SRI:
+  // NUNCA generar ni subir comprobantes falsos / maquetas de prueba ("generateValidPdfBase64").
+  // Solo se acepta el PDF legítimo y oficial emitido por el SRI (con sello, código de barras y CEP).
+  // Si no se capturó en pantalla post-envío, se registra sin comprobante para que el auditor/recuperador
+  // lo descargue auténtico desde Consulta de declaraciones del portal.
   let pdfData = null;
-  if (!noEsDeclaracionEnviada) {
-    if (!realPdf) await ensureJsPdfLoaded();
-    pdfData = realPdf || generateValidPdfBase64(ruc, canonicalPeriod, clientName);
+  if (!noEsDeclaracionEnviada && realPdf) {
+    pdfData = realPdf;
+  } else if (!noEsDeclaracionEnviada && !realPdf) {
+    console.warn(`⚠️ [COMPROBANTE PENDIENTE] No se capturó PDF oficial del SRI para ${ruc} (${canonicalPeriod}). Se registrará sin PDF para su posterior recuperación limpia y auténtica desde Consulta de declaraciones.`);
   }
 
   try {
@@ -2119,17 +2164,19 @@ async function syncDeclarationToSupabase(
 
       // ── TIER 2: SUPABASE STORAGE (Fallback Cloud) ────────────────────────────
       if (!pdfUrl) {
-        // 💡 DELTA UPLOAD / TOKEN SAVER: Verificar si el PDF ya existe en Supabase Storage antes de subir
+        // 💡 DELTA UPLOAD / TOKEN SAVER: Verificar si el PDF ya existe en Supabase Storage antes de subir (> 4000 bytes)
         try {
           const headVault = await fetch(publicUrlVault, { method: "HEAD" });
-          if (headVault.ok) {
+          const lenVault = parseInt(headVault.headers.get("content-length") || "0", 10);
+          if (headVault.ok && lenVault > 4000) {
             pdfUrl = publicUrlVault;
-            console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault. Subida omitida.`);
+            console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault (${lenVault} bytes). Subida omitida.`);
           } else {
             const headProofs = await fetch(publicUrlProofs, { method: "HEAD" });
-            if (headProofs.ok) {
+            const lenProofs = parseInt(headProofs.headers.get("content-length") || "0", 10);
+            if (headProofs.ok && lenProofs > 4000) {
               pdfUrl = publicUrlProofs;
-              console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs. Subida omitida.`);
+              console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs (${lenProofs} bytes). Subida omitida.`);
             }
           }
         } catch (headErr) {
@@ -2210,6 +2257,19 @@ async function syncDeclarationToSupabase(
       } catch (e) { console.warn('No se pudo registrar el estado del PDF:', e); }
     }
 
+    // 🛡️ Registrar hito en SriAuditor para rastreo determinista de comprobante
+    if (typeof SriAuditor !== 'undefined') {
+      try {
+        if (pdfUrl) {
+          await SriAuditor.registrarHito(ruc, canonicalPeriod, 'COMPROBANTE_SUBIDO', {
+            url: pdfUrl,
+            provider: storageProvider,
+            nombre: clientName
+          });
+        }
+      } catch (eAud) { console.warn('SriAuditor hito error:', eAud); }
+    }
+
     const fetchRes = await fetch(
       `${SUPABASE_URL}/rest/v1/clients?ruc=eq.${ruc}&select=id,declaration_history`,
       {
@@ -2244,7 +2304,7 @@ async function syncDeclarationToSupabase(
       type: "pdf",
       size: Math.round(pdfData.length * 0.75),
       lastModified: Date.now(),
-      content: pdfUrl ? null : pdfData, // 💡 ELITE OPTIMIZATION: Si se subió al bucket, ahorramos DB; si falló, usamos Base64 como respaldo
+      content: null, // 💡 AHORRO DE DATOS Y EVITAR PAGOS: content siempre NULL en PostgreSQL. El PDF vive en Storage (R2 / Supabase) con su URL pública. Nunca guardamos strings Base64 pesados en JSONB.
       url: pdfUrl,
       provider: storageProvider,
       metadata: {
@@ -2364,8 +2424,22 @@ async function syncDeclarationToSupabase(
     try {
       const nowIso = new Date().toISOString();
       const nowTime = new Date().toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      // 💡 AHORRO DE DATOS: Sanitizar historial existente removiendo strings Base64 pesados en registros que ya tienen URL
+      const sanitizedExistingHistory = existingHistory.map(d => {
+        if (d && d.proof_file && d.proof_file.content && (d.proof_file.url || d.pdfUrl)) {
+          return {
+            ...d,
+            proof_file: {
+              ...d.proof_file,
+              content: null
+            }
+          };
+        }
+        return d;
+      });
+
       const updatedHistory = [
-        ...existingHistory.filter(d => !(d && (d.period === canonicalPeriod || d.period === periodStr) && (d.type === decType || !d.type))),
+        ...sanitizedExistingHistory.filter(d => !(d && (d.period === canonicalPeriod || d.period === periodStr) && (d.type === decType || !d.type))),
         {
           period: canonicalPeriod,
           type: decType,
@@ -2630,6 +2704,8 @@ async function handleBatchNextClient() {
   if (nextIndex < queue.length) {
     const nextClient = queue[nextIndex];
     const clientPer = nextClient.period || targetPeriodStr;
+    if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(nextClient.ruc, clientPer);
+    if (typeof clearCapturedPdf === 'function') clearCapturedPdf('handleBatchNextClient_next_client');
     console.log(
       `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Período: ${clientPer}] [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
     );

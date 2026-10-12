@@ -937,6 +937,10 @@ const SriLoop = {
     /** Deja listo el auto-login del cliente que toca. */
     async prepararCliente(cliente, periodo) {
         anotarBitacora('credenciales listas', cliente.name || cliente.ruc);
+        const pToUse = cliente.periodo || periodo;
+        const perStr = pToUse ? (typeof pToUse === 'string' ? pToUse : `${pToUse.year}-${String(pToUse.monthIndex + 1).padStart(2, '0')}`) : null;
+        if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(cliente.ruc, perStr);
+        if (typeof clearCapturedPdf === 'function') clearCapturedPdf('prepararCliente_' + cliente.ruc);
 
         // El contador de rebotes al login es de ESTE intento, no del cliente.
         // Si quedara pegado de una corrida vieja, el primer rebote de la
@@ -989,8 +993,6 @@ const SriLoop = {
             await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
             return;
         }
-
-        const pToUse = cliente.periodo || periodo;
 
         if (cliente.soloRecuperar) {
             console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
