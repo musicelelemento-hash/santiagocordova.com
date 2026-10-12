@@ -1496,13 +1496,16 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
         const form = btn.closest("form");
         if (form) {
           const formData = new FormData(form);
-          formData.append(btn.name, btn.name);
+          const btnParam = btn.name || btn.id || 'frmFlujoDeclaracion:btnDescargarComprobante';
+          formData.append(btnParam, btnParam);
+          formData.append("javax.faces.source", btn.id || btnParam);
 
           const viewState = document.getElementById("javax.faces.ViewState");
           if (viewState) formData.set("javax.faces.ViewState", viewState.value);
 
           const res = await fetch(form.action, {
             method: "POST",
+            credentials: "include",
             body: formData,
           });
           const blob = await res.blob();

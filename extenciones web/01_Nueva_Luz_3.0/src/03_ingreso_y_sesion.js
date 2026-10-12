@@ -856,6 +856,45 @@ SafeStorage.get(null).then(async (items) => {
                             `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);
                 await anotarBitacora('el SRI pide', `IVA ${pend.periodoTexto} · ${pend.estado}`);
 
+                // 🛡️ BLINDAJE AUDITOR ANTI-BUCLE:
+                // El perfil de Angular del SRI tarda 15 a 30 minutos en quitar la obligación tras declarar.
+                // Si el auditor confirma que ya se declaró este período, cortamos de raíz la trampa de re-declarar.
+                const rucActual = quienEntro.ruc || items.pending_sri_autofill?.ruc;
+                const periodoObjetivo = pend.periodo || items.workflowPeriod;
+                if (rucActual && periodoObjetivo && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucActual, periodoObjetivo)) {
+                    console.warn(`🛑 [AUDITOR ANTI-BUCLE] El perfil sugiere declarar ${pend.periodoTexto}, pero ${rucActual} YA FUE DECLARADO.`);
+                    const faltaPdf = await SriAuditor.faltaComprobante(rucActual, periodoObjetivo);
+                    if (faltaPdf && typeof irARecuperarComprobante === 'function') {
+                        console.log('🧾 [AUDITOR] Ya declarado pero falta comprobante oficial. Recuperando...');
+                        if (window.sriAssistant?.showEliteToast) {
+                            window.sriAssistant.showEliteToast({
+                                title: '🧾 Recuperando Comprobante',
+                                msg: `Declaración de ${pend.periodoTexto} ya presentada. Descargando comprobante oficial...`,
+                                duration: 6000
+                            });
+                        }
+                        await irARecuperarComprobante(rucActual, periodoObjetivo, quienEntro.name);
+                        return;
+                    }
+
+                    console.log(`✅ [AUDITOR] ${quienEntro.name || rucActual} ya está al día para ${pend.periodoTexto}.`);
+                    if (window.sriAssistant?.showEliteToast) {
+                        window.sriAssistant.showEliteToast({
+                            title: '✅ Declaración al Día',
+                            msg: `${quienEntro.name || rucActual} ya fue declarado con éxito. Ignorando retraso del perfil del SRI.`,
+                            duration: 5000
+                        });
+                    }
+                    await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+                    if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
+                        const hay = await handleBatchNextClient();
+                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+                    } else if (typeof cerrarSesionSRI === 'function') {
+                        await cerrarSesionSRI();
+                    }
+                    return;
+                }
+
                 const wp = items.workflowPeriod;
                 const mismoPeriodo = !wp ||
                     (wp.year === pend.periodo.year && wp.monthIndex === pend.periodo.monthIndex);
@@ -980,6 +1019,28 @@ SafeStorage.get(null).then(async (items) => {
             await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
             return;
         }
+
+        // 🛡️ BLINDAJE AUDITOR ANTI-BUCLE: Sesión activa pero ya declarado
+        const rucSesion = quienEntro.ruc || items.pending_sri_autofill?.ruc;
+        const periodoSesion = items.workflowPeriod || (typeof SriLoop !== 'undefined' ? await SriLoop.resolverPeriodoObjetivo() : null);
+        if (rucSesion && periodoSesion && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucSesion, periodoSesion)) {
+            console.warn(`🛑 [AUDITOR ANTI-BUCLE] Sesión activa para ${rucSesion}, pero el período ya fue presentado. Abortando turbo_step1.`);
+            const faltaPdf = await SriAuditor.faltaComprobante(rucSesion, periodoSesion);
+            if (faltaPdf && typeof irARecuperarComprobante === 'function') {
+                console.log('🧾 [AUDITOR] Redirigiendo a recuperación de comprobante oficial...');
+                await irARecuperarComprobante(rucSesion, periodoSesion, quienEntro.name);
+                return;
+            }
+            await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
+            if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
+                const hay = await handleBatchNextClient();
+                if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+            } else if (typeof cerrarSesionSRI === 'function') {
+                await cerrarSesionSRI();
+            }
+            return;
+        }
+
         console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();

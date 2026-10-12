@@ -109,6 +109,213 @@ async function filtrarColaPorBendita(cola) {
     return (cola || []).filter((q) => q && set.has(String(q.ruc)));
 }
 
+/**
+ * ============================================================================
+ * 🛡️ SRI AUDITOR: Registro y Auditoría de Progreso por Cliente y Período
+ * ============================================================================
+ * Memoria persistente anti-bucle y trazabilidad milimétrica de hitos:
+ *   1_INICIADO -> 2_FACTURAS_EXTRAIDAS -> 3_FORMULARIO_LLENADO ->
+ *   4_DECLARACION_ENVIADA -> 5_COMPROBANTE_CAPTURADO -> 6_COMPROBANTE_SUBIDO ->
+ *   7_COMPLETADO
+ *
+ * Previene:
+ *  1. Bucle infinito al ingresar al perfil si el SRI aún no actualiza la obligación (lag de 15-30m).
+ *  2. Re-declaración de períodos ya presentados.
+ *  3. Pérdida del comprobante PDF en la nube si falló la subida post-envío.
+ */
+const SriAuditor = {
+    _KEY: 'sc_auditor_progreso',
+
+    normalizarPeriodo(periodo) {
+        if (!periodo) return '';
+        if (typeof periodo === 'string') {
+            const m = periodo.trim().match(/^(\d{4})[-/.]?(\d{1,2})$/);
+            if (m) {
+                return `${m[1]}-${m[2].padStart(2, '0')}`;
+            }
+            return periodo.trim();
+        }
+        if (typeof periodo === 'object') {
+            const y = periodo.year || periodo.anio || periodo.ano;
+            let m = (periodo.monthIndex !== undefined) ? (Number(periodo.monthIndex) + 1) : (periodo.month || periodo.mes);
+            if (y && m !== undefined) {
+                return `${y}-${String(m).padStart(2, '0')}`;
+            }
+        }
+        return String(periodo);
+    },
+
+    clave(ruc, periodo) {
+        const r = String(ruc || '').trim();
+        const p = this.normalizarPeriodo(periodo);
+        return `${r}|${p}`;
+    },
+
+    async obtenerTodos() {
+        try {
+            const r = await SafeStorage.get([this._KEY]);
+            return r[this._KEY] || {};
+        } catch (e) {
+            return {};
+        }
+    },
+
+    async obtenerEstado(ruc, periodo) {
+        if (!ruc || !periodo) return null;
+        const cl = this.clave(ruc, periodo);
+        const todos = await this.obtenerTodos();
+        return todos[cl] || null;
+    },
+
+    /**
+     * Registra un hito de progreso para un RUC y período.
+     * Hitos sugeridos:
+     *   'INICIADO', 'FACTURAS_EXTRAIDAS', 'FORMULARIO_LLENADO',
+     *   'DECLARACION_ENVIADA', 'COMPROBANTE_CAPTURADO',
+     *   'COMPROBANTE_SUBIDO', 'COMPLETADO'
+     */
+    async registrarHito(ruc, periodo, hito, extra = {}) {
+        if (!ruc || !periodo) return null;
+        const normPer = this.normalizarPeriodo(periodo);
+        const cl = this.clave(ruc, periodo);
+        const todos = await this.obtenerTodos();
+        const ahora = Date.now();
+
+        const actual = todos[cl] || {
+            ruc: String(ruc).trim(),
+            periodo: normPer,
+            nombre: extra.nombre || '',
+            creadoEn: ahora,
+            hitos: {},
+            declarado: false,
+            comprobanteSubido: false,
+            cep: '',
+            pdfUrl: '',
+            intentos: 0
+        };
+
+        if (extra.nombre && !actual.nombre) actual.nombre = extra.nombre;
+        actual.actualizadoEn = ahora;
+        actual.ultimoHito = hito;
+        actual.hitos[hito] = {
+            ts: ahora,
+            detalle: extra.detalle || '',
+            ...(extra.cep ? { cep: extra.cep } : {}),
+            ...(extra.url ? { url: extra.url } : {}),
+            ...(extra.provider ? { provider: extra.provider } : {})
+        };
+
+        if (hito === 'DECLARACION_ENVIADA' || extra.declarado) {
+            actual.declarado = true;
+            actual.declaradoEn = actual.declaradoEn || ahora;
+            if (extra.cep) actual.cep = extra.cep;
+        }
+
+        if (hito === 'COMPROBANTE_SUBIDO' || extra.pdfSubido) {
+            actual.comprobanteSubido = true;
+            if (extra.url) actual.pdfUrl = extra.url;
+            if (extra.provider) actual.pdfProvider = extra.provider;
+        }
+
+        if (hito === 'COMPLETADO') {
+            actual.completado = true;
+            actual.completadoEn = ahora;
+        }
+
+        todos[cl] = actual;
+        await SafeStorage.set({ [this._KEY]: todos });
+
+        console.log(`🛡️ [AUDITOR] Hito registrado [${hito}] para ${actual.nombre || ruc} (${normPer})`, extra);
+        if (typeof anotarBitacora === 'function') {
+            anotarBitacora(`AUDITOR · ${hito}`, `${actual.nombre || ruc} · ${normPer}`);
+        }
+        return actual;
+    },
+
+    /**
+     * Determina si el cliente ya fue declarado exitosamente para este período.
+     * Revisa tanto sc_auditor_progreso como sc_declaraciones_locales.
+     */
+    async yaFueDeclarado(ruc, periodo) {
+        if (!ruc || !periodo) return false;
+        const cl = this.clave(ruc, periodo);
+        const todos = await this.obtenerTodos();
+        const est = todos[cl];
+
+        if (est && (est.declarado || est.completado || est.comprobanteSubido || est.ultimoHito === 'DECLARACION_ENVIADA')) {
+            return true;
+        }
+
+        // Respaldo en sc_declaraciones_locales
+        try {
+            const r = await SafeStorage.get(['sc_declaraciones_locales']);
+            const loc = r.sc_declaraciones_locales || {};
+            if (loc[cl]) return true;
+        } catch (e) {}
+
+        return false;
+    },
+
+    /**
+     * Determina si la declaración ya se envió pero aún falta subir o capturar el comprobante.
+     */
+    async faltaComprobante(ruc, periodo) {
+        if (!ruc || !periodo) return false;
+        const cl = this.clave(ruc, periodo);
+        const todos = await this.obtenerTodos();
+        const est = todos[cl];
+
+        if (est && est.declarado && !est.comprobanteSubido && !est.pdfUrl) {
+            return true;
+        }
+
+        // Si en sc_declaraciones_locales está declarado pero sin pdf
+        try {
+            const r = await SafeStorage.get(['sc_declaraciones_locales']);
+            const loc = (r.sc_declaraciones_locales || {})[cl];
+            if (loc && !loc.pdfSubido) return true;
+        } catch (e) {}
+
+        return false;
+    },
+
+    /**
+     * Imprime reporte en consola y devuelve resumen de auditoría.
+     */
+    async imprimirReporte() {
+        const todos = await this.obtenerTodos();
+        const filas = Object.values(todos).sort((a, b) => (b.actualizadoEn || 0) - (a.actualizadoEn || 0));
+        if (!filas.length) {
+            console.log('🛡️ [AUDITOR] No hay registros de progreso aún.');
+            return [];
+        }
+        console.table(filas.map(f => ({
+            RUC: f.ruc,
+            Nombre: f.nombre || 'N/D',
+            Período: f.periodo,
+            'Último Hito': f.ultimoHito,
+            Declarado: f.declarado ? '✅ SÍ' : '❌ NO',
+            CEP: f.cep || '—',
+            Comprobante: f.comprobanteSubido ? '✅ Subido' : (f.declarado ? '⚠️ Pendiente' : '—'),
+            'Actualizado': f.actualizadoEn ? new Date(f.actualizadoEn).toLocaleTimeString('es-EC') : '—'
+        })));
+        return filas;
+    },
+
+    async limpiar(ruc, periodo) {
+        if (!ruc || !periodo) return;
+        const cl = this.clave(ruc, periodo);
+        const todos = await this.obtenerTodos();
+        delete todos[cl];
+        await SafeStorage.set({ [this._KEY]: todos });
+        console.log(`🛡️ [AUDITOR] Limpiado registro para ${cl}`);
+    }
+};
+
+if (typeof window !== 'undefined') {
+    window.SriAuditor = SriAuditor;
+}
+
 const SriLoop = {
     _KEY: 'sc_loop',
     // paso: el lote frena solo al empezar cada fase, hasta que se pulse ▶.
@@ -397,10 +604,9 @@ const SriLoop = {
         return habia;
     },
 
-    /** Clave del registro local para un contribuyente y periodo. */
+    /** Clave del registro local para un contribuyente y periodo. Normalizada y segura contra strings y objetos. */
     _claveDecl(ruc, periodo) {
-        const p = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
-        return `${ruc}|${p}`;
+        return SriAuditor.clave(ruc, periodo);
     },
 
     /**
@@ -412,16 +618,21 @@ const SriLoop = {
         const r = await SafeStorage.get(['sc_declaraciones_locales']);
         const reg = r.sc_declaraciones_locales || {};
         const clave = this._claveDecl(ruc, periodo);
+        const normPer = SriAuditor.normalizarPeriodo(periodo);
 
         reg[clave] = {
             ruc,
-            periodo: `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`,
+            periodo: normPer,
             cuando: Date.now(),
             nombre: extra.nombre || '',
             cep: extra.cep || '',
             pdfSubido: !!extra.pdfSubido
         };
         await SafeStorage.set({ sc_declaraciones_locales: reg });
+        await SriAuditor.registrarHito(ruc, periodo, 'DECLARACION_ENVIADA', {
+            ...extra,
+            declarado: true
+        });
         console.log(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
         anotarBitacora('DECLARADA', `${extra.nombre || ruc} · ${reg[clave].periodo}`);
     },
@@ -434,9 +645,7 @@ const SriLoop = {
     },
 
     async yaDeclaro(ruc, periodo) {
-        const r = await SafeStorage.get(['sc_declaraciones_locales']);
-        const reg = r.sc_declaraciones_locales || {};
-        return !!reg[this._claveDecl(ruc, periodo)];
+        return await SriAuditor.yaFueDeclarado(ruc, periodo);
     },
 
     /** Marca que el comprobante finalmente sí llegó a la nube. */
@@ -450,6 +659,11 @@ const SriLoop = {
             reg[clave].pdfDonde = extra.provider || '';
             await SafeStorage.set({ sc_declaraciones_locales: reg });
         }
+        await SriAuditor.registrarHito(ruc, periodo, 'COMPROBANTE_SUBIDO', {
+            url: extra.url || '',
+            provider: extra.provider || '',
+            pdfSubido: true
+        });
     },
 
     /** Las declaraciones registradas localmente, para el panel y la consola. */
@@ -1034,6 +1248,10 @@ const SriLoop = {
 
 // Se ejecuta una sola vez: apaga cualquier lote fantasma heredado.
 SriLoop.normalizarEstadoInicial();
+
+if (typeof window !== 'undefined') {
+    window.SriLoop = SriLoop;
+}
 
 // ── Atajos de consola para probar sin depender del puente web ──────────────
 // La caché de clientes la llena bridge_content.js al abrir SantiagoCordova.com.

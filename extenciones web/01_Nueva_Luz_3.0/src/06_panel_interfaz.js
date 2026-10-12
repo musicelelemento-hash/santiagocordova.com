@@ -1635,6 +1635,7 @@ class SriAssistantPanel {
                     if (info.ruc && typeof syncDeclarationToSupabase === 'function') {
                         this.log('✨ Subiendo PDF original y métricas de éxito a Supabase...');
                         targetPeriodStr = await this.getCanonicalPeriodStr();
+                        const cepDetectado = this.extraerCepDePantalla();
 
                         // 🛡️ ANTI-CARRERA: reservamos el cierre antes de sincronizar para que
                         // initDeclarationSuccessWatcher (poll de 2s) no dispare finalizarPostEnvioSRI
@@ -1644,13 +1645,18 @@ class SriAssistantPanel {
                         // 🧾 Dejar constancia ANTES de intentar subir nada: el portal
                         // tarda ~20 min en quitar la obligación y la subida puede
                         // fallar. Sin esto, el bot volvía a declarar (sustitutiva).
-// El periodo sale del lote, no de recalcular la fecha: es el que se está
-                        // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
-                        // todavía no existen: ReferenceError que abortaba el cierre entero.)
-                        // En una orden multi-mes el item de la cola manda: resolverPeriodoObjetivo()
-                        // leería el sri_target_period global (el primer mes) y marcaría mal todo lo demás.
                         const perDecl = await this.periodoDesdeStr(targetPeriodStr) || await SriLoop.resolverPeriodoObjetivo();
-                        await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
+                        await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name, cep: cepDetectado });
+                        if (typeof SriAuditor !== 'undefined') {
+                            await SriAuditor.registrarHito(info.ruc, perDecl, 'DECLARACION_ENVIADA', {
+                                nombre: info.name,
+                                cep: cepDetectado,
+                                detalle: 'Cierre Mágico pre-envío completado con éxito'
+                            });
+                        }
+
+                        // Asegurar clic nativo en el comprobante si está visible
+                        await this.asegurarDescargaComprobanteNativo();
 
                         let preFetchedGhostData = {};
                         if (typeof GhostMemory !== 'undefined') {
@@ -1658,6 +1664,13 @@ class SriAssistantPanel {
                         }
                         // syncDeclarationToSupabase internamente buscará y capturará el PDF oficial si le pasamos null
                         await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, preFetchedGhostData, "completado");
+
+                        if (typeof SriAuditor !== 'undefined') {
+                            const est = await SriAuditor.obtenerEstado(info.ruc, perDecl);
+                            if (est && est.comprobanteSubido) {
+                                await SriAuditor.registrarHito(info.ruc, perDecl, 'COMPLETADO', { nombre: info.name });
+                            }
+                        }
                     }
                     
                     this.showFinalReportSuccess();
@@ -3885,6 +3898,7 @@ class SriAssistantPanel {
 
         const info = this.extractClientInfo();
         const targetPeriodStr = await this.getCanonicalPeriodStr();
+        const cepDetectado = this.extraerCepDePantalla();
 
         // 💎 ELITE FIX: Capturar la memoria ANTES de limpiarla para que el Sync manual recoja las métricas (ventas, compras, etc)
         let preFetchedGhostData = {};
@@ -3895,13 +3909,27 @@ class SriAssistantPanel {
         if (info.ruc) {
             // 🧾 Constancia primero: si la subida falla, igual quedó registrado
             // que este contribuyente ya declaró este periodo.
-            // El periodo sale del lote, no de recalcular la fecha: es el que se está
-                        // declarando de verdad. (Antes usaba cYear/cMonth, que en este punto
-                        // todavía no existen: ReferenceError que abortaba el cierre entero.)
-                        // En una orden multi-mes manda el periodo real del item, no el global.
-                        const perDecl = await this.periodoDesdeStr(targetPeriodStr) || await SriLoop.resolverPeriodoObjetivo();
-                        await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name });
+            const perDecl = await this.periodoDesdeStr(targetPeriodStr) || await SriLoop.resolverPeriodoObjetivo();
+            await SriLoop.marcarDeclarado(info.ruc, perDecl, { nombre: info.name, cep: cepDetectado });
+            if (typeof SriAuditor !== 'undefined') {
+                await SriAuditor.registrarHito(info.ruc, perDecl, 'DECLARACION_ENVIADA', {
+                    nombre: info.name,
+                    cep: cepDetectado,
+                    detalle: 'Cierre post-envío detectado por pantalla de confirmación'
+                });
+            }
+
+            // Asegurar descarga nativa del comprobante si el botón está visible
+            await this.asegurarDescargaComprobanteNativo();
+
             await syncDeclarationToSupabase(info.ruc, targetPeriodStr, null, info.name, preFetchedGhostData, "completado");
+
+            if (typeof SriAuditor !== 'undefined') {
+                const est = await SriAuditor.obtenerEstado(info.ruc, perDecl);
+                if (est && est.comprobanteSubido) {
+                    await SriAuditor.registrarHito(info.ruc, perDecl, 'COMPLETADO', { nombre: info.name });
+                }
+            }
         }
 
         this.showEliteToast({
@@ -3982,6 +4010,59 @@ class SriAssistantPanel {
         console.warn(`⚠️ [PERÍODO] Ni la pantalla ni el lote dijeron el período. ` +
                      `Se supone ${supuesto} (el mes anterior). Revisá dónde quedó el comprobante.`);
         return supuesto;
+    }
+
+    /**
+     * Extrae el código CEP / número de comprobante de la pantalla post-envío.
+     */
+    extraerCepDePantalla() {
+        try {
+            const ids = [
+                'frmFlujoDeclaracion:outNumeroComprobante',
+                'frmFlujoDeclaracion:cep',
+                'frmFlujoDeclaracion:txtNumeroComprobante',
+                'panelSinValorAPagar'
+            ];
+            for (const id of ids) {
+                const el = document.getElementById(id);
+                if (el) {
+                    const txt = el.innerText || el.textContent || '';
+                    const m = txt.match(/\b(\d{10,20})\b/);
+                    if (m) return m[1];
+                }
+            }
+            const bodyTxt = document.body ? (document.body.innerText || document.body.textContent || '') : '';
+            const match = bodyTxt.match(/(?:comprobante|cep|adhesi[oó]n|tr[aá]mite|declaraci[oó]n\s+n[uú]mero)[:\s#]+(\d{10,20})/i);
+            if (match) return match[1];
+            const matchGen = bodyTxt.match(/\b\d{12,18}\b/);
+            if (matchGen) return matchGen[0];
+        } catch (e) {}
+        return '';
+    }
+
+    /**
+     * Asegura la descarga local directa del comprobante oficial nativo si el botón del SRI está en pantalla.
+     */
+    async asegurarDescargaComprobanteNativo() {
+        try {
+            const btn = document.getElementById('frmFlujoDeclaracion:btnDescargarComprobante')
+                || Array.from(document.querySelectorAll('button, a.ui-button, span.ui-button-text')).find(el => {
+                    const t = (el.innerText || el.textContent || '').toLowerCase();
+                    return (t.includes('descargar comprobante') || t.includes('imprimir comprobante'));
+                });
+            if (btn) {
+                const targetBtn = btn.closest('button, a') || btn;
+                console.log('📄 [POST-ENVÍO] Asegurando descarga nativa con botón oficial:', targetBtn);
+                if (typeof clickElement === 'function') {
+                    clickElement(targetBtn, 'Descarga nativa comprobante');
+                } else {
+                    targetBtn.click();
+                }
+                await sleep(1500);
+            }
+        } catch (e) {
+            console.warn('⚠️ No se pudo disparar clic en botón de comprobante nativo:', e);
+        }
     }
 
     /**
