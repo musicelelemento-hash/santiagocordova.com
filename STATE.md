@@ -41,7 +41,31 @@
 
 ---
 
-## 🏆 2₂. HITOS DE HOY (02-OCT-2026)
+## 🏆 2₃. HITOS DE HOY (11-OCT-2026)
+
+### 1. Auto-Login Instantáneo en Facturador Zifact (`https://zifact.com/login`)
+- **Web App (`santiagocordova-main`)**:
+  - Enlaces actualizados en [FacturadoresScreen.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/FacturadoresScreen.tsx), [FacturadorEditModal.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/FacturadorEditModal.tsx), [FacturadoresSettingsSection.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/FacturadoresSettingsSection.tsx) y [SalesComboModal.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/screens/SalesComboModal.tsx).
+  - Botón táctico `⚡ Zifact Auto-Login` en tarjetas de facturación con despacho vía puente a la extensión y fallback por URL codificada.
+- **Extensión (`SC TaxPilot PRO`)**:
+  - Host permission y content script autónomo [zifact_autologin.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/zifact_autologin.js) registrado en `manifest.json`.
+  - Inyección reactiva y segura de `#login-username`, `#login-password` y submit automático en `.login100-form-btn`.
+
+### 2. Motor de Auditoría de Progreso (`SriAuditor`) y Blindaje Anti-Bucle
+- **Módulo `SriAuditor` ([02_servicios_y_memoria.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/02_servicios_y_memoria.js))**:
+  - Trazabilidad estructurada de hitos persistida en `SafeStorage.sc_auditor_progreso`: `1_INICIADO` → `2_FACTURAS_EXTRAIDAS` → `3_FORMULARIO_LLENADO` → `4_DECLARACION_ENVIADA` → `5_COMPROBANTE_CAPTURADO` → `6_COMPROBANTE_SUBIDO` → `7_COMPLETADO`.
+  - Normalizador de período blindado contra cadenas (`'2026-08'`) u objetos (`{ year, monthIndex }`), erradicando claves corruptas `undefined-NaN`.
+- **Blindaje del Lag de Perfil del SRI ([03_ingreso_y_sesion.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/03_ingreso_y_sesion.js))**:
+  - El perfil de Angular del SRI tarda 15 a 30 minutos en actualizar la obligación tras presentar una declaración.
+  - La extensión consulta `SriAuditor.yaFueDeclarado(ruc, periodo)` antes de aceptar la sugerencia del perfil o relanzar `turbo_step1_facturas`. Si ya fue declarada, bloquea la extracción y si falta comprobante redirige limpiamente a Consulta de Declaraciones (`recuperar_comprobante`).
+- **Captura y Respaldo de Comprobante ([06_panel_interfaz.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/06_panel_interfaz.js) y [01_utilidades_y_pdf.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/01_utilidades_y_pdf.js))**:
+  - `extraerCepDePantalla()`: captura el código CEP oficial en pantalla de confirmación.
+  - `asegurarDescargaComprobanteNativo()`: dispara el botón nativo `#frmFlujoDeclaracion:btnDescargarComprobante`.
+  - Integración en `syncDeclarationToSupabase` con `credentials: "include"` y marcado de `COMPROBANTE_SUBIDO` y `COMPLETADO` en `SriAuditor`.
+
+---
+
+## 🏆 2₂. HITOS ANTERIORES (02-OCT-2026)
 
 ### 1. Rebranding Ejecutivo Oficial: `⚡ SC TaxPilot PRO`
 - **Implementación**:
