@@ -24,7 +24,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://srienlinea.sri.gob.ec/*"
+        "*://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/*",
+        "*://srienlinea.sri.gob.ec/tuportal-internet/*"
       ],
       "js": [
         "libs/injected_bypass.js"
@@ -34,7 +35,8 @@
     },
     {
       "matches": [
-        "*://srienlinea.sri.gob.ec/*"
+        "*://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/*",
+        "*://srienlinea.sri.gob.ec/tuportal-internet/*"
       ],
       "js": [
         "content.js"
@@ -46,7 +48,6 @@
     {
       "resources": [
         "libs/pdf.worker.mjs",
-        "libs/pdf.worker.js",
         "libs/pdf.mjs",
         "libs/injected_bypass.js"
       ],

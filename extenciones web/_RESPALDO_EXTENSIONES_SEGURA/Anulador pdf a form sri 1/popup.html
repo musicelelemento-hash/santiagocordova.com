@@ -1,236 +1,554 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8">
-  <title>SRI Asistente Premium</title>
+  <title>Anulador SRI Pro — Suite Obsidian & Gold</title>
   <style>
     :root {
-      --primary: #2563eb;
-      --primary-dark: #1e40af;
-      --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-      --text-main: #1e293b;
-      --text-sec: #64748b;
+      --bg-main: #07090e;
+      --bg-card: rgba(15, 23, 42, 0.75);
+      --bg-card-hover: rgba(30, 41, 59, 0.85);
+      --gold-primary: #f59e0b;
+      --gold-gradient: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+      --gold-glow: rgba(245, 158, 11, 0.25);
+      --emerald: #10b981;
+      --emerald-glow: rgba(16, 185, 129, 0.25);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-gold: rgba(245, 158, 11, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
     }
 
     body {
-      width: 360px;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: var(--bg-gradient);
+      width: 380px;
+      background: var(--bg-main);
       color: var(--text-main);
+      padding: 0;
+      margin: 0;
+      overflow-x: hidden;
+      border: 1px solid var(--border-subtle);
     }
 
+    /* HEADER OBSIDIAN & LIQUID GOLD */
     .header {
-      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-      padding: 24px 20px;
-      color: white;
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.95) 100%);
+      padding: 22px 20px 18px;
       text-align: center;
-      border-radius: 0 0 20px 20px;
-      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.2);
+      border-bottom: 1px solid var(--border-gold);
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #fbbf24;
+      margin-bottom: 10px;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
     .header h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #fbbf24 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
     }
 
     .header p {
-      margin: 5px 0 0;
-      opacity: 0.8;
-      font-size: 12px;
-    }
-
-    .status-badge {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 4px 12px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
       font-size: 11px;
-      font-weight: 600;
-      backdrop-filter: blur(4px);
+      color: var(--text-muted);
+      font-weight: 500;
     }
 
-    .dashboard {
-      padding: 20px;
+    /* CONTENEDOR PRINCIPAL */
+    .content-body {
+      padding: 16px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* BANNER DE REANUDACIÓN ELEGANTE (SIN CONFIRM NATIVO) */
+    .resume-banner {
+      display: none;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 12px;
+      padding: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .resume-banner-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .resume-banner-text {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+
+    .resume-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 8px;
     }
 
-    .card {
-      background: white;
+    .btn-resume {
+      background: var(--gold-gradient);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-resume:hover {
+      box-shadow: 0 4px 15px var(--gold-glow);
+      transform: translateY(-1px);
+    }
+
+    .btn-discard {
+      background: rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-discard:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    /* MODO ZERO-CLICK TOGGLE */
+    .mode-switch-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
-      padding: 16px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mode-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mode-label-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mode-label-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .3s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background: #f59e0b;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
+
+    /* DROP ZONE OBSIDIAN GLASS */
+    .drop-zone {
+      background: rgba(15, 23, 42, 0.5);
+      border: 2px dashed rgba(245, 158, 11, 0.35);
+      border-radius: 14px;
+      padding: 22px 16px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-      text-decoration: none;
-      color: inherit;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 8px;
     }
 
-    .card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.15);
-      border-color: var(--primary);
+    .drop-zone:hover, .drop-zone.dragover {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: #fbbf24;
+      box-shadow: 0 8px 25px var(--gold-glow);
+      transform: translateY(-2px);
     }
 
-    .card-icon {
-      font-size: 24px;
-      background: #eff6ff;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--primary);
+    .drop-icon {
+      font-size: 32px;
+      filter: drop-shadow(0 4px 10px rgba(245, 158, 11, 0.3));
     }
 
-    .card-title {
+    .drop-text-primary {
       font-size: 13px;
-      font-weight: 600;
-      color: var(--text-main);
+      font-weight: 700;
+      color: #ffffff;
     }
 
-    .card.primary {
-      grid-column: span 2;
-      background: linear-gradient(to right, #ffffff, #f8fafc);
-      padding: 20px;
-      border-left: 4px solid var(--primary);
+    .drop-text-secondary {
+      font-size: 10px;
+      color: var(--text-muted);
     }
 
-    .card.primary .card-icon {
-      background: #dbeafe;
-      color: #1d4ed8;
-      font-size: 28px;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 15px;
-      font-size: 11px;
-      color: var(--text-sec);
-      border-top: 1px solid rgba(0, 0, 0, 0.05);
-      margin-top: 10px;
-    }
-
-    /* Tweak input file */
     input[type=file] {
       display: none;
     }
-    
-    .drop-zone {
-      margin-top: 10px;
-      padding: 20px;
-      border: 2px dashed rgba(37,99,235,0.4);
-      border-radius: 12px;
-      text-align: center;
-      cursor: pointer;
-      background: rgba(255,255,255,0.8);
-      transition: all 0.3s;
-    }
-    .drop-zone:hover {
-      background: rgba(239,246,255,0.9);
-      border-color: var(--primary);
-    }
-    .drop-text {
-      font-size: 13px;
-      color: var(--text-main);
-      font-weight: 600;
-      margin-top: 8px;
-    }
-    .badge-icon {
-      font-size: 28px;
-    }
-    #status {
+
+    /* LISTA DE COLA */
+    #queue-container {
       display: none;
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      width: 100%;
-      text-align: center;
-      font-weight: bold;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px;
     }
+
+    .queue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .queue-badge {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-family: monospace;
+    }
+
+    #queue-list {
+      max-height: 120px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 4px;
+    }
+
+    #queue-list::-webkit-scrollbar { width: 4px; }
+    #queue-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
     .file-item {
       display: flex;
       justify-content: space-between;
-      padding: 4px 6px;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
-      border-radius: 4px;
-    }
-    .file-item:last-child {
-      border-bottom: none;
-    }
-    .file-remove {
-      color: #ef4444; cursor: pointer; font-weight: bold;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 11px;
     }
 
-    #status.success { background: #dcfce7; color: #166534; display: block; }
-    #status.error { background: #fee2e2; color: #991b1b; display: block; }
-    #status.processing { background: #dbeafe; color: #1e40af; display: block; }
+    .file-item-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 250px;
+      color: #e2e8f0;
+    }
+
+    .file-remove {
+      color: #ef4444;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .file-remove:hover {
+      opacity: 1;
+    }
+
+    /* BOTONES PRINCIPALES */
+    .btn-primary {
+      width: 100%;
+      background: var(--gold-gradient);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      padding: 13px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 4px 20px var(--gold-glow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-secondary {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      color: #cbd5e1;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-danger-outline {
+      background: transparent;
+      color: #f87171;
+      border: 1px dashed rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      margin-top: 6px;
+    }
+
+    .btn-danger-outline:hover {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: #ef4444;
+    }
+
+    /* STATUS TOAST */
+    #status {
+      display: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    #status.success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    #status.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    #status.processing { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+    /* FOOTER */
+    .footer {
+      padding: 14px 20px;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+      background: rgba(10, 15, 29, 0.8);
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .footer strong {
+      color: #f8fafc;
+      font-size: 11px;
+    }
+
+    .footer a {
+      color: #fbbf24;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 
 <body>
-
   <div class="header">
-    <h1>SRI Asistente Premium</h1>
-    <p>Suite Profesional para Contadores</p>
-    <div class="status-badge">● Sistema Activo</div>
+    <div class="header-badge">
+      <span class="pulse-dot"></span>
+      <span>Elite Engine · v3.2</span>
+    </div>
+    <h1>⚡ ANULADOR SRI PRO</h1>
+    <p>Soluciones Tributarias Estratégicas · Santiago Córdova</p>
   </div>
 
-  <div class="dashboard" style="display:flex; flex-direction:column;">
-    <!-- Drop & Go Zone -->
-        <label class="drop-zone" id="drop-zone" for="file-upload">
-           <div class="badge-icon">📂</div>
-           <div class="drop-text" id="drop-text-label">Suelta aquí tus PDFs (Lote)</div>
-           <div style="font-size: 11px; color:#64748b; margin-top:4px;">Arrastra y acumula facturas</div>
-        </label>
-        <input type="file" id="file-upload" accept="application/pdf" multiple />
+  <div class="content-body">
+    <!-- BANNER DE REANUDACIÓN DE SESIÓN (REEMPLAZA EL CONFIRM NATIVO) -->
+    <div id="resume-banner" class="resume-banner">
+      <div class="resume-banner-title">
+        <span>⚠️ Lote Previo Detectado</span>
+      </div>
+      <div id="resume-text" class="resume-banner-text">
+        Tienes documentos en cola de una sesión anterior.
+      </div>
+      <div class="resume-actions">
+        <button id="btn-resume-continue" class="btn-resume">▶️ Continuar Lote</button>
+        <button id="btn-resume-discard" class="btn-discard">🗑️ Empezar Limpio</button>
+      </div>
+    </div>
 
-        <div id="queue-container" style="display:none; width:100%; margin-top:15px;">
-            <div style="font-size: 12px; font-weight: 600; color: var(--primary); display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <span>Lista de Lote</span>
-                <span id="queue-count" style="background:#dbeafe; color:#1d4ed8; padding: 2px 6px; border-radius: 12px; font-size:10px;">0</span>
-            </div>
-            <div id="queue-list" style="max-height: 120px; overflow-y: auto; text-align: left; font-size: 11px; background: rgba(0,0,0,0.02); border-radius: 6px; padding: 5px; border: 1px solid rgba(0,0,0,0.05);"></div>
-            <button id="btn-process-batch" style="margin-top: 10px; width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 13px; transition: transform 0.1s, opacity 0.2s;">
-              🚀 Iniciar Automatización
-            </button>
-            <button id="btn-clear-queue" style="margin-top: 5px; width: 100%; padding: 8px; background: transparent; color: #ef4444; border: 1px dashed #fca5a5; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 11px; transition: all 0.2s;">
-              🗑️ Vaciar Cola
-            </button>
-        </div>
+    <!-- SELECTOR DE PILOTO AUTOMÁTICO (ZERO-CLICK) -->
+    <div class="mode-switch-card">
+      <div class="mode-label">
+        <span class="mode-label-title">⚡ Piloto Automático</span>
+        <span class="mode-label-desc">Zero-Click: llena, auto-confirma y avanza solo</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle-autopilot" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
 
-        <div id="status" class="alert-success"></div>
+    <!-- ZONA DROP & GO -->
+    <label class="drop-zone" id="drop-zone" for="file-upload">
+      <div class="drop-icon">📑</div>
+      <div class="drop-text-primary" id="drop-text-label">Suelta aquí tus PDFs (Lote)</div>
+      <div class="drop-text-secondary">Arrastra 1 o varias facturas para anular</div>
+    </label>
+    <input type="file" id="file-upload" accept="application/pdf" multiple />
 
-    <!-- Main Action: Navegar a Anulación -->
+    <!-- CONTENEDOR DE COLA -->
+    <div id="queue-container">
+      <div class="queue-header">
+        <span>Facturas en Lote</span>
+        <span id="queue-count" class="queue-badge">0</span>
+      </div>
+      <div id="queue-list"></div>
+      
+      <button id="btn-process-batch" class="btn-primary" style="margin-top: 10px;">
+        🚀 Iniciar Automatización
+      </button>
+      <button id="btn-clear-queue" class="btn-danger-outline">
+        🗑️ Vaciar Lista
+      </button>
+    </div>
+
+    <div id="status"></div>
+
+    <!-- HERRAMIENTAS ADICIONALES: EXPORTAR CSV & ACCESO PORTAL -->
+    <button id="btn-export-csv" class="btn-secondary">
+      📥 Descargar Acta de Anulaciones (.CSV)
+    </button>
+
     <a href="https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=61&idGrupo=58"
-      class="card primary" id="btn-navegar" style="padding: 15px; margin-top: 10px;">
-      <span class="card-title" style="font-size: 14px;">Ingresar al Portal sin PDFs</span>
+       id="btn-navegar" class="btn-secondary">
+      🌐 Entrar al Portal SRI Directo
     </a>
   </div>
 
   <div class="footer">
-    <strong>SOLUCIONES TRIBUTARIAS ESTRATÉGICAS</strong><br>
-    Ing. Santiago Córdova - Contable<br>
-    <span style="font-size: 10px; opacity: 0.8;">WhatsApp: 0978980722</span><br>
-    <div style="margin-top: 5px; opacity: 0.6; font-size: 9px;">v3.0 Final Release</div>
+    <strong>Ing. Santiago Córdova</strong> · Asesor Tributario<br>
+    Soporte Inmediato WhatsApp: <a href="https://wa.me/593978980722" target="_blank">0978980722</a><br>
+    <span style="opacity: 0.6; font-size: 9px;">Compromiso Cero Fricción · Rendimiento 60 FPS</span>
   </div>
 
   <script type="module" src="popup.js"></script>
 </body>
-
 </html>

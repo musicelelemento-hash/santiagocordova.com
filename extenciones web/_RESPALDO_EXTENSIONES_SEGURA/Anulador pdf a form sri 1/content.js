@@ -3,12 +3,25 @@
  * Desarrollado por: SOLUCIONES TRIBUTARIAS ESTRATÉGICAS
  */
 
-console.log("SRI Asistente: Iniciado 🚀");
+// 🛡️ AISLAMIENTO DE CONTEXTO:
+// Solo activar la extensión si estamos en rutas de anulación de comprobantes o en el menú del portal.
+// Si el usuario está en Declaraciones Mensuales (recibirDeclaracion.jsf), Consulta (lista-obligaciones),
+// Perfil o Login, silenciar el script para garantizar 100% de convivencia pacífica con la extensión de Declaraciones.
+const _currentHref = (window.location.href || '').toLowerCase();
+const _esRutaAnulacion = _currentHref.includes('/anulacion/') || 
+                         _currentHref.includes('menuanulacion') || 
+                         _currentHref.includes('solicitudanulacion') ||
+                         _currentHref.includes('/tuportal-internet/');
+
+if (_esRutaAnulacion) {
+    console.log("SRI Asistente: Iniciado en módulo de anulación 🚀");
+}
 
 let pdfjsLib = null;
 
 // ========== INICIALIZACIÓN ==========
 (async () => {
+    if (!_esRutaAnulacion) return;
     try {
         const src = chrome.runtime.getURL('libs/pdf.mjs');
         const module = await import(src);
@@ -21,84 +34,549 @@ let pdfjsLib = null;
     }
 })();
 
-// ========== INDICADOR VISUAL FLOTANTE (ANIMACIONES ELITE) ==========
-function injectOperatingIndicator(statusMsg, type = 'running') {
-    let indicator = document.getElementById('sri-operating-indicator-root');
-    if (!indicator) {
-        indicator = document.createElement('div');
-        indicator.id = 'sri-operating-indicator-root';
-        indicator.style.cssText = `
+// ========== MOTOR DE AUDIO HÁPTICO SENSORIAL (WEB AUDIO API PURA) ==========
+const SriAudioEngine = {
+    ctx: null,
+    enabled: true,
+
+    init() {
+        if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+        }
+        chrome.storage.local.get(['sri_sound_enabled'], (res) => {
+            this.enabled = res.sri_sound_enabled !== false;
+        });
+    },
+
+    toggleSound() {
+        this.enabled = !this.enabled;
+        chrome.storage.local.set({ sri_sound_enabled: this.enabled });
+        return this.enabled;
+    },
+
+    playTone(freq, duration = 0.15, type = 'sine', gainVal = 0.08) {
+        if (!this.enabled) return;
+        try {
+            if (!this.ctx) this.init();
+            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+            if (!this.ctx) return;
+
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+    },
+
+    playBatchStart() {
+        if (!this.enabled) return;
+        this.playTone(523.25, 0.10, 'sine', 0.07); // C5
+        setTimeout(() => this.playTone(659.25, 0.18, 'sine', 0.09), 80); // E5
+    },
+
+    playInvoiceSuccess() {
+        if (!this.enabled) return;
+        this.playTone(880.00, 0.08, 'sine', 0.08); // A5
+        setTimeout(() => this.playTone(1046.50, 0.12, 'sine', 0.10), 70); // C6
+        setTimeout(() => this.playTone(1318.51, 0.22, 'sine', 0.12), 140); // E6
+    },
+
+    playInvoiceWarning() {
+        if (!this.enabled) return;
+        this.playTone(440.00, 0.12, 'triangle', 0.07);
+        setTimeout(() => this.playTone(369.99, 0.20, 'triangle', 0.07), 100);
+    },
+
+    playBatchComplete() {
+        if (!this.enabled) return;
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+            setTimeout(() => this.playTone(freq, 0.28, 'sine', 0.10), idx * 110);
+        });
+    }
+};
+SriAudioEngine.init();
+window.SriAudioEngine = SriAudioEngine;
+
+// ========== MOTOR EXPORTADOR DE ACTAS CONTABLES (CSV UTF-8 BOM) ==========
+const SriReportExporter = {
+    downloadCSV(records) {
+        if (!records || records.length === 0) return;
+        let csv = '\uFEFF';
+        csv += 'Fecha;Hora;Tipo Comprobante;No. Factura;Clave de Acceso (49 digitos);RUC Receptor;Total ($);Estado SRI;Diagnostico / Mensaje\r\n';
+
+        records.forEach(row => {
+            const item = row.item || {};
+            const fechaHora = row.timestamp ? new Date(row.timestamp) : new Date();
+            const fechaStr = fechaHora.toLocaleDateString('es-EC');
+            const horaStr = fechaHora.toLocaleTimeString('es-EC');
+            const tipo = (item.tipoComprobante || row.tipoComprobante || 'FACTURA').replace(/;/g, ' ');
+            const numDoc = (item.facturaDisplay || row.facturaDisplay || '').replace(/;/g, ' ');
+            const clave = (row.clave || item.claveAcceso || row.claveAcceso || '').replace(/;/g, ' ');
+            const ruc = (item.idReceptor || row.idReceptor || '').replace(/;/g, ' ');
+            const total = (item.total || row.total || '0.00').replace(/;/g, '.');
+            const estado = (row.status === 'success' || row.estado === 'success' ? 'ANULADO_SRI' : 'OBSERVACION_SRI');
+            const detalle = (row.message || row.mensaje || row.error || 'Procesado satisfactoriamente').replace(/;/g, ' ').replace(/\n/g, ' ');
+
+            csv += `"${fechaStr}";"${horaStr}";"${tipo}";"${numDoc}";"${clave}";"${ruc}";"${total}";"${estado}";"${detalle}"\r\n`;
+        });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const now = new Date();
+        const dateSlug = `${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
+        a.href = url;
+        a.download = `Acta_Anulaciones_SRI_${dateSlug}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+};
+
+// ========== MOTOR DE COMPLIANCE TRIBUTARIO Y CONTROL DE PLAZOS SRI ==========
+const SriTaxCompliance = {
+    // Detecta el RUC del contribuyente actualmente autenticado en el portal SRI
+    obtenerRucSesionActiva() {
+        try {
+            // 1. Del token Keycloak en sessionStorage / localStorage
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                const val = sessionStorage.getItem(key);
+                if (val && (val.includes('"preferred_username"') || val.includes('"ruc"'))) {
+                    const match = val.match(/"preferred_username"\s*:\s*"(\d{13})"/i) || val.match(/"ruc"\s*:\s*"(\d{13})"/i);
+                    if (match) return match[1];
+                }
+            }
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const val = localStorage.getItem(key);
+                if (val && (val.includes('"preferred_username"') || val.includes('"ruc"'))) {
+                    const match = val.match(/"preferred_username"\s*:\s*"(\d{13})"/i) || val.match(/"ruc"\s*:\s*"(\d{13})"/i);
+                    if (match) return match[1];
+                }
+            }
+        } catch(e) {}
+
+        // 2. Selectores del DOM de cabecera en el portal SRI
+        const headerSelectors = [
+            '#lblIdentificacion', '#lblUsuario', '#lblRuc',
+            '.sri-identificacion', '.sri-texto-usuario', '.nombre-usuario',
+            '#frmPrincipal\\:lblIdentificacion', '[id*="lblIdentificacion"]',
+            '#lblContribuyente', '.user-info', '.menu-usuario'
+        ];
+        for (const sel of headerSelectors) {
+            try {
+                const el = document.querySelector(sel);
+                if (el && el.innerText) {
+                    const m = el.innerText.match(/\b\d{13}\b/);
+                    if (m) return m[0];
+                }
+            } catch(e) {}
+        }
+
+        // 3. Fallback de texto en las primeras 1500 letras del portal
+        try {
+            const topText = (document.body ? document.body.innerText.substring(0, 1500) : '');
+            const headerMatch = topText.match(/(?:RUC|Identificaci[óo]n|Usuario)[:\s]+(\d{13})/i);
+            if (headerMatch) return headerMatch[1];
+        } catch(e) {}
+
+        return null;
+    },
+
+    // Valida si el RUC emisor de la clave de 49 dígitos coincide con la cuenta en sesión
+    validarEmisorRuc(claveAcceso) {
+        if (!claveAcceso || claveAcceso.length !== 49) return { coincide: true, rucEmisor: '', rucSesion: '' };
+        const rucEmisor = claveAcceso.substring(10, 23);
+        const rucSesion = this.obtenerRucSesionActiva();
+        return {
+            coincide: !rucSesion || rucSesion === rucEmisor,
+            rucEmisor,
+            rucSesion: rucSesion || 'No detectado en DOM'
+        };
+    },
+
+    // Valida el plazo legal de anulación en línea (hasta el día 7 del mes siguiente)
+    // y excepciones críticas (Consumidor Final, Nota de Crédito hasta 12 meses)
+    validarPlazoLegalAnulacion(fechaEmisionStr, idReceptor = '') {
+        const esConsumidorFinal = (idReceptor === '9999999999999' || idReceptor === '9999999999');
+
+        if (!fechaEmisionStr || !fechaEmisionStr.includes('/')) {
+            return { valido: true, plazoVencido: false, esConsumidorFinal, motivo: 'Fecha no analizable', fechaLimiteStr: '' };
+        }
+
+        const [d, m, y] = fechaEmisionStr.split('/').map(Number);
+        if (!d || !m || !y || isNaN(d) || isNaN(m) || isNaN(y)) {
+            return { valido: true, plazoVencido: false, esConsumidorFinal, motivo: 'Fecha inválida', fechaLimiteStr: '' };
+        }
+
+        // El mes de vencimiento es el mes siguiente
+        let mesVencimiento = m + 1;
+        let anioVencimiento = y;
+        if (mesVencimiento > 12) {
+            mesVencimiento = 1;
+            anioVencimiento += 1;
+        }
+
+        // Fecha límite básica: Día 7 a las 23:59:59
+        let fechaLimite = new Date(anioVencimiento, mesVencimiento - 1, 7, 23, 59, 59);
+
+        // Regla legal tributaria de Ecuador (Art. 12 Código Tributario):
+        // Si el día 7 cae en fin de semana, se traslada al siguiente día hábil
+        const diaSemana = fechaLimite.getDay(); // 0 = Domingo, 6 = Sábado
+        if (diaSemana === 6) { // Sábado -> pasa al lunes 9
+            fechaLimite.setDate(fechaLimite.getDate() + 2);
+        } else if (diaSemana === 0) { // Domingo -> pasa al lunes 8
+            fechaLimite.setDate(fechaLimite.getDate() + 1);
+        }
+
+        const ahora = new Date();
+        const plazoVencido = ahora > fechaLimite;
+
+        // Plazo máximo para Nota de Crédito: 12 meses desde fecha de emisión
+        const fechaLimiteNC = new Date(y + 1, m - 1, d, 23, 59, 59);
+        const plazoNCVencido = ahora > fechaLimiteNC;
+
+        const diaStr = fechaLimite.getDate().toString().padStart(2, '0');
+        const mesStr = (fechaLimite.getMonth() + 1).toString().padStart(2, '0');
+        const fechaLimiteStr = `${diaStr}/${mesStr}/${fechaLimite.getFullYear()}`;
+
+        return {
+            valido: !plazoVencido && !esConsumidorFinal,
+            plazoVencido,
+            esConsumidorFinal,
+            plazoNCVencido,
+            fechaLimiteStr,
+            mensaje: esConsumidorFinal
+                ? '⚠️ Factura emitida a Consumidor Final: No permite anulación ni Nota de Crédito una vez autorizada.'
+                : (plazoVencido
+                    ? `⚠️ Plazo de anulación en línea vencido (Venció el ${fechaLimiteStr}). Requiere emisión de NOTA DE CRÉDITO (plazo de 12 meses).`
+                    : `✅ Dentro del plazo legal para anulación en línea (Límite: ${fechaLimiteStr}).`)
+        };
+    }
+};
+
+// ========== DYNAMIC ISLAND HUD DE ÉLITE (OBSIDIAN & LIQUID GOLD) ==========
+const SriDynamicIsland = {
+    element: null,
+
+    render() {
+        if (this.element && document.getElementById('sri-dynamic-island-root')) return this.element;
+
+        let existing = document.getElementById('sri-dynamic-island-root');
+        if (existing) existing.remove();
+
+        const island = document.createElement('div');
+        island.id = 'sri-dynamic-island-root';
+        island.style.cssText = `
             position: fixed;
-            top: 15px;
-            right: 25px;
-            background: rgba(15, 23, 42, 0.94);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(239, 68, 68, 0.6);
-            border-radius: 30px;
-            padding: 10px 20px;
-            z-index: 9999999;
+            top: 14px;
+            right: 20px;
+            z-index: 2147483647;
+            background: rgba(9, 13, 22, 0.92);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-radius: 40px;
+            padding: 8px 18px;
             display: flex;
             align-items: center;
             gap: 12px;
-            box-shadow: 0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(239, 68, 68, 0.35);
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            color: white;
-            font-size: 13px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7), 0 0 25px rgba(245, 158, 11, 0.18);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+            color: #f8fafc;
+            font-size: 12px;
             font-weight: 700;
-            letter-spacing: 0.02em;
-            transition: all 0.3s ease;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            user-select: none;
         `;
-        indicator.innerHTML = `
+
+        island.innerHTML = `
             <style>
-                @keyframes pulse-dot-anulador {
-                    0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-                    70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-                    100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+                @keyframes pulse-island-radar {
+                    0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+                    70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+                    100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
                 }
-                .sri-pulse-dot-anulador {
-                    width: 12px;
-                    height: 12px;
-                    background-color: #ef4444;
-                    border-radius: 50%;
-                    animation: pulse-dot-anulador 1.2s infinite ease-in-out;
-                    display: inline-block;
+                .sri-island-dot {
+                    width: 10px; height: 10px; border-radius: 50%;
+                    background: #f59e0b;
+                    box-shadow: 0 0 10px #f59e0b;
+                    animation: pulse-island-radar 1.4s infinite ease-in-out;
                     flex-shrink: 0;
-                    transition: background-color 0.3s ease;
+                }
+                .sri-island-btn {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #cbd5e1;
+                    border-radius: 20px;
+                    padding: 4px 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    transition: all 0.2s;
+                }
+                .sri-island-btn:hover {
+                    background: rgba(245, 158, 11, 0.2);
+                    color: #fbbf24;
+                    border-color: rgba(245, 158, 11, 0.4);
                 }
             </style>
-            <span class="sri-pulse-dot-anulador" id="sri-pulse-dot"></span>
-            <span id="sri-operating-text">${statusMsg}</span>
-            <button id="btnHideSriOperating" style="background: rgba(255,255,255,0.1); border: none; color: #94a3b8; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 5px;">✕</button>
+            <span class="sri-island-dot" id="sri-island-dot"></span>
+            <span id="sri-island-text" style="white-space:nowrap; letter-spacing: 0.01em;">⚡ Anulador SRI · Conectado</span>
+            <button id="sri-btn-mute" class="sri-island-btn" title="Silenciar / Activar sonido">🔊</button>
+            <button id="sri-btn-emergency" class="sri-island-btn" title="Parada de Emergencia" style="color:#f87171;">🛑</button>
         `;
-        document.body.appendChild(indicator);
-        document.getElementById('btnHideSriOperating')?.addEventListener('click', () => indicator.remove());
-    }
-    const textEl = document.getElementById('sri-operating-text');
-    if (textEl) textEl.textContent = statusMsg;
-    const dot = document.getElementById('sri-pulse-dot');
-    if (dot) {
-        if (type === 'success') {
-            dot.style.backgroundColor = '#10b981';
-            indicator.style.borderColor = 'rgba(16, 185, 129, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(16, 185, 129, 0.35)';
-        } else if (type === 'working') {
-            dot.style.backgroundColor = '#f59e0b';
-            indicator.style.borderColor = 'rgba(245, 158, 11, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(245, 158, 11, 0.35)';
-        } else {
-            dot.style.backgroundColor = '#ef4444';
-            indicator.style.borderColor = 'rgba(239, 68, 68, 0.6)';
-            indicator.style.boxShadow = '0 10px 35px rgba(0,0,0,0.6), 0 0 20px rgba(239, 68, 68, 0.35)';
+
+        document.body.appendChild(island);
+        this.element = island;
+
+        // Listeners interactivos del HUD
+        document.getElementById('sri-btn-mute')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const soundOn = SriAudioEngine.toggleSound();
+            const btn = document.getElementById('sri-btn-mute');
+            if (btn) btn.textContent = soundOn ? '🔊' : '🔇';
+        });
+
+        document.getElementById('sri-btn-emergency')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (window.sriPoller) clearInterval(window.sriPoller);
+            chrome.storage.local.set({ sri_active_batch: false, sri_batch_queue: [] }, () => {
+                SriDynamicIsland.update("🛑 Parada de emergencia activada", "error");
+                setTimeout(() => { if (island) island.remove(); }, 3500);
+            });
+        });
+
+        return island;
+    },
+
+    update(text, type = 'working') {
+        this.render();
+        const textEl = document.getElementById('sri-island-text');
+        if (textEl) textEl.textContent = text;
+
+        const dot = document.getElementById('sri-island-dot');
+        if (dot && this.element) {
+            if (type === 'success') {
+                dot.style.background = '#10b981';
+                dot.style.boxShadow = '0 0 12px #10b981';
+                this.element.style.borderColor = 'rgba(16, 185, 129, 0.5)';
+                this.element.style.boxShadow = '0 12px 40px rgba(0,0,0,0.7), 0 0 25px rgba(16, 185, 129, 0.25)';
+            } else if (type === 'working') {
+                dot.style.background = '#f59e0b';
+                dot.style.boxShadow = '0 0 12px #f59e0b';
+                this.element.style.borderColor = 'rgba(245, 158, 11, 0.45)';
+                this.element.style.boxShadow = '0 12px 40px rgba(0,0,0,0.7), 0 0 25px rgba(245, 158, 11, 0.2)';
+            } else {
+                dot.style.background = '#ef4444';
+                dot.style.boxShadow = '0 0 12px #ef4444';
+                this.element.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                this.element.style.boxShadow = '0 12px 40px rgba(0,0,0,0.7), 0 0 25px rgba(239, 68, 68, 0.25)';
+            }
         }
     }
+};
+
+function injectOperatingIndicator(statusMsg, type = 'running') {
+    SriDynamicIsland.update(statusMsg, type);
 }
+
+// ========== MODAL DE RESUMEN EJECUTIVO FINAL (OBSIDIAN & LIQUID GOLD) ==========
+function showFinalReport(results = []) {
+    chrome.storage.local.get(['sri_batch_results', 'sri_anulaciones_historial'], (res) => {
+        const batchResults = results.length > 0 ? results : (res.sri_batch_results || []);
+        const totalDocs = batchResults.length;
+        const exitosos = batchResults.filter(r => r.status === 'success' || r.estado === 'success').length;
+        const fallidos = totalDocs - exitosos;
+
+        // Calcular monto total acumulado
+        let montoAcumulado = 0;
+        batchResults.forEach(r => {
+            const item = r.item || {};
+            const val = parseFloat(item.total || r.total || '0');
+            if (!isNaN(val)) montoAcumulado += val;
+        });
+
+        // Eliminar modal previo si existiera
+        const prevModal = document.getElementById('sri-executive-modal-root');
+        if (prevModal) prevModal.remove();
+
+        const modalRoot = document.createElement('div');
+        modalRoot.id = 'sri-executive-modal-root';
+        modalRoot.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(3, 7, 18, 0.85);
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            z-index: 2147483647;
+            display: flex; align-items: center; justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+            animation: fadeInModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        `;
+
+        modalRoot.innerHTML = `
+            <style>
+                @keyframes fadeInModal { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+                .sri-modal-card {
+                    background: linear-gradient(180deg, #0d1322 0%, #060911 100%);
+                    border: 1px solid rgba(245, 158, 11, 0.45);
+                    box-shadow: 0 30px 80px rgba(0,0,0,0.8), 0 0 40px rgba(245, 158, 11, 0.2);
+                    border-radius: 24px;
+                    width: 440px;
+                    max-width: 90vw;
+                    padding: 28px 24px;
+                    text-align: center;
+                    color: white;
+                }
+                .sri-badge-kpi {
+                    background: rgba(255, 255, 255, 0.04);
+                    border: 1px solid rgba(255, 255, 255, 0.08);
+                    border-radius: 12px;
+                    padding: 12px 10px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+            </style>
+            <div class="sri-modal-card">
+                <div style="font-size: 38px; margin-bottom: 8px;">${fallidos > 0 && exitosos === 0 ? '⚠️' : (fallidos > 0 ? '📊' : '🏆')}</div>
+                <h2 style="font-size: 20px; font-weight: 800; background: linear-gradient(135deg, #ffffff 0%, #fbbf24 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 6px;">
+                    ${fallidos > 0 && exitosos === 0 ? 'Solicitudes con Observación del SRI' : (fallidos > 0 ? 'Lote Procesado con Observaciones' : '¡Lote Anulado con Éxito!')}
+                </h2>
+                <p style="font-size: 12px; color: #94a3b8; margin-bottom: 20px;">
+                    ${fallidos > 0 && exitosos === 0 ? 'El SRI notificó observaciones reglamentarias en los comprobantes' : 'Resumen ejecutivo oficial de las solicitudes de anulación ante el SRI'}
+                </p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+                    <div class="sri-badge-kpi">
+                        <span style="font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Facturas</span>
+                        <span style="font-size: 22px; font-weight: 800; color: #f8fafc;">${totalDocs}</span>
+                    </div>
+                    <div class="sri-badge-kpi">
+                        <span style="font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Total Anulado</span>
+                        <span style="font-size: 22px; font-weight: 800; color: #10b981;">$ ${montoAcumulado.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+                    <div class="sri-badge-kpi">
+                        <span style="font-size: 10px; color: #34d399; text-transform: uppercase; font-weight: 700;">✅ Confirmadas</span>
+                        <span style="font-size: 16px; font-weight: 700; color: #34d399;">${exitosos}</span>
+                    </div>
+                    <div class="sri-badge-kpi">
+                        <span style="font-size: 10px; color: #f87171; text-transform: uppercase; font-weight: 700;">⚠️ Con Observación</span>
+                        <span style="font-size: 16px; font-weight: 700; color: #f87171;">${fallidos}</span>
+                    </div>
+                </div>
+
+                ${(() => {
+                    const plazoObs = batchResults.filter(r => {
+                        const m = (r.message || r.mensaje || '').toLowerCase();
+                        return m.includes('plazo') || m.includes('nota de crédito');
+                    });
+                    if (plazoObs.length === 0) return '';
+                    return `
+                        <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; text-align: left; font-size: 11px; line-height: 1.45; color: #fde68a;">
+                            <div style="font-weight: 800; font-size: 12px; color: #fbbf24; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                                <span>⚖️</span> Dictamen SRI: Plazo Legal Superado
+                            </div>
+                            ${plazoObs.length === 1 ? 'Esta factura superó' : `${plazoObs.length} facturas superaron`} el día 7 del mes posterior a la emisión. El SRI prohíbe anulación directa en línea.
+                            <br><br>
+                            <b>Acción Requerida:</b> Emitir <b>Nota de Crédito electrónica</b> por el total de la factura (vigente hasta 12 meses desde la fecha de emisión).
+                        </div>
+                        <button id="sri-btn-modal-copy-nc" style="width: 100%; background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.45); color: #fbbf24; border-radius: 12px; padding: 10px; font-weight: 700; font-size: 11px; cursor: pointer; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                            📋 Copiar Clave(s) para emitir Nota de Crédito
+                        </button>
+                    `;
+                })()}
+
+                <button id="sri-btn-modal-csv" style="width: 100%; background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%); color: #000; border: none; border-radius: 12px; padding: 13px; font-weight: 800; font-size: 13px; cursor: pointer; box-shadow: 0 4px 20px rgba(245, 158, 11, 0.35); margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    📥 Descargar Acta de Anulaciones (.CSV)
+                </button>
+
+                <button id="sri-btn-modal-close" style="width: 100%; background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 11px; font-weight: 600; font-size: 12px; cursor: pointer;">
+                    ✨ Finalizar y Limpiar
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(modalRoot);
+
+        document.getElementById('sri-btn-modal-copy-nc')?.addEventListener('click', function() {
+            const plazoObs = batchResults.filter(r => {
+                const m = (r.message || r.mensaje || '').toLowerCase();
+                return m.includes('plazo') || m.includes('nota de crédito');
+            });
+            const claves = plazoObs.map(r => r.clave || (r.item ? r.item.claveAcceso : '')).filter(Boolean).join('\n');
+            if (claves) {
+                navigator.clipboard.writeText(claves).then(() => {
+                    this.innerHTML = '✅ ¡Claves Copiadas al Portapapeles!';
+                    setTimeout(() => {
+                        this.innerHTML = '📋 Copiar Clave(s) para emitir Nota de Crédito';
+                    }, 3000);
+                });
+            }
+        });
+
+        document.getElementById('sri-btn-modal-csv')?.addEventListener('click', () => {
+            SriReportExporter.downloadCSV(batchResults);
+        });
+
+        document.getElementById('sri-btn-modal-close')?.addEventListener('click', () => {
+            modalRoot.remove();
+        });
+    });
+}
+
+
+let isNavigating = false;
+let debounceTimer = null;
 
 // ========== OBSERVER & INJECTION ==========
 function initObserver() {
-    if (document.getElementById('sri-upload-widget')) return;
+    function findMenuLink() {
+        // 1. Prioridad: Enlace directo en menuAnulacion.jsf para entrar al formulario
+        const directLink = document.querySelector('a[onclick*="consultaDocumentoForm"]') ||
+                           document.querySelector('a[id*="consultaDocumentoForm"]');
+        if (directLink) return directLink;
 
-    const TARGET_PATH = "solicitud/anulacion/menuAnulacion.jsf";
+        // 2. Búsqueda por texto en todos los enlaces y botones
+        const elements = Array.from(document.querySelectorAll('a, button, span.ui-menuitem-text, td.rich-menu-item-label, div[class*="menu"]'));
+        const terms = [
+            "solicitud de anulación",
+            "solicitud de anulacion",
+            "anulación de comprobantes",
+            "anulacion de comprobantes",
+            "anulación",
+            "anulacion"
+        ];
+
+        for (const term of terms) {
+            const found = elements.find(el => {
+                const txt = (el.innerText || el.textContent || '').toLowerCase().trim();
+                return txt.includes(term);
+            });
+            if (found) {
+                return found.closest('a') || found.closest('button') || found;
+            }
+        }
+        return null;
+    }
 
     const checkAndInject = () => {
         // 1. SAFETY: Only allow widget on Anulacion workflow pages
@@ -108,8 +586,15 @@ function initObserver() {
             return;
         }
 
-        const menuLink = findMenuLink("Solicitud de anulación comprobantes");
-        const hasFormFields = document.querySelector('input[type="text"]');
+        // Si ya estamos en medio de una navegación activa al formulario, evitar re-ejecución
+        if (isNavigating) return;
+
+        const hasFormInput = document.getElementById('frmPrincipal:itxtClaveAcceso') || document.querySelector('input[id*="ClaveAcceso"]');
+        const hasBtnAceptar = document.getElementById('frmPrincipal:btnAceptar');
+        const hasBtnEnviar = document.getElementById('frmPrincipal:btnEnviar');
+        const hasFormFields = !!(hasFormInput || hasBtnAceptar || hasBtnEnviar || document.querySelector('input[type="text"]'));
+
+        const menuLink = findMenuLink();
 
         // 2. DATA RESTORE (Drop & Go Result)
         if (hasFormFields) {
@@ -118,49 +603,89 @@ function initObserver() {
                 sessionStorage.removeItem('sri_pending_data');
                 console.log("SRI Asistente: Restaurando datos pendientes...");
 
-                // Ensure widget is ready before filling
                 if (!document.getElementById('sri-upload-widget')) createUploadWidget();
 
                 setTimeout(() => {
                     try {
                         const data = JSON.parse(pending);
                         renderResults(data);
-                        fillForm(data);
+                        window.__sriLastProcessedItem = data;
 
-                        // Update UI to "Ready" state
                         const drop = document.getElementById('drop-zone');
                         const msg = document.getElementById('status-msg');
                         const ab = document.getElementById('action-bar');
 
                         if (drop) drop.style.display = 'none';
-                        if (msg) { msg.textContent = "Datos listos. Presiona ▶️ para continuar."; msg.style.display = 'block'; msg.className = 'status-msg success'; }
                         if (ab) ab.style.display = 'block';
+
+                        chrome.storage.local.get(['sri_autopilot_enabled'], (cfg) => {
+                            const auto = cfg.sri_autopilot_enabled !== false;
+                            if (auto) {
+                                if (msg) { msg.textContent = "⚡ Piloto Automático: Procesando..."; msg.style.display = 'block'; msg.className = 'status-msg success'; }
+                                if (window.SriAudioEngine) window.SriAudioEngine.playBatchStart();
+                                startProcessingItem(data);
+                            } else {
+                                fillForm(data);
+                                if (msg) { msg.textContent = "Datos listos. Presiona ▶️ para continuar."; msg.style.display = 'block'; msg.className = 'status-msg success'; }
+                            }
+                        });
                     } catch (err) { console.error("Restore failed", err); }
-                }, 800); // Small delay to ensure DOM is interactive
+                }, 800);
             }
         }
 
         // 3. MENU PAGE LOGIC (Auto-Nav - Authorized Only)
-        // User Request: "Enter the first option... and THERE ask for the pdf"
-        if (menuLink && !hasFormFields) {
+        if (menuLink && !hasFormFields && !isNavigating) {
             chrome.storage.local.get(['sri_auto_nav', 'sri_active_batch', 'sri_batch_queue'], (result) => {
+                if (isNavigating) return;
                 const auth = result.sri_auto_nav;
                 const queue = result.sri_batch_queue || [];
                 const isBatchActive = result.sri_active_batch && queue.length > 0;
                 const isAuth = (auth && auth.target === 'solicitud_anulacion' && (Date.now() - auth.timestamp) < 60000) || isBatchActive;
 
                 if (isAuth) {
-                    // AUTHORIZED: Auto-Navigate
-                    const loader = document.createElement('div');
-                    loader.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.95);z-index:999999;display:flex;justify-content:center;align-items:center;flex-direction:column;`;
-                    loader.innerHTML = `<div style="font-size:40px;">🚀</div><div style="margin-top:20px;font-family:sans-serif;color:#2563eb;font-weight:bold;">${isBatchActive ? `Procesando lote: siguiente factura (${queue.length} restantes)...` : 'Entrando a Solicitud...'}</div>`;
-                    document.body.appendChild(loader);
+                    isNavigating = true;
+
+                    // ÚNICO LOADER BLINDADO (Anti-duplicación, ID único)
+                    let loader = document.getElementById('sri-nav-loader');
+                    if (!loader) {
+                        loader = document.createElement('div');
+                        loader.id = 'sri-nav-loader';
+                        loader.style.cssText = `position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(3,7,18,0.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);z-index:2147483647;display:flex;justify-content:center;align-items:center;flex-direction:column;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter',system-ui,sans-serif;`;
+                        loader.innerHTML = `
+                            <div style="font-size:52px; animation:pulse 1s infinite; filter: drop-shadow(0 0 20px rgba(245,158,11,0.5));">🚀</div>
+                            <div style="margin-top:20px;color:#fbbf24;font-weight:800;font-size:16px;letter-spacing:0.02em;">
+                                ${isBatchActive ? `Procesando lote · Siguiente factura (${queue.length} restantes)...` : 'Entrando a Solicitud de Anulación...'}
+                            </div>
+                            <div style="margin-top:8px;color:#94a3b8;font-size:12px;font-weight:500;">
+                                Soluciones Tributarias Estratégicas · Santiago Córdova
+                            </div>
+                        `;
+                        document.body.appendChild(loader);
+                    }
 
                     if (auth) chrome.storage.local.remove('sri_auto_nav');
-                    setTimeout(() => menuLink.click(), 500);
+
+                    setTimeout(() => {
+                        console.log("⚡ [ANULADOR SRI] Clic automático en opción de menú ->", menuLink);
+                        try {
+                            const targetToClick = menuLink.closest('a') || menuLink.closest('button') || menuLink;
+                            targetToClick.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                            targetToClick.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                            targetToClick.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                            targetToClick.click();
+                            targetToClick.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                        } catch(e) {
+                            try { menuLink.click(); } catch(err){}
+                        }
+
+                        // Temporizador de seguridad: si no navega en 5s, permitir reintento
+                        setTimeout(() => {
+                            isNavigating = false;
+                        }, 5000);
+                    }, 500);
                 }
 
-                // Always ensure no widget on menu (unless we support Drop & Go, but user disabled it)
                 const w = document.getElementById('sri-upload-widget');
                 if (w) w.remove();
             });
@@ -168,19 +693,24 @@ function initObserver() {
 
         // 4. FORM PAGE LOGIC (Standard Fill)
         if (hasFormFields) {
+            // Si llegamos al formulario, retirar loader si aún existe
+            const oldLoader = document.getElementById('sri-nav-loader');
+            if (oldLoader) oldLoader.remove();
+            isNavigating = false;
+
             if (!document.getElementById('sri-upload-widget')) {
                 createUploadWidget();
+            } else {
+                checkBatchStatus();
             }
         }
     };
 
-    function findMenuLink(text) {
-        const links = Array.from(document.querySelectorAll('a, span.ui-menuitem-text'));
-        return links.find(el => el.innerText && el.innerText.toLowerCase().includes(text.toLowerCase()));
-    }
-
     checkAndInject();
-    const observer = new MutationObserver(checkAndInject);
+    const observer = new MutationObserver(() => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(checkAndInject, 250);
+    });
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -192,6 +722,10 @@ const UI_STATE = { injected: false };
 // Se carga como <script src> externo vía web_accessible_resources, que sí pasa
 // la CSP, y sobreescribe window.confirm en el contexto de la página.
 function injectMainWorldBypass() {
+    const _href = (window.location.href || '').toLowerCase();
+    if (!_href.includes('/anulacion/') && !_href.includes('menuanulacion') && !_href.includes('solicitudanulacion')) {
+        return;
+    }
     if (document.getElementById('sri-bypass-script')) return;
     try {
         const script = document.createElement('script');
@@ -211,146 +745,113 @@ function createUploadWidget() {
     widget.innerHTML = `
         <style>
             .sri-widget-container {
-                position: fixed; bottom: 30px; right: 30px; width: 300px;
-                background: rgba(255, 255, 255, 0.90); 
-                backdrop-filter: blur(15px);
-                -webkit-backdrop-filter: blur(15px);
+                position: fixed; bottom: 25px; right: 25px; width: 330px;
+                background: rgba(9, 13, 22, 0.94); 
+                backdrop-filter: blur(25px);
+                -webkit-backdrop-filter: blur(25px);
                 border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.6);
-                z-index: 999999; font-family: 'Segoe UI', system-ui, sans-serif;
-                overflow: hidden; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-                animation: slideUp 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-                border: 1px solid rgba(255,255,255,0.4);
+                box-shadow: 0 25px 65px rgba(0,0,0,0.7), 0 0 30px rgba(245, 158, 11, 0.15);
+                z-index: 2147483647; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+                overflow: hidden; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                animation: slideUpObsidian 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+                border: 1px solid rgba(245, 158, 11, 0.4);
+                color: #f8fafc;
             }
-            @keyframes slideUp { from { transform: translateY(120%) scale(0.9); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+            @keyframes slideUpObsidian { from { transform: translateY(110%) scale(0.92); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
             
             .widget-header {
-                background: linear-gradient(135deg, rgba(37,99,235,0.95) 0%, rgba(29,78,216,0.95) 100%);
-                padding: 16px 20px; color: white; display: flex; justify-content: space-between; align-items: center;
-                box-shadow: 0 4px 12px rgba(37,99,235,0.2);
+                background: linear-gradient(180deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.95) 100%);
+                padding: 14px 18px; color: white; display: flex; justify-content: space-between; align-items: center;
+                border-bottom: 1px solid rgba(245, 158, 11, 0.3);
             }
-            .widget-title { font-weight: 700; font-size: 14px; letter-spacing: 0.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-            .widget-close { cursor: pointer; font-size: 20px; opacity: 0.8; transition: transform 0.2s; }
-            .widget-close:hover { opacity: 1; transform: scale(1.1); }
+            .widget-title { 
+                font-weight: 800; font-size: 13px; letter-spacing: 0.02em;
+                background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #fbbf24 100%);
+                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            }
+            .widget-controls { display: flex; align-items: center; gap: 8px; }
+            .widget-auto-badge {
+                font-size: 10px; font-weight: 700; color: #fbbf24; background: rgba(245, 158, 11, 0.15);
+                border: 1px solid rgba(245, 158, 11, 0.35); padding: 2px 7px; border-radius: 10px;
+                display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none;
+            }
+            .widget-close { cursor: pointer; font-size: 18px; opacity: 0.7; transition: transform 0.2s, opacity 0.2s; color: #94a3b8; }
+            .widget-close:hover { opacity: 1; transform: scale(1.15); color: #ef4444; }
 
             .drop-zone {
-                padding: 20px 15px; text-align: center; border: 2px dashed rgba(203, 213, 225, 0.8);
-                margin: 20px; border-radius: 16px; cursor: pointer; 
-                background: rgba(248, 250, 252, 0.5);
-                transition: all 0.3s;
+                padding: 20px 14px; text-align: center; border: 2px dashed rgba(245, 158, 11, 0.35);
+                margin: 16px; border-radius: 14px; cursor: pointer; 
+                background: rgba(255, 255, 255, 0.02);
+                transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
             }
             .drop-zone:hover { 
-                border-color: #2563eb; background: rgba(239, 246, 255, 0.8); transform: translateY(-2px);
+                border-color: #fbbf24; background: rgba(245, 158, 11, 0.08);
+                box-shadow: 0 8px 25px rgba(245, 158, 11, 0.2); transform: translateY(-2px);
             }
-            .drop-icon { font-size: 36px; display: block; margin-bottom: 12px; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
-            .drop-text { font-size: 14px; color: #475569; font-weight: 600; }
+            .drop-icon { font-size: 30px; display: block; margin-bottom: 8px; filter: drop-shadow(0 4px 8px rgba(245, 158, 11, 0.3)); }
+            .drop-text { font-size: 12px; color: #f8fafc; font-weight: 700; }
             
-            .result-list { padding: 0 20px 20px; display: none; max-height: 320px; overflow-y: auto; }
-            /* Custom Scrollbar */
-            .result-list::-webkit-scrollbar { width: 6px; }
-            .result-list::-webkit-scrollbar-track { background: transparent; }
-            .result-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+            .result-list { padding: 0 16px 16px; display: none; max-height: 280px; overflow-y: auto; }
+            .result-list::-webkit-scrollbar { width: 4px; }
+            .result-list::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.3); border-radius: 2px; }
             
             .result-item { 
                 display: flex; flex-direction: column; 
-                padding: 12px; border-bottom: 1px solid rgba(0,0,0,0.05);
-                background: rgba(255,255,255,0.6); border-radius: 10px; margin-bottom: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+                padding: 10px; border: 1px solid rgba(255, 255, 255, 0.06);
+                background: rgba(255, 255, 255, 0.03); border-radius: 10px; margin-bottom: 8px;
             }
-            .result-label { font-size: 10px; color: #64748b; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-            .result-row { display: flex; align-items: center; gap: 10px; }
+            .result-label { font-size: 9px; color: #94a3b8; font-weight: 700; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+            .result-row { display: flex; align-items: center; gap: 8px; }
             .result-value { 
-                font-size: 13px; color: #1e293b; font-family: 'Consolas', monospace; 
+                font-size: 11px; color: #f8fafc; font-family: monospace; 
                 flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-                background: rgba(255,255,255,0.8); padding: 6px 10px; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px;
+                background: rgba(0, 0, 0, 0.3); padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px;
             }
             .copy-btn {
-                background: white; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 6px;
-                cursor: pointer; font-size: 11px; color: #475569; font-weight: 700;
-                transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); padding: 5px 10px; border-radius: 6px;
+                cursor: pointer; font-size: 10px; color: #cbd5e1; font-weight: 700;
+                transition: all 0.2s;
             }
-            .copy-btn:hover { background: #f1f5f9; color: #0f172a; transform: translateY(-1px); }
-            .copy-btn.copied { background: #dcfce7; color: #166534; border-color: #86efac; }
+            .copy-btn:hover { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4); }
+            .copy-btn.copied { background: rgba(16, 185, 129, 0.2); color: #34d399; border-color: rgba(16, 185, 129, 0.4); }
 
-            .status-msg { margin: 0 20px 20px; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 500; display: none; text-align: center; }
-            .status-msg.success { background: rgba(220, 252, 231, 0.9); color: #14532d; border: 1px solid #bbf7d0; }
-            .status-msg.error { background: rgba(254, 226, 226, 0.9); color: #7f1d1d; border: 1px solid #fecaca; }
+            .status-msg { margin: 0 16px 14px; padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; display: none; text-align: center; }
+            .status-msg.success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+            .status-msg.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
 
-            /* Action Bar for Semi-Auto */
-            .action-bar { padding: 0 20px 20px; display: none; text-align: center; }
+            .action-bar { padding: 0 16px 16px; display: none; text-align: center; }
             .btn-process {
-                width: 100%; background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-                color: white; border: none; padding: 12px; border-radius: 12px;
-                font-weight: 600; font-size: 14px; cursor: pointer;
-                box-shadow: 0 4px 15px rgba(37,99,235,0.3); transition: all 0.3s;
+                width: 100%; background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+                color: #000; border: none; padding: 12px; border-radius: 10px;
+                font-weight: 800; font-size: 13px; cursor: pointer;
+                box-shadow: 0 4px 18px rgba(245, 158, 11, 0.35); transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
                 display: flex; align-items: center; justify-content: center; gap: 8px;
             }
-            .btn-process:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(37,99,235,0.4); }
+            .btn-process:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(245, 158, 11, 0.45); }
             .btn-process.disabled { opacity: 0.6; cursor: wait; transform: none; }
             .btn-cancel { 
-                margin-top: 10px; font-size: 11px; color: #94a3b8; font-weight: bold; background: none; border: none; cursor: pointer; text-decoration: underline; 
-                display: none;
+                margin-top: 8px; font-size: 11px; color: #94a3b8; font-weight: 600; background: none; border: none; cursor: pointer;
+                display: none; transition: color 0.2s;
             }
-            .btn-cancel:hover { color: #ef4444; }
-            .current-file { font-size: 11px; color: #64748b; font-weight: bold; margin-bottom: 8px; display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
-
-            /* Play Overlay */
-            .play-overlay {
-                position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(255, 255, 255, 0.6);
-                backdrop-filter: blur(2px);
-                z-index: 10;
-                display: none;
-                align-items: center; justify-content: center;
-                flex-direction: column;
-            }
-            /* Minimalist Success Animation */
-            .success-circle {
-                width: 80px; height: 80px; border-radius: 50%; border: 4px solid #10b981;
-                position: relative; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-                display:flex; align-items:center; justify-content:center; background:white;
-            }
-            .checkmark {
-                width: 40px; height: 20px; border-bottom: 5px solid #10b981; border-left: 5px solid #10b981;
-                transform: rotate(-45deg) translate(2px, -2px); opacity: 0;
-                animation: check 0.4s 0.4s ease forwards;
-            }
-            .play-overlay {
-                position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(255, 255, 255, 0.85); /* Whiter, cleaner */
-                backdrop-filter: blur(5px);
-                z-index: 20; display: none;
-                align-items: center; justify-content: center; flex-direction: column;
-            }
-            .play-text {
-                margin-top: 20px; font-weight: 600; color: #0f172a; font-size: 16px; letter-spacing: -0.5px;
-                animation: fadeIn 0.5s 0.2s forwards; opacity: 0;
-            }
-            
-            @keyframes popIn { from { transform: scale(0); opacity:0; } to { transform: scale(1); opacity:1; } }
-            @keyframes check { from { transform: rotate(-45deg) scale(0); opacity:0; } to { transform: rotate(-45deg) scale(1); opacity:1; } }
-            @keyframes fadeIn { to { opacity: 1; } }
-            @keyframes pulse { 0% { opacity:0.6; } 50% { opacity:1; } 100% { opacity:0.6; } }
-
-            /* Highlight Class for Success Message Analysis */
-            .sri-success-highlight { font-weight: bold; background-color: #dcfce7; padding: 0 4px; border-radius: 4px; border: 1px solid #10b981; }
+            .btn-cancel:hover { color: #f87171; text-decoration: underline; }
+            .current-file { font-size: 10px; color: #94a3b8; font-weight: 700; margin-bottom: 6px; display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 8px; }
         </style>
         
         <div class="sri-widget-container" id="sri-widget-box">
-            <!-- Play Overlay -->
-            <div class="play-overlay" id="play-overlay">
-                <div class="play-icon">▶️</div>
-                <div class="play-text">Procesando...</div>
-            </div>
-
             <div class="widget-header">
-                <div class="widget-title">SRI Asistente Premium</div>
-                <div class="widget-close" id="widget-close">×</div>
+                <div class="widget-title">⚡ ANULADOR SRI PRO</div>
+                <div class="widget-controls">
+                    <span id="widget-toggle-auto" class="widget-auto-badge" title="Alternar Piloto Automático">
+                        <span style="font-size:8px;">●</span> AUTO ON
+                    </span>
+                    <div class="widget-close" id="widget-close" title="Cerrar Widget">×</div>
+                </div>
             </div>
             
             <div id="drop-zone" class="drop-zone">
-                <span class="drop-icon">📄</span>
+                <span class="drop-icon">📑</span>
                 <span id="drop-text" class="drop-text">Suelta aquí tus PDFs (Lote)</span>
+                <div style="font-size: 10px; color: #94a3b8; margin-top: 4px;">Zero-Click: procesa y anula en automático</div>
                 <input type="file" id="widget-file-input" accept="application/pdf" style="display:none" multiple>
             </div>
             
@@ -360,12 +861,9 @@ function createUploadWidget() {
             
             <div id="action-bar" class="action-bar">
                 <button id="btn-process" class="btn-process" data-state="idle">
-                    🚀 Procesar Archivo Extraído
+                    🚀 Iniciar Solicitud
                 </button>
-                <button id="btn-cancel" class="btn-cancel">Cancelar Lote</button>
-                <button id="btn-skip" style="display:none; width:100%; margin-top:8px; background:transparent; border:1px dashed #cbd5e1; color:#475569; padding:8px; border-radius:8px; cursor:pointer; font-weight:600; font-size:12px; transition:all 0.2s;">
-                    ⏭️ Saltar Factura (Test Mode)
-                </button>
+                <button id="btn-cancel" class="btn-cancel">Detener Proceso</button>
             </div>
         </div>
     `;
@@ -393,259 +891,7 @@ function createUploadWidget() {
         if (e.dataTransfer.files.length) handleMultipleFiles(e.dataTransfer.files);
     });
 
-    // Auto-Process Logic
-    // Batch Logic Execution
-    processBtn.addEventListener('click', async () => {
-        const currentState = processBtn.getAttribute('data-state');
-
-        // IF IN BATCH MODE: Handle progression
-        chrome.storage.local.get(['sri_batch_queue'], async (res) => {
-            const queue = res.sri_batch_queue || [];
-            if (queue.length > 0) {
-                startProcessingItem(queue[0]);
-                return;
-            }
-            
-            // Legacy/Single mode fallback
-            if (currentState === 'error' || currentState === 'success') {
-                resetWidgetUI();
-                return;
-            }
-        });
-    });
-
-    // New Batch Helper
-    async function handleMultipleFiles(files) {
-        const fileList = Array.from(files);
-        setButtonState('processing', `<span>⏳</span> Analizando ${fileList.length} archivo(s)...`);
-        
-        const batch = [];
-        for (const file of fileList) {
-            try {
-                const ab = await file.arrayBuffer();
-                const doc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
-                let text = '';
-                for (let i = 1; i <= doc.numPages; i++) {
-                    const page = await doc.getPage(i);
-                    const content = await page.getTextContent();
-                    text += content.items.map(it => it.str).join(' ') + ' ';
-                }
-                const data = extractData(text.replace(/\s+/g, ' '));
-                if (data.isValid) batch.push(data);
-            } catch (err) { console.error("Error batch extracting", err); }
-        }
-
-        if (batch.length > 0) {
-            chrome.storage.local.set({ 
-                sri_batch_queue: batch,
-                sri_batch_total: batch.length,
-                sri_active_batch: true 
-            }, () => {
-                renderBatchProgress(batch[0], 1, batch.length);
-                fillForm(batch[0]);
-            });
-        } else {
-            setButtonState('error', '❌ No se detectaron facturas válidas');
-        }
-    }
-
-    function saveResultAndContinue(status, message, claveConfirmada = '') {
-        setButtonState('verifying', '<span>💾</span> Guardando resultado...');
-        chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results', 'sri_anulaciones_historial'], (res) => {
-            const queue = res.sri_batch_queue || [];
-            const results = res.sri_batch_results || [];
-            const historial = res.sri_anulaciones_historial || [];
-            
-            const currentItem = queue.length > 0 ? queue[0] : (window.__sriLastProcessedItem || null);
-            const claveFinal = claveConfirmada || (currentItem ? currentItem.claveAcceso : '');
-            
-            const resultadoItem = {
-                item: currentItem,
-                clave: claveFinal,
-                status: status,
-                message: message,
-                fecha: new Date().toISOString(),
-                timestamp: Date.now()
-            };
-            
-            results.push(resultadoItem);
-            historial.push(resultadoItem);
-            
-            if (queue.length > 0) {
-                const nextQueue = queue.slice(1);
-                if (nextQueue.length > 0) {
-                    chrome.storage.local.set({ 
-                        sri_batch_queue: nextQueue, 
-                        sri_batch_results: results,
-                        sri_anulaciones_historial: historial,
-                        sri_active_batch: true
-                    }, () => {
-                        setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✅ Avanzando al siguiente...' : '⚠️ Avanzando...');
-                        if (typeof injectOperatingIndicator === 'function') {
-                            injectOperatingIndicator(`⏳ Avanzando a siguiente factura (${nextQueue.length} restantes)...`, 'working');
-                        }
-                        setTimeout(() => {
-                            window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf';
-                        }, 1200);
-                    });
-                } else {
-                    chrome.storage.local.set({ 
-                        sri_batch_queue: [], 
-                        sri_batch_results: results,
-                        sri_anulaciones_historial: historial,
-                        sri_active_batch: false 
-                    }, () => {
-                        setButtonState('success', '✨ Lote Completado');
-                        if (typeof injectOperatingIndicator === 'function') {
-                            injectOperatingIndicator('🎉 ¡Todas las solicitudes fueron procesadas con éxito!', 'success');
-                        }
-                        setTimeout(showFinalReport, 1000);
-                    });
-                }
-            } else {
-                // Caso documento individual
-                chrome.storage.local.set({ 
-                    sri_batch_results: results,
-                    sri_anulaciones_historial: historial
-                }, () => {
-                    setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✨ Anulado con éxito' : '❌ Falló anulación');
-                });
-            }
-        });
-    }
-
-    // Poller activo para capturar la respuesta AJAX de RichFaces tras pulsar btnEnviar
-    function iniciarPollerResultadoAnulacion() {
-        if (window.sriPoller) clearInterval(window.sriPoller);
-        
-        let intentos = 0;
-        const maxIntentos = 50; // ~30 segundos
-        console.log("👀 [ANULADOR SRI] Poller iniciado: esperando confirmación AJAX del SRI...");
-        
-        window.sriPoller = setInterval(() => {
-            intentos++;
-            
-            // 1. Selector prioritario reportado por el usuario: span.ui-messages-fatal-summary o mensajes JSF
-            const msgSummary = document.querySelector('.ui-messages-fatal-summary, .ui-messages-info-summary, .ui-messages-error-summary, [id*="messages"], .sri-mensaje');
-            const fullBodyText = (msgSummary ? msgSummary.innerText : '') + ' ' + (document.body ? document.body.innerText : '');
-            
-            // Detección de ÉXITO
-            if (fullBodyText.includes('enviada con éxito') || fullBodyText.includes('estado ANULADO')) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                
-                console.log("🎉 [ANULADOR SRI] ¡Confirmación de ÉXITO recibida del SRI!");
-                const claveMatch = fullBodyText.match(/\b\d{49}\b/);
-                const claveAnulada = claveMatch ? claveMatch[0] : '';
-                
-                setButtonState('success', '<span>✅</span> ¡ANULADO CON ÉXITO!');
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`🟢 Comprobante ANULADO con éxito${claveAnulada ? ': ' + claveAnulada.slice(-8) : ''}`, 'success');
-                }
-                
-                saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveAnulada);
-                return;
-            }
-            
-            // Detección de ERROR
-            if (fullBodyText.includes('ha ocurrido un error') || fullBodyText.includes('no se encuentra autorizado') || fullBodyText.includes('ya se encuentra anulado') || fullBodyText.includes('no corresponde al emisor')) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                
-                const errDetalle = msgSummary ? msgSummary.innerText : 'Error reportado por el SRI';
-                console.warn("⚠️ [ANULADOR SRI] Error en respuesta del SRI:", errDetalle);
-                setButtonState('error', '<span>❌</span> Error SRI');
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`🔴 Error: ${errDetalle.slice(0, 35)}...`, 'error');
-                }
-                saveResultAndContinue('error', errDetalle);
-                return;
-            }
-            
-            if (intentos >= maxIntentos) {
-                clearInterval(window.sriPoller);
-                window.sriPoller = null;
-                console.warn("⏱️ [ANULADOR SRI] Timeout esperando respuesta de anulación.");
-                setButtonState('error', '<span>⚠️</span> Tiempo agotado');
-            }
-        }, 600);
-    }
-
-    async function startProcessingItem(data) {
-        if (!data) return;
-        window.__sriLastProcessedItem = data;
-        setButtonState('processing', '<span>⚙️</span> Vinculando datos...');
-        
-        // --- PASO 2: Pantalla de Confirmación con Botón Enviar ---
-        const btnEnviar = document.getElementById('frmPrincipal:btnEnviar');
-        if (btnEnviar) {
-            console.log("⚡ [ANULADOR SRI] Pantalla de confirmación con btnEnviar detectada.");
-            setButtonState('confirming', '<span>🚀</span> Confirmando anulación...');
-            if (typeof injectOperatingIndicator === 'function') {
-                injectOperatingIndicator("🚀 Confirmando anulación en el SRI...", "working");
-            }
-            
-            // Bypass confirm en el onclick de RichFaces
-            const originalOnClick = btnEnviar.getAttribute('onclick') || '';
-            if (originalOnClick.includes('confirm')) {
-                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
-                btnEnviar.setAttribute('onclick', cleanOnClick);
-            }
-            
-            setTimeout(() => {
-                console.log("⚡ [ANULADOR SRI] Haciendo clic en btnEnviar...");
-                btnEnviar.click();
-                setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
-                iniciarPollerResultadoAnulacion();
-            }, 800);
-            return;
-        }
-
-        // --- PASO 1: Llenado de Formulario ---
-        const formInput = document.getElementById('frmPrincipal:itxtClaveAcceso');
-        if (formInput) {
-            if (!formInput.value) {
-                if (typeof injectOperatingIndicator === 'function') {
-                    injectOperatingIndicator(`📝 Llenando solicitud de anulación...`, 'working');
-                }
-                await fillForm(data);
-            } else {
-                console.log("SRI Asistente: El formulario ya parece estar lleno.");
-            }
-        }
-    }
-
-    // --- AUTO-PILOT LOGIC ---
-    async function runAutoPilot() {
-        chrome.storage.local.get(['sri_active_batch', 'sri_batch_queue'], async (res) => {
-            if (!res.sri_active_batch) return;
-            const queue = res.sri_batch_queue || [];
-            if (queue.length === 0) {
-                chrome.storage.local.set({ sri_active_batch: false });
-                setButtonState('success', '<span>✅</span> Lote completado');
-                return;
-            }
-
-            const bodyText = document.body ? document.body.innerText : '';
-            
-            // 1. Detectar Éxito si la página ya lo mostraba
-            if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO')) {
-                console.log("SRI Asistente: Éxito detectado en pantalla. Guardando y avanzando...");
-                const doneItem = queue[0];
-                const claveMatch = bodyText.match(/\b\d{49}\b/);
-                saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveMatch ? claveMatch[0] : (doneItem ? doneItem.claveAcceso : ''));
-                return;
-            }
-
-            // 2. Ejecutar acción según página actual
-            startProcessingItem(queue[0]);
-        });
-    }
-
-    // Llamar al piloto automático al iniciar el widget
-    setTimeout(runAutoPilot, 1500);
-
-    // 2. Click Solicitar
+    // Unificado: Control de Procesamiento de Lote y Manual
     processBtn.addEventListener('click', async () => {
         const state = processBtn.getAttribute('data-state');
         if (state === 'error' || state === 'success') {
@@ -655,7 +901,14 @@ function createUploadWidget() {
 
         chrome.storage.local.get(['sri_batch_queue'], (res) => {
             const queue = res.sri_batch_queue || [];
-            if (queue.length > 0) startProcessingItem(queue[0]);
+            if (queue.length > 0) {
+                checkBatchStatus();
+            } else if (window.__sriLastProcessedItem) {
+                startProcessingItem(window.__sriLastProcessedItem);
+            } else {
+                const btnSolicitar = document.getElementById('frmPrincipal:btnAceptar') || document.querySelector('[id*="btnAceptar"]') || findButtonByText('Solicitar');
+                if (btnSolicitar) btnSolicitar.click();
+            }
         });
     });
 
@@ -670,7 +923,6 @@ function createUploadWidget() {
         });
     }
 
-    // Handle Skip Logic
     const skipBtn = document.getElementById('btn-skip');
     if (skipBtn) {
         skipBtn.addEventListener('click', () => {
@@ -678,58 +930,445 @@ function createUploadWidget() {
         });
     }
 
-    // Run status check immediately
+    // Ejecutar verificación de estado de lote
     checkBatchStatus();
 }
 
-function showFinalReport() {
-    chrome.storage.local.get(['sri_batch_results'], (res) => {
+// ========== ESTADO Y CONTROL OPERATIVO DE PROCESAMIENTO (ÁMBITO GLOBAL) ==========
+let isSubmittingStep1 = false;
+let isSubmittingStep2 = false;
+let lastFilledClave = '';
+
+async function handleMultipleFiles(files) {
+    const fileList = Array.from(files);
+    setButtonState('processing', `<span>⏳</span> Analizando ${fileList.length} archivo(s)...`);
+    
+    const batch = [];
+    for (const file of fileList) {
+        try {
+            const ab = await file.arrayBuffer();
+            const doc = await pdfjsLib.getDocument(new Uint8Array(ab)).promise;
+            let text = '';
+            for (let i = 1; i <= doc.numPages; i++) {
+                const page = await doc.getPage(i);
+                const content = await page.getTextContent();
+                text += content.items.map(it => it.str).join(' ') + ' ';
+            }
+            const data = extractData(text.replace(/\s+/g, ' '));
+            data.fileName = file.name;
+            if (data.isValid) batch.push(data);
+        } catch (err) { console.error("Error batch extracting", err); }
+    }
+
+    if (batch.length > 0) {
+        if (window.SriAudioEngine) window.SriAudioEngine.playBatchStart();
+        chrome.storage.local.set({ 
+            sri_batch_queue: batch,
+            sri_batch_total: batch.length,
+            sri_active_batch: true 
+        }, () => {
+            renderBatchProgress(batch[0], 1, batch.length);
+            startProcessingItem(batch[0]);
+        });
+    } else {
+        setButtonState('error', '❌ No se detectaron facturas válidas');
+    }
+}
+
+function saveResultAndContinue(status, message, claveConfirmada = '') {
+    setButtonState('verifying', '<span>💾</span> Guardando resultado...');
+    chrome.storage.local.get(['sri_batch_queue', 'sri_batch_results', 'sri_anulaciones_historial'], (res) => {
+        const queue = res.sri_batch_queue || [];
         const results = res.sri_batch_results || [];
-        const dropZone = document.getElementById('drop-zone');
-        const statusBar = document.getElementById('status-msg');
-        const actionBar = document.getElementById('action-bar');
-        const resultList = document.getElementById('result-list');
+        const historial = res.sri_anulaciones_historial || [];
         
-        if (dropZone) dropZone.style.display = 'none';
-        if (statusBar) statusBar.style.display = 'none';
-        if (actionBar) actionBar.style.display = 'none';
+        const currentItem = queue.length > 0 ? queue[0] : (window.__sriLastProcessedItem || null);
+        const claveFinal = claveConfirmada || (currentItem ? currentItem.claveAcceso : '');
         
-        const successCount = results.filter(r => r.status === 'success').length;
-        const errorCount = results.filter(r => r.status === 'error').length;
-        const skipCount = results.filter(r => r.status === 'skipped').length;
+        const resultadoItem = {
+            item: currentItem,
+            clave: claveFinal,
+            status: status,
+            message: message,
+            fecha: new Date().toISOString(),
+            timestamp: Date.now()
+        };
         
-        let html = `<div style="text-align:center; padding: 10px;">
-            <h3 style="margin:0 0 10px 0; color:#1e293b; font-size: 15px;">📊 Resumen del Lote</h3>
-            <div style="display:flex; justify-content:space-around; margin-bottom:15px; font-size:12px;">
-                <div style="background:#dcfce7; color:#166534; padding:5px 10px; border-radius:6px; font-weight:bold;">${successCount} ✅</div>
-                <div style="background:#fee2e2; color:#991b1b; padding:5px 10px; border-radius:6px; font-weight:bold;">${errorCount} ❌</div>
-                <div style="background:#f1f5f9; color:#475569; padding:5px 10px; border-radius:6px; font-weight:bold;">${skipCount} ⏭️</div>
-            </div>
-            <div style="text-align:left; max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:6px; padding:5px; margin-bottom:10px;">`;
-            
-        results.forEach(r => {
-            const icon = r.status === 'success' ? '✅' : (r.status === 'error' ? '❌' : '⏭️');
-            html += `<div style="padding:6px; border-bottom:1px solid #f1f5f9; font-size:11px; display:flex; gap:6px;">
-                <div style="flex-shrink:0;">${icon}</div>
-                <div>
-                    <strong style="color:#0f172a;">${r.item.fileName || r.item.claveAcceso.substring(24,39)}</strong><br/>
-                    <span style="color:${r.status === 'error' ? '#991b1b' : '#64748b'}; font-weight:${r.status === 'error' ? '600' : 'normal'}">${r.message}</span>
-                </div>
-            </div>`;
-        });
+        results.push(resultadoItem);
+        historial.push(resultadoItem);
         
-        html += `</div>
-            <button id="btn-close-report" style="width:100%; padding:10px; background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; font-size: 13px; transition: 0.2s;">✨ Finalizar y Limpiar Tablero</button>
-        </div>`;
-        
-        resultList.innerHTML = html;
-        resultList.style.display = 'block';
-        
-        document.getElementById('btn-close-report').addEventListener('click', () => {
-            chrome.storage.local.set({ sri_active_batch: false, sri_batch_queue: [], sri_batch_results: [] }, resetWidgetUI);
-        });
+        // Resetear banderas de control
+        isSubmittingStep1 = false;
+        isSubmittingStep2 = false;
+        isNavigating = false;
+        lastFilledClave = '';
+
+        if (status === 'success') {
+            if (window.SriAudioEngine) window.SriAudioEngine.playInvoiceSuccess();
+        } else {
+            if (window.SriAudioEngine) window.SriAudioEngine.playInvoiceWarning();
+        }
+
+        if (queue.length > 0) {
+            const nextQueue = queue.slice(1);
+            if (nextQueue.length > 0) {
+                chrome.storage.local.set({ 
+                    sri_batch_queue: nextQueue, 
+                    sri_batch_results: results,
+                    sri_anulaciones_historial: historial,
+                    sri_active_batch: true
+                }, () => {
+                    setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✅ Avanzando al siguiente...' : '⚠️ Avanzando...');
+                    if (typeof injectOperatingIndicator === 'function') {
+                        injectOperatingIndicator(`⏳ Avanzando a siguiente factura (${nextQueue.length} restantes)...`, 'working');
+                    }
+                    setTimeout(() => {
+                        window.location.href = 'https://srienlinea.sri.gob.ec/comprobantes-electronicos-internet/pages/solicitud/anulacion/menuAnulacion.jsf';
+                    }, 1200);
+                });
+            } else {
+                chrome.storage.local.set({ 
+                    sri_batch_queue: [], 
+                    sri_batch_results: results,
+                    sri_anulaciones_historial: historial,
+                    sri_active_batch: false 
+                }, () => {
+                    const exitosos = results.filter(r => r.status === 'success' || r.estado === 'success').length;
+                    const fallidos = results.length - exitosos;
+                    if (fallidos > 0 && exitosos === 0) {
+                        setButtonState('error', '⚠️ Lote con Observaciones');
+                        if (typeof injectOperatingIndicator === 'function') {
+                            injectOperatingIndicator(`⚠️ ${fallidos} comprobante(s) con observación del SRI`, 'error');
+                        }
+                    } else if (fallidos > 0) {
+                        setButtonState('idle', '📊 Lote Completado');
+                        if (typeof injectOperatingIndicator === 'function') {
+                            injectOperatingIndicator(`📊 Lote completado: ${exitosos} confirmados, ${fallidos} observaciones`, 'working');
+                        }
+                    } else {
+                        setButtonState('success', '✨ Lote Completado');
+                        if (typeof injectOperatingIndicator === 'function') {
+                            injectOperatingIndicator('🎉 ¡Todas las solicitudes fueron anuladas con éxito!', 'success');
+                        }
+                    }
+                    if (window.SriAudioEngine) window.SriAudioEngine.playBatchComplete();
+                    setTimeout(() => showFinalReport(results), 1000);
+                });
+            }
+        } else {
+            // Caso documento individual
+            chrome.storage.local.set({ 
+                sri_batch_results: results,
+                sri_anulaciones_historial: historial
+            }, () => {
+                setButtonState(status === 'success' ? 'success' : 'error', status === 'success' ? '✨ Anulado con éxito' : '⚠️ Observación SRI');
+                setTimeout(() => showFinalReport(results), 1200);
+            });
+        }
     });
 }
+
+// Receptor de alertas y diálogos interceptados desde Main World
+window.__sriCapturedPortalMessage = '';
+window.addEventListener('SRI_PORTAL_ALERT', (e) => {
+    if (e.detail && e.detail.message) {
+        window.__sriCapturedPortalMessage = e.detail.message;
+        console.log("📢 [ANULADOR SRI] Mensaje alert del portal capturado:", e.detail.message);
+    }
+});
+window.addEventListener('SRI_PORTAL_DIALOG', (e) => {
+    if (e.detail && e.detail.text) {
+        window.__sriCapturedPortalMessage = e.detail.text;
+        console.log("📢 [ANULADOR SRI] Mensaje diálogo del portal capturado:", e.detail.text);
+    }
+});
+
+// Poller activo para capturar la respuesta AJAX de RichFaces tras pulsar btnEnviar
+function iniciarPollerResultadoAnulacion() {
+    if (window.sriPoller) clearInterval(window.sriPoller);
+    
+    let intentos = 0;
+    const maxIntentos = 50; // ~30 segundos
+    console.log("👀 [ANULADOR SRI] Poller iniciado: esperando confirmación AJAX del SRI...");
+    
+    window.sriPoller = setInterval(() => {
+        intentos++;
+        
+        // 1. Selector prioritario: mensajes JSF / RichFaces
+        const msgSummary = document.querySelector('.ui-messages-fatal-summary, .ui-messages-info-summary, .ui-messages-error-summary, [id*="messages"], .sri-mensaje, .rf-msgs-sum');
+        const capturedMsg = window.__sriCapturedPortalMessage || '';
+        const fullBodyText = ((msgSummary ? msgSummary.innerText : '') + ' ' + capturedMsg + ' ' + (document.body ? document.body.innerText : '')).trim();
+        
+        // Detección de ÉXITO
+        if (fullBodyText.includes('enviada con éxito') || fullBodyText.includes('estado ANULADO') || fullBodyText.includes('solicitud de anulación fue registrada') || fullBodyText.includes('anulación ha sido registrada')) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            
+            console.log("🎉 [ANULADOR SRI] ¡Confirmación de ÉXITO recibida del SRI!");
+            const claveMatch = fullBodyText.match(/\b\d{49}\b/);
+            const claveAnulada = claveMatch ? claveMatch[0] : '';
+            
+            setButtonState('success', '<span>✅</span> ¡ANULADO CON ÉXITO!');
+            if (typeof injectOperatingIndicator === 'function') {
+                injectOperatingIndicator(`🟢 Comprobante ANULADO con éxito${claveAnulada ? ': ' + claveAnulada.slice(-8) : ''}`, 'success');
+            }
+            
+            saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveAnulada);
+            return;
+        }
+        
+        // Detección de ERROR
+        const hasPlazoError = fullBodyText.includes('supera el plazo') || fullBodyText.includes('plazo permitido') || fullBodyText.includes('plazo máximo') || fullBodyText.includes('tiempo límite');
+
+        if (fullBodyText.includes('ha ocurrido un error') || fullBodyText.includes('no se encuentra autorizado') || fullBodyText.includes('ya se encuentra anulado') || fullBodyText.includes('no corresponde al emisor') || fullBodyText.includes('no corresponde a un Comprobante') || fullBodyText.includes('vuelva a ingresar su solicitud') || fullBodyText.includes('Error al procesar') || fullBodyText.includes('no pertenece') || hasPlazoError) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            
+            let errDetalle = '';
+            if (hasPlazoError) {
+                errDetalle = 'Supera el plazo máximo permitido en línea (Día 7 superado). Emitir NOTA DE CRÉDITO electrónica (vigente 12 meses)';
+            } else if (msgSummary && msgSummary.innerText) {
+                errDetalle = msgSummary.innerText.trim();
+            } else if (capturedMsg) {
+                errDetalle = capturedMsg.trim();
+            } else {
+                if (fullBodyText.includes('no corresponde al emisor') || fullBodyText.includes('no pertenece')) {
+                    errDetalle = 'El comprobante no corresponde al emisor autenticado';
+                } else if (fullBodyText.includes('ya se encuentra anulado')) {
+                    errDetalle = 'El comprobante ya se encuentra anulado';
+                } else {
+                    errDetalle = 'Error reportado por el SRI';
+                }
+            }
+
+            console.warn("⚠️ [ANULADOR SRI] Error en respuesta del SRI:", errDetalle);
+            setButtonState('error', '<span>⚠️</span> Observación SRI');
+            if (typeof injectOperatingIndicator === 'function') {
+                injectOperatingIndicator(`⚠️ ${errDetalle.slice(0, 36)}...`, 'error');
+            }
+            saveResultAndContinue('error', errDetalle);
+            return;
+        }
+        
+        if (intentos >= maxIntentos) {
+            clearInterval(window.sriPoller);
+            window.sriPoller = null;
+            console.warn("⏱️ [ANULADOR SRI] Timeout esperando respuesta de anulación.");
+            setButtonState('error', '<span>⚠️</span> Tiempo agotado');
+        }
+    }, 600);
+}
+
+async function startProcessingItem(data) {
+    if (!data || !data.claveAcceso) return;
+    window.__sriLastProcessedItem = data;
+
+    // --- PRE-FLIGHT 1: Validación de Consumidor Final y Plazo Legal ---
+    const receptorId = data.idReceptor || '';
+    const plazoValidacion = SriTaxCompliance.validarPlazoLegalAnulacion(data.fecha, receptorId);
+    
+    // Si es Consumidor Final
+    if (plazoValidacion.esConsumidorFinal) {
+        console.warn("⚠️ [ANULADOR SRI] Comprobante emitido a Consumidor Final:", data.facturaDisplay);
+        if (typeof injectOperatingIndicator === 'function') {
+            injectOperatingIndicator(`⚠️ Factura Consumidor Final: No anulable`, 'error');
+        }
+    }
+
+    // Si el plazo está vencido (pasó el día 7 del mes siguiente)
+    if (plazoValidacion.plazoVencido) {
+        console.warn(`⚠️ [ANULADOR SRI] Plazo legal vencido (venció el ${plazoValidacion.fechaLimiteStr}):`, data.facturaDisplay);
+        if (typeof injectOperatingIndicator === 'function') {
+            injectOperatingIndicator(`⚠️ Plazo vencido (Día 7 superado). Requiere Nota de Crédito`, 'error');
+        }
+    }
+
+    // --- PRE-FLIGHT 2: Validación de RUC Emisor vs Sesión Activa ---
+    const emisorCheck = SriTaxCompliance.validarEmisorRuc(data.claveAcceso);
+    if (!emisorCheck.coincide) {
+        console.warn(`⚠️ [ANULADOR SRI] RUC Emisor (${emisorCheck.rucEmisor}) no coincide con RUC en sesión (${emisorCheck.rucSesion})`);
+        if (typeof injectOperatingIndicator === 'function') {
+            injectOperatingIndicator(`⚠️ RUC no coincide: Factura de ${emisorCheck.rucEmisor} vs Sesión ${emisorCheck.rucSesion}`, 'error');
+        }
+    }
+
+    setButtonState('processing', '<span>⚙️</span> Vinculando datos...');
+    
+    const errorSummary = document.querySelector('.ui-messages-error-summary, .ui-messages-fatal-summary');
+    const bodyText = document.body ? document.body.innerText : '';
+
+    // Detección temprana de comprobante inválido / ya anulado en Step 1
+    if (errorSummary || bodyText.includes('no corresponde a un Comprobante') || bodyText.includes('no se encuentra autorizado') || bodyText.includes('ya se encuentra anulado') || bodyText.includes('no corresponde al emisor') || bodyText.includes('tiempo límite') || bodyText.includes('plazo permitido')) {
+        let errDetalle = errorSummary ? errorSummary.innerText : '';
+        if (!errDetalle) {
+            if (bodyText.includes('no corresponde al emisor')) errDetalle = 'El comprobante no corresponde al emisor autenticado';
+            else if (bodyText.includes('tiempo límite') || bodyText.includes('plazo permitido')) errDetalle = 'Plazo legal en línea vencido (Día 7 superado). Emitir Nota de Crédito';
+            else if (bodyText.includes('ya se encuentra anulado')) errDetalle = 'El comprobante ya se encuentra anulado';
+            else errDetalle = 'Comprobante no autorizado o rechazado por el SRI';
+        }
+        console.warn("⚠️ [ANULADOR SRI] Error temprano detectado en Step 1:", errDetalle);
+        saveResultAndContinue('error', errDetalle);
+        return;
+    }
+
+    // --- PASO 2: Pantalla de Confirmación con Botón Enviar ---
+    const btnEnviar = document.getElementById('frmPrincipal:btnEnviar') || document.querySelector('[id*="btnEnviar"]') || findButtonByText('Enviar');
+    if (btnEnviar) {
+        if (isSubmittingStep2) return;
+        isSubmittingStep2 = true;
+
+        console.log("⚡ [ANULADOR SRI] Pantalla de confirmación con btnEnviar detectada.");
+        setButtonState('confirming', '<span>🚀</span> Confirmando anulación...');
+        if (typeof injectOperatingIndicator === 'function') {
+            injectOperatingIndicator("🚀 Confirmando anulación en el SRI...", "working");
+        }
+        
+        // Habilitar botón y remover restricciones
+        try {
+            btnEnviar.removeAttribute('disabled');
+            btnEnviar.disabled = false;
+        } catch(e){}
+
+        // Bypass confirm en el onclick de RichFaces
+        const originalOnClick = btnEnviar.getAttribute('onclick') || '';
+        if (originalOnClick.includes('confirm')) {
+            const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
+            btnEnviar.setAttribute('onclick', cleanOnClick);
+        }
+        
+        setTimeout(() => {
+            console.log("⚡ [ANULADOR SRI] Haciendo clic en btnEnviar...");
+            try {
+                window.dispatchEvent(new CustomEvent('SRI_DISPARAR_ENVIAR'));
+            } catch(e){}
+
+            try {
+                btnEnviar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                btnEnviar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                btnEnviar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                btnEnviar.click();
+                btnEnviar.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+            } catch(e) {
+                try { btnEnviar.click(); } catch(err){}
+            }
+            setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
+            iniciarPollerResultadoAnulacion();
+            setTimeout(() => { isSubmittingStep2 = false; }, 4000);
+        }, 600);
+        return;
+    }
+
+    // --- PASO 1: Llenado de Formulario y Clic en Solicitar ---
+    const formInput = document.getElementById('frmPrincipal:itxtClaveAcceso') || document.querySelector('input[id*="ClaveAcceso"]');
+    const btnSolicitar = document.getElementById('frmPrincipal:btnAceptar') || document.querySelector('[id*="btnAceptar"]') || findButtonByText('Solicitar') || findButtonByText('Aceptar');
+
+    if (formInput) {
+        if (isSubmittingStep1) return;
+
+        if (formInput.value !== data.claveAcceso && lastFilledClave !== data.claveAcceso) {
+            isSubmittingStep1 = true;
+            if (typeof injectOperatingIndicator === 'function') {
+                injectOperatingIndicator(`📝 Llenando solicitud de anulación...`, 'working');
+            }
+            setButtonState('processing', '<span>⚙️</span> Llenando campos...');
+            await fillForm(data);
+            lastFilledClave = data.claveAcceso;
+            isSubmittingStep1 = false;
+        }
+
+        // Una vez confirmados los datos en el campo, clic determinístico en Solicitar
+        if (btnSolicitar && formInput.value === data.claveAcceso) {
+            if (isSubmittingStep1) return;
+            isSubmittingStep1 = true;
+            console.log("⚡ [ANULADOR SRI] Formulario listo. Clic en btnAceptar (Solicitar)...");
+            setButtonState('verifying', '<span>⏳</span> Solicitando anulación...');
+            setTimeout(() => {
+                try {
+                    btnSolicitar.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                    btnSolicitar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                    btnSolicitar.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                    btnSolicitar.click();
+                    btnSolicitar.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                } catch(e) {
+                    try { btnSolicitar.click(); } catch(err){}
+                }
+
+                // Iniciar vigilante activo de transición a Paso 2 (btnEnviar)
+                esperarTransicionAPaso2(data);
+                setTimeout(() => { isSubmittingStep1 = false; }, 4000);
+            }, 600);
+        }
+    } else {
+        // Reintentar si el DOM de JSF aún se está hidratando
+        setTimeout(() => {
+            const retryInput = document.getElementById('frmPrincipal:itxtClaveAcceso') || document.querySelector('input[id*="ClaveAcceso"]');
+            const retryBtnEnviar = document.getElementById('frmPrincipal:btnEnviar') || document.querySelector('[id*="btnEnviar"]') || findButtonByText('Enviar');
+            if (retryInput || retryBtnEnviar) {
+                startProcessingItem(data);
+            }
+        }, 500);
+    }
+}
+
+// Vigilante activo de transición hacia la pantalla de confirmación (Paso 2)
+function esperarTransicionAPaso2(data) {
+    console.log("👀 [ANULADOR SRI] Vigilante activo: esperando pantalla de confirmación (Paso 2)...");
+    let intentos = 0;
+    const maxIntentos = 40; // 20 segundos máximo (cada 500ms)
+    
+    const poller = setInterval(() => {
+        intentos++;
+        
+        const btnEnviar = document.getElementById('frmPrincipal:btnEnviar') || document.querySelector('[id*="btnEnviar"]') || document.querySelector('input[value="Enviar"]');
+        const errorSummary = document.querySelector('.ui-messages-error-summary, .ui-messages-fatal-summary');
+        const bodyText = document.body ? document.body.innerText : '';
+
+        // 1. Detectar si apareció la pantalla de confirmación con btnEnviar
+        if (btnEnviar) {
+            clearInterval(poller);
+            console.log("🎯 [ANULADOR SRI] ¡Pantalla de confirmación detectada con éxito!");
+            isSubmittingStep1 = false;
+            startProcessingItem(data);
+            return;
+        }
+
+        // 2. Detectar si el SRI arrojó un error tras dar clic en Solicitar
+        if (errorSummary || bodyText.includes('no corresponde a un Comprobante') || bodyText.includes('no se encuentra autorizado') || bodyText.includes('ya se encuentra anulado') || bodyText.includes('no corresponde al emisor') || bodyText.includes('tiempo límite') || bodyText.includes('plazo permitido') || bodyText.includes('no pertenece')) {
+            clearInterval(poller);
+            let errDetalle = errorSummary ? errorSummary.innerText : '';
+            if (!errDetalle) {
+                if (bodyText.includes('no corresponde al emisor') || bodyText.includes('no pertenece')) {
+                    errDetalle = 'El comprobante no corresponde al emisor autenticado';
+                } else if (bodyText.includes('tiempo límite') || bodyText.includes('plazo permitido')) {
+                    errDetalle = 'Plazo legal en línea vencido (Día 7 superado. Requiere Nota de Crédito)';
+                } else if (bodyText.includes('ya se encuentra anulado')) {
+                    errDetalle = 'El comprobante ya se encuentra anulado';
+                } else {
+                    errDetalle = 'Error reportado por el SRI al solicitar';
+                }
+            }
+            console.warn("⚠️ [ANULADOR SRI] Error del SRI tras solicitar:", errDetalle);
+            isSubmittingStep1 = false;
+            saveResultAndContinue('error', errDetalle);
+            return;
+        }
+
+        if (intentos >= maxIntentos) {
+            clearInterval(poller);
+            console.warn("⏱️ [ANULADOR SRI] Tiempo de espera agotado para transición a Paso 2.");
+            isSubmittingStep1 = false;
+            setButtonState('error', '<span>⚠️</span> Tiempo agotado');
+        }
+    }, 500);
+}
+
+// --- PILOTO AUTOMÁTICO GLOBAL ---
+async function runAutoPilot() {
+    const _href = (window.location.href || '').toLowerCase();
+    if (!_href.includes('/anulacion/') && !_href.includes('menuanulacion') && !_href.includes('solicitudanulacion')) return;
+    checkBatchStatus();
+}
+setTimeout(runAutoPilot, 1200);
 
 function setButtonState(state, text, bgColor = null) {
     const btn = document.getElementById('btn-process');
@@ -812,59 +1451,50 @@ function findButtonByText(text) {
 
 // Batch Status Multi-Step logic
 function checkBatchStatus() {
-    chrome.storage.local.get(['sri_active_batch', 'sri_batch_queue', 'sri_batch_total'], (res) => {
+    chrome.storage.local.get(['sri_active_batch', 'sri_batch_queue', 'sri_batch_total', 'sri_autopilot_enabled'], (res) => {
         if (!res.sri_active_batch || !res.sri_batch_queue || res.sri_batch_queue.length === 0) return;
 
         const queue = res.sri_batch_queue;
-        const total = res.sri_batch_total;
+        const total = res.sri_batch_total || queue.length;
         const current = queue[0];
         const index = total - queue.length + 1;
+        const auto = res.sri_autopilot_enabled !== false;
 
-        console.log(`⚡ [ANULADOR SRI] Estado de Lote: ${index}/${total}`);
+        console.log(`⚡ [ANULADOR SRI] Estado de Lote: ${index}/${total} (Piloto Auto: ${auto ? 'ON' : 'OFF'})`);
 
         // 1. Detectar Pantalla de Confirmación (Paso 2 con btnEnviar)
-        const btnEnviar = document.getElementById('frmPrincipal:btnEnviar');
+        const btnEnviar = document.getElementById('frmPrincipal:btnEnviar') || document.querySelector('[id*="btnEnviar"]') || findButtonByText('Enviar');
         const bodyText = document.body ? document.body.innerText : '';
 
         if (btnEnviar) {
-            setButtonState('confirming', `🚀 Confirmar ${index}/${total}`);
-            if (typeof injectOperatingIndicator === 'function') {
-                injectOperatingIndicator(`🚀 Confirmando anulación ${index}/${total}`, 'working');
+            renderBatchProgress(current, index, total);
+            if (auto) {
+                startProcessingItem(current);
+            } else {
+                setButtonState('idle', '<span>🚀</span> Confirmar y Enviar al SRI');
             }
-            
-            const originalOnClick = btnEnviar.getAttribute('onclick') || '';
-            if (originalOnClick.includes('confirm')) {
-                const cleanOnClick = originalOnClick.replace(/if\s*\(!confirm\([^)]*\)\)\s*return\s*false;?/gi, '');
-                btnEnviar.setAttribute('onclick', cleanOnClick);
-            }
-            
-            setTimeout(() => {
-                console.log("⚡ [ANULADOR SRI] Ejecutando envío de confirmación...");
-                btnEnviar.click();
-                setButtonState('verifying', '<span>👁️</span> Enviando solicitud al SRI...');
-                iniciarPollerResultadoAnulacion();
-            }, 800);
             return;
         }
 
         // 2. Detectar Éxito si la página ya lo cargó
-        if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO')) {
+        if (bodyText.includes('enviada con éxito') || bodyText.includes('estado ANULADO') || bodyText.includes('solicitud de anulación fue registrada')) {
             console.log("🎉 [ANULADOR SRI] Éxito detectado en pantalla en checkBatchStatus.");
             const claveMatch = bodyText.match(/\b\d{49}\b/);
             saveResultAndContinue('success', 'Comprobante ANULADO con éxito', claveMatch ? claveMatch[0] : (current ? current.claveAcceso : ''));
             return;
         }
 
-        // 3. Standard Form Start
-        const btnSolicitar = document.getElementById('frmPrincipal:btnAceptar');
-        if (btnSolicitar) {
+        // 3. Formulario Paso 1 (Llenado y solicitud)
+        const btnSolicitar = document.getElementById('frmPrincipal:btnAceptar') || document.querySelector('[id*="btnAceptar"]') || findButtonByText('Solicitar') || findButtonByText('Aceptar');
+        const formInput = document.getElementById('frmPrincipal:itxtClaveAcceso') || document.querySelector('input[id*="ClaveAcceso"]');
+        if (btnSolicitar || formInput) {
             renderBatchProgress(current, index, total);
-            fillForm(current);
-            setButtonState('idle', `▶️ Lote en Progreso ${index}/${total}`);
-            setTimeout(() => {
-                const processBtn = document.getElementById('btn-process');
-                if (processBtn) processBtn.click();
-            }, 1000); // Auto-fire!
+            if (auto) {
+                startProcessingItem(current);
+            } else {
+                fillForm(current);
+                setButtonState('idle', '<span>🚀</span> Solicitar Anulación');
+            }
         }
     });
 }
@@ -876,7 +1506,7 @@ function renderBatchProgress(data, currentIdx, totalCount) {
     
     if (drop) drop.style.display = 'none';
     if (msg) {
-        msg.innerHTML = `<span style="background:#2563eb; color:white; padding:2px 8px; border-radius:50px; font-size:11px; margin-right:8px;">Lote ${currentIdx}/${totalCount}</span>Datos listos para procesar.`;
+        msg.innerHTML = `<span style="background:linear-gradient(135deg, #fbbf24 0%, #d97706 100%); color:#000; padding:2px 8px; border-radius:50px; font-size:11px; font-weight:800; margin-right:8px;">Lote ${currentIdx}/${totalCount}</span>Datos listos para procesar.`;
         msg.style.display = 'block';
         msg.className = 'status-msg success';
     }
@@ -930,17 +1560,27 @@ async function processPdfFile(file) {
         if (hasInputs) {
             // == FORM MODE (Standard) ==
             renderResults(data);
-            fillForm(data);
+            window.__sriLastProcessedItem = data;
 
             ui.drop.style.display = 'none';
-            ui.msg.textContent = "Datos listos. Presiona ▶️ para continuar.";
-            ui.msg.className = 'status-msg success';
-            ui.msg.style.display = 'block';
-
             const actionBar = document.getElementById('action-bar');
             if (actionBar) actionBar.style.display = 'block';
 
-            // Allow Auto-Run if configured (optional, not requested yet but good practice)
+            chrome.storage.local.get(['sri_autopilot_enabled'], (cfg) => {
+                const auto = cfg.sri_autopilot_enabled !== false;
+                if (auto) {
+                    ui.msg.textContent = "⚡ Piloto Automático: Procesando y solicitando anulación...";
+                    ui.msg.className = 'status-msg success';
+                    ui.msg.style.display = 'block';
+                    if (window.SriAudioEngine) window.SriAudioEngine.playBatchStart();
+                    startProcessingItem(data);
+                } else {
+                    fillForm(data);
+                    ui.msg.textContent = "Datos listos. Presiona ▶️ para continuar.";
+                    ui.msg.className = 'status-msg success';
+                    ui.msg.style.display = 'block';
+                }
+            });
         } else {
             // == MENU MODE (Drop & Go) ==
             console.log("Drop & Go: Menu detected. Saving state and navigating...");
@@ -1127,29 +1767,23 @@ function extractData(text) {
     }
 
     // Extract Client Name (Razon Social)
-    // Algorithm:
-    // 1. Look for explicit label "Razón Social / Nombres y Apellidos"
-    // 2. Stop at common next field labels (RUC, Fecha, Dir, etc)
     let cliente = '';
-    const patterns = [
-        /(?:Razón Social|Nombres y Apellidos|Cliente|Señor\(es\)).*?:\s*(.*?)\s*(?:RUC|Identificaci|Fecha|Direcci|Dir\.|Obligado|Guía)/i,
-        /(?:Razón Social|Nombres y Apellidos).*?\s+(.*?)\s+(?:RUC|Identificaci|Fecha|Direcci)/i
-    ];
-
-    for (const p of patterns) {
-        const m = text.match(p);
-        if (m && m[1] && m[1].length > 3) {
-            cliente = m[1].trim();
-            break;
+    if (ruc === '9999999999999' || ruc === '9999999999') {
+        cliente = 'CONSUMIDOR FINAL';
+    } else {
+        const patterns = [
+            /(?:Razón Social|Nombres y Apellidos|Cliente|Señor\(es\))[\s\:\.\-]+([^\n\r:;]+?)(?=\s+(?:RUC|Identificaci|Fecha|Direcci|Dir\.|Obligado|Guía|$))/i,
+            /(?:Razón Social|Nombres y Apellidos)[\s\:\.\-]+([^\n\r:;]+)/i
+        ];
+        for (const p of patterns) {
+            const m = text.match(p);
+            if (m && m[1] && m[1].trim().length > 2) {
+                cliente = m[1].trim().replace(/^[:\-\.]+\s*/, '');
+                break;
+            }
         }
     }
-
-    // Clean up client name (remove leading punctuations sometimes captured)
-    if (cliente) {
-        cliente = cliente.replace(/^[:\-\.]+\s*/, '').trim();
-        // Fallback: if it captured too much (newlines converted to spaces), maybe truncate?
-        // For now, trust the stop words.
-    }
+    if (!cliente) cliente = 'Nombre no detectado';
 
     // Extract Total Amount (Valor Final)
     let total = '0.00';
@@ -1159,10 +1793,9 @@ function extractData(text) {
             total = specificMatch[1].replace(',', '.');
         } else {
             const valMatch = text.match(/Total.*?\$?\s*([\d,]+\.\d{2})/i);
-            if (valMatch) total = valMatch[1];
+            if (valMatch) total = valMatch[1].replace(',', '.');
         }
     } catch (e) { console.warn("Extraction error total", e); }
-
 
     return {
         isValid: !!(clave && clave.length === 49),
@@ -1171,74 +1804,105 @@ function extractData(text) {
         claveAcceso: clave,
         numAutorizacion: auth,
         idReceptor: ruc,
-        razonSocial: cliente || 'Nombre no detectado',
+        razonSocial: cliente,
+        cliente: cliente,
         email,
         facturaDisplay,
-        importeTotal: total
+        total: total || '0.00',
+        importeTotal: total || '0.00'
     };
 }
 
 function renderResults(data) {
     const list = document.getElementById('result-list');
+    if (!list) return;
     list.innerHTML = '';
     list.style.display = 'block';
 
-    // PREMIUM MINIMALIST CARD (Refined)
-
-    // 1. Format Invoice Number (Highlight Last 4)
-    let invoiceHtml = data.facturaDisplay;
+    let invoiceHtml = data.facturaDisplay || 'Comprobante';
     if (data.facturaDisplay && data.facturaDisplay.includes('-')) {
-        const parts = data.facturaDisplay.split('-'); // 001-001-123456789
+        const parts = data.facturaDisplay.split('-');
         if (parts.length === 3) {
             const seq = parts[2];
             const prefix = `${parts[0]}-${parts[1]}-`;
-            const mainSeq = seq.substring(0, seq.length - 4);
-            const last4 = seq.substring(seq.length - 4);
+            const mainSeq = seq.substring(0, Math.max(0, seq.length - 4));
+            const last4 = seq.substring(Math.max(0, seq.length - 4));
 
             invoiceHtml = `
-                <span style="opacity:0.7">${prefix}${mainSeq}</span><span style="color:#2563eb; font-size:1.2em; font-weight:900;">${last4}</span>
+                <span style="opacity:0.75">${prefix}${mainSeq}</span><span style="color:#fbbf24; font-size:1.15em; font-weight:900;">${last4}</span>
             `;
         }
     }
 
     const card = document.createElement('div');
     card.style.cssText = `
-        background: white; border-radius: 12px; padding: 16px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.05);
-        display: flex; flex-direction: column; gap: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: 14px; padding: 14px 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        display: flex; flex-direction: column; gap: 10px;
+        color: #f8fafc; text-align: left;
     `;
 
     const rowInvoice = `
-        <div style="border-bottom: 1px solid #f1f5f9; padding-bottom: 8px;">
-            <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">Comprobante</div>
-            <div style="font-size:20px; font-weight:800; color:#1e293b; font-family:'Consolas', monospace;">${invoiceHtml}</div>
+        <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px;">
+            <div style="font-size:9px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:2px;">Comprobante</div>
+            <div style="font-size:18px; font-weight:800; color:#f8fafc; font-family:'Consolas', monospace;">${invoiceHtml}</div>
         </div>
     `;
 
-    // Only show Client Name and Amount.
-    const isClientMissing = !data.razonSocial || data.razonSocial.includes('no detectado');
-    const clientColor = isClientMissing ? '#f59e0b' : '#334155';
-    const clientText = isClientMissing ? 'Nombre no detectado (Verificar PDF)' : data.razonSocial;
+    const clientName = data.razonSocial || data.cliente || (data.idReceptor === '9999999999999' ? 'CONSUMIDOR FINAL' : 'Nombre no detectado');
+    const isClientMissing = !clientName || clientName.includes('no detectado');
+    const clientColor = isClientMissing ? '#f59e0b' : '#f8fafc';
+    const clientText = isClientMissing ? 'Nombre no detectado (Verificar PDF)' : clientName;
+    const finalTotal = data.total || data.importeTotal || '0.00';
 
     const rowDetails = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div style="flex:1;">
-                <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; margin-bottom:2px;">Cliente</div>
-                <div style="font-size:12px; font-weight:600; color:${clientColor}; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:180px;">${clientText}</div>
+            <div style="flex:1; overflow:hidden; padding-right:8px;">
+                <div style="font-size:9px; color:#94a3b8; font-weight:700; text-transform:uppercase; margin-bottom:2px;">Cliente</div>
+                <div style="font-size:11px; font-weight:600; color:${clientColor}; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" title="${clientText}">${clientText}</div>
             </div>
-            <div style="text-align:right;">
-                <div style="font-size:10px; color:#64748b; font-weight:700; text-transform:uppercase; margin-bottom:2px;">Total</div>
-                <div style="font-size:13px; font-weight:700; color:#059669;">$ ${data.importeTotal}</div>
+            <div style="text-align:right; flex-shrink:0;">
+                <div style="font-size:9px; color:#94a3b8; font-weight:700; text-transform:uppercase; margin-bottom:2px;">Total</div>
+                <div style="font-size:14px; font-weight:800; color:#34d399;">$ ${finalTotal}</div>
             </div>
         </div>
     `;
 
-    card.innerHTML = rowInvoice + rowDetails;
+    // Análisis Tributario de Plazos y Emisor
+    const compliance = SriTaxCompliance.validarPlazoLegalAnulacion(data.fecha, data.idReceptor);
+    const emisorCheck = SriTaxCompliance.validarEmisorRuc(data.claveAcceso);
+
+    let statusAlertHtml = '';
+    if (!emisorCheck.coincide) {
+        statusAlertHtml = `
+            <div style="background:rgba(239, 68, 68, 0.15); border:1px solid rgba(239, 68, 68, 0.35); border-radius:8px; padding:6px 10px; font-size:10px; color:#fca5a5; line-height:1.3;">
+                ⚠️ <b>Emisor difiere:</b> Factura de <code>${emisorCheck.rucEmisor}</code> vs Cuenta SRI <code>${emisorCheck.rucSesion}</code>. El SRI la rechazará si no coincide.
+            </div>
+        `;
+    } else if (compliance.esConsumidorFinal) {
+        statusAlertHtml = `
+            <div style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.35); border-radius:8px; padding:6px 10px; font-size:10px; color:#fde68a; line-height:1.3;">
+                ⚠️ <b>Consumidor Final:</b> El SRI prohíbe anulación de comprobantes a Consumidor Final autorizados.
+            </div>
+        `;
+    } else if (compliance.plazoVencido) {
+        statusAlertHtml = `
+            <div style="background:rgba(245, 158, 11, 0.15); border:1px solid rgba(245, 158, 11, 0.35); border-radius:8px; padding:6px 10px; font-size:10px; color:#fde68a; line-height:1.3;">
+                ⚠️ <b>Plazo vencido:</b> Excedió el día 7 (${compliance.fechaLimiteStr}). Requiere <b>Nota de Crédito</b> electrónica (plazo 12 meses).
+            </div>
+        `;
+    }
+
+    card.innerHTML = rowInvoice + rowDetails + statusAlertHtml;
     list.appendChild(card);
 }
 
 // ========== AUTO FILL (Inject Script for Date) ==========
-function fillForm(data) {
+async function fillForm(data) {
+    if (!data) return;
+
     // Mapeo específico de valores para el select del SRI (según inspección del usuario)
     const sriSelectMap = {
         'FACTURA': '1',
@@ -1250,7 +1914,7 @@ function fillForm(data) {
     };
 
     const set = async (k, v) => {
-        if (!v) return;
+        if (!v || v === 'click') return;
         const kSearch = k.toLowerCase().replace(/[^a-z0-9]/g, '');
         const labels = Array.from(document.querySelectorAll('label'));
         let input = null;
@@ -1262,8 +1926,7 @@ function fillForm(data) {
             'frmPrincipal:itxtClaveAcceso',
             'frmPrincipal:itxtNoAutorizacion',
             'frmPrincipal:itxtIdentificacion',
-            'frmPrincipal:itxtCorreoElectronico',
-            'frmPrincipal:btnAceptar'
+            'frmPrincipal:itxtCorreoElectronico'
         ];
         
         for (const id of knownIds) {
@@ -1299,11 +1962,14 @@ function fillForm(data) {
         }
 
         if (input) {
+            // Protección: nunca tocar ni sobrescribir botones
+            if (input.type === 'submit' || input.type === 'button') return;
+
             console.log(`SRI Asistente: Llenando ${k} con [${v}] en ID: ${input.id}`);
             highlight(input);
             
             input.focus();
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 60));
 
             if (input.tagName === 'SELECT') {
                 const options = Array.from(input.options);
@@ -1315,10 +1981,6 @@ function fillForm(data) {
                 if (opt) input.value = opt.value;
             } else {
                 input.value = v.trim();
-                if (input.type === 'submit' || input.type === 'button') {
-                    input.click();
-                    return; // No disparar más eventos si es clic
-                }
             }
 
             input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1328,26 +1990,22 @@ function fillForm(data) {
             if (input.tagName !== 'SELECT') input.value = v.trim();
             
             input.dispatchEvent(new Event('blur', { bubbles: true }));
-            await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, 200));
         }
     };
 
     // Llenar campos en secuencia usando los IDs mapeados
-    (async () => {
-        await set('tipoComprobante', data.tipoComprobante);
-        await set('fechaAutorizacion', data.fecha);
-        await set('claveAcceso', data.claveAcceso);
-        // REGLA OBLIGATORIA: En No. Autorización va exactamente la misma Clave de Acceso de 49 dígitos
-        const authAsegurada = (data.claveAcceso && data.claveAcceso.length === 49) ? data.claveAcceso : (data.numAutorizacion || data.claveAcceso);
-        await set('noAutorizacion', authAsegurada);
-        await set('Identificacion', data.idReceptor);
-        await set('CorreoElectronico', data.email);
-        
-        // Finalizar: Clic en el botón Solicitar con pausa extra
-        console.log("SRI Asistente: Llenado completo. Esperando estabilidad antes de Solicitar...");
-        await new Promise(r => setTimeout(r, 1000));
-        await set('btnAceptar', 'click');
-    })();
+    await set('tipoComprobante', data.tipoComprobante);
+    await set('fechaAutorizacion', data.fecha);
+    await set('claveAcceso', data.claveAcceso);
+    // REGLA OBLIGATORIA: En No. Autorización va exactamente la misma Clave de Acceso de 49 dígitos
+    const authAsegurada = (data.claveAcceso && data.claveAcceso.length === 49) ? data.claveAcceso : (data.numAutorizacion || data.claveAcceso);
+    await set('noAutorizacion', authAsegurada);
+    await set('Identificacion', data.idReceptor);
+    await set('CorreoElectronico', data.email);
+    
+    console.log("SRI Asistente: Llenado de campos completado.");
+    await new Promise(r => setTimeout(r, 400));
 }
 
 function highlight(el) {
