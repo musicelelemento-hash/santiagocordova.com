@@ -2522,6 +2522,120 @@ async function syncDeclarationToSupabase(
   }
 }
 
+/**
+ * 💾 Guarda el reporte de extracción (valores totales y desglose) en el perfil local
+ * y en Supabase (clients.declaration_history) para el período indicado (ej. 2021-SEM1, 2021, etc.).
+ */
+async function guardarReporteExtraccionEnPerfil(reportData) {
+  if (!reportData) return { ok: false, error: 'Sin datos de reporte' };
+  let ruc = reportData.clientRuc;
+  if (!ruc && reportData.clientName) {
+    const m = String(reportData.clientName).match(/\d{13}/);
+    if (m) ruc = m[0];
+  }
+  if (!ruc && typeof window !== 'undefined' && window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function') {
+    ruc = window.sriAssistant.extractClientInfo().ruc || null;
+  }
+  if (!ruc) {
+    try {
+      const q = typeof quienEstaEnElPortal === 'function' ? quienEstaEnElPortal() : {};
+      ruc = q.ruc || null;
+    } catch (e) {}
+  }
+  if (!ruc) return { ok: false, error: 'No se pudo detectar el RUC del contribuyente' };
+
+  const totals = reportData.totals || {};
+  const periodLabel = reportData.periodLabel || (reportData.period ? (reportData.period.label || `AÑO_${reportData.period.year}`) : 'EXTRACCION');
+  const anio = (reportData.period && reportData.period.year) ? parseInt(reportData.period.year, 10) : new Date().getFullYear();
+
+  console.log(`💾 [EXTRACTOR] Guardando reporte de ${ruc} (${periodLabel})...`, totals);
+
+  // 1. Guardar en memoria local (SafeStorage / sc_declaraciones_locales)
+  try {
+    const stor = await SafeStorage.get(['sc_declaraciones_locales']);
+    const loc = stor.sc_declaraciones_locales || {};
+    const key = `${ruc}_EXTRAC_${anio}_${String(periodLabel).replace(/[\s\/\.]+/g, '_')}`;
+    loc[key] = {
+      ruc,
+      periodo: periodLabel,
+      anio,
+      guardadoEn: new Date().toISOString(),
+      tipo: 'EXTRACCION_DOCUMENTOS',
+      totals,
+      breakdown: reportData.breakdown || []
+    };
+    await SafeStorage.set({ sc_declaraciones_locales: loc });
+    console.log(`✅ [LOCAL] Reporte guardado localmente bajo clave: ${key}`);
+  } catch (eLoc) {
+    console.warn('⚠️ Error guardando reporte local:', eLoc);
+  }
+
+  // 2. Sincronizar en Supabase clients.declaration_history si hay conectividad
+  let nubeOk = false;
+  if (SC_SUPABASE_URL && SC_SUPABASE_ANON_KEY) {
+    try {
+      const cab = {
+        apikey: SC_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json'
+      };
+      const rCli = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=id,name,declaration_history`, { headers: cab });
+      if (rCli.ok) {
+        const rows = await rCli.json();
+        if (rows && rows.length > 0) {
+          const cli = rows[0];
+          const existingHist = Array.isArray(cli.declaration_history) ? cli.declaration_history : [];
+
+          const nuevaEntrada = {
+            period: periodLabel,
+            status: 'EXTRAIDO',
+            type: '2011',
+            source: 'EXTRACTOR_NUEVA_LUZ',
+            extractedAt: new Date().toISOString(),
+            metadata: {
+              compras15: totals.iva15 || 0,
+              compras0: totals.iva0 || 0,
+              montoIvaCompras: totals.montoIva || 0,
+              totalCompras: (totals.iva15 || 0) + (totals.iva0 || 0) + (totals.montoIva || 0),
+              retencionIva: totals.retIva || 0,
+              retencionRenta: totals.retRenta || 0,
+              totalRetenciones: (totals.retIva || 0) + (totals.retRenta || 0),
+              notasCredito15: totals.ncIva15 || 0,
+              notasCredito0: totals.ncIva0 || 0,
+              notasCreditoTotal: totals.ncTotal || 0,
+              totalBasesRenta: (totals.iva15 || 0) + (totals.iva0 || 0),
+              mesesProcesados: (reportData.breakdown || []).length
+            }
+          };
+
+          const indexPrev = existingHist.findIndex(h => h && h.period === periodLabel);
+          let histActualizado;
+          if (indexPrev >= 0) {
+            histActualizado = [...existingHist];
+            histActualizado[indexPrev] = nuevaEntrada;
+          } else {
+            histActualizado = [nuevaEntrada, ...existingHist];
+          }
+
+          const resPatch = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?id=eq.${cli.id}`, {
+            method: 'PATCH',
+            headers: cab,
+            body: JSON.stringify({ declaration_history: histActualizado })
+          });
+          if (resPatch.ok || resPatch.status === 204) {
+            nubeOk = true;
+            console.log(`✅ [NUBE] Reporte sincronizado con clients.declaration_history de ${ruc}`);
+          }
+        }
+      }
+    } catch (eNube) {
+      console.warn('⚠️ Error sincronizando reporte con Supabase:', eNube);
+    }
+  }
+
+  return { ok: true, nube: nubeOk, ruc, periodLabel };
+}
+
 // ============================================================
 // PODERES DE AUTO ADMIN & MODO AUTO BUCLE
 // ============================================================

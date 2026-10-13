@@ -41,7 +41,25 @@
 
 ---
 
-## 🏆 2₃. HITOS DE HOY (11-OCT-2026)
+## 🏆 2₄. HITOS DE HOY (13-OCT-2026)
+
+### 1. Extractor de Documentos sin Declarar (Semestral, Anual o Mensual) con Cero Tokens
+- **Objetivo**: Extraer totales y desglose de comprobantes recibidos (Facturas, Retenciones, Notas de Crédito) para semestres pasados (ej. 1er Semestre 2021), año completo o mes específico, sin consumir tokens LLM y sin disparar la automatización de declaración.
+- **Detección Automática de Cliente**: Reconoce al contribuyente en el portal mediante `identificarClienteActual()` cruzando sesión activa con Supabase y DOM del SRI.
+- **Control de Planta y Flotante**:
+  - Chip de planta interactivo `#sri-plant-extractor-chip` inyectado en `comprobantesRecibidos.jsf`.
+  - Botón `#slh-extractor` (📥) en el cajón 🧰 del HUD flotante.
+  - Panel interactivo `#slh-extractor-panel` con selector de año (desde 2026 hasta 2018), alcance (`sem1`, `sem2`, `annual`, `monthly`, `current_table`), mes y checkboxes de documentos.
+- **Cero Tokens & Blindaje Anti-Declaración**:
+  - Parámetros `onlyExtract: true`, `autoDeclaration: false`, `sri_auto_mode: false`.
+  - Intercepción en `FIN_TURBO` y `FIN_TURBO_BULK` en [03_ingreso_y_sesion.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/03_ingreso_y_sesion.js) para detener cualquier flujo de navegación a formulario IVA, avance de lote o cierre de sesión tras la extracción.
+- **Guardado en Perfil del Cliente**:
+  - Función `guardarReporteExtraccionEnPerfil(reportData)` en [01_utilidades_y_pdf.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/01_utilidades_y_pdf.js) que persiste en `sc_declaraciones_locales` y actualiza `clients.declaration_history` en Supabase vía `PATCH` sin sobrescribir datos ajenos.
+  - Botón interactivo `💾 GUARDAR EN PERFIL` dentro del modal maestro [showBulkEliteToast](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/07_navegacion_sri.js) y en el panel del extractor.
+
+---
+
+## 🏆 2₃. HITOS ANTERIORES (11-OCT-2026)
 
 ### 1. Auto-Login Instantáneo en Facturador Zifact (`https://zifact.com/login`)
 - **Web App (`santiagocordova-main`)**:

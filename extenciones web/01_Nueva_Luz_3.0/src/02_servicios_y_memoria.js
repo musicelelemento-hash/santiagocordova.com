@@ -3950,85 +3950,201 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    // ELITE v12: TRIGGER TURBO MANUAL (Desde Popup)
-    if (request.action === 'START_TURBO_MANUAL') {
-        const { year, monthIndex, bulkType, checkFacturas, checkRetenciones, checkNC } = request.data;
-        console.log('🚀 Iniciando MODO TURBO MANUAL SELECTIVO:', request.data);
+/**
+ * 🚀 Inicia el flujo de extracción segura de documentos (Facturas, Retenciones, NC)
+ * para un mes, semestre o año completo, sin tocar el formulario ni declarar.
+ */
+async function iniciarExtractorDocumentos(config = {}) {
+    const {
+        year = new Date().getFullYear(),
+        monthIndex = 0,
+        bulkType = 'sem1',
+        checkFacturas = true,
+        checkRetenciones = true,
+        checkNC = true,
+        onlyExtract = true
+    } = config;
 
-        if (window.sriAssistant) {
-            window.sriAssistant.log('🚀 Modo Turbo Manual solicitado...');
-            window.sriAssistant.setWorking(true);
-        }
+    console.log('🚀 [EXTRACTOR] Solicitud de extracción segura recibida:', config);
+    if (window.sriAssistant) {
+        window.sriAssistant.log(`🚀 Extractor solicitado: ${String(bulkType).toUpperCase()} ${year}...`);
+        window.sriAssistant.setWorking(true);
+    }
 
-        // Determinar primer paso activo
-        let firstStep = 'turbo_step1_facturas';
-        if (!checkFacturas) {
-            if (checkRetenciones) firstStep = 'turbo_step3_retenciones';
-            else if (checkNC) firstStep = 'turbo_step5_notas_credito';
-            else firstStep = 'FIN_TURBO';
-        }
-
-        const storageData = {
-            workflowPeriod: { year, monthIndex, source: 'MANUAL_TURBO' },
-            bulkType: bulkType || 'monthly',
-            checkFacturas: !!checkFacturas,
-            checkRetenciones: !!checkRetenciones,
-            checkNC: !!checkNC,
-            pendingAction: firstStep,
-            actionTimestamp: Date.now(),
-            skipSafetyCheck: true,
-            sriAutomationPaused: false
-        };
-
-        // Inicializar Flujo Masivo si aplica
-        if (bulkType && bulkType !== 'monthly') {
-            let monthsToProcess = [];
-            if (bulkType === 'sem1') monthsToProcess = [0, 1, 2, 3, 4, 5];
-            else if (bulkType === 'sem2') monthsToProcess = [6, 7, 8, 9, 10, 11];
-            else if (bulkType === 'annual') monthsToProcess = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-
-            // ELITE FIX (v14.0): Protección de Fechas Futuras
-            const now = new Date();
-            const currentYear = now.getFullYear();
-            const currentMonth = now.getMonth(); // 0 = Enero, 1 = Feb...
-
-            if (parseInt(year) === currentYear) {
-                // Solo procesar hasta el mes ANTERIOR (meses cerrados)
-                monthsToProcess = monthsToProcess.filter(m => m < currentMonth);
-                if (monthsToProcess.length === 0) {
-                    if (window.sriAssistant) window.sriAssistant.log('⚠️ Error: No hay meses cerrados disponibles en este año aún.');
-                    return;
-                }
-            } else if (parseInt(year) > currentYear) {
-                if (window.sriAssistant) window.sriAssistant.log('🚫 Error: No se permiten búsquedas de años futuros.');
-                return;
+    // Caso especial: Tabla actual que ya está en pantalla
+    if (bulkType === 'current_table') {
+        try {
+            if (window.sriAssistant) window.sriAssistant.log('📊 Extrayendo tabla actual en pantalla...');
+            let facturas = null;
+            if (typeof extraerTodasLasFacturas === 'function') {
+                facturas = await extraerTodasLasFacturas();
+            } else if (typeof extraerFacturasPaginaActual === 'function') {
+                facturas = extraerFacturasPaginaActual();
             }
-
-            storageData.bulkFlow = {
-                active: true,
-                months: monthsToProcess,
-                currentIndex: 0,
-                results: [] // Para guardar acumulados por cada mes
+            const totals = {
+                facturasCount: facturas?.totalFacturas || 0,
+                iva15: parseDecimal(facturas?.iva15?.baseImponible || 0),
+                iva0: parseDecimal(facturas?.iva0?.baseImponible || 0),
+                montoIva: parseDecimal(facturas?.iva15?.montoIva || 0),
+                totalFacturas: parseDecimal(facturas?.iva15?.total || 0) + parseDecimal(facturas?.iva0?.total || 0),
+                retCount: 0, retIva: 0, retIvaBase: 0, retRenta: 0, retRentaBase: 0,
+                ncCount: 0, ncIva15: 0, ncIva0: 0, ncIva: 0, ncTotal: 0
             };
-            // Forzar el mes inicial del bulk
-            storageData.workflowPeriod.monthIndex = monthsToProcess[0];
-            // Actualizar mes objetivo en workflowPeriod para que coincida con el primero del bulk
-            storageData.workflowPeriod.month = monthsToProcess[0] + 1;
-        } else {
-            storageData.bulkFlow = { active: false };
-        }
-
-        SafeStorage.set(storageData).then(async () => {
-            if (firstStep === 'FIN_TURBO') {
-                if (window.sriAssistant) window.sriAssistant.log('⚠️ No se seleccionaron tipos de documento.');
-                return;
+            const m = monthIndex !== undefined ? parseInt(monthIndex, 10) : 0;
+            const flow = {
+                months: [m],
+                results: [{ month: m, data: { facturas } }],
+                onlyExtract: true
+            };
+            const per = { year: parseInt(year, 10), monthIndex: m, label: `TABLA_ACTUAL_${year}` };
+            if (typeof showBulkEliteToast === 'function') {
+                showBulkEliteToast(totals, flow, per);
             }
+            if (window.sriAssistant) window.sriAssistant.setWorking(false);
+            return { ok: true, totals };
+        } catch (eCur) {
+            console.error('Error al extraer tabla actual:', eCur);
+            if (window.sriAssistant) {
+                window.sriAssistant.showEliteToast({ title: 'Error', msg: 'No se pudo extraer la tabla actual: ' + eCur.message });
+                window.sriAssistant.setWorking(false);
+            }
+            return { ok: false, error: eCur.message };
+        }
+    }
 
-            // VOLVER A NAVEGACIÓN ROBUSTA (Evitar cuelgues de redirección directa)
-            await navegarAComprobantes();
+    // Determinar primer paso activo
+    let firstStep = 'turbo_step1_facturas';
+    if (!checkFacturas) {
+        if (checkRetenciones) firstStep = 'turbo_step3_retenciones';
+        else if (checkNC) firstStep = 'turbo_step5_notas_credito';
+        else firstStep = 'FIN_TURBO';
+    }
+
+    if (firstStep === 'FIN_TURBO') {
+        if (window.sriAssistant) {
+            window.sriAssistant.showEliteToast({ title: 'Atención', msg: 'No seleccionó ningún tipo de documento para extraer.' });
+            window.sriAssistant.setWorking(false);
+        }
+        return { ok: false, error: 'Sin tipos de documento' };
+    }
+
+    const storageData = {
+        workflowPeriod: { year: parseInt(year, 10), monthIndex: parseInt(monthIndex, 10), source: 'EXTRACTOR_TOOL' },
+        bulkType: bulkType || 'monthly',
+        checkFacturas: !!checkFacturas,
+        checkRetenciones: !!checkRetenciones,
+        checkNC: !!checkNC,
+        pendingAction: firstStep,
+        actionTimestamp: Date.now(),
+        skipSafetyCheck: true,
+        sriAutomationPaused: false,
+        autoDeclaration: false,
+        onlyExtract: true,
+        sri_auto_mode: false
+    };
+
+    // Determinar meses a procesar
+    let monthsToProcess = [parseInt(monthIndex, 10)];
+    if (bulkType === 'sem1') monthsToProcess = [0, 1, 2, 3, 4, 5];
+    else if (bulkType === 'sem2') monthsToProcess = [6, 7, 8, 9, 10, 11];
+    else if (bulkType === 'annual') monthsToProcess = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    if (parseInt(year, 10) === currentYear) {
+        monthsToProcess = monthsToProcess.filter(m => m < currentMonth);
+        if (monthsToProcess.length === 0) {
+            if (window.sriAssistant) {
+                window.sriAssistant.showEliteToast({ title: 'Aviso', msg: 'No hay meses cerrados disponibles en este año aún.' });
+                window.sriAssistant.setWorking(false);
+            }
+            return { ok: false, error: 'Sin meses cerrados' };
+        }
+    } else if (parseInt(year, 10) > currentYear) {
+        if (window.sriAssistant) {
+            window.sriAssistant.showEliteToast({ title: 'Error', msg: 'No se permiten consultas de años futuros.' });
+            window.sriAssistant.setWorking(false);
+        }
+        return { ok: false, error: 'Año futuro' };
+    }
+
+    if (bulkType && bulkType !== 'monthly') {
+        storageData.bulkFlow = {
+            active: true,
+            months: monthsToProcess,
+            currentIndex: 0,
+            results: [],
+            onlyExtract: true,
+            year: parseInt(year, 10)
+        };
+        storageData.workflowPeriod.monthIndex = monthsToProcess[0];
+        storageData.workflowPeriod.month = monthsToProcess[0] + 1;
+    } else {
+        storageData.bulkFlow = { active: false, onlyExtract: true };
+    }
+
+    await SafeStorage.set(storageData);
+
+    // Navegar a Comprobantes Recibidos o iniciar
+    if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
+        await navegarAComprobantes();
+    } else {
+        if (typeof ejecutarAccionPendiente === 'function') {
+            await ejecutarAccionPendiente(storageData);
+        } else {
+            window.location.reload();
+        }
+    }
+
+    return { ok: true, storageData };
+}
+
+// Exponer en window para integración universal y uso desde consola / HUD
+if (typeof window !== 'undefined') {
+    window.sriExtractor = {
+        iniciar: iniciarExtractorDocumentos,
+        async verUltimoReporte() {
+            const stor = await SafeStorage.get(['lastBulkReport']);
+            if (stor.lastBulkReport && typeof showBulkEliteToast === 'function') {
+                showBulkEliteToast(stor.lastBulkReport.totals, stor.lastBulkReport, stor.lastBulkReport.period);
+                return true;
+            }
+            if (window.sriAssistant) {
+                window.sriAssistant.showEliteToast({ title: 'Sin Reporte', msg: 'No hay reportes de extracción previos en memoria.' });
+            }
+            return false;
+        },
+        async guardarEnPerfil(reportData) {
+            if (!reportData) {
+                const stor = await SafeStorage.get(['lastBulkReport']);
+                reportData = stor.lastBulkReport;
+            }
+            if (!reportData) {
+                if (window.sriAssistant) window.sriAssistant.showEliteToast({ title: 'Sin Reporte', msg: 'No hay reporte para guardar.' });
+                return false;
+            }
+            if (typeof guardarReporteExtraccionEnPerfil === 'function') {
+                const res = await guardarReporteExtraccionEnPerfil(reportData);
+                if (res.ok && window.sriAssistant) {
+                    window.sriAssistant.showEliteToast({
+                        title: '💾 Guardado',
+                        msg: `Reporte de ${res.ruc} (${res.periodLabel}) guardado en el perfil${res.nube ? ' y sincronizado en la nube.' : ' localmente.'}`
+                    });
+                }
+                return res;
+            }
+            return false;
+        }
+    };
+}
+
+    // ELITE v12: TRIGGER TURBO MANUAL (Desde Popup o Extractor)
+    if (request.action === 'START_TURBO_MANUAL') {
+        iniciarExtractorDocumentos(request.data).then(res => {
+            sendResponse(res);
         });
-
-        sendResponse({ success: true });
         return true;
     }
 

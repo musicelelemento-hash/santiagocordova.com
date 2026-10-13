@@ -739,6 +739,7 @@ const SriLoopHUD = {
             '<button id="slh-chequeo" aria-label="Chequeo: ver si está todo listo para correr el lote" title="Chequeo: la subida, las claves, el catastro, los proveedores y las marcas que frenan el envío" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(94,234,212,0.16);color:#5eead4">🩺</button>',
             '<button id="slh-sincronizar" aria-label="Sincronizar claves desde la nube (Web)" title="Sincronizar claves: descarga las contraseñas vigentes de la web a la extensión y limpia bloqueos obsoletos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(52,211,153,0.18);color:#6ee7b7">🔄</button>',
             '<button id="slh-probarclaves" aria-label="Probar claves: entra con cada clave guardada y sale, sin declarar nada" title="Probar claves: recorre la cartera, entra con cada clave guardada y sale — nunca declara" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🔑</button>',
+            '<button id="slh-extractor" aria-label="Extractor de documentos: facturas, retenciones, NC (semestral, anual o mensual)" title="Extractor de documentos: extrae totales de facturas, retenciones, NC sin declarar (semestral, anual o mensual)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">📥</button>',
             '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // Período objetivo del lote: qué mes se va a declarar. El popup y este
@@ -773,6 +774,7 @@ const SriLoopHUD = {
             '<div id="slh-chequeo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:340px;overflow:auto"></div>',
             '<div id="slh-probarclaves-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:280px;overflow:auto"></div>',
             '<div id="slh-auditoria-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:8px;max-height:320px;overflow:auto"></div>',
+            '<div id="slh-extractor-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:10px;max-height:380px;overflow:auto"></div>',
             '<div id="slh-periodo-panel" style="display:none;border-top:1px solid rgba(255,255,255,0.10);padding-top:10px">',
             '  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">',
             '    <span style="font-size:10px;opacity:0.6;font-family:monospace;letter-spacing:0.05em">PERÍODO OBJETIVO</span>',
@@ -1220,6 +1222,16 @@ const SriLoopHUD = {
             await this.arrancarPruebaClaves();
         });
 
+        el.querySelector('#slh-extractor').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const panel = el.querySelector('#slh-extractor-panel');
+            if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+            soloUno('slh-extractor-panel');
+            panel.innerHTML = '<div style="font-size:11px;opacity:0.6;padding:4px 2px">Cargando extractor…</div>';
+            panel.style.display = 'block';
+            await this.pintarExtractor();
+        });
+
         el.querySelector('#slh-auditoria').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             const panel = el.querySelector('#slh-auditoria-panel');
@@ -1305,6 +1317,7 @@ const SriLoopHUD = {
             ['slh-chequeo',     'Chequeo'],
             ['slh-sincronizar', 'Sincronizar'],
             ['slh-probarclaves','Probar claves'],
+            ['slh-extractor',   'Extractor'],
             ['slh-auditoria',   'Períodos'],
             ['slh-subida',      'Probar subida'],
             ['slh-migrar',      'Migrar a la nube'],
@@ -2108,8 +2121,8 @@ const SriLoopHUD = {
         ['slh-plan', 'slh-omitidos-panel', 'slh-registro-panel', 'slh-subida-panel',
          'slh-cola-panel', 'slh-bitacora-panel', 'slh-casilleros-panel',
          'slh-ir-panel', 'slh-proveedores-panel', 'slh-notas-panel',
-         'slh-chequeo-panel', 'slh-probarclaves-panel', 'slh-auditoria-panel',
-         'slh-migrar-panel', 'slh-periodo-panel']
+         'slh-chequeo-panel', 'slh-probarclaves-panel', 'slh-extractor-panel',
+         'slh-auditoria-panel', 'slh-migrar-panel', 'slh-periodo-panel']
             .filter((id) => id !== cual && id !== 'slh-plan')   // null cierra todos
             .forEach((id) => {
                 const p = this._el.querySelector('#' + id);
@@ -2888,6 +2901,281 @@ const SriLoopHUD = {
     },
 
     /**
+     * Inyecta un chip / botón de planta en Comprobantes Recibidos (pedido por el usuario)
+     * para extraer datos de semestres/años pasados con 0 tokens de IA.
+     */
+    inyectarBotonPlantaRecibidos() {
+        if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) return;
+        if (document.getElementById('sri-plant-extractor-chip')) return;
+
+        const formBusqueda = document.getElementById('frmPrincipal') || 
+                             document.querySelector('form[id*="frmPrincipal"]') || 
+                             document.querySelector('.ui-panel-content') ||
+                             document.body;
+        if (!formBusqueda) return;
+
+        const chip = document.createElement('div');
+        chip.id = 'sri-plant-extractor-chip';
+        chip.style.cssText = `
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0;
+            padding: 8px 14px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.25);
+            font-family: 'Manrope', 'Inter', system-ui, sans-serif;
+            color: #fcd34d;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            z-index: 9999;
+        `;
+        chip.innerHTML = `
+            <span style="font-size: 16px;">📥</span>
+            <span>Extractor de Documentos (Semestre / Año / Mes)</span>
+            <span style="background: rgba(245,158,11,0.2); color: #fde68a; padding: 2px 6px; border-radius: 6px; font-size: 10px;">0 TOKENS</span>
+        `;
+        chip.onmouseover = () => { chip.style.transform = 'translateY(-1px)'; chip.style.borderColor = '#fbbf24'; };
+        chip.onmouseout = () => { chip.style.transform = 'none'; chip.style.borderColor = 'rgba(245, 158, 11, 0.4)'; };
+        chip.onclick = (e) => {
+            e.stopPropagation();
+            const btnExt = document.getElementById('slh-extractor');
+            if (btnExt) {
+                const cajon = document.getElementById('slh-cajon');
+                const cajonBtn = document.getElementById('slh-cajon-btn');
+                if (cajon && cajon.style.display !== 'flex' && cajonBtn) {
+                    cajonBtn.click();
+                }
+                btnExt.click();
+            } else if (window.sriExtractor) {
+                window.sriExtractor.iniciar({ bulkType: 'sem1', year: 2021, onlyExtract: true });
+            }
+        };
+
+        if (formBusqueda === document.body) {
+            chip.style.position = 'fixed';
+            chip.style.top = '70px';
+            chip.style.right = '20px';
+            document.body.appendChild(chip);
+        } else {
+            formBusqueda.insertAdjacentElement('beforebegin', chip);
+        }
+    },
+
+    /**
+     * Pinta el panel del extractor de documentos en el cajón 🧰.
+     * Permite consultar un semestre, año completo o mes sin disparar la automatización
+     * de declaración. Cero tokens de IA.
+     */
+    async pintarExtractor() {
+        const panel = document.getElementById('slh-extractor-panel');
+        if (!panel) return;
+        const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+
+        let cliente = null;
+        if (typeof identificarClienteActual === 'function') {
+            try { cliente = await identificarClienteActual(); } catch (e) {}
+        }
+        if (!cliente) {
+            const domInfo = (window.sriAssistant && window.sriAssistant.extractClientInfo)
+                ? window.sriAssistant.extractClientInfo() : {};
+            const rucDom = domInfo.ruc || document.getElementById('sri-client-ruc')?.textContent?.replace(/\\D/g, '') || '';
+            const nomDom = domInfo.name || document.getElementById('sri-client-name')?.textContent || '';
+            if (rucDom) cliente = { ruc: rucDom, name: nomDom };
+        }
+
+        const ultimoReporte = (await SafeStorage.get(['lastBulkReport'])).lastBulkReport || null;
+        const enCurso = typeof SriLoop !== 'undefined' && (await SriLoop.get()).estado === 'CORRIENDO';
+
+        const now = new Date();
+        const currYear = now.getFullYear();
+
+        let yearOpts = '';
+        for (let y = currYear; y >= 2018; y--) {
+            const selected = (y === 2021) ? 'selected' : '';
+            yearOpts += `<option value="${y}" ${selected} style="background:#0f172a;color:#fff">${y}</option>`;
+        }
+
+        const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const monthOpts = MESES.map((m, i) => `<option value="${i}" style="background:#0f172a;color:#fff">${m}</option>`).join('');
+
+        panel.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:8px;font-family:'Manrope','Inter',sans-serif">
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px 10px">
+                    <div style="font-size:10px;font-weight:800;color:#fbbf24;letter-spacing:0.05em;display:flex;align-items:center;justify-content:space-between">
+                        <span>📥 EXTRACTOR DE DOCUMENTOS</span>
+                        <span style="font-size:9px;background:rgba(16,185,129,0.18);color:#34d399;padding:1px 6px;border-radius:4px">CERO TOKENS</span>
+                    </div>
+                    <div style="font-size:11px;font-weight:700;color:#fff;margin-top:4px">
+                        👤 ${cliente ? esc(cliente.name || cliente.ruc) : '<span style="color:#94a3b8">Cliente SRI (portal activo)</span>'}
+                    </div>
+                    <div style="font-size:10px;color:#818cf8;font-family:monospace">
+                        RUC: ${cliente?.ruc ? esc(cliente.ruc) : 'Detectado en sesión'}
+                    </div>
+                    <div style="font-size:9px;opacity:0.65;margin-top:3px">
+                        ⚡ Solo extrae totales de documentos. <b>No declara ni altera casilleros.</b>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                    <div>
+                        <label style="font-size:9px;opacity:0.75;font-weight:700;display:block;margin-bottom:2px">AÑO:</label>
+                        <select id="slh-ext-year" style="width:100%;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);color:#fbbf24;border-radius:6px;padding:5px 6px;font-size:11px;font-weight:700;outline:none">
+                            ${yearOpts}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:9px;opacity:0.75;font-weight:700;display:block;margin-bottom:2px">ALCANCE / PERÍODO:</label>
+                        <select id="slh-ext-tipo" style="width:100%;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:6px;padding:5px 6px;font-size:11px;font-weight:700;outline:none">
+                            <option value="sem1" selected style="background:#0f172a;color:#fff">1er Semestre (Ene - Jun)</option>
+                            <option value="sem2" style="background:#0f172a;color:#fff">2do Semestre (Jul - Dic)</option>
+                            <option value="annual" style="background:#0f172a;color:#fff">Año Completo (12 meses)</option>
+                            <option value="monthly" style="background:#0f172a;color:#fff">Mensual (1 mes)</option>
+                            <option value="current_table" style="background:#0f172a;color:#fff">Tabla Actual en Pantalla</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="slh-ext-mes-wrap" style="display:none">
+                    <label style="font-size:9px;opacity:0.75;font-weight:700;display:block;margin-bottom:2px">MES ESPECÍFICO:</label>
+                    <select id="slh-ext-month" style="width:100%;background:rgba(15,23,42,0.9);border:1px solid rgba(255,255,255,0.15);color:#fff;border-radius:6px;padding:5px 6px;font-size:11px;outline:none">
+                        ${monthOpts}
+                    </select>
+                </div>
+
+                <div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:6px 8px;border:1px solid rgba(255,255,255,0.06)">
+                    <div style="font-size:9px;opacity:0.7;font-weight:700;margin-bottom:4px">DOCUMENTOS A CONSULTAR:</div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                        <label style="font-size:10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+                            <input type="checkbox" id="slh-ext-chk-facturas" checked style="accent-color:#10b981;cursor:pointer">
+                            <span style="color:#34d399">Facturas</span>
+                        </label>
+                        <label style="font-size:10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+                            <input type="checkbox" id="slh-ext-chk-retenciones" checked style="accent-color:#818cf8;cursor:pointer">
+                            <span style="color:#a5b4fc">Retenciones</span>
+                        </label>
+                        <label style="font-size:10px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+                            <input type="checkbox" id="slh-ext-chk-nc" checked style="accent-color:#f43f5e;cursor:pointer">
+                            <span style="color:#fda4af">Notas Crédito</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button id="slh-ext-btn-iniciar" ${enCurso ? 'disabled' : ''} style="border:none;border-radius:8px;padding:9px 12px;font-weight:800;font-size:12px;cursor:${enCurso ? 'default' : 'pointer'};background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:#fff;box-shadow:0 4px 15px rgba(217,119,6,0.35);display:flex;align-items:center;justify-content:center;gap:6px;opacity:${enCurso ? 0.6 : 1}">
+                    <span>${enCurso ? '⏳ Hay un lote en curso' : '🚀 EXTRAER DOCUMENTOS AHORA'}</span>
+                </button>
+
+                ${ultimoReporte ? `
+                    <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;margin-top:2px">
+                        <div style="font-size:9px;opacity:0.75;display:flex;justify-content:space-between;margin-bottom:4px">
+                            <span>ÚLTIMA EXTRACCIÓN GUARDADA:</span>
+                            <span style="font-family:monospace;color:#fbbf24">${ultimoReporte.period?.year || ''}</span>
+                        </div>
+                        <div style="display:flex;gap:6px">
+                            <button id="slh-ext-btn-ver-ultimo" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:10px;font-weight:700;cursor:pointer;background:rgba(99,102,241,0.22);color:#a5b4fc;border:1px solid rgba(99,102,241,0.3)">
+                                📋 Ver Reporte
+                            </button>
+                            <button id="slh-ext-btn-guardar-perfil" style="flex:1;border:none;border-radius:6px;padding:6px;font-size:10px;font-weight:700;cursor:pointer;background:rgba(16,185,129,0.22);color:#6ee7b7;border:1px solid rgba(16,185,129,0.3)">
+                                💾 Guardar en Perfil
+                            </button>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        const selTipo = panel.querySelector('#slh-ext-tipo');
+        const wrapMes = panel.querySelector('#slh-ext-mes-wrap');
+        if (selTipo && wrapMes) {
+            selTipo.onchange = () => {
+                wrapMes.style.display = (selTipo.value === 'monthly') ? 'block' : 'none';
+            };
+        }
+
+        const btnIniciar = panel.querySelector('#slh-ext-btn-iniciar');
+        if (btnIniciar && !enCurso) {
+            btnIniciar.onclick = async () => {
+                const year = parseInt(panel.querySelector('#slh-ext-year')?.value || '2021', 10);
+                const bulkType = panel.querySelector('#slh-ext-tipo')?.value || 'sem1';
+                const monthIndex = parseInt(panel.querySelector('#slh-ext-month')?.value || '0', 10);
+                const extractFacturas = !!panel.querySelector('#slh-ext-chk-facturas')?.checked;
+                const extractRetenciones = !!panel.querySelector('#slh-ext-chk-retenciones')?.checked;
+                const extractNotasCredito = !!panel.querySelector('#slh-ext-chk-nc')?.checked;
+
+                btnIniciar.disabled = true;
+                btnIniciar.innerHTML = '<span>⏳ Iniciando extracción...</span>';
+
+                try {
+                    if (window.sriExtractor && window.sriExtractor.iniciar) {
+                        await window.sriExtractor.iniciar({
+                            bulkType,
+                            year,
+                            monthIndex,
+                            extractFacturas,
+                            extractRetenciones,
+                            extractNotasCredito,
+                            onlyExtract: true,
+                            autoDeclaration: false
+                        });
+                        this._aviso('📥 Extractor Iniciado', `Consultando ${bulkType.toUpperCase()} ${year} sin declarar.`, 5000);
+                    } else {
+                        this._aviso('⚠️ Error', 'Módulo extractor no disponible.', 5000);
+                    }
+                } catch (err) {
+                    console.error('Error al iniciar extractor:', err);
+                    this._aviso('❌ Error', err.message, 6000);
+                } finally {
+                    btnIniciar.disabled = false;
+                    btnIniciar.innerHTML = '<span>🚀 EXTRAER DOCUMENTOS AHORA</span>';
+                }
+            };
+        }
+
+        const btnVerUltimo = panel.querySelector('#slh-ext-btn-ver-ultimo');
+        if (btnVerUltimo) {
+            btnVerUltimo.onclick = () => {
+                if (window.sriExtractor && window.sriExtractor.verUltimoReporte) {
+                    window.sriExtractor.verUltimoReporte();
+                } else if (ultimoReporte && typeof showBulkEliteToast === 'function') {
+                    showBulkEliteToast(ultimoReporte.totals, ultimoReporte, ultimoReporte.period);
+                }
+            };
+        }
+
+        const btnGuardarPerfil = panel.querySelector('#slh-ext-btn-guardar-perfil');
+        if (btnGuardarPerfil) {
+            btnGuardarPerfil.onclick = async () => {
+                btnGuardarPerfil.disabled = true;
+                btnGuardarPerfil.textContent = '⏳ Guardando...';
+                try {
+                    if (typeof guardarReporteExtraccionEnPerfil === 'function') {
+                        const res = await guardarReporteExtraccionEnPerfil(ultimoReporte);
+                        if (res && res.ok) {
+                            btnGuardarPerfil.textContent = '✅ Guardado';
+                            this._aviso('💾 Guardado', `Información de ${ultimoReporte.period?.year || ''} vinculada al perfil del cliente.`, 5000);
+                        } else {
+                            btnGuardarPerfil.textContent = '⚠️ Error';
+                            this._aviso('⚠️ No se pudo guardar', res?.error || 'Verifica la consola', 6000);
+                        }
+                    }
+                } catch (e) {
+                    btnGuardarPerfil.textContent = '❌ Error';
+                }
+                setTimeout(() => {
+                    if (btnGuardarPerfil) {
+                        btnGuardarPerfil.disabled = false;
+                        btnGuardarPerfil.textContent = '💾 Guardar en Perfil';
+                    }
+                }, 3000);
+            };
+        }
+    },
+
+    /**
      * Lista los comprobantes que quedaron DENTRO de la base. **No toca nada.**
      *
      * Deuda histórica: hasta el 07-sep-2026 R2 no estaba en el flujo, y el PDF
@@ -3092,6 +3380,7 @@ const SriLoopHUD = {
         this.pintarPeriodo().catch(() => {});
         this.pintarPlan(e).catch(() => {});
         this.anunciarEnPerfil(e).catch(() => {});
+        this.inyectarBotonPlantaRecibidos();
 
         const aqui = this._el.querySelector('#slh-aqui');
         if (aqui) {
@@ -4551,12 +4840,15 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
             </div>
 
             <!-- Footer Actions -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <button id="btn-copy-bulk-toast" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 18px; padding: 16px; font-size: 14px; font-weight: 800; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4); display: flex; align-items: center; justify-content: center; gap: 10px;">
-                    <span>📋</span> COPIAR REPORTE COMPLETO
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <button id="btn-copy-bulk-toast" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 18px; padding: 14px; font-size: 13px; font-weight: 800; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span>📋</span> COPIAR REPORTE
                 </button>
-                <button id="btn-export-excel" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 18px; padding: 16px; font-size: 14px; font-weight: 800; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; gap: 10px;">
-                    <span>📊</span> EXPORTAR A EXCEL (CSV)
+                <button id="btn-export-excel" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 18px; padding: 14px; font-size: 13px; font-weight: 800; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span>📊</span> EXCEL (CSV)
+                </button>
+                <button id="btn-save-to-profile" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border: none; border-radius: 18px; padding: 14px; font-size: 13px; font-weight: 800; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 20px rgba(217, 119, 6, 0.4); display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span>💾</span> GUARDAR EN PERFIL
                 </button>
             </div>
         </div>
@@ -4651,6 +4943,37 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
 
             btnExport.innerHTML = '<span>✅</span> EXPORTADO!';
             setTimeout(() => btnExport.innerHTML = '<span>📊</span> EXPORTAR A EXCEL (CSV)', 2000);
+        };
+    }
+
+    // Save to profile functionality
+    const btnSaveProfile = document.getElementById('btn-save-to-profile');
+    if (btnSaveProfile) {
+        btnSaveProfile.onclick = async () => {
+            btnSaveProfile.disabled = true;
+            btnSaveProfile.innerHTML = '<span>⏳</span> GUARDANDO...';
+            try {
+                if (typeof guardarReporteExtraccionEnPerfil === 'function') {
+                    const res = await guardarReporteExtraccionEnPerfil(reportData);
+                    if (res && res.ok) {
+                        btnSaveProfile.innerHTML = '<span>✅</span> ¡GUARDADO EN PERFIL!';
+                        btnSaveProfile.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+                    } else {
+                        btnSaveProfile.innerHTML = `<span>⚠️</span> ${res?.error || 'ERROR'}`;
+                    }
+                } else {
+                    btnSaveProfile.innerHTML = '<span>⚠️</span> NO DISPONIBLE';
+                }
+            } catch (err) {
+                console.error('Error guardando en perfil:', err);
+                btnSaveProfile.innerHTML = '<span>❌</span> ERROR';
+            }
+            setTimeout(() => {
+                if (btnSaveProfile) {
+                    btnSaveProfile.disabled = false;
+                    btnSaveProfile.innerHTML = '<span>💾</span> GUARDAR EN PERFIL';
+                }
+            }, 3000);
         };
     }
 

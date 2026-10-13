@@ -1630,14 +1630,15 @@ async function ejecutarAccionPendiente(items) {
 
             if (currentAction === 'FIN_TURBO') {
                 await SafeStorage.remove(['pendingAction']);
-                const storage = await SafeStorage.get(['autoDeclaration']);
+                const storage = await SafeStorage.get(['autoDeclaration', 'onlyExtract']);
+                const isOnlyExtract = items.onlyExtract === true || storage.onlyExtract === true;
                 const porSemaforo = await SriLoop.puedeAvanzar();
                 const porBandera = storage.autoDeclaration === true;
-                const isAuto = porSemaforo || porBandera;
+                const isAuto = !isOnlyExtract && (porSemaforo || porBandera);
                 console.log(`🔀 [FASE 1→2] Extracción lista. ¿Pasar a declarar? ${isAuto ? 'SÍ' : 'NO'} ` +
-                            `(semáforo=${porSemaforo}, autoDeclaration=${porBandera})`);
+                            `(semáforo=${porSemaforo}, autoDeclaration=${porBandera}, onlyExtract=${isOnlyExtract})`);
                 anotarBitacora('extracción lista',
-                    isAuto ? 'pasa a declarar' : `⚠️ NO pasa (semáforo=${porSemaforo}, bandera=${porBandera})`);
+                    isAuto ? 'pasa a declarar' : `⚠️ NO pasa (semáforo=${porSemaforo}, bandera=${porBandera}, onlyExtract=${isOnlyExtract})`);
 
                 if (window.sriAssistant) {
                     window.sriAssistant.setWorking(false);
@@ -1645,12 +1646,48 @@ async function ejecutarAccionPendiente(items) {
                     window.sriAssistant.updateSummary();
 
                     if (!isAuto) {
-                        // Si es reporte, mostrar un aviso de éxito sin sugerir navegación
-                        window.sriAssistant.showEliteToast({
-                            title: '📊 Reporte Generado',
-                            msg: 'Los datos han sido extraídos. Puedes ver el resumen en el panel o exportar a Excel.',
-                            duration: 5000
-                        });
+                        try {
+                            const ghostData = await GhostMemory.getData();
+                            const mIdx = (items.workflowPeriod && items.workflowPeriod.monthIndex !== undefined)
+                                ? items.workflowPeriod.monthIndex : 0;
+                            const singleTotals = {
+                                facturasCount: ghostData.facturas?.totalFacturas || 0,
+                                iva15: parseDecimal(ghostData.facturas?.iva15?.baseImponible || 0),
+                                iva0: parseDecimal(ghostData.facturas?.iva0?.baseImponible || 0),
+                                montoIva: parseDecimal(ghostData.facturas?.iva15?.montoIva || 0),
+                                totalFacturas: parseDecimal(ghostData.facturas?.iva15?.total || 0) + parseDecimal(ghostData.facturas?.iva0?.total || 0),
+                                retCount: ghostData.retenciones?.totalRetenciones || 0,
+                                retIva: parseDecimal(ghostData.retenciones?.ivaRetenido?.total || 0),
+                                retIvaBase: parseDecimal(ghostData.retenciones?.ivaRetenido?.baseTotal || 0),
+                                retRenta: parseDecimal(ghostData.retenciones?.rentaRetenida?.total || 0),
+                                retRentaBase: parseDecimal(ghostData.retenciones?.rentaRetenida?.baseTotal || 0),
+                                ncCount: ghostData.notasCredito?.totalNotas || 0,
+                                ncIva15: parseDecimal(ghostData.notasCredito?.iva15?.baseImponible || 0),
+                                ncIva0: parseDecimal(ghostData.notasCredito?.iva0?.baseImponible || 0),
+                                ncIva: parseDecimal(ghostData.notasCredito?.iva?.total || 0),
+                                ncTotal: parseDecimal(ghostData.notasCredito?.totalGeneral || 0)
+                            };
+                            const singleFlow = {
+                                months: [mIdx],
+                                results: [{ month: mIdx, data: ghostData }],
+                                onlyExtract: true
+                            };
+                            if (typeof showBulkEliteToast === 'function') {
+                                showBulkEliteToast(singleTotals, singleFlow, items.workflowPeriod || { year: new Date().getFullYear(), monthIndex: mIdx });
+                            } else {
+                                window.sriAssistant.showEliteToast({
+                                    title: '📊 Reporte Generado',
+                                    msg: 'Los datos han sido extraídos. Puedes ver el resumen en el panel o exportar a Excel.',
+                                    duration: 5000
+                                });
+                            }
+                        } catch (eRep) {
+                            window.sriAssistant.showEliteToast({
+                                title: '📊 Reporte Generado',
+                                msg: 'Los datos han sido extraídos. Puedes ver el resumen en el panel o exportar a Excel.',
+                                duration: 5000
+                            });
+                        }
                     }
                 }
                 if (isAuto && window.sriAssistant) {
@@ -1720,10 +1757,11 @@ async function ejecutarAccionPendiente(items) {
 
         showBulkEliteToast(totals, items.bulkFlow, items.workflowPeriod);
 
-        const storage = await SafeStorage.get(['autoDeclaration']);
-        const isAuto = (await SriLoop.puedeAvanzar()) || storage.autoDeclaration === true;
+        const storage = await SafeStorage.get(['autoDeclaration', 'onlyExtract']);
+        const isOnlyExtract = items.onlyExtract === true || items.bulkFlow?.onlyExtract === true || storage.onlyExtract === true;
+        const isAuto = !isOnlyExtract && ((await SriLoop.puedeAvanzar()) || storage.autoDeclaration === true);
 
-        await SafeStorage.remove(['pendingAction', 'bulkFlow', 'sriAutomationPaused']);
+        await SafeStorage.remove(['pendingAction', 'bulkFlow', 'sriAutomationPaused', 'onlyExtract']);
         
         if (isAuto) {
             console.log('🔄 Modo Auto activado. Continuando con el lote o cerrando sesión...');
