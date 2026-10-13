@@ -397,6 +397,17 @@ SafeStorage.get(null).then(async (items) => {
     const autofillListo = !!(items.pending_sri_autofill && items.pending_sri_autofill.ruc);
 
     if (isLoginPage && !isAlreadyLoggedIn && autofillListo) {
+        // 🛑 BLINDAJE LOTE DETENIDO: Si las credenciales provienen de un lote (isBatch) pero el
+        // semáforo ya no está CORRIENDO (ej. el lote terminó o se detuvo), abortar auto-login y purgar.
+        if (items.pending_sri_autofill?.isBatch && typeof SriLoop !== 'undefined') {
+            const puede = await SriLoop.puedeAvanzar();
+            if (!puede) {
+                console.warn('🛑 [LOGIN CANCELADO] Autofill de lote en pantalla de login, pero el lote está detenido o completado. Descartando credenciales para prevenir bucle.');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+                return;
+            }
+        }
+
         const clientRuc = items.pending_sri_autofill.ruc;
         let clientPass = items.pending_sri_autofill.password;
         if (!clientPass) {
@@ -856,10 +867,9 @@ SafeStorage.get(null).then(async (items) => {
                             `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);
                 await anotarBitacora('el SRI pide', `IVA ${pend.periodoTexto} · ${pend.estado}`);
 
-                // 🛡️ BLINDAJE AUDITOR ANTI-BUCLE:
-                // El perfil de Angular del SRI tarda 15 a 30 minutos en quitar la obligación tras declarar.
-                // Si el auditor confirma que ya se declaró este período, cortamos de raíz la trampa de re-declarar.
-                const rucActual = quienEntro.ruc || items.pending_sri_autofill?.ruc;
+                const rucHeader = (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function')
+                    ? (window.sriAssistant.extractClientInfo().ruc || null) : null;
+                const rucActual = quienEntro.ruc || items.pending_sri_autofill?.ruc || rucHeader;
                 const periodoObjetivo = pend.periodo || items.workflowPeriod;
                 if (rucActual && periodoObjetivo && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucActual, periodoObjetivo)) {
                     console.warn(`🛑 [AUDITOR ANTI-BUCLE] El perfil sugiere declarar ${pend.periodoTexto}, pero ${rucActual} YA FUE DECLARADO.`);
@@ -1021,7 +1031,9 @@ SafeStorage.get(null).then(async (items) => {
         }
 
         // 🛡️ BLINDAJE AUDITOR ANTI-BUCLE: Sesión activa pero ya declarado
-        const rucSesion = quienEntro.ruc || items.pending_sri_autofill?.ruc;
+        const rucHeader = (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function')
+            ? (window.sriAssistant.extractClientInfo().ruc || null) : null;
+        const rucSesion = quienEntro.ruc || items.pending_sri_autofill?.ruc || rucHeader;
         const periodoSesion = items.workflowPeriod || (typeof SriLoop !== 'undefined' ? await SriLoop.resolverPeriodoObjetivo() : null);
         if (rucSesion && periodoSesion && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucSesion, periodoSesion)) {
             console.warn(`🛑 [AUDITOR ANTI-BUCLE] Sesión activa para ${rucSesion}, pero el período ya fue presentado. Abortando turbo_step1.`);

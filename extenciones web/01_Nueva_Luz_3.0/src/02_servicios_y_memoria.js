@@ -239,18 +239,41 @@ const SriAuditor = {
     async yaFueDeclarado(ruc, periodo) {
         if (!ruc || !periodo) return false;
         const cl = this.clave(ruc, periodo);
+        const normPer = this.normalizarPeriodo(periodo);
+        const r = String(ruc || '').trim();
         const todos = await this.obtenerTodos();
-        const est = todos[cl];
+        const est = todos[cl] || todos[`${r}|${normPer}`] || todos[`${r}_${normPer}`];
 
         if (est && (est.declarado || est.completado || est.comprobanteSubido || est.ultimoHito === 'DECLARACION_ENVIADA')) {
             return true;
         }
 
-        // Respaldo en sc_declaraciones_locales
+        // Respaldo en sc_declaraciones_locales (clave con pipe o guion bajo)
         try {
-            const r = await SafeStorage.get(['sc_declaraciones_locales']);
-            const loc = r.sc_declaraciones_locales || {};
-            if (loc[cl]) return true;
+            const stor = await SafeStorage.get(['sc_declaraciones_locales']);
+            const loc = stor.sc_declaraciones_locales || {};
+            if (loc[cl] || loc[`${r}|${normPer}`] || loc[`${r}_${normPer}`]) return true;
+        } catch (e) {}
+
+        // Respaldo en formato histórico filed_RUC_2011_MES_AÑO
+        try {
+            let mIdx = null;
+            let y = null;
+            if (typeof periodo === 'object') {
+                y = periodo.year || periodo.anio || periodo.ano;
+                mIdx = periodo.monthIndex !== undefined ? periodo.monthIndex : (periodo.month ? periodo.month - 1 : null);
+            } else if (typeof periodo === 'string') {
+                const match = periodo.match(/^(\d{4})[-/.]?(\d{1,2})$/);
+                if (match) {
+                    y = parseInt(match[1], 10);
+                    mIdx = parseInt(match[2], 10) - 1;
+                }
+            }
+            if (y !== null && mIdx !== null) {
+                const legacyKey = `filed_${r}_2011_${mIdx}_${y}`;
+                const legRes = await SafeStorage.get([legacyKey]);
+                if (legRes[legacyKey]) return true;
+            }
         } catch (e) {}
 
         return false;

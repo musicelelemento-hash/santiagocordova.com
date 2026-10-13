@@ -321,9 +321,12 @@ class SriAssistantPanel {
                     setTimeout(async () => {
                         const batchNext = await handleBatchNextClient();
                         if (!batchNext) {
-                            console.log('🏁 [SESIÓN] No hay más clientes en lote. Cerrando sesión para el siguiente manual...');
-                            await SafeStorage.set({ sri_auto_mode: false });
-                            await cerrarSesionSRI();
+                            console.log('🏁 [SESIÓN] No hay más clientes en lote. Lote completado.');
+                            if (typeof SriLoop !== 'undefined') await SriLoop.detener('Lote completado');
+                            await SafeStorage.remove([
+                                'pending_sri_autofill', 'pendingAction', 'actionTimestamp',
+                                'auto_batch_enabled', 'sri_auto_mode', 'autoDeclaration', 'sri_master_switch_on'
+                            ]);
                         }
                     }, 3000);
                 } else {
@@ -334,6 +337,11 @@ class SriAssistantPanel {
                             msg: "Proceso terminado. Cerrando sesión...",
                             duration: 3000
                         });
+                        if (typeof SriLoop !== 'undefined') await SriLoop.detener('Declaración única finalizada');
+                        await SafeStorage.remove([
+                            'pending_sri_autofill', 'pendingAction', 'actionTimestamp',
+                            'auto_batch_enabled', 'sri_auto_mode', 'autoDeclaration', 'sri_master_switch_on'
+                        ]);
                         await cerrarSesionSRI();
                     }, 3000);
                 }
@@ -1711,11 +1719,18 @@ class SriAssistantPanel {
                             if (typeof handleBatchNextClient === 'function') {
                                 const batchNext = await handleBatchNextClient();
                                 if (!batchNext) {
-                                    await SafeStorage.set({ sri_auto_mode: false, auto_batch_enabled: false, autoDeclaration: false, sri_master_switch_on: false });
-                                    await cerrarSesionSRI();
+                                    if (typeof SriLoop !== 'undefined') await SriLoop.detener('Lote completado');
+                                    await SafeStorage.remove([
+                                        'pending_sri_autofill', 'pendingAction', 'actionTimestamp',
+                                        'auto_batch_enabled', 'sri_auto_mode', 'autoDeclaration', 'sri_master_switch_on'
+                                    ]);
                                 }
                             } else {
-                                await SafeStorage.set({ sri_auto_mode: false, auto_batch_enabled: false, autoDeclaration: false, sri_master_switch_on: false });
+                                if (typeof SriLoop !== 'undefined') await SriLoop.detener('Fin de declaración');
+                                await SafeStorage.remove([
+                                    'pending_sri_autofill', 'pendingAction', 'actionTimestamp',
+                                    'auto_batch_enabled', 'sri_auto_mode', 'autoDeclaration', 'sri_master_switch_on'
+                                ]);
                                 await cerrarSesionSRI();
                             }
                         }, 3500);

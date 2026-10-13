@@ -2902,10 +2902,26 @@ async function handleBatchNextClient() {
     console.log(
       "🎉 [MODO AUTO BUCLE] ¡Lote completado! Todos los clientes han sido procesados.",
     );
+    // 🛑 DETENER EL SEMÁFORO Y PURGAR CREDENCIALES: Si no se detiene SriLoop y no se limpia
+    // pending_sri_autofill, el logout canónico redirige a Keycloak y la extensión
+    // vuelve a iniciar sesión en bucle infinito para el último cliente procesado.
+    if (typeof SriLoop !== 'undefined') {
+      await SriLoop.detener('Lote completado: todos los clientes fueron procesados');
+    }
     await SafeStorage.remove([
+      "pending_sri_autofill",
+      "pendingAction",
+      "actionTimestamp",
+      "accionDeQuien",
+      "accionEnCurso",
+      "accionVueltas",
+      "sri_active_autofill",
+      "sri_active_client",
       "auto_batch_enabled",
       "auto_batch_queue",
       "auto_batch_index",
+      "sri_auto_mode",
+      "autoDeclaration"
     ]);
     // 🗓️ La orden de meses terminó: se limpia para que el siguiente arranque
     // vuelva al comportamiento normal (cola de todo el periodo).
