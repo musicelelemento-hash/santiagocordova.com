@@ -41,7 +41,25 @@
 
 ---
 
-## 🏆 2₄. HITOS DE HOY (13-OCT-2026)
+## 🏆 2₅. HITOS DE HOY (14-OCT-2026)
+
+### 1. Blindaje Triple Anti-Bucle en Auto-Login y Cierre Limpio de Sesión
+- **Caso Real**: Cliente *Delgado Quito Alejandro Sebastián* (RUC `0706687233001`). El usuario presionó el botón naranja de declarar septiembre en el perfil web; el asistente detectó que la declaración ya existía (Sustitutiva), fue a *Consulta de declaraciones*, descargó el PDF oficial, lo subió a R2 y Supabase (`clients.declaration_history`), pero al cerrar sesión rebotaba a `inicio/NAT` y Keycloak volvía a loguearlo en bucle infinito hacia Comprobantes Recibidos.
+- **Causa Raíz Diagnosticada**:
+  1. La extensión en el navegador corría un build antiguo (`build 3.1.0+20261006.1734`) sin los cortes de lote aplicados el 13 de octubre.
+  2. En [03_ingreso_y_sesion.js](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/extenciones%20web/01_Nueva_Luz_3.0/src/03_ingreso_y_sesion.js), el filtro de parada en la pantalla de login solo evaluaba `items.pending_sri_autofill?.isBatch`. Las corridas manuales/individuales (`manual: true`) quedaban desprotegidas: al aterrizar en `inicio/NAT`, la extensión hacía clic automático en "Iniciar sesión" aunque el período ya estuviese declarado.
+  3. Al salir de `ejecutarRecuperacionComprobante` o `handleBatchNextClient`, `cerrarSesionSRI()` se invocaba sin `force = true`, activando el guard `LOGOUT PROTEGIDO` que no purgaba la sesión ni las credenciales.
+- **Blindajes Implementados**:
+  - **Blindaje 1 (Ya Declarado)**: Si `SriAuditor.yaFueDeclarado(clientRuc, targetPer)` es `true`, en la pantalla de login se descarta el autofill inmediatamente y se cancela cualquier clic de ingreso.
+  - **Blindaje 2 (Semáforo Inactivo)**: Si `!(await SriLoop.puedeAvanzar())` y no es `soloEstarAdentro`, se purgan credenciales y se aborta el auto-login tanto en lote como individual.
+  - **Blindaje 3 (Sesión Consumida)**: Si `haEntradoAlPortal: true` y no hay una acción pendiente en curso, no se vuelve a inyectar la credencial.
+  - **Cierre Forzado**: `cerrarSesionSRI(true)` se garantiza con `force = true` al completar lote o comprobante individual.
+  - **Sincronización en Web**: [ProfileTab.tsx](file:///c:/Programacion/Paginas%20Web/SantiagoCordova.com/santiagocordova-main/components/features/ClientDetail/tabs/ProfileTab.tsx) ahora consulta tanto `declarations` como `declaration_history` para reflejar al instante el comprobante guardado y cambiar el botón naranja a estado "Al Día / Escritorio SRI".
+- **Compilación Validada**: Build `3.1.0+20261014.0945` generado con éxito tras pasar validaciones de sintaxis `node --check`.
+
+---
+
+## 🏆 2₄. HITOS ANTERIORES (13-OCT-2026)
 
 ### 1. Extractor de Documentos sin Declarar (Semestral, Anual o Mensual) con Cero Tokens
 - **Objetivo**: Extraer totales y desglose de comprobantes recibidos (Facturas, Retenciones, Notas de Crédito) para semestres pasados (ej. 1er Semestre 2021), año completo o mes específico, sin consumir tokens LLM y sin disparar la automatización de declaración.

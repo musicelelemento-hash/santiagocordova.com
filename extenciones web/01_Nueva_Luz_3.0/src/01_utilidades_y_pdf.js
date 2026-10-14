@@ -3051,7 +3051,7 @@ async function handleBatchNextClient() {
       });
     }
     
-    await cerrarSesionSRI();
+    await cerrarSesionSRI(true);
     return false;
   }
 }

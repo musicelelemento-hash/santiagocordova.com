@@ -647,7 +647,12 @@ async function ejecutarRecuperacionComprobante() {
         console.log('⏩ [RECUPERAR] Comprobante subido a Supabase. Pasando al siguiente cliente del lote...');
         await sleep(2000);
         const hasNext = await handleBatchNextClient();
-        if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+        if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
+    } else {
+        console.log('🏁 [RECUPERAR] Comprobante recuperado en modo individual. Finalizando corrida limpiamente.');
+        if (typeof SriLoop !== 'undefined') await SriLoop.detener('Comprobante individual recuperado');
+        await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+        if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
     }
     return true;
 }

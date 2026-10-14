@@ -397,18 +397,36 @@ SafeStorage.get(null).then(async (items) => {
     const autofillListo = !!(items.pending_sri_autofill && items.pending_sri_autofill.ruc);
 
     if (isLoginPage && !isAlreadyLoggedIn && autofillListo) {
-        // 🛑 BLINDAJE LOTE DETENIDO: Si las credenciales provienen de un lote (isBatch) pero el
-        // semáforo ya no está CORRIENDO (ej. el lote terminó o se detuvo), abortar auto-login y purgar.
-        if (items.pending_sri_autofill?.isBatch && typeof SriLoop !== 'undefined') {
+        const clientRuc = items.pending_sri_autofill.ruc;
+        const targetPer = items.workflowPeriod || (typeof SriLoop !== 'undefined' ? await SriLoop.resolverPeriodoObjetivo() : null);
+
+        // 🛑 BLINDAJE 1: YA DECLARADO — Si el cliente ya fue presentado para el período objetivo,
+        // no tiene ningún sentido volver a iniciar sesión para declarar. Abortar auto-login y purgar.
+        if (clientRuc && targetPer && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(clientRuc, targetPer)) {
+            console.warn(`🛑 [BLINDAJE LOGIN] ${clientRuc} ya fue declarado para ${SriAuditor.normalizarPeriodo(targetPer)}. Descartando autofill en pantalla de login para prevenir bucle.`);
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+            return;
+        }
+
+        // 🛑 BLINDAJE 2: SEMÁFORO DETENIDO O LOTE COMPLETADO — Si el bucle no está CORRIENDO
+        // y no es un acceso expreso de sólo inspección (soloEstarAdentro), abortar auto-login y purgar.
+        if (typeof SriLoop !== 'undefined' && !items.pending_sri_autofill?.soloEstarAdentro) {
             const puede = await SriLoop.puedeAvanzar();
             if (!puede) {
-                console.warn('🛑 [LOGIN CANCELADO] Autofill de lote en pantalla de login, pero el lote está detenido o completado. Descartando credenciales para prevenir bucle.');
-                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
+                console.warn('🛑 [LOGIN CANCELADO] El semáforo no está CORRIENDO. Descartando credenciales en pantalla de login para prevenir auto-login infinito.');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
                 return;
             }
         }
 
-        const clientRuc = items.pending_sri_autofill.ruc;
+        // 🛑 BLINDAJE 3: SESIÓN YA COMPLETADA — Si ya había ingresado al portal con esta orden
+        // y ahora está en la pantalla de login sin una acción pendiente legítima:
+        if (items.pending_sri_autofill?.haEntradoAlPortal && !items.pendingAction) {
+            console.warn('🛑 [LOGIN CANCELADO] Esta orden ya completó su sesión en el portal. Descartando credenciales para evitar reingreso cíclico.');
+            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+            return;
+        }
+
         let clientPass = items.pending_sri_autofill.password;
         if (!clientPass) {
             const cacheRes = await SafeStorage.get(['sc_clients_cache']);
@@ -898,9 +916,11 @@ SafeStorage.get(null).then(async (items) => {
                     await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
                     if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
                         const hay = await handleBatchNextClient();
-                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+                        if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
                     } else if (typeof cerrarSesionSRI === 'function') {
-                        await cerrarSesionSRI();
+                        if (typeof SriLoop !== 'undefined') await SriLoop.detener('Ya estaba declarado');
+                        await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+                        await cerrarSesionSRI(true);
                     }
                     return;
                 }
@@ -1046,9 +1066,11 @@ SafeStorage.get(null).then(async (items) => {
             await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
             if (await SriLoop.puedeAvanzar() && typeof handleBatchNextClient === 'function') {
                 const hay = await handleBatchNextClient();
-                if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
+                if (!hay && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
             } else if (typeof cerrarSesionSRI === 'function') {
-                await cerrarSesionSRI();
+                if (typeof SriLoop !== 'undefined') await SriLoop.detener('Ya estaba presentado');
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+                await cerrarSesionSRI(true);
             }
             return;
         }
