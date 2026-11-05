@@ -3525,11 +3525,23 @@ async function renderAnticipationWidget(items) {
   const despiertaAnticipacion = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
   if (!despiertaAnticipacion) {
     document.getElementById('sri-anticipacion-sidebar')?.remove();
+    document.getElementById('sri-anticipacion-conector')?.remove();
     return;
   }
 
   let sidebar = document.getElementById("sri-anticipacion-sidebar");
   if (!sidebar) {
+    // El conector visual: un pequeño triángulo que une el panel con la isla
+    // de arriba, para que se lea como UNA superficie que se despliega, no
+    // como dos paneles sueltos en lugares distintos de la pantalla.
+    if (!document.getElementById('sri-anticipacion-conector')) {
+      const conector = document.createElement('div');
+      conector.id = 'sri-anticipacion-conector';
+      conector.style.cssText =
+        'position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid rgba(5, 20, 36, 0.96); z-index: 999999; pointer-events: none;';
+      document.body.appendChild(conector);
+    }
+
     sidebar = document.createElement("div");
     sidebar.id = "sri-anticipacion-sidebar";
     if (isSRILoginPage()) sidebar.classList.add("collapsed");
@@ -3803,7 +3815,7 @@ async function renderAnticipationWidget(items) {
             <div style="display: flex; align-items: center; gap: 14px;">
                 <div style="font-size: 15px; font-weight: 800; color: #4edea3; display: flex; align-items: center; gap: 8px; letter-spacing: -0.01em;">
                     <span class="sri-toggle-icon">▼</span>
-                    ⚡ SC TAXPILOT PRO
+                    📋 Lista completa
                 </div>
                 
                 <div class="sri-switch-container" id="sri-switch-wrap">
@@ -4105,7 +4117,10 @@ async function renderAnticipationWidget(items) {
 
   sidebar
     .querySelector("#sri-sidebar-close")
-    .addEventListener("click", () => sidebar.remove());
+    .addEventListener("click", () => {
+      sidebar.remove();
+      document.getElementById('sri-anticipacion-conector')?.remove();
+    });
 }
 
 // ============================================================
