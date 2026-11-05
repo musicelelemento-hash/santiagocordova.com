@@ -24,7 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
     initSelectors();
     bindEvents();
     loadClientsFromCacheOrFetch();
+    pintarVersionReal();
 });
+
+// El pie del popup traía "v3.2.0" escrito a mano en el HTML, congelado desde
+// hace tiempo — nunca se tocó aunque el manifest y el content script sí
+// avanzaron. Mostrar un número de versión que no corresponde al código real
+// es peor que no mostrar ninguno: alguien podía creer que seguía en una
+// versión vieja (o viceversa) sin forma de saberlo. chrome.runtime.getManifest()
+// es la única fuente que SIEMPRE coincide con lo que Chrome tiene cargado en
+// este momento, sin pasar por el pipeline de build de content.js.
+function pintarVersionReal() {
+    const el = document.getElementById('popupFootVersion');
+    if (!el) return;
+    try {
+        el.textContent = 'v' + chrome.runtime.getManifest().version;
+    } catch (e) { /* si no se puede leer, se deja el texto que ya había */ }
+}
 
 function initSelectors() {
     const now = new Date();
