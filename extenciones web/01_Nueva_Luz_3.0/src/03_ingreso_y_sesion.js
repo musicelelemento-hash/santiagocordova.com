@@ -33,7 +33,7 @@ SafeStorage.get(null).then(async (items) => {
     if (items.pendingAction && items.accionDeQuien &&
         items.pending_sri_autofill?.ruc &&
         items.accionDeQuien !== items.pending_sri_autofill.ruc) {
-        console.warn(`🏷️ [ACCIÓN] «${items.pendingAction}» era de ${items.accionDeQuien} y ahora ` +
+        log.warn(`🏷️ [ACCIÓN] «${items.pendingAction}» era de ${items.accionDeQuien} y ahora ` +
                      `está en curso ${items.pending_sri_autofill.ruc}. Se descarta: la acción de ` +
                      'un contribuyente no se ejecuta sobre otro.');
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionDeQuien',
@@ -47,9 +47,9 @@ SafeStorage.get(null).then(async (items) => {
         const vueltas = mismaQueAntes ? (items.accionVueltas || 0) + 1 : 1;
 
         if (vueltas > TOPE_DE_VUELTAS) {
-            console.error(`🔁 [BUCLE] La acción «${items.pendingAction}» lleva ${vueltas} cargas de ` +
+            log.error(`🔁 [BUCLE] La acción «${items.pendingAction}» lleva ${vueltas} cargas de ` +
                           'página sin terminar. Eso es un bucle: se descarta y el navegador queda libre.');
-            console.error('   Si esto se repite con el mismo contribuyente, el paso que se traba es ése ' +
+            log.error('   Si esto se repite con el mismo contribuyente, el paso que se traba es ése ' +
                           'y hay que mirarlo — no es un problema de su clave.');
             await anotarBitacora('🔁 bucle cortado', `${items.pendingAction} · ${vueltas} cargas`);
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionEnCurso',
@@ -67,7 +67,7 @@ SafeStorage.get(null).then(async (items) => {
             // A la mitad se avisa, para que se vea venir en el log en vez de
             // descubrirlo cuando ya se cortó.
             if (vueltas === Math.ceil(TOPE_DE_VUELTAS / 2)) {
-                console.warn(`🔁 [BUCLE] «${items.pendingAction}» va por la vuelta ${vueltas} de ` +
+                log.warn(`🔁 [BUCLE] «${items.pendingAction}» va por la vuelta ${vueltas} de ` +
                              `${TOPE_DE_VUELTAS}. Si llega al tope se descarta.`);
             }
         }
@@ -83,7 +83,7 @@ SafeStorage.get(null).then(async (items) => {
         const sem = await SriLoop.get();
         const af = items.pending_sri_autofill;
         const total = (sem.cola || []).length;
-        console.log(
+        log.debug(
             `🚦 [ESTADO] semáforo=${sem.estado}` +
             `${total ? ` · cliente ${sem.indice + 1}/${total}` : ' · sin lote'}` +
             ` · autofill=${af ? `${af.name || af.ruc} [${[af.manual && 'manual', af.isBatch && 'lote', af.loginAttempted && 'login-hecho'].filter(Boolean).join(',') || 'sin banderas'}]` : 'no'}` +
@@ -100,13 +100,13 @@ SafeStorage.get(null).then(async (items) => {
     } catch (e) { /* no romper el arranque por un log */ }
 
     if (window.location.href.includes('pagina-no-encontrada')) {
-        console.warn('⚠️ [404 SRI] Página no encontrada detectada en Angular. Redirigiendo limpiamente a inicio/NAT...');
+        log.warn('⚠️ [404 SRI] Página no encontrada detectada en Angular. Redirigiendo limpiamente a inicio/NAT...');
         window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
         return;
     }
 
     if (window.location.href.includes('salirSSO.jsp')) {
-        console.log('🚪 [SALIR SSO] Redirección detectada en salirSSO.jsp. Continuando hacia el portal...');
+        log.debug('🚪 [SALIR SSO] Redirección detectada en salirSSO.jsp. Continuando hacia el portal...');
         setTimeout(() => {
             const btnContinuar = document.querySelector('button[name="btnContinuar"]') ||
                                  document.querySelector('.sri-boton-mediano-azul') ||
@@ -162,23 +162,23 @@ SafeStorage.get(null).then(async (items) => {
             const parado = await sePidioParar();
             const viejo = !!items.actionTimestamp && (Date.now() - items.actionTimestamp > 300000);
             if (parado || viejo) {
-                console.warn(`🛑 [PARADA] Autofill suelto de ${autofill.name || autofill.ruc} ` +
+                log.warn(`🛑 [PARADA] Autofill suelto de ${autofill.name || autofill.ruc} ` +
                              (parado ? 'pero se pidió parar' : 'pero es viejo (>5 min)') +
                              '. No se despierta; se descarta lo que quedó.');
                 await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp',
                                           'auto_batch_queue', 'auto_batch_index']);
-                console.log('💤 [SRI ELITE] Modo Reposo: no se rearma nada solo.');
+                log.debug('💤 [SRI ELITE] Modo Reposo: no se rearma nada solo.');
                 return;
             }
-            console.log('🔓 [SRI ELITE] Login manual solicitado. Despertando extensión...');
+            log.debug('🔓 [SRI ELITE] Login manual solicitado. Despertando extensión...');
             await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
             items.sri_master_switch_on = true;
         } else {
             if (esLoteSinPermiso) {
-                console.log('🧹 [BUCLE] Resto de un lote detenido en storage. Se descarta.');
+                log.debug('🧹 [BUCLE] Resto de un lote detenido en storage. Se descarta.');
                 await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
             }
-            console.log('💤 [SRI ELITE] Extensión en Modo Reposo (Apagada). Interacciones canceladas.');
+            log.debug('💤 [SRI ELITE] Extensión en Modo Reposo (Apagada). Interacciones canceladas.');
             return;
         }
     }
@@ -242,7 +242,7 @@ SafeStorage.get(null).then(async (items) => {
 
     // Si el cliente está en el login de Keycloak y su formulario expiró sin respuesta ni error (> 8s):
     if (isLoginPage && isExplicitlyOutside && items.pending_sri_autofill?.loginAttempted && !haEntradoAlPortal && !enviandoAhora) {
-        console.warn('⏳ [LOGIN] Formulario de Keycloak sin respuesta tras 8s. Reintentando inyección de credenciales...');
+        log.warn('⏳ [LOGIN] Formulario de Keycloak sin respuesta tras 8s. Reintentando inyección de credenciales...');
         items.pending_sri_autofill.loginAttempted = false;
         await SafeStorage.set({
             pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
@@ -265,7 +265,7 @@ SafeStorage.get(null).then(async (items) => {
         // Se deja dicho QUÉ se leyó y DÓNDE. Marcar una clave como mala deja al
         // contribuyente afuera hasta que alguien lo deshaga a mano: el log
         // tiene que permitir discutir la decisión, no sólo anunciarla.
-        console.warn('🔎 [LOGIN] El portal rechaza la credencial. Lo que dice el formulario: ' +
+        log.warn('🔎 [LOGIN] El portal rechaza la credencial. Lo que dice el formulario: ' +
                      `«${(feedbackText || textoDelPortal).slice(0, 160).replace(/\s+/g, ' ').trim() || '(nada legible)'}»`);
     }
 
@@ -298,7 +298,7 @@ SafeStorage.get(null).then(async (items) => {
                 ? 'Keycloak procesó el intento y no lo dejó pasar (login-actions/authenticate). ' +
                   'Si se repite en las próximas corridas, mirá esa clave.'
                 : 'volvió a la pantalla de acceso sin pasar por la validación.';
-            console.warn(`↩️ [REBOTE ${veces}/2] ${nombreRebote}: ${dondeReboto} ` +
+            log.warn(`↩️ [REBOTE ${veces}/2] ${nombreRebote}: ${dondeReboto} ` +
                          'El SRI no dio un mensaje, así que no se concluye nada: se reintenta una vez.');
             anotarBitacora('↩️ rebote', `${veces}/2 · ${nombreRebote} volvió al login sin mensaje`);
             rebotes[rucRebote] = veces;
@@ -311,7 +311,7 @@ SafeStorage.get(null).then(async (items) => {
             items.pending_sri_autofill = { ...items.pending_sri_autofill, loginAttempted: false };
             // Y se sigue de largo: el auto-login de más abajo vuelve a inyectar.
         } else {
-            console.error(`🔌 [SESIÓN] ${nombreRebote} rebotó al login dos veces sin mensaje del SRI. ` +
+            log.error(`🔌 [SESIÓN] ${nombreRebote} rebotó al login dos veces sin mensaje del SRI. ` +
                           'Se lo omite SIN marcarle la clave: no hay nada que diga que esté mal.');
             anotarBitacora('🔌 sesión caída', nombreRebote);
             delete rebotes[rucRebote];
@@ -342,7 +342,7 @@ SafeStorage.get(null).then(async (items) => {
     }
 
     if (elSriLoRechazo) {
-        console.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o reintento bloqueado. Deteniendo para blindar la cuenta contra bloqueos.');
+        log.error('❌ [LOGIN BLINDAJE] Credenciales erróneas o reintento bloqueado. Deteniendo para blindar la cuenta contra bloqueos.');
         const clientRuc = items.pending_sri_autofill?.ruc;
         const clientPass = items.pending_sri_autofill?.password;
         const clientName = items.pending_sri_autofill?.name || clientRuc || 'este cliente';
@@ -382,7 +382,7 @@ SafeStorage.get(null).then(async (items) => {
 
         const isLoop = items.auto_batch_enabled || (items.pending_sri_autofill && items.pending_sri_autofill.isBatch) || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
         if (isLoop) {
-            console.log(`🚂 [FERROCARRIL] Cliente ${clientRuc || ''} omitido con seguridad. Continuando tren al siguiente cliente en 2s...`);
+            log.debug(`🚂 [FERROCARRIL] Cliente ${clientRuc || ''} omitido con seguridad. Continuando tren al siguiente cliente en 2s...`);
             setTimeout(async () => {
                 if (typeof handleBatchNextClient === 'function') {
                     await handleBatchNextClient();
@@ -403,7 +403,7 @@ SafeStorage.get(null).then(async (items) => {
         // 🛑 BLINDAJE 1: YA DECLARADO — Si el cliente ya fue presentado para el período objetivo,
         // no tiene ningún sentido volver a iniciar sesión para declarar. Abortar auto-login y purgar.
         if (clientRuc && targetPer && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(clientRuc, targetPer)) {
-            console.warn(`🛑 [BLINDAJE LOGIN] ${clientRuc} ya fue declarado para ${SriAuditor.normalizarPeriodo(targetPer)}. Descartando autofill en pantalla de login para prevenir bucle.`);
+            log.warn(`🛑 [BLINDAJE LOGIN] ${clientRuc} ya fue declarado para ${SriAuditor.normalizarPeriodo(targetPer)}. Descartando autofill en pantalla de login para prevenir bucle.`);
             await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
             return;
         }
@@ -413,7 +413,7 @@ SafeStorage.get(null).then(async (items) => {
         if (typeof SriLoop !== 'undefined' && !items.pending_sri_autofill?.soloEstarAdentro) {
             const puede = await SriLoop.puedeAvanzar();
             if (!puede) {
-                console.warn('🛑 [LOGIN CANCELADO] El semáforo no está CORRIENDO. Descartando credenciales en pantalla de login para prevenir auto-login infinito.');
+                log.warn('🛑 [LOGIN CANCELADO] El semáforo no está CORRIENDO. Descartando credenciales en pantalla de login para prevenir auto-login infinito.');
                 await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
                 return;
             }
@@ -422,7 +422,7 @@ SafeStorage.get(null).then(async (items) => {
         // 🛑 BLINDAJE 3: SESIÓN YA COMPLETADA — Si ya había ingresado al portal con esta orden
         // y ahora está en la pantalla de login sin una acción pendiente legítima:
         if (items.pending_sri_autofill?.haEntradoAlPortal && !items.pendingAction) {
-            console.warn('🛑 [LOGIN CANCELADO] Esta orden ya completó su sesión en el portal. Descartando credenciales para evitar reingreso cíclico.');
+            log.warn('🛑 [LOGIN CANCELADO] Esta orden ya completó su sesión en el portal. Descartando credenciales para evitar reingreso cíclico.');
             await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
             return;
         }
@@ -439,7 +439,7 @@ SafeStorage.get(null).then(async (items) => {
             const isManual = !!(items.pending_sri_autofill && (items.pending_sri_autofill.manual || items.pending_sri_autofill.soloEstarAdentro));
             const checkVault = await SriCredentialVault.canAttemptLogin(clientRuc, clientPass, { isManual });
             if (!checkVault.allowed) {
-                console.warn(`🛑 [BLINDAJE SEGURIDAD PREVENTIVO] Omitiendo login de ${clientRuc}: ${checkVault.reason}`);
+                log.warn(`🛑 [BLINDAJE SEGURIDAD PREVENTIVO] Omitiendo login de ${clientRuc}: ${checkVault.reason}`);
                 await Omitidos.anotar(clientRuc, 'cuenta_bloqueada', {
                     nombre: items.pending_sri_autofill.name, detalle: checkVault.reason });
                 await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp']);
@@ -458,22 +458,22 @@ SafeStorage.get(null).then(async (items) => {
             }
         }
 
-        console.log(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
+        log.debug(`🚀 SRI Assistant: Auto-Login trigger detectado (${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc})...`);
         anotarBitacora('auto-login', items.pending_sri_autofill.name || items.pending_sri_autofill.ruc);
 
         // Si estamos en Keycloak pero no hay campos de login, es una pantalla de error o sesión rota de Keycloak
         if (window.location.href.includes('/auth/realms/') && !isExplicitlyOutside) {
-            console.warn('⚠️ [LOGIN KEYCLOAK] Pantalla de error o sesión expirada de Keycloak (sin campos de credenciales).');
+            log.warn('⚠️ [LOGIN KEYCLOAK] Pantalla de error o sesión expirada de Keycloak (sin campos de credenciales).');
             const restartLink = document.querySelector('a#kc-page-back, a.kc-login-restart, a[href*="login"], a[href*="restart"], a[href*="srienlinea"]');
             if (restartLink && esVisible(restartLink)) {
-                console.log('🔄 Reiniciando flujo de login desde enlace de Keycloak...');
+                log.debug('🔄 Reiniciando flujo de login desde enlace de Keycloak...');
                 restartLink.click();
                 return;
             }
             
             const clientRuc = items.pending_sri_autofill?.ruc;
             const clientName = items.pending_sri_autofill?.name || clientRuc;
-            console.warn(`🔌 [SESIÓN] Error en Keycloak para ${clientName}. Omitiendo y avanzando al siguiente cliente...`);
+            log.warn(`🔌 [SESIÓN] Error en Keycloak para ${clientName}. Omitiendo y avanzando al siguiente cliente...`);
             if (clientRuc) {
                 await Omitidos.anotar(clientRuc, 'sesion_caida', {
                     nombre: clientName,
@@ -494,7 +494,7 @@ SafeStorage.get(null).then(async (items) => {
 
         // Si estamos en la portada de inicio del SRI (ej. inicio/NAT), hacer clic en "Iniciar sesión" para ir a Keycloak
         if (!isExplicitlyOutside) {
-            console.log('⏳ Esperando que cargue el botón de Iniciar Sesión en la portada...');
+            log.debug('⏳ Esperando que cargue el botón de Iniciar Sesión en la portada...');
             let loginAttempts = 0;
             const loginInterval = setInterval(() => {
                 const loginLink = document.querySelector('pre.sri-iniciar-sesion') ||
@@ -505,7 +505,7 @@ SafeStorage.get(null).then(async (items) => {
 
                 if (loginLink) {
                     clearInterval(loginInterval);
-                    console.log('✅ Portada SRI detectada. Clickeando "Iniciar sesión" para ingresar...');
+                    log.info('✅ Portada SRI detectada. Clickeando "Iniciar sesión" para ingresar...');
                     if (typeof clickElement === 'function') clickElement(loginLink, 'Iniciar Sesión Portada');
                     else loginLink.click();
                     const parentLink = loginLink.closest('a, button');
@@ -515,7 +515,7 @@ SafeStorage.get(null).then(async (items) => {
                 loginAttempts++;
                 if (loginAttempts > 30) {
                     clearInterval(loginInterval);
-                    console.warn('⚠️ [LOGIN] No apareció el botón "Iniciar sesión" de la portada tras 6s. Si estabas en la pantalla de credenciales, avisá: el detector no la reconoció.');
+                    log.warn('⚠️ [LOGIN] No apareció el botón "Iniciar sesión" de la portada tras 6s. Si estabas en la pantalla de credenciales, avisá: el detector no la reconoció.');
                 }
             }, 200);
             return;
@@ -529,7 +529,7 @@ SafeStorage.get(null).then(async (items) => {
             const btn = campos && campos.btn;
 
             if (rucInput && passInput && btn) {
-                console.log('🔑 [LOGIN] Formulario localizado:',
+                log.debug('🔑 [LOGIN] Formulario localizado:',
                     `ruc=#${rucInput.id || rucInput.name || '(sin id)'}`,
                     `clave=#${passInput.id || passInput.name || '(sin id)'}`,
                     `botón="${(btn.innerText || btn.value || '').trim()}"`);
@@ -551,7 +551,7 @@ SafeStorage.get(null).then(async (items) => {
                 if (targetPass) {
                     escribirCampo(passInput, targetPass);
                 } else {
-                    console.warn('⚠️ [LOGIN] Sin clave para este RUC: el formulario queda a medio llenar.');
+                    log.warn('⚠️ [LOGIN] Sin clave para este RUC: el formulario queda a medio llenar.');
                 }
 
                 // Desactivar overlays de bloqueo de navegador del SRI si estuvieran activos
@@ -570,7 +570,7 @@ SafeStorage.get(null).then(async (items) => {
                             list[idx].password = passInput.value;
                             list[idx].sri_password = passInput.value;
                             await SafeStorage.set({ sc_clients_cache: list });
-                            console.log('💾 Clave SRI guardada localmente para próximas sesiones.');
+                            log.debug('💾 Clave SRI guardada localmente para próximas sesiones.');
                         }
                     }
                 });
@@ -589,7 +589,7 @@ SafeStorage.get(null).then(async (items) => {
                 });
 
                 if (!targetPass) {
-                    console.log('⚠️ Falta contraseña para este cliente. Esperando ingreso manual...');
+                    log.warn('⚠️ Falta contraseña para este cliente. Esperando ingreso manual...');
                     if (window.sriAssistant) {
                         window.sriAssistant.showEliteToast({
                             title: '🔑 Clave Requerida',
@@ -600,7 +600,7 @@ SafeStorage.get(null).then(async (items) => {
                     return;
                 }
 
-                console.log('✅ Credenciales inyectadas. Iniciando sesión...');
+                log.info('✅ Credenciales inyectadas. Iniciando sesión...');
                 setTimeout(() => {
                     if (typeof clickElement === 'function') clickElement(btn, 'Boton Login Keycloak');
                     else btn.click();
@@ -622,16 +622,16 @@ SafeStorage.get(null).then(async (items) => {
     if (avisoClave.pide) {
         const ruc = items.pending_sri_autofill?.ruc;
         const nombre = items.pending_sri_autofill?.name || ruc || 'este contribuyente';
-        console.warn(`🔑 [CLAVE] El SRI exige cambiar la clave de ${nombre} (por ${avisoClave.via}). ` +
+        log.warn(`🔑 [CLAVE] El SRI exige cambiar la clave de ${nombre} (por ${avisoClave.via}). ` +
                      'El bot NO cambia contraseñas.');
-        if (avisoClave.mensaje) console.warn(`   El portal dice: «${avisoClave.mensaje}»`);
+        if (avisoClave.mensaje) log.warn(`   El portal dice: «${avisoClave.mensaje}»`);
 
         if (ruc) {
             const resErr = await SafeStorage.get(['flagged_errors']);
             const errs = resErr.flagged_errors || {};
             errs[ruc] = true;
             await SafeStorage.set({ flagged_errors: errs });
-            console.log(`   ${nombre} queda marcado: el lote lo va a omitir.`);
+            log.debug(`   ${nombre} queda marcado: el lote lo va a omitir.`);
             await Omitidos.anotar(ruc, 'clave_caducada', { nombre });
             await marcarCredencialEnLaWeb(ruc, 'caducada', 'El SRI exige cambiar la clave antes de entrar');
             if (items.pendingAction === 'probar_clave' && typeof PruebaClaves !== 'undefined') {
@@ -648,7 +648,7 @@ SafeStorage.get(null).then(async (items) => {
         }
 
         if (await SriLoop.puedeAvanzar()) {
-            console.log('⏭️ [BUCLE] Saltando al siguiente cliente...');
+            log.debug('⏭️ [BUCLE] Saltando al siguiente cliente...');
             anotarBitacora('salta cliente', 'clave caducada');
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'pending_sri_autofill']);
             if (typeof handleBatchNextClient === 'function') await handleBatchNextClient();
@@ -687,14 +687,14 @@ SafeStorage.get(null).then(async (items) => {
                 // Estar en el último de la cola y sin credenciales significa
                 // que ya se lo procesó (u omitió) y el lote se acabó.
                 if ((sem.indice || 0) >= (sem.cola || []).length - 1) {
-                    console.log('🏁 [BUCLE] El lote ya terminó y este contribuyente quedó omitido. ' +
+                    log.info('🏁 [BUCLE] El lote ya terminó y este contribuyente quedó omitido. ' +
                                 'No hay nada que rescatar.');
                     await SriLoop.detener('Lote terminado');
                     return;
                 }
 
                 if (veces > 2) {
-                    console.error(`🚑 [RESCATE] ${cliente.name || cliente.ruc} ya se rescató 2 veces y sigue sin credenciales. Se detiene el lote.`);
+                    log.error(`🚑 [RESCATE] ${cliente.name || cliente.ruc} ya se rescató 2 veces y sigue sin credenciales. Se detiene el lote.`);
                     anotarBitacora('⛔ lote detenido', `rescate agotado en ${cliente.name || cliente.ruc}`);
                     await SriLoop.detener('Rescate agotado: algo borra las credenciales en cada vuelta');
                     return;
@@ -703,19 +703,19 @@ SafeStorage.get(null).then(async (items) => {
                 cont[cliente.ruc] = veces;
                 await SafeStorage.set({ sc_rescates: cont });
 
-                console.warn(`🚑 [RESCATE ${veces}/2] Lote sin credenciales en ${cliente.name || cliente.ruc}. Reponiéndolas desde el semáforo.`);
+                log.warn(`🚑 [RESCATE ${veces}/2] Lote sin credenciales en ${cliente.name || cliente.ruc}. Reponiéndolas desde el semáforo.`);
                 anotarBitacora('🚑 rescate', `${veces}/2 · credenciales repuestas: ${cliente.name || cliente.ruc}`);
                 await SriLoop.prepararCliente(cliente, sem.periodo || SriLoop.periodoPorDefecto());
                 await sleep(400);
                 window.location.reload();
                 return;
             }
-            console.warn('🚑 [RESCATE] El semáforo no tiene un cliente con clave en esta posición. Deteniendo el lote.');
+            log.warn('🚑 [RESCATE] El semáforo no tiene un cliente con clave en esta posición. Deteniendo el lote.');
             anotarBitacora('⛔ lote detenido', 'sin cliente con clave en el semáforo');
             await SriLoop.detener('Sin credenciales para el cliente en curso');
             return;
         }
-        console.log('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
+        log.debug('⏳ [BUCLE] Lote activo pero sin sesión todavía. Esperando el login.');
         anotarBitacora('esperando login', 'con credenciales');
     } else if (isAlreadyLoggedIn && (isFreshLogin || (!hasActiveAction && (isAutoFlow || (items.pending_sri_autofill && (items.pending_sri_autofill.isBatch || items.pending_sri_autofill.manual)))))) {
         if (typeof SriCredentialVault !== 'undefined' && items.pending_sri_autofill?.ruc) {
@@ -760,7 +760,7 @@ SafeStorage.get(null).then(async (items) => {
         if (items.pendingAction === 'probar_clave') {
             const ruc = quienEntro.ruc;
             const nombre = quienEntro.name || ruc || 'este contribuyente';
-            console.log(`🔑 [PROBAR CLAVES] ${nombre}: clave OK.`);
+            log.debug(`🔑 [PROBAR CLAVES] ${nombre}: clave OK.`);
             if (ruc && typeof PruebaClaves !== 'undefined') {
                 await PruebaClaves.anotar(ruc, 'ok', '', nombre);
             }
@@ -778,7 +778,7 @@ SafeStorage.get(null).then(async (items) => {
         if (items.pendingAction === 'solo_perfil' || quienEntro.soloEstarAdentro) {
             const ruc = quienEntro.ruc;
             const nombre = quienEntro.name || ruc || 'este contribuyente';
-            console.log(`🌐 [SOLO SESIÓN SRI] ${nombre} (${ruc}): Acceso completado con éxito. Permaneciendo en escritorio SRI.`);
+            log.info(`🌐 [SOLO SESIÓN SRI] ${nombre} (${ruc}): Acceso completado con éxito. Permaneciendo en escritorio SRI.`);
             if (ruc && typeof marcarCredencialEnLaWeb === 'function') {
                 marcarCredencialEnLaWeb(ruc, 'ok', 'Ingreso manual autorizado');
             }
@@ -789,7 +789,7 @@ SafeStorage.get(null).then(async (items) => {
                 const ingresos = (await SafeStorage.get(['sc_ultimo_ingreso_sri'])).sc_ultimo_ingreso_sri || {};
                 ingresos[ruc] = new Date().toISOString();
                 await SafeStorage.set({ sc_ultimo_ingreso_sri: ingresos });
-            } catch (e) {}
+            } catch (e) { /* sin registro de ingreso: no corta el login */ }
 
             await SafeStorage.remove([
                 'pending_sri_autofill',
@@ -815,7 +815,7 @@ SafeStorage.get(null).then(async (items) => {
             items.pendingAction !== 'bajar_todos_comprobantes' &&
             items.sri_verificacion_sello !== selloEsperado &&
             !location.href.includes('/contribuyente/perfil')) {
-            console.log(`👋 [PERFIL] Antes de nada, verifico las obligaciones de ${quienEntro.name || quienEntro.ruc}.`);
+            log.debug(`👋 [PERFIL] Antes de nada, verifico las obligaciones de ${quienEntro.name || quienEntro.ruc}.`);
             await SafeStorage.set({ actionTimestamp: Date.now() });
             window.location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/contribuyente/perfil';
             return;
@@ -835,7 +835,7 @@ SafeStorage.get(null).then(async (items) => {
         // tenía el salto al perfil, tres líneas más arriba.
         if (items.pendingAction === 'recuperar_comprobante' && items.recuperarComprobante &&
             typeof enConsultaDeclaraciones === 'function' && !enConsultaDeclaraciones()) {
-            console.log('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
+            log.debug('🧾 Sesión activa: este cliente ya declaró, vamos por su comprobante.');
             await SafeStorage.set({ actionTimestamp: Date.now() });
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
             return;
@@ -846,7 +846,7 @@ SafeStorage.get(null).then(async (items) => {
         // cliente pasa por Consulta de declaraciones a traer lo que le falte.
         if (items.pendingAction === 'bajar_todos_comprobantes' && items.bajarTodos &&
             typeof enConsultaDeclaraciones === 'function' && !enConsultaDeclaraciones()) {
-            console.log('🧾 Sesión activa: primero el comprobante, después declarar. Yendo a Consulta de declaraciones...');
+            log.debug('🧾 Sesión activa: primero el comprobante, después declarar. Yendo a Consulta de declaraciones...');
             await SafeStorage.set({ actionTimestamp: Date.now() });
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
             return;
@@ -876,12 +876,12 @@ SafeStorage.get(null).then(async (items) => {
                         urgencia: 'según el perfil',
                         pendiente: true
                     };
-                    console.log(`📋 [PERFIL] La API no contestó, pero el panel del perfil pide: ${delPanel.texto}`);
+                    log.debug(`📋 [PERFIL] La API no contestó, pero el panel del perfil pide: ${delPanel.texto}`);
                 }
             }
 
             if (pend) {
-                console.log(`📋 [SRI] IVA ${pend.periodoTexto} · vence ${pend.vence} ` +
+                log.debug(`📋 [SRI] IVA ${pend.periodoTexto} · vence ${pend.vence} ` +
                             `(${pend.dias} días, ${pend.urgencia}) · ${pend.estado}`);
                 await anotarBitacora('el SRI pide', `IVA ${pend.periodoTexto} · ${pend.estado}`);
 
@@ -890,10 +890,10 @@ SafeStorage.get(null).then(async (items) => {
                 const rucActual = quienEntro.ruc || items.pending_sri_autofill?.ruc || rucHeader;
                 const periodoObjetivo = pend.periodo || items.workflowPeriod;
                 if (rucActual && periodoObjetivo && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucActual, periodoObjetivo)) {
-                    console.warn(`🛑 [AUDITOR ANTI-BUCLE] El perfil sugiere declarar ${pend.periodoTexto}, pero ${rucActual} YA FUE DECLARADO.`);
+                    log.warn(`🛑 [AUDITOR ANTI-BUCLE] El perfil sugiere declarar ${pend.periodoTexto}, pero ${rucActual} YA FUE DECLARADO.`);
                     const faltaPdf = await SriAuditor.faltaComprobante(rucActual, periodoObjetivo);
                     if (faltaPdf && typeof irARecuperarComprobante === 'function') {
-                        console.log('🧾 [AUDITOR] Ya declarado pero falta comprobante oficial. Recuperando...');
+                        log.debug('🧾 [AUDITOR] Ya declarado pero falta comprobante oficial. Recuperando...');
                         if (window.sriAssistant?.showEliteToast) {
                             window.sriAssistant.showEliteToast({
                                 title: '🧾 Recuperando Comprobante',
@@ -905,7 +905,7 @@ SafeStorage.get(null).then(async (items) => {
                         return;
                     }
 
-                    console.log(`✅ [AUDITOR] ${quienEntro.name || rucActual} ya está al día para ${pend.periodoTexto}.`);
+                    log.info(`✅ [AUDITOR] ${quienEntro.name || rucActual} ya está al día para ${pend.periodoTexto}.`);
                     if (window.sriAssistant?.showEliteToast) {
                         window.sriAssistant.showEliteToast({
                             title: '✅ Declaración al Día',
@@ -930,7 +930,7 @@ SafeStorage.get(null).then(async (items) => {
                     (wp.year === pend.periodo.year && wp.monthIndex === pend.periodo.monthIndex);
 
                 if (!mismoPeriodo) {
-                    console.log(`📋 [SRI] El portal habla de ${pend.periodoTexto}, pero el lote va por ` +
+                    log.debug(`📋 [SRI] El portal habla de ${pend.periodoTexto}, pero el lote va por ` +
                                 `${wp.year}-${String(wp.monthIndex + 1).padStart(2, '0')}. ` +
                                 'No se concluye nada de ahí: sigue el flujo normal.');
                 } else if (!pend.pendiente) {
@@ -946,7 +946,7 @@ SafeStorage.get(null).then(async (items) => {
                     // lo presentado. Y si efectivamente está, de paso se baja
                     // su comprobante — que es lo que faltaba para cerrar el
                     // objetivo. Si no aparece, se declara normalmente.
-                    console.log(`🔍 [SRI] El aviso dice "${pend.estado}" para ${pend.periodoTexto}. ` +
+                    log.debug(`🔍 [SRI] El aviso dice "${pend.estado}" para ${pend.periodoTexto}. ` +
                                 'No alcanza para saltarlo: se comprueba en Consulta de declaraciones.');
                     await anotarBitacora('a comprobar', `${pend.periodoTexto} · el aviso dice ${pend.estado}`);
 
@@ -970,7 +970,7 @@ SafeStorage.get(null).then(async (items) => {
                     // Sin período fijado por el lote, el del portal es el bueno.
                     items.workflowPeriod = pend.periodo;
                     await SafeStorage.set({ workflowPeriod: pend.periodo });
-                    console.log(`📋 [SRI] Período tomado del portal: ${pend.periodoTexto}.`);
+                    log.debug(`📋 [SRI] Período tomado del portal: ${pend.periodoTexto}.`);
                 }
                 await SafeStorage.set({ sri_obligacion_actual: pend });
                 if (selloEsperado) await SafeStorage.set({ sri_verificacion_sello: selloEsperado });
@@ -978,7 +978,7 @@ SafeStorage.get(null).then(async (items) => {
                 // Sin obligación pendiente a la vista, el perfil todavía tiene
                 // algo que decir: si este contribuyente declara IVA o no.
                 const v = await SriLoopHUD.veredictoDelPerfil();
-                console.log(`📋 [PERFIL] Veredicto: ${v.veredicto} — ${v.motivo}`);
+                log.debug(`📋 [PERFIL] Veredicto: ${v.veredicto} — ${v.motivo}`);
                 await anotarBitacora('veredicto del perfil', `${v.veredicto} · ${v.motivo}`);
 
                 if (v.veredicto === 'no_declara_iva' && quienEntro.ruc) {
@@ -1033,9 +1033,9 @@ SafeStorage.get(null).then(async (items) => {
         // esta línea justamente cuando NO supo concluir nada.
         const YA_DECIDIDAS = ['recuperar_comprobante', 'bajar_todos_comprobantes', 'bajarTodos'];
         if (YA_DECIDIDAS.includes(items.pendingAction)) {
-            console.log(`🎯 [FLUJO] Ya hay algo decidido en curso («${items.pendingAction}»). ` +
+            log.debug(`🎯 [FLUJO] Ya hay algo decidido en curso («${items.pendingAction}»). ` +
                         'No se planta la extracción encima: eso rehacía todo el trabajo.');
-            console.log('🔄 Recuperando estado pendiente:', items);
+            log.debug('🔄 Recuperando estado pendiente:', items);
             const ghostData = await GhostMemory.getData();
             ejecutarAccionPendiente({ ...ghostData, ...items });
             return;
@@ -1045,7 +1045,7 @@ SafeStorage.get(null).then(async (items) => {
         // candado, después de un DETENER el perfil volvía a plantar
         // turbo_step1_facturas y el bucle seguía (09-sep-2026).
         if (await sePidioParar()) {
-            console.warn('🛑 [PARADA] Sesión activa pero se pidió parar: no se replanta turbo_step1.');
+            log.warn('🛑 [PARADA] Sesión activa pero se pidió parar: no se replanta turbo_step1.');
             await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
             return;
         }
@@ -1056,10 +1056,10 @@ SafeStorage.get(null).then(async (items) => {
         const rucSesion = quienEntro.ruc || items.pending_sri_autofill?.ruc || rucHeader;
         const periodoSesion = items.workflowPeriod || (typeof SriLoop !== 'undefined' ? await SriLoop.resolverPeriodoObjetivo() : null);
         if (rucSesion && periodoSesion && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(rucSesion, periodoSesion)) {
-            console.warn(`🛑 [AUDITOR ANTI-BUCLE] Sesión activa para ${rucSesion}, pero el período ya fue presentado. Abortando turbo_step1.`);
+            log.warn(`🛑 [AUDITOR ANTI-BUCLE] Sesión activa para ${rucSesion}, pero el período ya fue presentado. Abortando turbo_step1.`);
             const faltaPdf = await SriAuditor.faltaComprobante(rucSesion, periodoSesion);
             if (faltaPdf && typeof irARecuperarComprobante === 'function') {
-                console.log('🧾 [AUDITOR] Redirigiendo a recuperación de comprobante oficial...');
+                log.debug('🧾 [AUDITOR] Redirigiendo a recuperación de comprobante oficial...');
                 await irARecuperarComprobante(rucSesion, periodoSesion, quienEntro.name);
                 return;
             }
@@ -1075,7 +1075,7 @@ SafeStorage.get(null).then(async (items) => {
             return;
         }
 
-        console.log('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
+        log.debug('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
         let cMonth = now.getMonth() - 1;
@@ -1101,7 +1101,7 @@ SafeStorage.get(null).then(async (items) => {
 
         // Si ya estamos adentro y no estamos en la página de comprobantes recibidos, redirigir ordenadamente
         if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-            console.log('✈️ [AUTO FLIGHT] Navegando a Comprobantes Recibidos (Paso 1)...');
+            log.debug('✈️ [AUTO FLIGHT] Navegando a Comprobantes Recibidos (Paso 1)...');
             if (typeof navegarAComprobantes === 'function') {
                 navegarAComprobantes();
             } else {
@@ -1111,7 +1111,7 @@ SafeStorage.get(null).then(async (items) => {
         }
     } else if (items.pending_sri_autofill && items.pending_sri_autofill.loginAttempted) {
         // En login manual suelto: Respetar navegación manual
-        console.log('ℹ️ Login completado. Control manual respetado (sin auto-redirección).');
+        log.info('ℹ️ Login completado. Control manual respetado (sin auto-redirección).');
         await SafeStorage.set({
             pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
         });
@@ -1120,9 +1120,9 @@ SafeStorage.get(null).then(async (items) => {
     if (items.pendingAction) {
         if (isLoginPage && !isAlreadyLoggedIn && (items.pendingAction === 'startIvaNavigation' || items.pendingAction === 'verifyProfile' || items.pendingAction.includes('turbo'))) {
             if (autofillListo) {
-                console.log('🔑 SRI Assistant: En el login con credenciales cargadas. El auto-login se encarga.');
+                log.debug('🔑 SRI Assistant: En el login con credenciales cargadas. El auto-login se encarga.');
             } else {
-                console.log('🛑 SRI Assistant: Detectado Login sin credenciales. Esperando a que el usuario ingrese...');
+                log.debug('🛑 SRI Assistant: Detectado Login sin credenciales. Esperando a que el usuario ingrese...');
             }
             return;
         }
@@ -1131,12 +1131,12 @@ SafeStorage.get(null).then(async (items) => {
         // se ejecuta — se descarta (carrera entre el clic de DETENER y la
         // escritura del storage en la página que se está cerrando).
         if (await sePidioParar()) {
-            console.warn(`🛑 [PARADA] Acción «${items.pendingAction}» pendiente pero se pidió parar. Se descarta.`);
+            log.warn(`🛑 [PARADA] Acción «${items.pendingAction}» pendiente pero se pidió parar. Se descarta.`);
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'accionEnCurso', 'accionVueltas']);
             return;
         }
 
-        console.log('🔄 Recuperando estado pendiente:', items);
+        log.debug('🔄 Recuperando estado pendiente:', items);
         GhostMemory.getData().then(ghostData => {
             ejecutarAccionPendiente({ ...ghostData, ...items });
         });
@@ -1148,7 +1148,7 @@ async function ejecutarAccionPendiente(items) {
     if (location.search.includes('token=') &&
         !document.getElementById('frmPrincipal:ano') &&
         !document.getElementById('formPresentada:tblConsultaDeclaracion')) {
-        console.log('🚪 [PUENTE] Página de traspaso del SSO. Espero la redirección.');
+        log.debug('🚪 [PUENTE] Página de traspaso del SSO. Espero la redirección.');
         await SafeStorage.set({ actionTimestamp: Date.now() });
         return;
     }
@@ -1157,10 +1157,10 @@ async function ejecutarAccionPendiente(items) {
     if ((!items || !items.pendingAction) && window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
         let sem = null;
         if (typeof SriLoop !== 'undefined') {
-            try { sem = await SriLoop.get(); } catch (e) {}
+            try { sem = await SriLoop.get(); } catch (e) { /* sin estado del bucle: sem queda nulo */ }
         }
         if (sem && sem.estado === 'CORRIENDO') {
-            console.log('🔄 [AUTO-RECOVERY] En Comprobantes Recibidos con lote activo. Restaurando turbo_step1_facturas...');
+            log.debug('🔄 [AUTO-RECOVERY] En Comprobantes Recibidos con lote activo. Restaurando turbo_step1_facturas...');
             if (!items) items = {};
             items.pendingAction = 'turbo_step1_facturas';
             if (!items.workflowPeriod && sem.periodo) items.workflowPeriod = sem.periodo;
@@ -1178,13 +1178,13 @@ async function ejecutarAccionPendiente(items) {
     if (items.actionTimestamp) {
         const diff = Date.now() - items.actionTimestamp;
         if (diff > 120000) { // 2 minutos (120,000 ms)
-            console.log(`💀 Acción Caducada detectada (${items.pendingAction}, ${Math.round(diff / 1000)}s old). Limpiando...`);
+            log.debug(`💀 Acción Caducada detectada (${items.pendingAction}, ${Math.round(diff / 1000)}s old). Limpiando...`);
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'sriAutomationPaused']);
             return;
         }
     } else {
         if (window.location.href.includes('inicio.jsf') || window.location.href.includes('login')) {
-            console.log('💀 Acción Legacy sin timestamp en Inicio. Limpiando...');
+            log.debug('💀 Acción Legacy sin timestamp en Inicio. Limpiando...');
             await SafeStorage.remove(['pendingAction']);
             return;
         }
@@ -1198,11 +1198,11 @@ async function ejecutarAccionPendiente(items) {
         const sem = await SriLoop.get();
         if (sem.estado === 'PAUSADO' || sem.estado === 'PAUSANDO') {
             // En pausa NO se toca nada: el cliente y su acción quedan esperando.
-            console.log(`⏸️ [BUCLE] En pausa en ${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc}. Todo queda guardado; pulsá ▶ para seguir.`);
+            log.debug(`⏸️ [BUCLE] En pausa en ${items.pending_sri_autofill.name || items.pending_sri_autofill.ruc}. Todo queda guardado; pulsá ▶ para seguir.`);
             anotarBitacora('en pausa', items.pending_sri_autofill.name || items.pending_sri_autofill.ruc);
             return;
         }
-        console.log('🧹 Acción de lote descartada: el semáforo está DETENIDO. Usá ▶ para arrancar.');
+        log.debug('🧹 Acción de lote descartada: el semáforo está DETENIDO. Usá ▶ para arrancar.');
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'workflowPeriod', 'pending_sri_autofill']);
         return;
     }
@@ -1220,7 +1220,7 @@ async function ejecutarAccionPendiente(items) {
                 enPantalla = { ruc: String(p.identificacion), highConfidence: true };
                 fuente = 'la API del perfil';
                 if (enPantalla.ruc !== esperado) {
-                    console.error(`🪪 [IDENTIDAD] El portal dice que la sesión es de ${enPantalla.ruc}, ` +
+                    log.error(`🪪 [IDENTIDAD] El portal dice que la sesión es de ${enPantalla.ruc}, ` +
                                   `y el lote espera a ${esperado}.`);
                 }
             }
@@ -1243,14 +1243,14 @@ async function ejecutarAccionPendiente(items) {
         const soloCabecera = fuente === 'la cabecera de la página';
 
         if (selloFresco && soloCabecera && enPantalla.ruc && enPantalla.ruc !== esperado) {
-            console.warn(`🪪 [IDENTIDAD] La cabecera muestra a ${enPantalla.ruc}, pero el SRI aceptó la clave ` +
+            log.warn(`🪪 [IDENTIDAD] La cabecera muestra a ${enPantalla.ruc}, pero el SRI aceptó la clave ` +
                          `de ${esperado} hace ${Math.round((Date.now() - sello.ts) / 1000)}s. ` +
                          'Es la cabecera vieja de otra pantalla: sigo con el cliente correcto.');
             enPantalla = {};
         }
 
         if (enPantalla.ruc && enPantalla.highConfidence && enPantalla.ruc !== esperado) {
-            console.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
+            log.error(`🪪 [IDENTIDAD] La sesión abierta es de ${enPantalla.ruc} pero el lote espera a ${esperado}. ` +
                           'No se toca nada: se purga la sesión y se avanza al siguiente cliente del lote.');
             anotarBitacora('⛔ identidad no coincide', `sesión=${enPantalla.ruc} · esperado=${esperado}`);
 
@@ -1261,7 +1261,7 @@ async function ejecutarAccionPendiente(items) {
             intentos[esperado] = (intentos[esperado] || 0) + 1;
             await SafeStorage.set({ [kIntentos]: intentos });
             if (intentos[esperado] >= 3) {
-                console.error(`🛑 [IDENTIDAD] Tercer desencuentro seguido con ${esperado}. ` +
+                log.error(`🛑 [IDENTIDAD] Tercer desencuentro seguido con ${esperado}. ` +
                               'Freno el lote: seguir sería martillar el login del SRI y arriesgar el bloqueo de la cuenta.');
                 anotarBitacora('🛑 lote detenido', `identidad irresoluble en ${esperado}`);
                 if (typeof SriLoop !== 'undefined') await SriLoop.detener('identidad irresoluble');
@@ -1299,13 +1299,13 @@ async function ejecutarAccionPendiente(items) {
     if (!(await checkSessionAlive())) {
         const url = window.location.href.toLowerCase();
         if (url.includes('/auth/realms/') || url.includes('login')) {
-            console.log('🔒 Esperando login del usuario...');
+            log.debug('🔒 Esperando login del usuario...');
             return;
         }
         return;
     }
 
-    console.log(`🔎 Acción pendiente detectada: ${items.pendingAction}`);
+    log.debug(`🔎 Acción pendiente detectada: ${items.pendingAction}`);
 
     let retries = 0;
     while ((!window.sriAssistant || !window.sriAssistant.container) && retries < 20) {
@@ -1380,7 +1380,7 @@ async function ejecutarAccionPendiente(items) {
         // ELITE FIX: Si hay un flujo automático explícito activo ordenado recientemente (<120s),
         // despausar automáticamente para evitar quedar bloqueado por un estado pausado previo
         if (enAutomatico && items.actionTimestamp && (Date.now() - items.actionTimestamp < 120000)) {
-            console.log('🔓 [AUTORUN] Flujo automático activo detectado (<120s). Reactivando sistema previamente pausado...');
+            log.debug('🔓 [AUTORUN] Flujo automático activo detectado (<120s). Reactivando sistema previamente pausado...');
             await SafeStorage.set({ sriAutomationPaused: false, ghost_manual_mode: false });
             if (window.sriAssistant) {
                 window.sriAssistant.isPaused = false;
@@ -1388,7 +1388,7 @@ async function ejecutarAccionPendiente(items) {
                 window.sriAssistant.updatePauseUI();
             }
         } else {
-            console.log('⏸️ El sistema está pausado. No se retomarán acciones pendientes.');
+            log.debug('⏸️ El sistema está pausado. No se retomarán acciones pendientes.');
             if (window.sriAssistant) {
                 window.sriAssistant.isPaused = true;
                 window.sriAssistant.render();
@@ -1400,11 +1400,11 @@ async function ejecutarAccionPendiente(items) {
     // --- WORKFLOW TURBO (CICLO COMPLETO) ---
     let currentAction = items.pendingAction;
     if (currentAction?.startsWith('turbo_')) {
-        console.log(`🚀 MODO TURBO (Local State): ${currentAction}`);
+        log.debug(`🚀 MODO TURBO (Local State): ${currentAction}`);
 
         // Si no estamos en la página de comprobantes recibidos, redirigir directamente
         if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-            console.log('🚀 [MODO TURBO] Redirigiendo vía puente a Comprobantes Recibidos...');
+            log.debug('🚀 [MODO TURBO] Redirigiendo vía puente a Comprobantes Recibidos...');
             if (typeof renderEmergencyStopBar === 'function') renderEmergencyStopBar();
             window.location.href = SRI_PUENTE_RECIBIDOS;
             return;
@@ -1422,7 +1422,7 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ Confirmado: No hay Facturas para este periodo.');
+                log.debug('ℹ️ Confirmado: No hay Facturas para este periodo.');
                 await GhostMemory.set('facturas', { totalFacturas: 0, iva15: { cantidad: 0 }, iva0: { cantidad: 0 } });
                 const nextAction = getNextTurboStep('turbo_step2_extraer_facturas', items);
                 if (nextAction === 'FIN_TURBO') {
@@ -1433,19 +1433,19 @@ async function ejecutarAccionPendiente(items) {
                     return;
                 }
             } else if (searchRes.tableFound && searchRes.desdeTxt && Array.isArray(searchRes.filasTxt)) {
-                console.log(`📊 [TXT OFICIAL] Procesando ${searchRes.filasTxt.length} facturas recuperadas directamente desde el listado TXT del SRI...`);
+                log.debug(`📊 [TXT OFICIAL] Procesando ${searchRes.filasTxt.length} facturas recuperadas directamente desde el listado TXT del SRI...`);
                 let rucsAl5 = new Set();
                 if (typeof Proveedores !== 'undefined') {
                     try {
                         await Proveedores.registrarLote(searchRes.filasTxt, await rucDelClienteActual());
                         rucsAl5 = await Proveedores.losQueFacturanAl5();
-                    } catch (e) { console.warn('🏷️ [PROVEEDORES] Error anotando desde TXT:', e.message); }
+                    } catch (e) { log.warn('🏷️ [PROVEEDORES] Error anotando desde TXT:', e.message); }
                 }
                 const res = (typeof calcularResumen === 'function')
                     ? calcularResumen(searchRes.filasTxt, { rucsAl5 })
                     : { totalFacturas: searchRes.filasTxt.length };
                 await GhostMemory.set('facturas', res);
-                console.log(`✅ [TXT OFICIAL] Facturas procesadas y guardadas: ${res.totalFacturas || searchRes.filasTxt.length}`);
+                log.info(`✅ [TXT OFICIAL] Facturas procesadas y guardadas: ${res.totalFacturas || searchRes.filasTxt.length}`);
 
                 const nextAction = getNextTurboStep('turbo_step2_extraer_facturas', items);
                 await SafeStorage.set({
@@ -1459,7 +1459,7 @@ async function ejecutarAccionPendiente(items) {
                     return;
                 }
             } else if (!searchRes.tableFound && searchRes.error) {
-                console.warn('⚠️ [ALERTA] La búsqueda de facturas no concluyó en el portal SRI. Reintentando consulta...');
+                log.warn('⚠️ [ALERTA] La búsqueda de facturas no concluyó en el portal SRI. Reintentando consulta...');
                 await SafeStorage.set({ pendingAction: 'turbo_step1_facturas' });
                 await sleep(1500);
                 window.location.reload();
@@ -1485,7 +1485,7 @@ async function ejecutarAccionPendiente(items) {
                     // insumo del laboratorio de clasificación.
                     if (informe.proveedores.length) {
                         await SafeStorage.set({ sc_proveedores_periodo: informe.proveedores });
-                        console.log(`🧪 [PROVEEDORES] ${informe.proveedores.length} emisores distintos en el período.`);
+                        log.debug(`🧪 [PROVEEDORES] ${informe.proveedores.length} emisores distintos en el período.`);
                     }
                 }
             } catch (e) { /* auditar nunca puede frenar la extracción */ }
@@ -1514,7 +1514,7 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ Confirmado fehacientemente: No hay retenciones para este periodo.');
+                log.debug('ℹ️ Confirmado fehacientemente: No hay retenciones para este periodo.');
                 await GhostMemory.set('retenciones', { totalRetenciones: 0, ivaRetenido: { total: 0 }, rentaRetenida: { total: 0 }, listaNumeros: [] });
 
                 const nextAction = getNextTurboStep('turbo_step4_extraer_retenciones', items);
@@ -1527,7 +1527,7 @@ async function ejecutarAccionPendiente(items) {
                     return;
                 }
             } else if (!searchRes.tableFound && searchRes.error) {
-                console.warn('⚠️ [ALERTA] La búsqueda de retenciones no concluyó de forma fehaciente en el portal SRI. Reintentando consulta...');
+                log.warn('⚠️ [ALERTA] La búsqueda de retenciones no concluyó de forma fehaciente en el portal SRI. Reintentando consulta...');
                 if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de retenciones (sin respuesta del SRI)...');
                 await SafeStorage.set({ pendingAction: 'turbo_step3_retenciones' });
                 await sleep(1500);
@@ -1569,11 +1569,11 @@ async function ejecutarAccionPendiente(items) {
             });
 
             if (searchRes.noData) {
-                console.log('ℹ️ Confirmado fehacientemente: No hay Notas de Crédito para este periodo.');
+                log.debug('ℹ️ Confirmado fehacientemente: No hay Notas de Crédito para este periodo.');
                 await GhostMemory.set('notasCredito', { totalNotas: 0, iva: { total: 0 }, totalGeneral: 0 });
                 currentAction = 'FIN_TURBO';
             } else if (!searchRes.tableFound && searchRes.error) {
-                console.warn('⚠️ [ALERTA] La búsqueda de notas de crédito no concluyó fehacientemente. Reintentando...');
+                log.warn('⚠️ [ALERTA] La búsqueda de notas de crédito no concluyó fehacientemente. Reintentando...');
                 if (window.sriAssistant) window.sriAssistant.log('⚠️ Reintentando búsqueda de notas de crédito...');
                 await SafeStorage.set({ pendingAction: 'turbo_step5_notas_credito' });
                 await sleep(1500);
@@ -1635,7 +1635,7 @@ async function ejecutarAccionPendiente(items) {
                     return;
                 } else {
                     // FIN DEL BULK TOTAL
-                    console.log('🏆 FIN DE EXTRACCIÓN MASIVA.');
+                    log.debug('🏆 FIN DE EXTRACCIÓN MASIVA.');
                     if (window.sriAssistant) window.sriAssistant.log('🏆 FIN DE EXTRACCIÓN MASIVA.');
 
                     // Actualizar para el bloque de agregación mas adelante
@@ -1657,7 +1657,7 @@ async function ejecutarAccionPendiente(items) {
                 const porSemaforo = await SriLoop.puedeAvanzar();
                 const porBandera = storage.autoDeclaration === true;
                 const isAuto = !isOnlyExtract && (porSemaforo || porBandera);
-                console.log(`🔀 [FASE 1→2] Extracción lista. ¿Pasar a declarar? ${isAuto ? 'SÍ' : 'NO'} ` +
+                log.debug(`🔀 [FASE 1→2] Extracción lista. ¿Pasar a declarar? ${isAuto ? 'SÍ' : 'NO'} ` +
                             `(semáforo=${porSemaforo}, autoDeclaration=${porBandera}, onlyExtract=${isOnlyExtract})`);
                 anotarBitacora('extracción lista',
                     isAuto ? 'pasa a declarar' : `⚠️ NO pasa (semáforo=${porSemaforo}, bandera=${porBandera}, onlyExtract=${isOnlyExtract})`);
@@ -1786,7 +1786,7 @@ async function ejecutarAccionPendiente(items) {
         await SafeStorage.remove(['pendingAction', 'bulkFlow', 'sriAutomationPaused', 'onlyExtract']);
         
         if (isAuto) {
-            console.log('🔄 Modo Auto activado. Continuando con el lote o cerrando sesión...');
+            log.debug('🔄 Modo Auto activado. Continuando con el lote o cerrando sesión...');
             if (typeof handleBatchNextClient === 'function') {
                 const batchNext = await handleBatchNextClient();
                 if (!batchNext && typeof cerrarSesionSRI === 'function') {
@@ -1803,7 +1803,7 @@ async function ejecutarAccionPendiente(items) {
     // CASO REDIRIGIDO: Directo a Comprobantes Recibidos
     if (items.pendingAction === 'verifyProfile') {
         let targetPeriod = items.workflowPeriod;
-        console.log('🔄 verifyProfile redirigiendo directamente a Comprobantes Recibidos (turbo_step1_facturas)...', targetPeriod);
+        log.debug('🔄 verifyProfile redirigiendo directamente a Comprobantes Recibidos (turbo_step1_facturas)...', targetPeriod);
         await SafeStorage.set({
             pendingAction: 'turbo_step1_facturas',
             checkFacturas: true,
@@ -1823,12 +1823,12 @@ async function ejecutarAccionPendiente(items) {
 
     // CASO 2: Navegación al Formulario IVA Wizard (INDESTRUCTIBLE v9.9)
     if (items.pendingAction === 'startIvaNavigation') {
-        console.log(`🔎 Check Navegación: Periodo=${JSON.stringify(items.workflowPeriod)} Host=${window.location.hostname}`);
+        log.debug(`🔎 Check Navegación: Periodo=${JSON.stringify(items.workflowPeriod)} Host=${window.location.hostname}`);
 
         // Auto-reparación: Si no hay periodo, usar mes anterior por defecto
         let targetPeriod = items.workflowPeriod;
         if (!targetPeriod) {
-            console.warn('⚠️ No se encontró workflowPeriod. Usando Mes Anterior por defecto.');
+            log.warn('⚠️ No se encontró workflowPeriod. Usando Mes Anterior por defecto.');
             const today = new Date();
             const prevMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
             targetPeriod = {
@@ -1838,9 +1838,9 @@ async function ejecutarAccionPendiente(items) {
         }
 
         if (window.location.hostname.includes('sri.gob.ec')) {
-            console.log('🔄 Ejecutando: Navegación IVA 2011 hacia', targetPeriod);
+            log.debug('🔄 Ejecutando: Navegación IVA 2011 hacia', targetPeriod);
             if (window.__sriNavRunning) {
-                console.log('⏩ Navegación ya está en ejecución en esta vista.');
+                log.debug('⏩ Navegación ya está en ejecución en esta vista.');
                 return;
             }
             window.__sriNavRunning = true;
@@ -1848,11 +1848,11 @@ async function ejecutarAccionPendiente(items) {
             if (typeof ejecutarNavegacionDeclaracion === 'function') {
                 ejecutarNavegacionDeclaracion(targetPeriod);
             } else {
-                console.error('❌ CRÍTICO: ejecutarNavegacionDeclaracion no está definida.');
+                log.error('❌ CRÍTICO: ejecutarNavegacionDeclaracion no está definida.');
                 if (window.sriAssistant) window.sriAssistant.showEliteToast({ title: 'Error Crítico', msg: 'Falló la carga del motor de navegación.' });
             }
         } else {
-            console.warn('⚠️ Hostname no coincide con SRI:', window.location.hostname);
+            log.warn('⚠️ Hostname no coincide con SRI:', window.location.hostname);
         }
         return;
     }
@@ -1865,7 +1865,7 @@ async function ejecutarAccionPendiente(items) {
     // 🧾 Traer TODOS los comprobantes: el objetivo general del proyecto.
     if (items.pendingAction === 'bajar_todos_comprobantes' && items.bajarTodos) {
         if (!enConsultaDeclaraciones()) {
-            console.log('🧾 [TODOS] Esperando llegar a Consulta de declaraciones...');
+            log.debug('🧾 [TODOS] Esperando llegar a Consulta de declaraciones...');
             await SafeStorage.set({ actionTimestamp: Date.now() });
             return;
         }
@@ -1898,7 +1898,7 @@ async function ejecutarAccionPendiente(items) {
         if (items.bajarTodos.continuarCon) {
             const periodoSiguiente = items.bajarTodos.continuarPeriodo ||
                 (typeof SriLoop !== 'undefined' ? SriLoop.periodoPorDefecto() : null);
-            console.log(`🧾→🚀 [BUCLE] Comprobantes al día. Ahora sí: ${items.bajarTodos.continuarCon}.`);
+            log.debug(`🧾→🚀 [BUCLE] Comprobantes al día. Ahora sí: ${items.bajarTodos.continuarCon}.`);
             await SafeStorage.set({
                 pendingAction: items.bajarTodos.continuarCon,
                 workflowPeriod: periodoSiguiente,
@@ -1922,7 +1922,7 @@ async function ejecutarAccionPendiente(items) {
     }
 
     if (items.pendingAction === 'recoverPDF') {
-        console.log('🛑 [SRI ASSISTANT] recoverPDF anulado por el usuario. Limpiando acción pendiente...');
+        log.debug('🛑 [SRI ASSISTANT] recoverPDF anulado por el usuario. Limpiando acción pendiente...');
         await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
         return;
     }
@@ -1932,7 +1932,7 @@ async function ejecutarAccionPendiente(items) {
         const type = items.pendingAction.includes('Retencion') ? 'Retencion' : 'Factura';
         const period = items.workflowPeriod || { year: new Date().getFullYear(), monthIndex: new Date().getMonth() - 1 };
 
-        console.log(`🔄 Ejecutando: Llenar Búsqueda ${type}`);
+        log.debug(`🔄 Ejecutando: Llenar Búsqueda ${type}`);
         await autoLlenarBusqueda({ ...period, tipoComprobante: type, autoClickConsultar: true });
         await SafeStorage.remove(['pendingAction']);
         if (window.sriAssistant) window.sriAssistant.setWorking(false);
@@ -1959,17 +1959,17 @@ async function autoLlenarBusqueda(data) {
     const currMonth = now.getMonth();
 
     if (data && (parseInt(data.year) > currYear || (parseInt(data.year) === currYear && parseInt(data.monthIndex) >= currMonth))) {
-        console.error('🚫 Bloqueo de Seguridad: Intento de búsqueda en periodo futuro/abierto.');
+        log.error('🚫 Bloqueo de Seguridad: Intento de búsqueda en periodo futuro/abierto.');
         if (window.sriAssistant) window.sriAssistant.log('🚫 Error: No se pueden extraer datos de periodos futuros o el mes en curso.');
         return { tableFound: false, error: 'Future date' };
     }
 
-    console.log('🚀 Iniciando configuración de búsqueda con:', data);
+    log.debug('🚀 Iniciando configuración de búsqueda con:', data);
 
     // 1. Verificar si estamos en la página correcta, si no, navegar
     const urlActual = window.location.href;
     if (!urlActual.includes('comprobantesRecibidos.jsf')) {
-        console.log('🔄 No estamos en Comprobantes Recibidos, intentando navegar...');
+        log.debug('🔄 No estamos en Comprobantes Recibidos, intentando navegar...');
         const navegado = await navegarAComprobantes();
         if (!navegado) {
             throw new Error('No se pudo navegar automáticamante. Por favor ve a "Comprobantes electrónicos recibidos" manualmente.');
@@ -1979,7 +1979,7 @@ async function autoLlenarBusqueda(data) {
 
     // Si solo queríamos navegar, terminamos aquí
     if (data && data.onlyNavigate) {
-        console.log('✅ Navegación completada (modo solo navegación).');
+        log.info('✅ Navegación completada (modo solo navegación).');
         return { periodo: 'Navegación', tipo: '-' };
     }
 
@@ -2001,10 +2001,10 @@ async function autoLlenarBusqueda(data) {
 
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
     const mesNombre = meses[mesIndex];
-    console.log(`📅 Configurando para: ${mesNombre} ${anio}`);
+    log.debug(`📅 Configurando para: ${mesNombre} ${anio}`);
 
     // 3. Interactuar con los Selects (ID-Based v12.0)
-    console.log('🎯 Detectando selectores de búsqueda...');
+    log.debug('🎯 Detectando selectores de búsqueda...');
 
     // Función helper para obtener selectores por ID (robusto con escaping de JSF)
     const getSelect = (id) => {
@@ -2039,7 +2039,7 @@ async function autoLlenarBusqueda(data) {
             throw new Error('PORTAL_CAIDO: ' + salud.motivo);
         }
 
-        if (intento === 0) console.log('⏳ Esperando a que cargue el formulario de búsqueda...');
+        if (intento === 0) log.debug('⏳ Esperando a que cargue el formulario de búsqueda...');
         await sleep(500);
     }
 
@@ -2058,13 +2058,13 @@ async function autoLlenarBusqueda(data) {
                     document.querySelectorAll('select')[3];
 
     if (!selAnio || !selMes) {
-        console.warn(`⚠️ No aparecieron los selectores de Año/Mes en ${location.pathname.split('/').pop()}. ` +
+        log.warn(`⚠️ No aparecieron los selectores de Año/Mes en ${location.pathname.split('/').pop()}. ` +
                      'Si el portal está redirigiendo, se resuelve en la próxima carga.');
         throw new Error('No se encontraron los selectores de Año/Mes. Verifica que la página cargó bien.');
     }
 
     // A. Seleccionar AÑO
-    console.log(`📅 Seleccionando año: ${anio}`);
+    log.debug(`📅 Seleccionando año: ${anio}`);
     selAnio.value = anio.toString();
     selAnio.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(800); // Esperar que JSF/Ajax refresque el mes
@@ -2082,7 +2082,7 @@ async function autoLlenarBusqueda(data) {
         });
 
         if (opcionMes) {
-            console.log(`✅ Mes hallado en intento ${attempt + 1}: ${mesNombre}`);
+            log.info(`✅ Mes hallado en intento ${attempt + 1}: ${mesNombre}`);
             currentSelMes.value = opcionMes.value;
             currentSelMes.dispatchEvent(new Event('input', { bubbles: true }));
             currentSelMes.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2090,7 +2090,7 @@ async function autoLlenarBusqueda(data) {
             // VERIFICACIÓN ELITE: Esperar y re-verificar que no se haya reseteado por Ajax tardío
             await sleep(600);
             if (currentSelMes.value !== opcionMes.value) {
-                console.warn('⚠️ El mes se reseteó tras la selección. Reintentando...');
+                log.warn('⚠️ El mes se reseteó tras la selección. Reintentando...');
                 currentSelMes.value = opcionMes.value;
                 currentSelMes.dispatchEvent(new Event('change', { bubbles: true }));
             }
@@ -2100,7 +2100,7 @@ async function autoLlenarBusqueda(data) {
         }
         await sleep(500);
     }
-    if (!mesSeleccionado) console.warn(`⚠️ No se pudo seleccionar el mes ${mesNombre}.`);
+    if (!mesSeleccionado) log.warn(`⚠️ No se pudo seleccionar el mes ${mesNombre}.`);
 
     // C. Seleccionar DIA -> "Todos"
     if (selDia) {
@@ -2129,7 +2129,7 @@ async function autoLlenarBusqueda(data) {
         );
 
         if (opcion) {
-            console.log(`✅ Tipo documento: ${opcion.text}`);
+            log.info(`✅ Tipo documento: ${opcion.text}`);
             if (selTipo.value !== opcion.value) {
                 selTipo.value = opcion.value;
                 selTipo.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2145,11 +2145,11 @@ async function autoLlenarBusqueda(data) {
 
     // CLICK EN BOTÓN CONSULTAR (Opcional según autoClickConsultar)
     if (data.autoClickConsultar === false) {
-        console.log('✅ Filtros configurados. Esperando click manual en Consultar.');
+        log.info('✅ Filtros configurados. Esperando click manual en Consultar.');
         return { tableFound: false };
     }
 
-    console.log('🔎 Buscando botón Consultar...');
+    log.debug('🔎 Buscando botón Consultar...');
     // ID TATUADO OFICIAL CONFIRMADO: frmPrincipal:btnConsultarSinRe (o fallback frmPrincipal:btnConsultar)
     const directBtn = document.getElementById('frmPrincipal:btnConsultarSinRe') || document.getElementById('frmPrincipal:btnConsultar');
     let btnConsultar = (directBtn && esVisible(directBtn)) ? directBtn : null;
@@ -2165,7 +2165,7 @@ async function autoLlenarBusqueda(data) {
     if (btnConsultar) {
         // En modo Turbo, guardamos el siguiente estado ANTES de clickear por si hay reload
         if (data.nextStep) {
-            console.log(`💾 Guardando siguiente paso Turbo: ${data.nextStep}`);
+            log.debug(`💾 Guardando siguiente paso Turbo: ${data.nextStep}`);
             await SafeStorage.set({
                 pendingAction: data.nextStep,
                 actionTimestamp: Date.now(),
@@ -2206,11 +2206,11 @@ async function autoLlenarBusqueda(data) {
                               btnConsultar;
 
             if (!btnActual) {
-                console.warn('⚠️ No se encontró botón Consultar en el DOM.');
+                log.warn('⚠️ No se encontró botón Consultar en el DOM.');
                 return;
             }
 
-            console.log('🎯 [SRI] Clic certero en Consultar:', btnActual.id || btnActual);
+            log.debug('🎯 [SRI] Clic certero en Consultar:', btnActual.id || btnActual);
             if (window.sriAssistant) {
                 window.sriAssistant.log(`🔎 Consultando ${data.tipoComprobante || 'comprobantes'} en el portal SRI...`);
             }
@@ -2223,7 +2223,7 @@ async function autoLlenarBusqueda(data) {
         dispararClicConsultar();
 
         // ESPERAR Y VERIFICAR SI CARGA LA TABLA O MENSAJE VERÍDICO (Skip Captcha)
-        console.log('⏳ Esperando respuesta del SRI (Polling fehaciente)...');
+        log.debug('⏳ Esperando respuesta del SRI (Polling fehaciente)...');
         let tableFound = false;
 
         // Intentar detectar durante 30 segundos (60 intentos x 500ms)
@@ -2236,7 +2236,7 @@ async function autoLlenarBusqueda(data) {
                 : { encontrado: false };
 
             if (noDataVerificado.encontrado) {
-                console.warn(`⚡ [Fast-Fail Verídico] Mensaje confirmado del SRI: "${noDataVerificado.texto}"`);
+                log.warn(`⚡ [Fast-Fail Verídico] Mensaje confirmado del SRI: "${noDataVerificado.texto}"`);
                 if (window.sriAssistant) {
                     window.sriAssistant.log(`ℹ️ Confirmado por SRI: No existen comprobantes.`);
                 }
@@ -2246,7 +2246,7 @@ async function autoLlenarBusqueda(data) {
             // Detección de Tabla Vacía (PrimeFaces empty message visible)
             const emptyTable = document.querySelector('.ui-datatable-empty-message');
             if (emptyTable && esVisible(emptyTable)) {
-                console.warn('⚡ [Fast-Fail Verídico] Tabla vacía de PrimeFaces encontrada.');
+                log.warn('⚡ [Fast-Fail Verídico] Tabla vacía de PrimeFaces encontrada.');
                 return { tableFound: false, noData: true };
             }
 
@@ -2259,7 +2259,7 @@ async function autoLlenarBusqueda(data) {
             const tieneFilasReales = filasConDatos.length > 0 && Array.from(filasConDatos).some(r => r.querySelectorAll('td').length >= 3);
 
             if (tieneFilasReales || (numeroCeldas > 10 && document.body.innerText.includes('Clave de Acceso'))) {
-                console.log(`✅ [SRI] Tabla con datos detectada (Filas: ${filasConDatos.length}, Celdas: ${numeroCeldas}).`);
+                log.info(`✅ [SRI] Tabla con datos detectada (Filas: ${filasConDatos.length}, Celdas: ${numeroCeldas}).`);
                 if (window.sriAssistant) {
                     window.sriAssistant.log(`✅ Comprobantes encontrados en el portal SRI.`);
                 }
@@ -2277,48 +2277,48 @@ async function autoLlenarBusqueda(data) {
 
                 if (!isStatusActive) {
                     const intentoNum = i <= 7 ? 2 : (i <= 15 ? 3 : 4);
-                    console.log(`🔄 Reintentando clic en Consultar (intento ${intentoNum})...`);
+                    log.debug(`🔄 Reintentando clic en Consultar (intento ${intentoNum})...`);
                     if (window.sriAssistant) {
                         window.sriAssistant.log(`🔄 Reintentando clic en Consultar (${data.tipoComprobante || 'comprobantes'} - intento ${intentoNum})...`);
                     }
                     dispararClicConsultar();
                 } else {
-                    console.log('⏳ Portal SRI procesando consulta (diálogo de espera activo)...');
+                    log.debug('⏳ Portal SRI procesando consulta (diálogo de espera activo)...');
                 }
             }
         }
 
         if (tableFound) {
-            console.log('✅ Tabla presente. Auto-Skipping Captcha.');
+            log.info('✅ Tabla presente. Auto-Skipping Captcha.');
             return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: true };
         }
 
     } else {
-        console.warn('⚠️ No se encontró el botón Consultar');
+        log.warn('⚠️ No se encontró el botón Consultar');
     }
 
     // FALLBACK DE SEGURIDAD NATIVO: Si el polling finalizó sin tabla ni mensaje explícito,
     // consultar directamente vía POST al endpoint de TXT oficial del SRI (lnkTxtlistado)
     if (typeof descargarTxtRecibidos === 'function') {
-        console.log('🔎 Polling visual sin tabla. Consultando listado TXT oficial del SRI (lnkTxtlistado)...');
+        log.debug('🔎 Polling visual sin tabla. Consultando listado TXT oficial del SRI (lnkTxtlistado)...');
         try {
             const codTipo = data.tipoComprobante === 'Retencion' ? '6' : (data.tipoComprobante === 'Nota de Crédito' ? '3' : '1');
             const filasTxt = await descargarTxtRecibidos(codTipo);
             if (Array.isArray(filasTxt)) {
                 if (filasTxt.length > 0) {
-                    console.log(`✅ [TXT Oficial] Se recuperaron ${filasTxt.length} comprobantes directamente del portal SRI.`);
+                    log.info(`✅ [TXT Oficial] Se recuperaron ${filasTxt.length} comprobantes directamente del portal SRI.`);
                     return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: true, desdeTxt: true, filasTxt };
                 } else {
-                    console.log('ℹ️ [TXT Oficial] Confirmado por respuesta del SRI: 0 comprobantes en este periodo.');
+                    log.debug('ℹ️ [TXT Oficial] Confirmado por respuesta del SRI: 0 comprobantes en este periodo.');
                     return { tableFound: false, noData: true };
                 }
             }
         } catch (eTxt) {
-            console.warn('⚠️ Falló verificación TXT de respaldo:', eTxt.message);
+            log.warn('⚠️ Falló verificación TXT de respaldo:', eTxt.message);
         }
     }
 
-    console.warn('⚠️ Polling finalizado sin confirmación fehaciente del SRI. No se asumirá 0 a ciegas.');
+    log.warn('⚠️ Polling finalizado sin confirmación fehaciente del SRI. No se asumirá 0 a ciegas.');
     return { periodo: `${mesNombre} ${anio}`, tipo: 'Documento', tableFound: false, error: 'timeout_sin_respuesta' };
 }
 
@@ -2710,7 +2710,7 @@ async function renderLoginCockpit(items) {
                 for (const q of queue) {
                     const check = await SriCredentialVault.canAttemptLogin(q.ruc, q.password);
                     if (check.allowed) safeQueue.push(q);
-                    else console.log(`🛡️ [COCKPIT] Excluyendo ${q.ruc} (${q.name}) del bucle: ${check.reason}`);
+                    else log.debug(`🛡️ [COCKPIT] Excluyendo ${q.ruc} (${q.name}) del bucle: ${check.reason}`);
                 }
                 queue = safeQueue;
             }
@@ -2854,7 +2854,7 @@ function initLoginCockpitWatcher() {
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
             chrome.storage.onChanged.addListener((changes, namespace) => {
                 if (namespace === 'local' && (changes.sc_clients_cache || changes.selected_period_month || changes.selected_period_year)) {
-                    console.log('🔄 [SRI ELITE] Sincronización en tiempo real: Clientes actualizados desde la web.');
+                    log.debug('🔄 [SRI ELITE] Sincronización en tiempo real: Clientes actualizados desde la web.');
                     if (isSRILoginPage()) {
                         SafeStorage.get(null).then(items => {
                             renderLoginCockpit(items);
@@ -2866,5 +2866,5 @@ function initLoginCockpitWatcher() {
                 }
             });
         }
-    } catch(e) {}
+    } catch(e) { /* sin poder leer el documento: se sigue con lo visible */ }
 }

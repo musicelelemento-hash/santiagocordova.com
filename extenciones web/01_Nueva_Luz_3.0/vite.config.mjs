@@ -50,18 +50,26 @@ function concatPlugin() {
       console.log(`\n  🏷️  build: ${sello}\n`);
 
       // 💡 MINIFICAR con esbuild: 870 KB → ~250 KB (menos parse/memoria en el SRI)
-      const minified = await transform(concatenatedCode, {
-        minify: true,
-        loader: 'js',
-        target: 'chrome110',
-        legalComments: 'none'
-      });
+      //
+      // `npm run build:dev` saltea la minificación. El minificado es lo que
+      // viaja al SRI, pero deja el stack de una excepción en una sola línea de
+      // 250 KB: cuando algo falla en la página, no hay forma de saber en qué
+      // módulo pasó. Con `build:dev` los números de línea del navegador son
+      // los del archivo fuente y el error se puede seguir.
+      const sinMinificar = process.env.npm_lifecycle_event === 'build:dev';
+      const codigo = sinMinificar
+        ? { code: concatenatedCode }
+        : await transform(concatenatedCode, {
+            minify: true,
+            loader: 'js',
+            target: 'chrome110',
+            legalComments: 'none'
+          });
 
-      // Emit the concatenated (minified) file
       this.emitFile({
         type: 'asset',
         fileName: 'content.js',
-        source: minified.code
+        source: codigo.code
       });
     }
   };

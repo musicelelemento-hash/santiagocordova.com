@@ -252,6 +252,93 @@
   const d4 = await Proveedores.porQueDecidir('0799999999001', C1);
   push('un desconocido no inventa una decisión',  d4.credito, null);
 
+  // ══ Y · la decisión es de UN cliente, no del proveedor ═════════════════
+  sec('Y · el mismo proveedor, distinto crédito según quién compra');
+  // Lo dijo el usuario el 06-sep-2026: la misma factura da distinta respuesta
+  // para un constructor y para una peluquería. Una ferretería es insumo de
+  // obra para el maestro y gasto personal para la odontóloga. Con `deducible`
+  // colgando sólo del RUC del proveedor, las dos daban lo mismo.
+  const FER = '0790000000002';
+
+  await Proveedores.olvidarTodo();
+  await Proveedores.registrarLote([
+    { rucEmisor: FER, razonSocial: 'FERRETERIA CENTRAL', valorSinImpuestos: 100, iva: 15 },
+    { rucEmisor: FER, razonSocial: 'FERRETERIA CENTRAL', valorSinImpuestos: 200, iva: 30 }
+  ], C1);
+  await Proveedores.registrarLote([{ rucEmisor: FER, razonSocial: 'FERRETERIA CENTRAL' }], C2);
+
+  let dd = await Proveedores.creditoDe(FER, C1);
+  push('sin decisión no hay ni sí ni no', dd, { deducible: null, origen: null, ambito: null });
+
+  push('el contador la da por general',
+       await Proveedores.clasificar(FER, { deducible: true, origen: 'usuario' }), true);
+  dd = await Proveedores.creditoDe(FER, C2);
+  push('y vale para el otro cliente',   dd.deducible, true);
+  push('marcada como general',          dd.ambito, 'global');
+
+  // El caso que importa: excepción para UN contribuyente.
+  push('para el centro médico es una excepción',
+       await Proveedores.clasificar(FER, { deducible: false, origen: 'usuario', clienteRuc: C1 }), true);
+  dd = await Proveedores.creditoDe(FER, C1);
+  push('esa compra no le da crédito a este cliente', dd.deducible, false);
+  push('y se ve que es una decisión suya',           dd.ambito, 'cliente');
+  push('el otro cliente no se enteró', (await Proveedores.creditoDe(FER, C2)).deducible, true);
+
+  // Una sugerencia no pisa ninguna de las dos: ni la general ni la del cliente.
+  push('una sugerencia no pisa la excepción',
+       await Proveedores.clasificar(FER, { deducible: true, origen: 'ia', clienteRuc: C1 }), false);
+  push('y el valor sigue siendo el del contador',
+       (await Proveedores.creditoDe(FER, C1)).deducible, false);
+
+  // El mapa que usa el llenado, resuelto por cliente y sin los `null`.
+  const m1 = await Proveedores.mapaCredito(C1);
+  const m2 = await Proveedores.mapaCredito(C2);
+  push('el mapa de este cliente lo trae', m1.get(FER) && m1.get(FER).deducible, false);
+  push('el del otro, al revés',           m2.get(FER) && m2.get(FER).deducible, true);
+
+  // Deshacer: primero la excepción, después el criterio general.
+  push('se deshace la excepción', await Proveedores.olvidarClasificacion(FER, C1), true);
+  push('y vuelve al criterio general', (await Proveedores.creditoDe(FER, C1)).deducible, true);
+  push('se deshace el criterio general', await Proveedores.olvidarClasificacion(FER), true);
+  push('y queda sin clasificar', (await Proveedores.creditoDe(FER, C1)).deducible, null);
+  push('el mapa ya no lo trae', (await Proveedores.mapaCredito(C1)).has(FER), false);
+
+  // Pendientes: lo decidido deja de estar pendiente, y una decisión propia
+  // también lo saca de la lista de ESE cliente.
+  await Proveedores.clasificar(FER, { deducible: true, origen: 'usuario' });
+  push('con criterio general no está pendiente',
+       (await Proveedores.pendientes(200, C1)).some((p) => p.ruc === FER), false);
+  await Proveedores.clasificar(FER, { deducible: false, origen: 'usuario', clienteRuc: C1 });
+  push('ni con una decisión propia de este cliente',
+       (await Proveedores.pendientes(200, C1)).some((p) => p.ruc === FER), false);
+  push('la excepción se puede deshacer', await Proveedores.olvidarClasificacion(FER, C1), true);
+  await Proveedores.olvidarClasificacion(FER);
+  push('sin nada, vuelve a estar pendiente',
+       (await Proveedores.pendientes(200, C1)).some((p) => p.ruc === FER), true);
+
+  // ══ Z2 · el perfil del contribuyente: ¿vende sólo al 0%? ═══════════════
+  sec('Z2 · el cliente que vende sólo al 0%');
+  // Razón #4 del criterio del contador (AGENTS §12): un centro médico vende
+  // al 0%, así que el IVA de sus compras es costo. Eso no depende del
+  // proveedor y no se puede deducir del CIIU: lo afirma el contador.
+  await CreditoCliente.olvidarTodo();
+  push('sin perfil, no se supone nada',  await CreditoCliente.soloCero(C1), false);
+  push('ni se inventa un perfil',        await CreditoCliente.saber(C1), null);
+
+  push('el contador lo afirma',
+       await CreditoCliente.poner(C1, { soloCero: true, origen: 'usuario' }), true);
+  push('y el bot lo lee',                await CreditoCliente.soloCero(C1), true);
+  push('un RUC que no lo es no entra',
+       await CreditoCliente.poner('123', { soloCero: true }), false);
+
+  push('una sugerencia no lo pisa',
+       await CreditoCliente.poner(C1, { soloCero: false, origen: 'catastro' }), false);
+  push('sigue siendo del contador',      await CreditoCliente.soloCero(C1), true);
+
+  push('se puede deshacer',              await CreditoCliente.limpiar(C1), true);
+  push('y vuelve a no saberse',          await CreditoCliente.soloCero(C1), false);
+
+  await CreditoCliente.olvidarTodo();
   await Proveedores.olvidarTodo();
 
   const fallos = ok.filter(x=>!x).length;

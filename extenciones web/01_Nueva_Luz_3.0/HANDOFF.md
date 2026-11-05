@@ -20,23 +20,31 @@ del SRI (Ecuador). Escrito el **06-sep-2026**, manifest `3.1.0`, bundle 556 KB,
 
 ```bash
 # desde la carpeta de la extensión
-npm run build
+npm run build      # producción, minificado (el que viaja al SRI)
+npm run build:dev  # sin minificar, para leer el stack cuando algo falla
+npm run check      # sintaxis de todos los módulos + la suite completa
+npm test           # solo la suite, headless
 ```
 
-Y para las pruebas, **una sola página**:
+La suite ya no necesita abrir la página ni hacer clic: `tests/run.mjs` levanta
+un servidor, abre `tests/index.html?auto=1` en el Chrome/Edge instalado y
+devuelve código 0/1. `npm test -- --headed` muestra el navegador cuando hay
+que mirar. Sigue estando la página (`localhost:8791/tests/`) para correrla a
+mano.
 
 ```
 .claude/launch.json → configuración «bancos-extension» (localhost:8791)
 → http://localhost:8791/tests/   →  botón «Correr todos»
 ```
 
-**561 comprobaciones, todas verdes al 09-sep-2026**, en los 16 bancos de
+**891 comprobaciones, todas verdes al 05-nov-2026**, en los 24 bancos de
 `tests/index.html`. Cada banco carga el `build/content.js` de verdad, el mismo
 que se inyecta en el portal. **Si algo sale en rojo, la extensión tiene un
-problema real.** (Cifras anteriores —319/06-sep, 544/14 bancos 07-sep— eran de
-corridas parciales: el banco `iva5` estuvo roto desde el 08-sep sin que se
-notara porque no pintaba veredicto, y `recibidos_nodata` usaba un formato que
-el runner no leía. Arreglados el 09-sep-2026, ver §4.11.)
+problema real.** (Cifras anteriores —319/06-sep, 544/14 bancos 07-sep, 561/16
+bancos 09-sep, 888/24 bancos 05-nov— eran de corridas parciales o de antes de
+la última tanda: el banco `iva5` estuvo roto desde el 08-sep sin que se notara
+porque no pintaba veredicto, y `recibidos_nodata` usaba un formato que el
+runner no leía. Arreglados el 09-sep-2026, ver §4.11.)
 
 | Banco | Qué cuida | # real |
 | :--- | :--- | ---: |

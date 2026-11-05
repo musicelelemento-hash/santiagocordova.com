@@ -290,6 +290,26 @@ footer {
 </section>
 
 <section class="tarjeta">
+    <h2>🐞 Diagnóstico</h2>
+    <p class="bajada">
+        Con esto encendido, la extensión escribe en la consola del SRI lo que va
+        aprendiendo: por qué eligió una fila, qué casillero leyó, qué proveedor
+        anotó. Apagado, sólo quedan los avisos importantes —el lote no se pone
+        más lento en ninguno de los dos casos.
+    </p>
+    <div class="campo" style="display:flex;align-items:center;gap:10px;">
+        <input type="checkbox" id="chkDebug" style="width:auto;margin:0;cursor:pointer">
+        <label for="chkDebug" style="margin:0;cursor:pointer">Registrar todo en la consola (modo depuración)</label>
+    </div>
+    <div class="estado" id="estadoDebug">—</div>
+    <p class="bajada" style="margin: 12px 0 0;">
+        Desde la consola del SRI también se puede copiar el contexto de una
+        corrida con <code>scLogBuffer()</code>, aunque no hayas tenido la consola
+        abierta desde el principio.
+    </p>
+</section>
+
+<section class="tarjeta">
     <h2>🔒 Por qué acá y no en el código</h2>
     <ol class="pasos">
         <li><code>shared_config.js</code> está en el repositorio: lo que se escribe ahí

@@ -30,9 +30,9 @@ function enConsultaDeclaraciones() {
  * El resto sigue del otro lado, cuando la página cargue.
  */
 async function irARecuperarComprobante(ruc, periodo, nombre = '') {
-    if (!ruc || !periodo) { console.warn('🧾 [RECUPERAR] Falta el RUC o el periodo.'); return false; }
+    if (!ruc || !periodo) { log.warn('🧾 [RECUPERAR] Falta el RUC o el periodo.'); return false; }
     const per = `${periodo.year}-${String(periodo.monthIndex + 1).padStart(2, '0')}`;
-    console.log(`🧾 [RECUPERAR] Buscando el comprobante de ${nombre || ruc} · ${per} en Consulta de declaraciones...`);
+    log.debug(`🧾 [RECUPERAR] Buscando el comprobante de ${nombre || ruc} · ${per} en Consulta de declaraciones...`);
     await anotarBitacora('recuperar comprobante', `${nombre || ruc} · ${per}`);
 
     await SafeStorage.set({
@@ -111,11 +111,11 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
     const resumen = { bajados: 0, yaEstaban: 0, fallaron: 0, total: lista.length };
 
     if (!lista.length) {
-        console.warn('🧾 [TODOS] La tabla de declaraciones presentadas está vacía o no cargó.');
+        log.warn('🧾 [TODOS] La tabla de declaraciones presentadas está vacía o no cargó.');
         return resumen;
     }
 
-    console.log(`🧾 [TODOS] ${lista.length} declaraciones de IVA presentadas: ` +
+    log.debug(`🧾 [TODOS] ${lista.length} declaraciones de IVA presentadas: ` +
                 lista.map((d) => d.periodoTexto).join(', '));
     await anotarBitacora('comprobantes a bajar', `${lista.length} periodos de ${nombre || ruc}`);
 
@@ -129,7 +129,7 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
             if (typeof SriLoop !== 'undefined') {
                 const reg = await SriLoop.declaracionLocal(ruc, d.periodo);
                 if (reg && reg.pdfSubido) {
-                    console.log(`   ✓ ${d.periodoTexto} ya está guardado en registro local.`);
+                    log.debug(`   ✓ ${d.periodoTexto} ya está guardado en registro local.`);
                     resumen.yaEstaban++;
                     continue;
                 }
@@ -139,7 +139,7 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
                 dec && (dec.proof_file?.url || dec.proof_file || dec.pdfUrl) && String(dec.period || '').includes(pStr)
             );
             if (yaEnSistema) {
-                console.log(`   ✓ ${d.periodoTexto} ya tiene comprobante guardado en el sistema (Supabase/R2). Se omite descarga redundante.`);
+                log.debug(`   ✓ ${d.periodoTexto} ya tiene comprobante guardado en el sistema (Supabase/R2). Se omite descarga redundante.`);
                 resumen.yaEstaban++;
                 continue;
             }
@@ -151,19 +151,19 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
         const fila = tabla && Array.from(tabla.querySelectorAll('tbody tr[data-ri]'))
             .find((tr) => (tr.textContent || '').toUpperCase().includes(d.periodoTexto.toUpperCase()));
         if (!fila) {
-            console.warn(`   ✗ ${d.periodoTexto}: ya no encuentro su fila.`);
+            log.warn(`   ✗ ${d.periodoTexto}: ya no encuentro su fila.`);
             resumen.fallaron++;
             continue;
         }
 
         const boton = botonComprobanteDeFila(fila);
         if (!boton) {
-            console.warn(`   ✗ ${d.periodoTexto}: la fila no tiene botón de comprobante.`);
+            log.warn(`   ✗ ${d.periodoTexto}: la fila no tiene botón de comprobante.`);
             resumen.fallaron++;
             continue;
         }
 
-        console.log(`   ⬇️ ${d.periodoTexto}${d.cep ? ' · CEP ' + d.cep : ''}...`);
+        log.debug(`   ⬇️ ${d.periodoTexto}${d.cep ? ' · CEP ' + d.cep : ''}...`);
         if (typeof clearCapturedPdf === 'function') clearCapturedPdf('bajar_comprobante_fila');
         else capturedPdfBase64 = null;
         if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(ruc, d.per);
@@ -172,7 +172,7 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
         for (let i = 0; i < 25 && !capturedPdfBase64; i++) await sleep(700);
 
         if (!capturedPdfBase64) {
-            console.warn(`   ✗ ${d.periodoTexto}: no llegó el PDF.`);
+            log.warn(`   ✗ ${d.periodoTexto}: no llegó el PDF.`);
             await anotarBitacora('comprobante sin bajar', `${d.periodoTexto} · ${nombre || ruc}`);
             resumen.fallaron++;
             continue;
@@ -190,7 +190,7 @@ async function bajarTodosLosComprobantes({ ruc, nombre = '', soloFaltantes = tru
         await sleep(1500);
     }
 
-    console.log(`🧾 [TODOS] ${resumen.bajados} bajados · ${resumen.yaEstaban} ya estaban · ${resumen.fallaron} fallaron.`);
+    log.debug(`🧾 [TODOS] ${resumen.bajados} bajados · ${resumen.yaEstaban} ya estaban · ${resumen.fallaron} fallaron.`);
     await anotarBitacora('comprobantes: resumen',
         `${resumen.bajados} bajados · ${resumen.yaEstaban} ya estaban · ${resumen.fallaron} fallaron`);
     return resumen;
@@ -203,9 +203,9 @@ if (typeof window !== 'undefined') {
             ? window.sriAssistant.extractClientInfo() : {};
         const af = (await SafeStorage.get(['pending_sri_autofill'])).pending_sri_autofill || {};
         const ruc = info.ruc || af.ruc;
-        if (!ruc) { console.error('🧾 No sé de quién es esta sesión.'); return null; }
+        if (!ruc) { log.error('🧾 No sé de quién es esta sesión.'); return null; }
         if (!enConsultaDeclaraciones()) {
-            console.log('🧾 Primero hay que estar en Consulta de declaraciones. Yendo...');
+            log.debug('🧾 Primero hay que estar en Consulta de declaraciones. Yendo...');
             await SafeStorage.set({ pendingAction: 'bajar_todos_comprobantes', actionTimestamp: Date.now(),
                                     bajarTodos: { ruc, nombre: info.name || af.name || '', soloFaltantes } });
             window.location.href = SRI_PUENTE_CONSULTA_DECLARACIONES;
@@ -243,15 +243,15 @@ async function barrerTodosLosAnios({ ruc, nombre = '', soloFaltantes = true } = 
         .slice(0, MAX_ANIOS_BARRIDO - 1);
 
     if (!pendientes.length) {
-        console.log('🧾 [AÑOS] El portal no ofrece más años que el que ya barrí.');
+        log.debug('🧾 [AÑOS] El portal no ofrece más años que el que ya barrí.');
         return total;
     }
-    console.log(`🧾 [AÑOS] Faltan por revisar: ${pendientes.join(', ')}.`);
+    log.debug(`🧾 [AÑOS] Faltan por revisar: ${pendientes.join(', ')}.`);
 
     for (const anio of pendientes) {
         const nueva = document.getElementById('formPresentada:btnGenerarNuevaConsulta');
         if (!nueva) {
-            console.warn(`🧾 [AÑOS] No encuentro «Nueva consulta»: ${anio} y los anteriores quedan sin revisar.`);
+            log.warn(`🧾 [AÑOS] No encuentro «Nueva consulta»: ${anio} y los anteriores quedan sin revisar.`);
             break;
         }
         clickElement(nueva, `Consulta · volver para el año ${anio}`);
@@ -260,15 +260,15 @@ async function barrerTodosLosAnios({ ruc, nombre = '', soloFaltantes = true } = 
 
         const listo = await prepararTablaDeclaraciones(anio);
         if (!listo) {
-            console.warn(`🧾 [AÑOS] ${anio}: no llegué a la tabla. Sigo con el resto.`);
+            log.warn(`🧾 [AÑOS] ${anio}: no llegué a la tabla. Sigo con el resto.`);
             continue;
         }
-        console.log(`🧾 [AÑOS] ── ${anio} ──`);
+        log.debug(`🧾 [AÑOS] ── ${anio} ──`);
         r = await bajarTodosLosComprobantes({ ruc, nombre, soloFaltantes });
         sumarResumen(total, r, anio);
     }
 
-    console.log(`🧾 [AÑOS] Barrido completo (${total.anios.join(', ')}): ` +
+    log.debug(`🧾 [AÑOS] Barrido completo (${total.anios.join(', ')}): ` +
                 `${total.bajados} bajados · ${total.yaEstaban} ya estaban · ${total.fallaron} fallaron.`);
     await anotarBitacora('barrido de años',
         `${total.anios.join(', ')} · ${total.bajados} bajados · ${total.fallaron} fallaron`);
@@ -308,7 +308,7 @@ async function prepararTablaDeclaraciones(anio) {
         const filaIva = Array.from(tablaGrupo.querySelectorAll('tbody tr[data-rk]'))
             .find((tr) => /\bIVA\b/i.test(tr.textContent || ''));
         if (!filaIva) {
-            console.warn('🧾 No hay un grupo de obligación de IVA para este contribuyente.');
+            log.warn('🧾 No hay un grupo de obligación de IVA para este contribuyente.');
             return false;
         }
         const casilla = filaIva.querySelector('.ui-chkbox-box');
@@ -340,7 +340,7 @@ async function prepararTablaDeclaraciones(anio) {
             if (ofrecidos.length) ANIOS_OFRECIDOS = Array.from(new Set(ofrecidos)).sort((a, b) => b - a);
             const item = opciones.find((li) => (li.textContent || '').trim() === anioTxt);
             if (item) { clickElement(item, `Consulta · año ${anioTxt}`); await sleep(700); }
-            else console.warn(`🧾 El año ${anioTxt} no está entre las opciones.`);
+            else log.warn(`🧾 El año ${anioTxt} no está entre las opciones.`);
         }
         // Elegir el año repinta el diálogo: el botón de recién ya no existe.
         const aceptarVivo = document.getElementById('formPresentada:btnAceptarPeriodoSeleccion') || btnAceptar;
@@ -373,7 +373,7 @@ async function traerPdfDelComprobantePresentado(boton) {
     if (!boton) return null;
     const form = boton.closest('form');
     if (!form) {
-        console.warn('🧾 [RECUPERAR] El botón no está dentro de un formulario.');
+        log.warn('🧾 [RECUPERAR] El botón no está dentro de un formulario.');
         return null;
     }
 
@@ -381,7 +381,7 @@ async function traerPdfDelComprobantePresentado(boton) {
     // eso el POST llega pero el portal no sabe qué hacer con él.
     const nombre = boton.getAttribute('name') || boton.id;
     if (!nombre) {
-        console.warn('🧾 [RECUPERAR] El botón no tiene name ni id: no se puede reproducir el POST.');
+        log.warn('🧾 [RECUPERAR] El botón no tiene name ni id: no se puede reproducir el POST.');
         return null;
     }
 
@@ -405,7 +405,7 @@ async function traerPdfDelComprobantePresentado(boton) {
             body: cuerpo.toString()
         });
         if (!r.ok) {
-            console.warn(`🧾 [RECUPERAR] El portal devolvió HTTP ${r.status} al pedir el comprobante.`);
+            log.warn(`🧾 [RECUPERAR] El portal devolvió HTTP ${r.status} al pedir el comprobante.`);
             return null;
         }
 
@@ -415,7 +415,7 @@ async function traerPdfDelComprobantePresentado(boton) {
         // portal contestó otra cosa: no se guarda basura como comprobante.
         if (bytes.length < 5 ||
             !(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) {
-            console.warn('🧾 [RECUPERAR] La respuesta no es un PDF ' +
+            log.warn('🧾 [RECUPERAR] La respuesta no es un PDF ' +
                          `(${bytes.length} bytes, empieza con «${String.fromCharCode(...bytes.slice(0, 12))}»). ` +
                          '¿Sesión caducada?');
             return null;
@@ -428,22 +428,22 @@ async function traerPdfDelComprobantePresentado(boton) {
             bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
         }
         const b64 = btoa(bin);
-        console.log(`🧾 [RECUPERAR] PDF traído por POST. Tamaño: ${bytes.length} bytes.`);
+        log.debug(`🧾 [RECUPERAR] PDF traído por POST. Tamaño: ${bytes.length} bytes.`);
         return b64;
     } catch (err) {
-        console.warn('🧾 [RECUPERAR] Falló el POST del comprobante:', err.message);
+        log.warn('🧾 [RECUPERAR] Falló el POST del comprobante:', err.message);
         return null;
     }
 }
 
 async function ejecutarRecuperacionComprobante() {
     const st = (await SafeStorage.get(['recuperarComprobante'])).recuperarComprobante;
-    if (!st) { console.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
+    if (!st) { log.warn('🧾 [RECUPERAR] No hay nada pendiente de recuperar.'); return false; }
 
     // Tope duro: una pantalla que no carga no puede volverse un bucle de
     // recargas contra el portal del SRI.
     if ((st.intentos || 0) >= 6) {
-        console.error('🧾 [RECUPERAR] Demasiados intentos sin llegar al comprobante. Se abandona.');
+        log.error('🧾 [RECUPERAR] Demasiados intentos sin llegar al comprobante. Se abandona.');
         await anotarBitacora('⛔ recuperación fallida', `${st.nombre || st.ruc} · ${st.per}`);
         await Omitidos.anotar(st.ruc, 'sin_datos', {
             nombre: st.nombre, detalle: 'No se pudo recuperar el comprobante ya presentado' });
@@ -453,7 +453,7 @@ async function ejecutarRecuperacionComprobante() {
     await SafeStorage.set({ recuperarComprobante: { ...st, intentos: (st.intentos || 0) + 1 } });
 
     if (!enConsultaDeclaraciones()) {
-        console.log('🧾 [RECUPERAR] Todavía no llegamos a Consulta de declaraciones. Esperando el puente SSO...');
+        log.debug('🧾 [RECUPERAR] Todavía no llegamos a Consulta de declaraciones. Esperando el puente SSO...');
         return false;
     }
 
@@ -471,7 +471,7 @@ async function ejecutarRecuperacionComprobante() {
         const filasG = Array.from(tablaGrupo.querySelectorAll('tbody tr[data-rk]'));
         const filaIva = filasG.find((tr) => /\bIVA\b/i.test(tr.textContent || ''));
         if (!filaIva) {
-            console.warn(`🧾 [RECUPERAR] No hay un grupo de obligación de IVA (${filasG.length} opciones).`);
+            log.warn(`🧾 [RECUPERAR] No hay un grupo de obligación de IVA (${filasG.length} opciones).`);
             return false;
         }
         const casilla = filaIva.querySelector('.ui-chkbox-box');
@@ -479,7 +479,7 @@ async function ejecutarRecuperacionComprobante() {
             clickElement(casilla, 'Consulta · marcar obligación IVA');
             await sleep(700);
         }
-        console.log('🧾 [RECUPERAR] Obligación IVA marcada. Buscando...');
+        log.debug('🧾 [RECUPERAR] Obligación IVA marcada. Buscando...');
         clickElement(btnBuscar, 'Consulta · buscar grupo de obligación');
         await esperarAjaxSri(() => CONSULTA_PANTALLAS.periodoFiscal() || CONSULTA_PANTALLAS.tabla(),
                              'pantalla de período fiscal');
@@ -501,10 +501,10 @@ async function ejecutarRecuperacionComprobante() {
                 clickElement(item, `Consulta · año ${anio}`);
                 await sleep(700);
             } else {
-                console.warn(`🧾 [RECUPERAR] El año ${anio} no está entre las opciones (${items.length}).`);
+                log.warn(`🧾 [RECUPERAR] El año ${anio} no está entre las opciones (${items.length}).`);
             }
         }
-        console.log(`🧾 [RECUPERAR] Período fiscal ${anio}. Aceptando...`);
+        log.debug(`🧾 [RECUPERAR] Período fiscal ${anio}. Aceptando...`);
         clickElement(btnAceptar, 'Consulta · aceptar período');
         await esperarAjaxSri(CONSULTA_PANTALLAS.tabla, 'tabla de declaraciones presentadas');
     }
@@ -512,7 +512,7 @@ async function ejecutarRecuperacionComprobante() {
     // ── Pantalla 3 · La tabla de declaraciones presentadas ───────────────
     const tabla = document.getElementById('formPresentada:tblConsultaDeclaracion');
     if (!tabla) {
-        console.log('🧾 [RECUPERAR] La tabla todavía no está. Se reintenta en la próxima carga.');
+        log.debug('🧾 [RECUPERAR] La tabla todavía no está. Se reintenta en la próxima carga.');
         return false;
     }
 
@@ -529,14 +529,14 @@ async function ejecutarRecuperacionComprobante() {
     if (!candidatas.length) {
         if (!filas.length) {
             // Tabla vacía: puede que todavía no haya terminado de cargar.
-            console.log('🧾 [RECUPERAR] La tabla está vacía todavía. Se reintenta en la próxima carga.');
+            log.debug('🧾 [RECUPERAR] La tabla está vacía todavía. Se reintenta en la próxima carga.');
             return false;
         }
 
         // La tabla trae filas y ninguna es la nuestra: el portal está diciendo
         // que ese período NO se presentó. Es una respuesta clara, y lo que
         // corresponde es declararlo, no abandonar al cliente.
-        console.warn(`🧾 [COMPROBADO] ${mes} ${anio} NO figura entre las ${filas.length} declaraciones presentadas. ` +
+        log.warn(`🧾 [COMPROBADO] ${mes} ${anio} NO figura entre las ${filas.length} declaraciones presentadas. ` +
                      'Hay que declararla.');
         await anotarBitacora('no estaba declarada', `${st.nombre || st.ruc} · ${mes} ${anio} · hay que hacerla`);
 
@@ -585,11 +585,11 @@ async function ejecutarRecuperacionComprobante() {
         botones.find((b) => /comprobante/i.test(b.textContent || ''));
 
     if (!disparador) {
-        console.warn(`🧾 [RECUPERAR] La fila no tiene el botón "Comprobante de declaración" (${botones.length} botones).`);
+        log.warn(`🧾 [RECUPERAR] La fila no tiene el botón "Comprobante de declaración" (${botones.length} botones).`);
         return false;
     }
 
-    console.log(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
+    log.debug(`🧾 [RECUPERAR] ${mes} ${anio} · ${tipo || 'declaración'}${cep ? ` · CEP ${cep}` : ''}. Descargando el comprobante...`);
     if (typeof clearCapturedPdf === 'function') clearCapturedPdf('recuperar_comprobante');
     else capturedPdfBase64 = null;
     if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(st.ruc, st.per);
@@ -607,7 +607,7 @@ async function ejecutarRecuperacionComprobante() {
     // Y si el POST no salió, se pulsa igual: el interceptor del módulo 01
     // levanta el PDF cuando el portal lo entrega por `createObjectURL`.
     if (!capturedPdfBase64) {
-        console.log('🧾 [RECUPERAR] El POST no trajo el PDF. Pulsando el botón como respaldo...');
+        log.debug('🧾 [RECUPERAR] El POST no trajo el PDF. Pulsando el botón como respaldo...');
         clickElement(disparador, 'Consulta · comprobante de declaración');
         for (let i = 0; i < 25; i++) {
             await sleep(700);
@@ -616,13 +616,13 @@ async function ejecutarRecuperacionComprobante() {
     }
 
     if (!capturedPdfBase64) {
-        console.warn('🧾 [RECUPERAR] Ni el POST ni el botón trajeron el comprobante. ' +
+        log.warn('🧾 [RECUPERAR] Ni el POST ni el botón trajeron el comprobante. ' +
                      'Puede que haya bajado a la carpeta de descargas del navegador: ' +
                      'si está ahí, el portal contestó bien y lo que falla es la captura.');
         return false;
     }
 
-    console.log('🧾 [RECUPERAR] Comprobante capturado. Subiéndolo...');
+    log.debug('🧾 [RECUPERAR] Comprobante capturado. Subiéndolo...');
     await anotarBitacora('comprobante recuperado', `${st.nombre || st.ruc} · ${st.per}${cep ? ' · CEP ' + cep : ''}`);
 
     await syncDeclarationToSupabase(st.ruc, st.per, null, st.nombre, null, 'completado');
@@ -644,12 +644,12 @@ async function ejecutarRecuperacionComprobante() {
     const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
     const enLote = autoRes.auto_batch_enabled || autoRes.sri_auto_mode || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
     if (enLote && typeof handleBatchNextClient === 'function') {
-        console.log('⏩ [RECUPERAR] Comprobante subido a Supabase. Pasando al siguiente cliente del lote...');
+        log.debug('⏩ [RECUPERAR] Comprobante subido a Supabase. Pasando al siguiente cliente del lote...');
         await sleep(2000);
         const hasNext = await handleBatchNextClient();
         if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
     } else {
-        console.log('🏁 [RECUPERAR] Comprobante recuperado en modo individual. Finalizando corrida limpiamente.');
+        log.info('🏁 [RECUPERAR] Comprobante recuperado en modo individual. Finalizando corrida limpiamente.');
         if (typeof SriLoop !== 'undefined') await SriLoop.detener('Comprobante individual recuperado');
         await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
         if (typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
@@ -902,7 +902,7 @@ const SriLoopHUD = {
                     this._aviso('🎉 Todo al día', 'No hay períodos con clientes sin declarar hacia atrás.', 6000);
                 }
             } catch (err) {
-                console.error('🎯 [PERÍODO] No se pudo detectar el mes que falta:', err);
+                log.error('🎯 [PERÍODO] No se pudo detectar el mes que falta:', err);
                 this._aviso('⚠️ No se pudo', err.message, 7000);
             }
             btn.textContent = previo;
@@ -929,7 +929,7 @@ const SriLoopHUD = {
                 }
                 await window.sriTraerComprobantes(true);
             } catch (e) {
-                console.error('🧾 No se pudieron traer los comprobantes:', e);
+                log.error('🧾 No se pudieron traer los comprobantes:', e);
                 this._aviso('🧾 No pude', e.message, 7000);
             }
             btn.textContent = previo;
@@ -957,14 +957,14 @@ const SriLoopHUD = {
             if (window.sriAssistant && window.sriAssistant.omitirClienteActual) {
                 await window.sriAssistant.omitirClienteActual();
             } else {
-                console.warn('⏭️ El panel todavía no está listo.');
+                log.warn('⏭️ El panel todavía no está listo.');
             }
         });
 
         el.querySelector('#slh-cerrar').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             if (!window.sriAssistant || !window.sriAssistant.ejecutarCierreMagico) {
-                console.warn('🏁 El panel todavía no está listo.');
+                log.warn('🏁 El panel todavía no está listo.');
                 return;
             }
             // Sin confirm(). Un diálogo modal en medio de un lote desatendido
@@ -1017,7 +1017,7 @@ const SriLoopHUD = {
                 btn.textContent = '✅ copiada';
                 setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
             } catch (e) {
-                console.log(await Bitacora.texto());
+                log.debug(await Bitacora.texto());
                 btn.textContent = '⚠️ mirá la consola';
             }
         });
@@ -1102,7 +1102,26 @@ const SriLoopHUD = {
                     await navigator.clipboard.writeText(txt);
                     copiar.textContent = '✅ copiado';
                     setTimeout(() => { copiar.textContent = '📋 Copiar la base'; }, 2500);
-                } catch (e) { console.log(txt); copiar.textContent = '⚠️ mirá la consola'; }
+                } catch (e) { log.warn(txt); copiar.textContent = '⚠️ mirá la consola'; }
+                return;
+            }
+
+            // Vende sólo al 0%: es un interruptor del CLIENTE, no del
+            // proveedor. Mueve todas sus compras gravadas al 502 de una vez.
+            const toggleCero = ev.target.closest('#slh-prov-solocero');
+            if (toggleCero) {
+                ev.stopPropagation();
+                const rucCli = typeof rucDelClienteActual === 'function'
+                    ? await rucDelClienteActual() : '';
+                if (!rucCli) {
+                    this._aviso('👤 Sin contribuyente', 'No se pudo identificar al cliente en esta pantalla.', 6000);
+                    return;
+                }
+                if (typeof CreditoCliente !== 'undefined') {
+                    const estaba = toggleCero.getAttribute('data-sc-solocero') === 'si';
+                    await CreditoCliente.poner(rucCli, { soloCero: !estaba, origen: 'usuario' });
+                }
+                await this.pintarProveedores();
                 return;
             }
 
@@ -1110,11 +1129,36 @@ const SriLoopHUD = {
             // regla que con las claves del SRI: nunca datos de más en el DOM.
             const marca = ev.target.closest('[data-sc-prov]');
             if (!marca) return;
+            ev.stopPropagation();
             const ruc = marca.getAttribute('data-sc-prov');
-            const deducible = marca.getAttribute('data-sc-ded') === 'si';
+            const accion = marca.getAttribute('data-sc-ded') || '';
+            const rucCli = typeof rucDelClienteActual === 'function'
+                ? await rucDelClienteActual() : '';
+
+            // Deshacer: devuelve el proveedor a «sin clasificar» (o al criterio
+            // general, si lo que se deshace es la excepción de este cliente).
+            if (accion === 'olvidar') {
+                const ambito = marca.getAttribute('data-sc-ambito');
+                if (ambito === 'cliente' && rucCli) {
+                    await Proveedores.olvidarClasificacion(ruc, rucCli);
+                } else {
+                    await Proveedores.olvidarClasificacion(ruc);
+                }
+                await this.pintarProveedores();
+                return;
+            }
+
             // origen 'usuario': lo decidió el contador, y a partir de acá
-            // ninguna sugerencia lo pisa.
-            await Proveedores.clasificar(ruc, { deducible, origen: 'usuario' });
+            // ninguna sugerencia lo pisa. Con cliente identificado la decisión
+            // es de ESE contribuyente —la misma factura no da el mismo crédito
+            // a un constructor que a un centro médico—; sin cliente se guarda
+            // como criterio general, que es el valor por defecto de todos.
+            const deducible = accion === 'si';
+            if (rucCli) {
+                await Proveedores.clasificar(ruc, { deducible, origen: 'usuario', clienteRuc: rucCli });
+            } else {
+                await Proveedores.clasificar(ruc, { deducible, origen: 'usuario' });
+            }
             await this.pintarProveedores();
         });
 
@@ -1180,7 +1224,7 @@ const SriLoopHUD = {
                     btn.textContent = '👆 seleccionado: Ctrl+C';
                 } else {
                     btn.textContent = '⚠️ mirá la consola';
-                    console.log(md);
+                    log.debug(md);
                 }
             }
         });
@@ -1396,7 +1440,7 @@ const SriLoopHUD = {
                 if (this._reanudando) return;
                 this._reanudando = true;
 
-                console.log(`▶️ [BUCLE] Reanudado con "${r.pendingAction}" pendiente. Recargando para retomarlo...`);
+                log.debug(`▶️ [BUCLE] Reanudado con "${r.pendingAction}" pendiente. Recargando para retomarlo...`);
                 anotarBitacora('reanudado', r.pendingAction);
                 // Refrescamos el timestamp: si no, la acción puede llegar caducada.
                 await SafeStorage.set({ actionTimestamp: Date.now() });
@@ -1415,7 +1459,7 @@ const SriLoopHUD = {
         if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
             window.sriAssistant.showEliteToast({ title, msg, duration });
         } else {
-            console.log(`${title} — ${msg}`);
+            log.debug(`${title} — ${msg}`);
         }
     },
 
@@ -1512,7 +1556,7 @@ const SriLoopHUD = {
                 .some((h) => /obligacion/i.test(h.textContent || ''));
             if (acordeon) break;
             if (!avisado) {
-                console.log('⏳ [PERFIL] Esperando a que el portal pinte las obligaciones...');
+                log.debug('⏳ [PERFIL] Esperando a que el portal pinte las obligaciones...');
                 avisado = true;
             }
             await sleep(500);
@@ -1667,7 +1711,7 @@ const SriLoopHUD = {
             ? `El SRI marca pendiente el IVA de ${delPanel.periodoTexto.toLowerCase()}, vence el ${delPanel.vence}.`
             : `Queda pendiente el IVA de ${per}.`;
 
-        console.log(`📋 [PERFIL] ${detalle} Voy a declararlo para ${quien}.`);
+        log.debug(`📋 [PERFIL] ${detalle} Voy a declararlo para ${quien}.`);
 
         const total = (e.cola || []).length;
         const hora = new Date().getHours();
@@ -1860,7 +1904,7 @@ const SriLoopHUD = {
                 'Hace falta para volver a entrar al pasar de pantalla.\n' +
                 'Queda guardada solo en este navegador.'
             );
-            if (!clave) { console.log('🎯 Cancelado: sin clave no se puede continuar.'); return; }
+            if (!clave) { log.debug('🎯 Cancelado: sin clave no se puede continuar.'); return; }
             if (typeof window.sriAgregarCliente === 'function') {
                 await window.sriAgregarCliente(info.ruc, clave, nombre);
             }
@@ -1875,7 +1919,7 @@ const SriLoopHUD = {
             `Periodo: ${MESES[periodo.monthIndex]} ${periodo.year}\n\n` +
             'El bot va a extraer los comprobantes, llenar el formulario y frenar\n' +
             'antes de enviar si el saldo no es cero.\n\n¿Seguimos?'
-        )) { console.log('🎯 Arranque cancelado por el usuario.'); return; }
+        )) { log.debug('🎯 Arranque cancelado por el usuario.'); return; }
 
         const cliente = { ruc: info.ruc, name: nombre, password: clave };
         await SriLoop.iniciar([cliente], periodo);
@@ -1893,7 +1937,7 @@ const SriLoopHUD = {
         });
 
         this._aviso('🎯 En marcha', `Declarando a ${nombre} · ${MESES[periodo.monthIndex]} ${periodo.year}`, 5000);
-        console.log(`🎯 [AQUÍ] Arrancando con ${nombre} (${info.ruc}).`);
+        log.debug(`🎯 [AQUÍ] Arrancando con ${nombre} (${info.ruc}).`);
         await sleep(700);
 
         if (typeof navegarAComprobantes === 'function') navegarAComprobantes();
@@ -1949,7 +1993,7 @@ const SriLoopHUD = {
         ].filter(Boolean).join('\n');
 
         if (!confirm(aviso)) {
-            console.log('▶️ [BUCLE] Arranque cancelado por el usuario.');
+            log.debug('▶️ [BUCLE] Arranque cancelado por el usuario.');
             return;
         }
 
@@ -1966,7 +2010,7 @@ const SriLoopHUD = {
         const isCurrentTargetActive = targetRuc && currentBodyText.includes(targetRuc);
 
         if (isCurrentTargetActive) {
-            console.log(`🎯 [BUCLE] Ya estamos dentro de la sesión de ${targetRuc}. Navegando directo a Comprobantes Recibidos...`);
+            log.debug(`🎯 [BUCLE] Ya estamos dentro de la sesión de ${targetRuc}. Navegando directo a Comprobantes Recibidos...`);
             window.location.href = SRI_RECIBIDOS_URL;
             return;
         }
@@ -1974,7 +2018,7 @@ const SriLoopHUD = {
         const haySesion = !!(document.body && /\b\d{13}\b/.test(currentBodyText)) &&
                           !location.href.includes('/auth/realms/');
         if (haySesion && typeof cerrarSesionSRI === 'function') {
-            console.log('🔒 [BUCLE] Cerrando la sesión actual para entrar con el primer cliente…');
+            log.debug('🔒 [BUCLE] Cerrando la sesión actual para entrar con el primer cliente…');
             await cerrarSesionSRI();
         } else {
             window.location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&response_mode=fragment&response_type=code&scope=openid';
@@ -2044,7 +2088,7 @@ const SriLoopHUD = {
 
         const periodo = await SriLoop.resolverPeriodoObjetivo();
         const omitidos = {};
-        try { (await Omitidos.lista()).forEach((o) => { omitidos[o.ruc] = o; }); } catch (e) {}
+        try { (await Omitidos.lista()).forEach((o) => { omitidos[o.ruc] = o; }); } catch (e) { /* sin lista de omitidos: el aviso sale sin ellos */ }
 
         const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
         const filas = [];
@@ -2105,7 +2149,7 @@ const SriLoopHUD = {
                 info.textContent = `${c.aDeclarar} a declarar · ${c.sinPdf} solo comprobante · ${c.sinClave} sin clave · ${c.total} pendientes en ${c.periodo}`;
             }
         } catch (e) {
-            console.warn('🗓 No se pudo pintar el período:', e);
+            log.warn('🗓 No se pudo pintar el período:', e);
             if (etiq) etiq.textContent = '—';
             if (info) info.textContent = '';
         }
@@ -2447,8 +2491,75 @@ const SriLoopHUD = {
             return;
         }
 
-        const r = await Proveedores.resumen();
-        const faltan = await Proveedores.pendientes(40);
+        // A quién se le está declarando. Todo lo de abajo se resuelve para ESTE
+        // contribuyente: la misma factura no da el mismo crédito a un
+        // constructor que a un centro médico.
+        const rucCli = typeof rucDelClienteActual === 'function'
+            ? await rucDelClienteActual() : '';
+
+        const r = await Proveedores.resumen(rucCli);
+        const todos = await Proveedores.todos(rucCli);
+
+        // El último resumen extraído de este cliente. Es lo que permite mostrar
+        // el reparto EN DINERO antes de tocar el formulario: marcar un
+        // proveedor y ver cuánto se mueve del 500 al 502 es toda la función.
+        let facturas = null;
+        if (rucCli) {
+            try {
+                const clave = `data_${rucCli}_facturas`;
+                facturas = (await SafeStorage.get([clave]))[clave] || null;
+            } catch (e) { facturas = null; }
+        }
+        const delPeriodo = new Set();
+        ['detalle15', 'detalle5'].forEach((k) => {
+            const lista = facturas && Array.isArray(facturas[k]) ? facturas[k] : [];
+            lista.forEach((f) => { if (f && f.ruc) delPeriodo.add(String(f.ruc)); });
+        });
+
+        // El período que se está declarando y TODOS los proveedores de este
+        // cliente, no sólo los del período. El perfil se arma con el
+        // historial: un proveedor que no facturó este mes sigue siendo parte
+        // de a quién le compra y sigue necesitando una decisión.
+        const periodoActual = (typeof periodoDeTrabajo === 'function')
+            ? await periodoDeTrabajo() : '';
+        const proveedoresDelCliente = rucCli
+            ? await Proveedores.deCliente(rucCli, periodoActual) : [];
+        const metricaPerfil = rucCli
+            ? await Proveedores.perfilDeCliente(rucCli, periodoActual) : null;
+        const porRucCliente = new Map(proveedoresDelCliente.map((p) => [p.ruc, p]));
+
+        // La decisión de cada RUC, ya resuelta para este cliente.
+        const mapa = new Map();
+        todos.forEach((p) => {
+            if (p.decision && (p.decision.deducible === true || p.decision.deducible === false)) {
+                mapa.set(p.ruc, p.decision);
+            }
+        });
+
+        // Las que faltan clasificar para este cliente, las de este período
+        // primero. Una sugerencia del catastro no las saca de la lista: el
+        // catastro dice a qué se dedica el proveedor, no si da crédito.
+        //
+        // Y las del período entran SIEMPRE, aunque ya tengan criterio general:
+        // el contador pudo decir «sí» para casi todos y este cliente ser la
+        // excepción. El crédito es de quien compra, no del que vende.
+        //
+        // Desde el 05-nov-2026 también entran los proveedores HISTÓRICOS de
+        // este cliente: la lista ya no es sólo una cola de pendientes, es su
+        // perfil de compras. Se puede ver, revisar y deshacer.
+        const filasBase = todos
+            .filter((p) => porRucCliente.has(p.ruc) || delPeriodo.has(p.ruc) ||
+                           !p.decision || p.decision.deducible === null)
+            .sort((a, b) => {
+                const aCli = porRucCliente.get(a.ruc);
+                const bCli = porRucCliente.get(b.ruc);
+                return ((bCli && bCli.enPeriodo) ? 1 : 0) - ((aCli && aCli.enPeriodo) ? 1 : 0) ||
+                       (delPeriodo.has(b.ruc) ? 1 : 0) - (delPeriodo.has(a.ruc) ? 1 : 0) ||
+                       ((bCli && bCli.basePeriodo) || 0) - ((aCli && aCli.basePeriodo) || 0) ||
+                       ((bCli && bCli.base) || 0) - ((aCli && aCli.base) || 0) ||
+                       ((b.veces || 0) - (a.veces || 0));
+            });
+        const faltan = filasBase.slice(0, 80);
 
         // A qué se dedica el CLIENTE. Sin esto no se puede juzgar ninguna de
         // las decisiones de abajo: una compra da crédito tributario cuando
@@ -2456,20 +2567,113 @@ const SriLoopHUD = {
         // factura da distinta respuesta para un constructor y para otro rubro.
         let quienCompra = null;
         try {
-            const rucCli = typeof rucDelClienteActual === 'function' ? await rucDelClienteActual() : '';
             if (rucCli && typeof Catastro !== 'undefined' && await Catastro.cargar()) {
                 quienCompra = Catastro.buscar(rucCli);
             }
         } catch (e) { /* sin catastro se sigue, con menos datos */ }
 
-        const bandaCliente = quienCompra
-            ? '<div style="background:rgba(56,189,248,0.12);color:#7dd3fc;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
-              `👤 <b>El cliente se dedica a:</b> ${esc(String(quienCompra.actividad || '(sin actividad en el catastro)').slice(0, 110))}` +
+        // El perfil que escribió el contador manda sobre el catastro. El
+        // catastro dice a qué se dedica un RUC; no dice si factura al 0%.
+        let perfil = null;
+        try {
+            if (typeof CreditoCliente !== 'undefined' && rucCli) {
+                perfil = await CreditoCliente.saber(rucCli);
+            }
+        } catch (e) { perfil = null; }
+        const actividad = (perfil && perfil.actividad) || (quienCompra && quienCompra.actividad) || '';
+        const soloCero = !!(perfil && perfil.soloCero === true);
+
+        const bandaCliente = actividad
+            ? '<div style="background:rgba(56,189,248,0.12);color:#7dd3fc;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px;line-height:1.5">' +
+              `👤 <b>El cliente se dedica a:</b> ${esc(String(actividad).slice(0, 110))}` +
               '<br><span style="opacity:0.75">Una compra da crédito tributario si es compatible con esta actividad. ' +
               'Eso lo decidís vos: acá sólo está el dato.</span></div>'
-            : '<div style="background:rgba(251,191,36,0.14);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5">' +
+            : '<div style="background:rgba(251,191,36,0.14);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px;line-height:1.5">' +
               '👤 <b>No se sabe a qué se dedica el cliente.</b> Sin eso no se puede juzgar si una ' +
               'compra es compatible con su actividad. (Puede ser de otra provincia: el catastro es de El Oro.)</div>';
+
+        // La razón #4 del criterio del contador (AGENTS §12): si el
+        // contribuyente vende SÓLO al 0% —salud, educación, transporte— ninguna
+        // de sus compras gravadas da crédito. Es un interruptor por cliente y
+        // mueve todas sus facturas de una vez.
+        const bandaSoloCero =
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;line-height:1.4">' +
+            `  <button id="slh-prov-solocero" data-sc-solocero="${soloCero ? 'si' : 'no'}" ` +
+            '    aria-label="Marcar si el contribuyente vende sólo con tarifa 0%" ' +
+            '    title="Si vende SÓLO al 0%, el IVA de sus compras gravadas no es crédito: es costo. Lo decide el contador." ' +
+            '    style="border:none;border-radius:8px;padding:6px 10px;min-height:30px;font-size:11px;font-weight:800;cursor:pointer;' +
+            (soloCero ? 'background:rgba(239,68,68,0.18);color:#fca5a5">✅ Vende SÓLO al 0%'
+                      : 'background:rgba(148,163,184,0.16);color:#cbd5e1">↔ ¿Vende sólo al 0%?') +
+            '</button>' +
+            '<span style="opacity:0.7">' +
+            (soloCero
+                ? 'Todas sus compras al 15% y al 5% van al 502. Tocá para deshacer.'
+                : 'Sólo si lo confirmás, sus compras gravadas van al 502.') +
+            '</span></div>';
+
+        // El NIVEL DE PERFIL: cuánto se sabe de los proveedores de este
+        // cliente. No es una decisión ni una nota: es una medida de cuánto
+        // falta para clasificar sin adivinar. Se arma con los tres datos que
+        // importan —quién le vende, a qué se dedica y si da crédito— y con el
+        // historial de períodos. Sube trabajando, no solo mirando.
+        let bandaPerfil = '';
+        if (metricaPerfil && metricaPerfil.proveedores > 0) {
+            const m = metricaPerfil;
+            const color = m.nivel >= 80 ? '#86efac' : (m.nivel >= 50 ? '#fcd34d' : '#fca5a5');
+            const ancho = Math.max(3, Math.min(100, m.nivel));
+            bandaPerfil =
+                '<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:7px 9px;margin-bottom:8px;font-size:11px;line-height:1.55">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+                `  <b>📊 Nivel de perfil del cliente</b><span style="color:${color};font-weight:900">${m.nivel}%</span>` +
+                '</div>' +
+                `<div style="height:6px;border-radius:99px;background:rgba(148,163,184,0.18);margin:5px 0 6px;overflow:hidden">` +
+                `  <div style="height:100%;width:${ancho}%;background:${color};border-radius:99px"></div>` +
+                '</div>' +
+                `👥 <b>${m.proveedores}</b> proveedor(es) · ` +
+                `<span style="color:#86efac">${m.clasificados} clasificados</span> · ` +
+                `<span style="color:#7dd3fc">${m.conActividad} con actividad</span> · ` +
+                `<span style="opacity:0.8">${m.conPeriodo} en este período</span>` +
+                (m.faltan > 0
+                    ? `<br><span style="opacity:0.75">Faltan <b>${m.faltan}</b>: cada uno que clasifiques sube el nivel y evita adivinar el 502.</span>`
+                    : '<br><span style="opacity:0.75">Todo clasificado. El nivel sigue subiendo cuando el catastro completa la actividad.</span>') +
+                '</div>';
+        }
+
+        // El reparto en dinero, con el último resumen extraído. Es la razón de
+        // existir del panel: marcar un proveedor y ver el monto cambiar de
+        // casillero, antes de tocar el formulario.
+        let bandaReparto = '';
+        if (typeof repartirCreditoCompras === 'function' && facturas &&
+            (Array.isArray(facturas.detalle15) || Array.isArray(facturas.detalle5))) {
+            const rep = repartirCreditoCompras(
+                { quince: facturas.detalle15, cinco: facturas.detalle5 }, mapa, { soloCero });
+            const total15 = parseDecimal(facturas.iva15 && facturas.iva15.baseImponible || 0);
+            const total5 = parseDecimal(facturas.iva5 && facturas.iva5.baseImponible || 0);
+            const con15 = Math.max(0, redondear(total15 - rep.sinCredito15));
+            const con5 = Math.max(0, redondear(total5 - rep.sinCredito5));
+            const sinTotal = redondear(rep.sinCredito15 + rep.sinCredito5);
+
+            bandaReparto =
+                '<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:7px 9px;margin-bottom:8px;font-size:11px;line-height:1.6">' +
+                '<b>⚖️ Reparto de este período</b><br>' +
+                `<span style="color:#86efac">$${con15.toFixed(2)}</span> → 500/510 con derecho` +
+                (con5 > 0 ? ` · <span style="color:#86efac">$${con5.toFixed(2)}</span> → 540/550 (5%)` : '') +
+                '<br>' +
+                `<span style="color:${sinTotal > 0 ? '#fca5a5' : 'rgba(148,163,184,0.8)'}">$${sinTotal.toFixed(2)}</span> → 502/512 SIN derecho` +
+                (rep.sinClasificar > 0
+                    ? `<br><span style="opacity:0.7">${rep.sinClasificar} factura(s) sin clasificar siguen arriba: nunca al 502 por las dudas.</span>`
+                    : '') +
+                '</div>';
+        } else if (facturas) {
+            bandaReparto =
+                '<div style="background:rgba(148,163,184,0.10);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5;opacity:0.8">' +
+                '⚖️ Este período se extrajo con una versión anterior: no hay detalle por factura. ' +
+                'Volvé a extraer para ver el reparto en dinero.</div>';
+        } else {
+            bandaReparto =
+                '<div style="background:rgba(148,163,184,0.10);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5;opacity:0.8">' +
+                '⚖️ Sin extracción de este período. Corré una y acá aparece cuánto va al 500 y cuánto al 502.</div>';
+        }
 
         if (r.total === 0) {
             panel.innerHTML =
@@ -2493,12 +2697,11 @@ const SriLoopHUD = {
             Object.keys(r.porOrigen).map((o) => `${esc(o)}: <b>${r.porOrigen[o]}</b>`).join(' · ') +
             '</div>';
 
-        if (!faltan.length) {
-            panel.innerHTML = cabecera + bandaCliente +
-                '<div style="background:rgba(74,222,128,0.14);color:#86efac;border-radius:8px;padding:8px;font-size:11px">' +
-                '✅ No queda ninguno sin clasificar.</div>';
-            return;
-        }
+        // El panel deja de esconderse cuando ya no queda nada pendiente: lo ya
+        // decidido también se tiene que poder revisar y deshacer. Si no, un
+        // click equivocado queda grabado para todos los clientes y no hay
+        // forma de encontrarlo.
+        const sinPendientes = r.sinClasificar === 0;
 
         // El aviso que protege la firma: un proveedor que figura suspendido o
         // pasivo en el catastro y sigue emitiendo es una compra objetable.
@@ -2525,6 +2728,27 @@ const SriLoopHUD = {
 
         const filas = faltan.map((p) => {
             const nombre = p.nombre || '(sin nombre)';
+            const cli = porRucCliente.get(p.ruc) || null;
+            // Que le haya facturado a ESTE cliente en el período que se va a
+            // declarar es la razón más fuerte para decidirlo ahora.
+            const enPeriodo = (delPeriodo.has(p.ruc) || (cli && cli.enPeriodo))
+                ? '<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;background:rgba(56,189,248,0.18);color:#7dd3fc" title="Le facturó en el período que se va a declarar">en el período</span>'
+                : '';
+            // La plata de ESTE cliente. Es lo que convierte la lista en un
+            // perfil: no es lo mismo un proveedor de $12 que uno de $4.000.
+            const plata = cli && cli.enPeriodo
+                ? `<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;background:rgba(74,222,128,0.14);color:#86efac" ` +
+                  `title="Base de las facturas de este cliente en el período">$${redondear(cli.basePeriodo || 0).toFixed(2)} este mes</span>`
+                : (cli && cli.base > 0
+                    ? `<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;background:rgba(148,163,184,0.16);color:#cbd5e1" ` +
+                      `title="Base acumulada de todas las facturas vistas de este cliente">$${redondear(cli.base || 0).toFixed(2)} histórico</span>`
+                    : (cli && cli.sinMontos
+                        ? '<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;background:rgba(148,163,184,0.12);color:#94a3b8" title="Anotado antes de guardar montos por cliente">sin montos</span>'
+                        : ''));
+            const nPer = cli && Array.isArray(cli.periodos) ? cli.periodos.length : 0;
+            const chapaPeriodos = nPer > 1
+                ? `<span style="margin-left:4px;font-size:10px;opacity:0.7" title="${esc((cli.periodos || []).join(', '))}">${nPer} períodos</span>`
+                : '';
             // La actividad que sugiere el catastro: no decide, pero ahorra el
             // 90% del trabajo de clasificar a mano.
             const act = p.actividad
@@ -2536,6 +2760,15 @@ const SriLoopHUD = {
                 : '';
             const bandera = p.estadoSri
                 ? `<span style="color:#fca5a5;font-weight:800"> · ${esc(p.estadoSri)}</span>` : '';
+            // Si ya tiene decisión, se ve acá: «general» si vale para todos,
+            // «para este cliente» si es una excepción suya.
+            const dec = p.decision || null;
+            const chapaDecision = dec && dec.deducible !== null
+                ? '<span style="margin-left:4px;font-size:10px;border-radius:5px;padding:1px 5px;' +
+                  (dec.deducible ? 'background:rgba(74,222,128,0.16);color:#86efac'
+                                 : 'background:rgba(251,191,36,0.2);color:#fcd34d') + '">' +
+                  `${dec.ambito === 'cliente' ? 'para este cliente' : 'general'}: ${dec.deducible ? 'sí' : 'no'}</span>`
+                : '';
             // A qué tarifa factura, contado de lo que se vio. No hace falta
             // preguntárselo a nadie: está en cada factura.
             const t = p.tarifas || {};
@@ -2545,19 +2778,81 @@ const SriLoopHUD = {
                   (t['5'] ? 'background:rgba(251,146,60,0.2);color:#fdba74"' : 'background:rgba(148,163,184,0.16);color:#cbd5e1"') +
                   ` title="Tarifas vistas en sus comprobantes">${vistas.map((k) => (k === '?' ? '?' : k + '%') + '×' + t[k]).join(' ')}</span>`
                 : '';
+            const comp = cli ? (cli.veces || 0) : (p.veces || 0);
+            // La pista NO decide: sólo adelanta lo que el contador tendría que
+            // buscar a mano. Va aparte, en gris, para que no se confunda con un
+            // dato confirmado.
+            let pistas = [];
+            try {
+                pistas = (typeof Proveedores.sugerencias === 'function')
+                    ? (Proveedores.sugerencias(p, rucCli, actividad) || []) : [];
+            } catch (e) { pistas = []; }
+            const lineaPista = pistas.length
+                ? `<div style="font-size:10px;opacity:0.66;line-height:1.35;margin-top:1px;white-space:normal">` +
+                  `💡 ${esc(pistas.slice(0, 2).join(' '))}` +
+                  (pistas.length > 2 ? `<span title="${esc(pistas.slice(2).join(' '))}"> …</span>` : '') +
+                  '</div>'
+                : '';
             return '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
-                `<span style="flex:1;min-width:0;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}${p.actividad ? ' · ' + esc(p.actividad) : ''}">` +
-                `  <b>${esc(nombre)}</b>${bandera}${cat}<span style="opacity:0.55"> · ${p.veces} comp.</span>${chapaTarifa}${act}</span>` +
+                `<div style="flex:1;min-width:0">` +
+                `  <div style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.ruc)}${p.actividad ? ' · ' + esc(p.actividad) : ''}">` +
+                `    <b>${esc(nombre)}</b>${bandera}${cat}${chapaDecision}${plata}${chapaPeriodos}<span style="opacity:0.55"> · ${comp} comp.</span>${chapaTarifa}${enPeriodo}${act}` +
+                '  </div>' + lineaPista +
+                '</div>' +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
                 `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
                 '</div>';
         }).join('');
 
-        panel.innerHTML = cabecera + bandaCliente + alertaEstado + alerta5 +
-            `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">Faltan clasificar <b>${faltan.length}</b>, los más frecuentes primero:</div>` +
-            filas +
+        // Lo ya decidido también se puede revisar y deshacer. Sin esto, un
+        // click equivocado queda grabado para todos los clientes y no hay
+        // forma de encontrarlo después.
+        const decididos = todos
+            .filter((p) => p.decision && p.decision.deducible !== null &&
+                           !delPeriodo.has(p.ruc) && !porRucCliente.has(p.ruc))
+            .sort((a, b) => ((b.veces || 0) - (a.veces || 0)))
+            .slice(0, 24);
+
+        const chipsDecididos = decididos.map((p) => {
+            const si = p.decision.deducible === true;
+            const deCliente = p.decision.ambito === 'cliente';
+            return '<span style="display:inline-flex;align-items:center;gap:3px;margin:0 4px 4px 0;padding:3px 6px;' +
+                'border-radius:6px;font-size:10px;' +
+                (si ? 'background:rgba(74,222,128,0.14);color:#86efac' : 'background:rgba(251,191,36,0.16);color:#fcd34d') + '">' +
+                `${esc(String(p.nombre || p.ruc).slice(0, 20))}${deCliente ? ' ·cliente' : ''}` +
+                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="olvidar" data-sc-ambito="${deCliente ? 'cliente' : 'global'}" ` +
+                'title="Deshacer esta clasificación" style="border:none;background:transparent;color:inherit;' +
+                'cursor:pointer;font-weight:800;padding:0 2px">↺</button></span>';
+        }).join('');
+
+        const estado =
+            '<div style="font-size:10px;opacity:0.8;margin:6px 0;line-height:1.6">' +
+            `sin clasificar <b>${r.sinClasificar}</b> · sin derecho <b>${r.sinCredito}</b>` +
+            (r.conCompras > 0 ? ` · con compras <b>${r.conCompras}</b>` : '') +
+            (r.porCliente > 0 ? ` · propios de este cliente <b>${r.porCliente}</b>` : '') +
+            '</div>';
+
+        const tituloLista = porRucCliente.size > 0
+            ? `<div style="font-size:10px;opacity:0.8;margin-bottom:4px">` +
+              `🏭 <b>${porRucCliente.size}</b> proveedor(es) de este cliente` +
+              (r.sinClasificar > 0 ? ` · <b>${r.sinClasificar}</b> sin clasificar en toda la base` : '') +
+              ` · el período primero:</div>`
+            : `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">Faltan clasificar <b>${faltan.length}</b>, los del período primero:</div>`;
+
+        panel.innerHTML = cabecera + bandaCliente + bandaSoloCero + bandaReparto + bandaPerfil + estado +
+            alertaEstado + alerta5 +
+            (sinPendientes && faltan.length === 0
+                ? '<div style="background:rgba(74,222,128,0.14);color:#86efac;border-radius:8px;padding:8px;font-size:11px;margin-bottom:6px">' +
+                  '✅ No queda ninguno sin clasificar.</div>'
+                : tituloLista + filas) +
+            (chipsDecididos
+                ? '<div style="margin-top:8px;font-size:10px;opacity:0.85;line-height:1.9">Ya decidido: ' +
+                  chipsDecididos + '</div>'
+                : '') +
             '<div style="font-size:10px;opacity:0.6;margin-top:8px;line-height:1.5">' +
             'Lo que marques queda como decisión tuya y ninguna sugerencia lo pisa. ' +
+            'Los 💡 son pistas armadas con el nombre, la tarifa y la recurrencia: ' +
+            'no son un dato confirmado ni mueven plata solas. ' +
             'Sin clasificar, la compra va donde va hoy — nunca al 502 por las dudas.</div>';
     },
 
@@ -2580,7 +2875,7 @@ const SriLoopHUD = {
         ];
 
         let corriendo = false;
-        try { corriendo = (await SriLoop.get()).estado === 'CORRIENDO'; } catch (e) {}
+        try { corriendo = (await SriLoop.get()).estado === 'CORRIENDO'; } catch (e) { /* sin estado del bucle: se asume detenido */ }
 
         const aviso = corriendo
             ? '<div style="background:rgba(245,158,11,0.16);color:#fcd34d;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:11px">' +
@@ -2736,7 +3031,7 @@ const SriLoopHUD = {
         const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
 
         let lista = [];
-        try { lista = (await SafeStorage.get(['sc_bitacora'])).sc_bitacora || []; } catch (e) {}
+        try { lista = (await SafeStorage.get(['sc_bitacora'])).sc_bitacora || []; } catch (e) { /* sin bitácora: la lista queda vacía */ }
 
         const copiar = '<button id="slh-bitacora-copiar" aria-label="Copiar la bitácora al portapapeles" style="border:none;border-radius:8px;padding:6px 10px;min-height:32px;background:rgba(148,163,184,0.18);color:#cbd5e1;font-size:11px;font-weight:800;cursor:pointer">📋 Copiar</button>';
 
@@ -2983,7 +3278,7 @@ const SriLoopHUD = {
 
         let cliente = null;
         if (typeof identificarClienteActual === 'function') {
-            try { cliente = await identificarClienteActual(); } catch (e) {}
+            try { cliente = await identificarClienteActual(); } catch (e) { /* si no se identifica el cliente, sigue nulo */ }
         }
         if (!cliente) {
             const domInfo = (window.sriAssistant && window.sriAssistant.extractClientInfo)
@@ -3131,7 +3426,7 @@ const SriLoopHUD = {
                         this._aviso('⚠️ Error', 'Módulo extractor no disponible.', 5000);
                     }
                 } catch (err) {
-                    console.error('Error al iniciar extractor:', err);
+                    log.error('Error al iniciar extractor:', err);
                     this._aviso('❌ Error', err.message, 6000);
                 } finally {
                     btnIniciar.disabled = false;
@@ -3577,7 +3872,7 @@ async function asegurarRequiereInformarValoresSi() {
             return false;
         }
 
-        console.log('🔍 [WIZARD] Pregunta detectada: "¿Requiere informar valores en su declaración de este período?"');
+        log.debug('🔍 [WIZARD] Pregunta detectada: "¿Requiere informar valores en su declaración de este período?"');
 
         // 2. Localizar el contenedor de la pregunta y sus radiobuttons
         let contenedor = (nodoPregunta.nodeType === Node.TEXT_NODE ? nodoPregunta.parentElement : nodoPregunta);
@@ -3656,7 +3951,7 @@ async function asegurarRequiereInformarValoresSi() {
         }
 
         if (!boxSi) {
-            console.warn('⚠️ [WIZARD] Se detectó la pregunta pero no se pudo ubicar el selector "SÍ".');
+            log.warn('⚠️ [WIZARD] Se detectó la pregunta pero no se pudo ubicar el selector "SÍ".');
             return false;
         }
 
@@ -3666,11 +3961,11 @@ async function asegurarRequiereInformarValoresSi() {
             !!boxSi.querySelector('.ui-icon-bullet');
 
         if (siEstaActivo) {
-            console.log('✅ [WIZARD] La pregunta "¿Requiere informar valores...?" ya se encuentra en SÍ.');
+            log.info('✅ [WIZARD] La pregunta "¿Requiere informar valores...?" ya se encuentra en SÍ.');
             return false;
         }
 
-        console.log('⚡ [WIZARD] Pregunta detectada en NO. Activando "SÍ" para desbloquear formulario completo...');
+        log.debug('⚡ [WIZARD] Pregunta detectada en NO. Activando "SÍ" para desbloquear formulario completo...');
         if (typeof safeStatus === 'function') {
             safeStatus('📝 Activando "SÍ" en informar valores...');
         }
@@ -3683,7 +3978,7 @@ async function asegurarRequiereInformarValoresSi() {
         }
 
         if (labelSi) {
-            try { labelSi.click(); } catch (e) {}
+            try { labelSi.click(); } catch (e) { /* si el clic falla, se prueba el botón */ }
         }
 
         if (inputSi) {
@@ -3704,9 +3999,9 @@ async function asegurarRequiereInformarValoresSi() {
             !!boxSi.querySelector('.ui-icon-bullet');
 
         if (!siQuedoActivo) {
-            console.log('🔄 [WIZARD] Reintento de activación en "SÍ"...');
+            log.debug('🔄 [WIZARD] Reintento de activación en "SÍ"...');
             boxSi.click();
-            if (labelSi) try { labelSi.click(); } catch (e) {}
+            if (labelSi) try { labelSi.click(); } catch (e) { /* último intento: si falla, se sigue */ }
             if (inputSi) {
                 inputSi.checked = true;
                 inputSi.dispatchEvent(new Event('change', { bubbles: true }));
@@ -3714,10 +4009,10 @@ async function asegurarRequiereInformarValoresSi() {
             await sleep(600);
         }
 
-        console.log('✅ [WIZARD] Pregunta cambiada a "SÍ" con éxito. Formulario completo habilitado.');
+        log.info('✅ [WIZARD] Pregunta cambiada a "SÍ" con éxito. Formulario completo habilitado.');
         return true;
     } catch (err) {
-        console.warn('⚠️ [WIZARD] Error verificando pregunta de valores:', err);
+        log.warn('⚠️ [WIZARD] Error verificando pregunta de valores:', err);
         return false;
     }
 }
@@ -3744,7 +4039,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
     try {
         // PASO 0: ESPERA DEL PORTAL (OPTIMIZADO v10.0)
-        console.log('🔍 Paso 0: Esperando al portal (Splash)...');
+        log.debug('🔍 Paso 0: Esperando al portal (Splash)...');
         safeStatus('⏳ Esperando al portal...');
 
         // Espera optimizada: Si el splash se va, arrancamos.
@@ -3759,7 +4054,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         progress(15);
 
         // PASO 1: UBICACIÓN Y NAVEGACIÓN RESILIENTE AL WIZARD (ELITE v10.0)
-        console.log('🔍 Paso 1: Verificando vista...');
+        log.debug('🔍 Paso 1: Verificando vista...');
         safeStatus('🔍 Verificando página...');
         await dismissSridialogs();
 
@@ -3778,7 +4073,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         while (!enWizard && intentosNavegacion < 3) {
             intentosNavegacion++;
-            console.log(`🧭 [WIZARD NAV] Paso de navegación ${intentosNavegacion}/3. URL actual: ${window.location.href}`);
+            log.debug(`🧭 [WIZARD NAV] Paso de navegación ${intentosNavegacion}/3. URL actual: ${window.location.href}`);
             safeStatus('📑 Navegando a Formulario IVA...');
             progress(20 + (intentosNavegacion * 5));
 
@@ -3800,17 +4095,17 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     'a[href*="redireccion=310"], a[href*="declaracionImpuesto"]');
 
                 if (enlaceDirecto && esVisible(enlaceDirecto)) {
-                    console.log('📑 El índice ofrece el enlace directo al formulario IVA. Lo uso.');
+                    log.debug('📑 El índice ofrece el enlace directo al formulario IVA. Lo uso.');
                     safeStatus('🎯 Accediendo a Formulario IVA...');
                     if (!await clickCuandoSePueda(enlaceDirecto, 'Enlace Formulario IVA')) {
-                        console.warn('⚠️ El clic no se pudo dar. Voy por el puente SSO.');
+                        log.warn('⚠️ El clic no se pudo dar. Voy por el puente SSO.');
                         window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                         await sleep(4000);
                         return;
                     }
                     await sleep(2500);
                 } else {
-                    console.log('📑 En índice de declaraciones. Voy por el puente SSO, que es el camino confirmado.');
+                    log.debug('📑 En índice de declaraciones. Voy por el puente SSO, que es el camino confirmado.');
                     safeStatus('⚡ Accediendo a Formulario IVA...');
                     window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                     await sleep(4000);
@@ -3818,7 +4113,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 }
             } else {
                 // CASO B: Estamos en otra página (comprobantesRecibidos, perfil, inicio.jsf, etc.)
-                console.log('🚀 [WIZARD NAV] Navegando inmediatamente vía puente SSO oficial al Formulario IVA...');
+                log.debug('🚀 [WIZARD NAV] Navegando inmediatamente vía puente SSO oficial al Formulario IVA...');
                 safeStatus('⚡ Accediendo a Formulario IVA...');
                 window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                 await sleep(4000);
@@ -3828,7 +4123,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             // Verificar si entramos al Wizard tras este paso
             enWizard = !!checkWizardInDOM();
             if (enWizard) {
-                console.log('✅ Wizard detectado exitosamente.');
+                log.info('✅ Wizard detectado exitosamente.');
                 break;
             }
         }
@@ -3843,19 +4138,19 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         if (!lblObligacion) {
             // Último recurso: si todavía no estamos en el wizard, navegar directo.
             if (!estaEnFormularioIva()) {
-                console.warn('⚠️ Wizard no visible en DOM tras navegación SPA. Forzando el formulario IVA vía puente SSO...');
+                log.warn('⚠️ Wizard no visible en DOM tras navegación SPA. Forzando el formulario IVA vía puente SSO...');
                 safeStatus('⚡ Abriendo Formulario IVA directo...');
                 window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                 await sleep(5000);
                 return;
             }
-            console.error('❌ El Wizard no apareció tras espera.');
+            log.error('❌ El Wizard no apareció tras espera.');
             safeStatus('❌ Error: Portal no responde.');
             return;
         }
 
         // PASO 2: OBLIGACIÓN (Selection 2011 - Robust v2)
-        console.log('🔍 Paso 2: Selección 2011...');
+        log.debug('🔍 Paso 2: Selección 2011...');
         safeStatus('🎯 Seleccionando Obligación 2011...');
 
         await dismissSridialogs();
@@ -3869,12 +4164,12 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             await dismissSridialogs();
             let labelActual = getLabelObligacion();
             if (labelActual && labelActual.textContent.includes('2011')) {
-                console.log('✅ Obligación 2011 ya seleccionada.');
+                log.info('✅ Obligación 2011 ya seleccionada.');
                 selectionOk = true;
                 break;
             }
 
-            console.log(`🎯 Intento ${attempt + 1}: Abriendo dropdown obligación...`);
+            log.debug(`🎯 Intento ${attempt + 1}: Abriendo dropdown obligación...`);
             const trigger = document.querySelector('#frmFlujoDeclaracion\\:somObligacion .ui-selectonemenu-trigger') || labelActual;
 
             if (trigger) {
@@ -3890,7 +4185,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 }, 3000, `Opción 2011 (Intento ${attempt + 1})`);
 
                 if (opt) {
-                    console.log('✅ Opción 2011 encontrada. Clickeando...');
+                    log.info('✅ Opción 2011 encontrada. Clickeando...');
                     clickElement(opt, '2011');
                     await waitForPortal(); // Esperar Ajax del SRI que carga los periodos
                     // Lo que se espera es que la etiqueta diga 2011, que es
@@ -3915,12 +4210,12 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         if (selectionOk) {
             progress(50);
         } else {
-            console.error('🚫 Fallo crítico: No se pudo seleccionar la obligación 2011.');
+            log.error('🚫 Fallo crítico: No se pudo seleccionar la obligación 2011.');
             throw new Error('No se pudo seleccionar la obligación 2011. Por favor selecciona manualmente y el asistente continuará.');
         }
 
         // PASO 3: SELECCIÓN DE PERIODO (Año/Mes)
-        console.log('🔍 Paso 3: Selección de Periodo (Detección de Interfaz)...');
+        log.debug('🔍 Paso 3: Selección de Periodo (Detección de Interfaz)...');
         safeStatus('📅 Configurando periodo...');
 
         await dismissSridialogs();
@@ -3940,7 +4235,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         }, 8000, 'Calendar Input Periodo');
 
         if (calendarInput) {
-            console.log('📅 Interfaz CALENDARIO detectada. Procediendo...');
+            log.debug('📅 Interfaz CALENDARIO detectada. Procediendo...');
 
             // ELITE INTERACTION: Asegurar que el calendario se abra sin cerrarlo si ya está abierto
             const openCalendar = async () => {
@@ -3957,7 +4252,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
                 for (let i = 0; i < 3; i++) {
                     if (await cortarSiPidieronParar('apertura del calendario')) return false;
-                    console.log(`🎯 Abriendo calendario (Intento ${i + 1})...`);
+                    log.debug(`🎯 Abriendo calendario (Intento ${i + 1})...`);
                     calendarInput.focus();
                     await sleep(350);
 
@@ -4002,10 +4297,10 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     }
 
                     if (!datepickerDiv) {
-                        console.log('⏳ Buscando visor de calendario...');
+                        log.debug('⏳ Buscando visor de calendario...');
                         const opened = await openCalendar();
                         if (!opened) {
-                            console.warn('⚠️ No se pudo abrir el calendario visualmente.');
+                            log.warn('⚠️ No se pudo abrir el calendario visualmente.');
                         }
                         await sleep(500);
                         continue;
@@ -4017,7 +4312,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     const matchYear = headerText.match(/(20\d{2})/);
 
                     if (!matchYear) {
-                        console.log('📅 No se halló año en cabecera text:', headerText);
+                        log.debug('📅 No se halló año en cabecera text:', headerText);
                         // A veces el año está en un botón o span específico
                         const yearEl = datepickerDiv.querySelector('.ui-datepicker-year, .ui-button-text, .ui-datepicker-title');
                         const yearText = (yearEl ? yearEl.textContent : "").match(/20\d{2}/);
@@ -4028,7 +4323,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     }
 
                     const currentYear = parseInt(matchYear[0]);
-                    console.log(`🔎 Año en UI: ${currentYear} | Objetivo: ${targetYear}`);
+                    log.debug(`🔎 Año en UI: ${currentYear} | Objetivo: ${targetYear}`);
 
                     if (currentYear === targetYear) return datepickerDiv;
 
@@ -4059,7 +4354,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 const targetText = targetMonthName; // "MARZO", "ABRIL", etc.
                 const shortText = mesesAbreviados[monthIndex]; // "MAR", "ABR", etc.
 
-                console.log(`🎯 Buscando botón para: ${targetText} (${shortText}) en el calendario...`);
+                log.debug(`🎯 Buscando botón para: ${targetText} (${shortText}) en el calendario...`);
 
                 // Buscamos todos los elementos que parezcan botones de mes
                 const candidates = Array.from(root.querySelectorAll('a.ui-button, button.ui-button, .button-3, td'))
@@ -4076,7 +4371,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                                  candidates[0];
 
                 if (bestMatch) {
-                    console.log(`✅ Mes ${targetText} localizado. Forzando click...`);
+                    log.info(`✅ Mes ${targetText} localizado. Forzando click...`);
                     bestMatch.focus();
                     
                     // Doble evento para asegurar que PrimeFaces lo detecte
@@ -4094,7 +4389,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const monthSelected = selectMonthInCalendar(yearGrid);
 
             if (monthSelected) {
-                console.log('✨ Mes clickeado. Esperando que el portal procese la selección...');
+                log.debug('✨ Mes clickeado. Esperando que el portal procese la selección...');
                 periodSelected = true;
                 progress(75);
                 
@@ -4109,7 +4404,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 await sleep(1500); // Pausa necesaria para que PrimeFaces habilite el botón 'Siguiente'
             } else {
                 // 3.4: GHOST INJECTION (Fallback de emergencia)
-                console.log('⚠️ No se pudo clickear el mes. Intentando inyección directa...');
+                log.warn('⚠️ No se pudo clickear el mes. Intentando inyección directa...');
                 const dateString = `${(monthIndex + 1).toString().padStart(2, '0')}/${year}`;
                 calendarInput.value = dateString;
                 calendarInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -4123,7 +4418,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     if (widget && widget.setDate) {
                         widget.setDate(new Date(year, monthIndex, 1));
                     }
-                } catch(e) {}
+                } catch(e) { /* sin widget de fecha: se deja el valor que ya tenía */ }
                 
                 await sleep(1500);
                 periodSelected = true; 
@@ -4132,7 +4427,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         // FALLBACK: MODO CLÁSICO (Dropdowns) si falla el calendario O si el calendario falló en seleccionar
         if (!periodSelected) {
-            console.log('🔍 Intentando Fallback: Interfaz Clásica (Dropdowns)...');
+            log.debug('🔍 Intentando Fallback: Interfaz Clásica (Dropdowns)...');
 
             const findClassicDropdown = async (labelMatch, idMatch) => {
                 return await waitFor(() => {
@@ -4151,12 +4446,12 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             let yearClassicOk = false;
             if (labelAnio) {
                 if (labelAnio.textContent.includes(year.toString())) {
-                    console.log('✅ Año ya seleccionado en dropdown clásico.');
+                    log.info('✅ Año ya seleccionado en dropdown clásico.');
                     yearClassicOk = true;
                 } else {
                     // RETRY LOOP para dropdown de año
                     for (let attempt = 0; attempt < 3; attempt++) {
-                        console.log(`🎯 Intento ${attempt + 1}: Seleccionando año ${year} en dropdown clásico...`);
+                        log.debug(`🎯 Intento ${attempt + 1}: Seleccionando año ${year} en dropdown clásico...`);
                         const trigger = labelAnio.closest('.ui-selectonemenu') || labelAnio;
                         clickElement(trigger, 'Dropdown Año');
                         await sleep(800);
@@ -4171,7 +4466,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
                             // Verificar si pegó
                             if (labelAnio.textContent.includes(year.toString())) {
-                                console.log('✅ Año seleccionado correctamente.');
+                                log.info('✅ Año seleccionado correctamente.');
                                 yearClassicOk = true;
                                 break;
                             }
@@ -4184,12 +4479,12 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             const labelMes = await findClassicDropdown('MES', 'frmFlujoDeclaracion:somMes_label');
             if (yearClassicOk && labelMes) {
                 if (labelMes.textContent.toUpperCase().includes(targetMonthName)) {
-                    console.log('✅ Mes ya seleccionado en dropdown clásico.');
+                    log.info('✅ Mes ya seleccionado en dropdown clásico.');
                     periodSelected = true;
                 } else {
                     // RETRY LOOP para dropdown de mes
                     for (let attempt = 0; attempt < 3; attempt++) {
-                        console.log(`🎯 Intento ${attempt + 1}: Seleccionando mes ${targetMonthName} en dropdown clásico...`);
+                        log.debug(`🎯 Intento ${attempt + 1}: Seleccionando mes ${targetMonthName} en dropdown clásico...`);
                         const trigger = labelMes.closest('.ui-selectonemenu') || labelMes;
                         clickElement(trigger, 'Dropdown Mes');
                         await sleep(800);
@@ -4204,7 +4499,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
                             // Verificar si pegó
                             if (labelMes.textContent.toUpperCase().includes(targetMonthName)) {
-                                console.log('✅ Mes seleccionado correctamente.');
+                                log.info('✅ Mes seleccionado correctamente.');
                                 periodSelected = true;
                                 break;
                             }
@@ -4213,13 +4508,13 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                     }
                 }
             } else if (!yearClassicOk) {
-                console.warn('⚠️ No se pudo seleccionar el año, saltando selección de mes.');
+                log.warn('⚠️ No se pudo seleccionar el año, saltando selección de mes.');
             }
         }
 
         // VALIDACIÓN DE SEGURIDAD CON ASISTENCIA AL USUARIO
         if (!periodSelected) {
-            console.error('🚫 El periodo no pudo ser configurado automáticamente.');
+            log.error('🚫 El periodo no pudo ser configurado automáticamente.');
             safeStatus('🤝 Necesito tu ayuda: Selecciona el periodo manualmente');
 
             // ELITE: Mostrar tarjeta de asistencia al usuario
@@ -4236,7 +4531,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             }
 
             // ESPERAR A QUE EL USUARIO SELECCIONE Y CONTINUAR AUTOMÁTICAMENTE
-            console.log('⏳ Esperando selección manual del periodo...');
+            log.debug('⏳ Esperando selección manual del periodo...');
             const userSelectedPeriod = await waitFor(() => {
                 // Verificar si el botón Siguiente está habilitado (indica que el periodo fue seleccionado)
                 const btnSig = document.getElementById('frmFlujoDeclaracion:btnObligacionSiguiente');
@@ -4244,17 +4539,17 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             }, 120000, 'Selección Manual de Periodo'); // 2 minutos de espera
 
             if (userSelectedPeriod) {
-                console.log('✅ Usuario seleccionó el periodo. Continuando...');
+                log.info('✅ Usuario seleccionó el periodo. Continuando...');
                 periodSelected = true;
             } else {
-                console.error('❌ Timeout esperando selección manual.');
+                log.error('❌ Timeout esperando selección manual.');
                 safeStatus('❌ Tiempo agotado. Reinicia el proceso.');
                 return;
             }
         }
 
         // PASO 4: BOTÓN SIGUIENTE (Primer Step)
-        console.log('🔍 Paso 4: Avanzar Siguiente...');
+        log.debug('🔍 Paso 4: Avanzar Siguiente...');
         const btnSiguiente = await waitFor(() => {
             const btn = document.getElementById('frmFlujoDeclaracion:btnObligacionSiguiente') ||
                         document.querySelector('button[id*="btnObligacionSiguiente"]') ||
@@ -4268,11 +4563,11 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             await sleep(2000);
             // Si el portal no avanzó (sigue el botón ahí), intentar un segundo click forzado
             if (document.getElementById('frmFlujoDeclaracion:btnObligacionSiguiente')) {
-                console.log('⚠️ El botón Siguiente sigue presente. Re-clickeando...');
+                log.warn('⚠️ El botón Siguiente sigue presente. Re-clickeando...');
                 btnSiguiente.click();
             }
         } else {
-            console.warn('⚠️ No se detectó botón Siguiente habilitado. Verifique selección manual.');
+            log.warn('⚠️ No se detectó botón Siguiente habilitado. Verifique selección manual.');
         }
         
         progress(85);
@@ -4280,7 +4575,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
         // ELITE FIX: SMART DETECTOR DE DECLARACIÓN SUSTITUTIVA / PREVIA
         // Evita que el asistente intente declarar algo que ya fue declarado (evitando error 404 o wizard roto)
-        console.log('🔍 Chequeando alertas de declaración previa/sustitutiva...');
+        log.debug('🔍 Chequeando alertas de declaración previa/sustitutiva...');
         await sleep(600); // Pequeña espera para que PrimeFaces termine de actualizar la vista
         
         const checkTipo = typeof tipoDeDeclaracionEnPantalla === 'function' ? tipoDeDeclaracionEnPantalla() : { esSustitutiva: false, marca: '' };
@@ -4300,7 +4595,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         });
 
         if (isAlreadyDeclared) {
-            console.warn('⚠️ DECLARACIÓN PREVIA / SUSTITUTIVA DETECTADA EN WIZARD SRI.');
+            log.warn('⚠️ DECLARACIÓN PREVIA / SUSTITUTIVA DETECTADA EN WIZARD SRI.');
             safeStatus('⚠️ Declaración ya registrada (Sustitutiva)');
             
             if (window.sriAssistant) {
@@ -4339,7 +4634,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                         duration: 6000
                     });
                 }
-                console.log(`🧾 [WIZARD] Redirigiendo a Consulta de declaraciones para traer el comprobante de ${quien.name || quien.ruc}...`);
+                log.debug(`🧾 [WIZARD] Redirigiendo a Consulta de declaraciones para traer el comprobante de ${quien.name || quien.ruc}...`);
                 await sleep(1200);
                 await irARecuperarComprobante(quien.ruc, periodo, quien.name || '');
                 return; // Redirección en marcha
@@ -4363,7 +4658,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         }
 
         // PASO 5: PREGUNTAS (Si aparecen - SMART SKIP)
-        console.log('🔍 Paso 5: Preguntas...');
+        log.debug('🔍 Paso 5: Preguntas...');
 
         // 🎯 Candado preventivo: Si la pregunta de informar valores aparece en el paso de preguntas, activar SÍ
         await asegurarRequiereInformarValoresSi();
@@ -4377,7 +4672,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
                 document.getElementById('frmFlujoDeclaracion:btnVerFormularioCompleto') ||
                 findByText('Ver formulario completo');
             if (btnFinal && esVisible(btnFinal)) {
-                console.log('⏩ No hay preguntas. Saltando al Paso 6.');
+                log.debug('⏩ No hay preguntas. Saltando al Paso 6.');
                 return 'SKIPPED';
             }
             return null;
@@ -4391,7 +4686,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         }
 
         // PASO 6: VER FORMULARIO COMPLETO (ELITE CLICK)
-        console.log('🔍 Paso 6: Abrir Formulario...');
+        log.debug('🔍 Paso 6: Abrir Formulario...');
 
         // 🎯 Candado de Oro Definitivo: Justo antes de aplastar "Ver formulario completo",
         // si la pregunta "¿Requiere informar valores en su declaración de este período?"
@@ -4399,7 +4694,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         // y no salga en blanco ni se cuelgue.
         const cambioSi = await asegurarRequiereInformarValoresSi();
         if (cambioSi) {
-            console.log('⏳ Esperando actualización reactiva del portal tras marcar SÍ...');
+            log.debug('⏳ Esperando actualización reactiva del portal tras marcar SÍ...');
             await sleep(600);
         }
 
@@ -4414,7 +4709,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
         if (btnVerFormulario) {
             // Doble candado de seguridad: verificar que no sea sustitutiva antes de abrir
             if (typeof tipoDeDeclaracionEnPantalla === 'function' && tipoDeDeclaracionEnPantalla().esSustitutiva) {
-                console.warn('🛑 [PASO 6] Sustitutiva detectada antes de abrir formulario. Cancelando apertura.');
+                log.warn('🛑 [PASO 6] Sustitutiva detectada antes de abrir formulario. Cancelando apertura.');
                 return;
             }
             safeStatus('✨ Abriendo Formulario...');
@@ -4425,7 +4720,7 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             progress(100);
 
             // Espera reactiva de los campos del formulario (hasta 15s)
-            console.log('⏳ Esperando renderizado reactivo de casilleros IVA en DOM...');
+            log.debug('⏳ Esperando renderizado reactivo de casilleros IVA en DOM...');
             safeStatus('⏳ Cargando casilleros del formulario...');
             const formFieldsFound = await waitFor(() => {
                 return document.getElementById('concepto401') ||
@@ -4434,10 +4729,10 @@ async function ejecutarNavegacionDeclaracion(periodData) {
             }, 15000, 'Campos Formulario IVA');
 
             if (formFieldsFound) {
-                console.log('✅ Casilleros de Formulario IVA detectados en DOM.');
+                log.info('✅ Casilleros de Formulario IVA detectados en DOM.');
                 await sleep(500);
             } else {
-                console.warn('⚠️ Casilleros no detectados inmediatamente tras 15s. Intentando detección de seguridad...');
+                log.warn('⚠️ Casilleros no detectados inmediatamente tras 15s. Intentando detección de seguridad...');
             }
 
             // ELITE NOTIFICACIÓN: LLEGADA AL FORMULARIO
@@ -4457,13 +4752,13 @@ async function ejecutarNavegacionDeclaracion(periodData) {
 
             // ELITE FIX: Limpiar pendingAction para detener el ciclo
             await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
-            console.log('✅ Navegación completada. pendingAction limpiado.');
+            log.info('✅ Navegación completada. pendingAction limpiado.');
         }
 
         console.groupEnd();
         return;
     } catch (e) {
-        console.error('❌ Error en Wizard:', e);
+        log.error('❌ Error en Wizard:', e);
         safeStatus('❌ Error: ' + e.message);
     } finally {
         if (window.sriAssistant) {
@@ -4908,7 +5203,7 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
             navigator.clipboard.writeText(clipboardText).then(() => {
                 btnCopy.innerHTML = '<span>✅</span> ¡REPORTE COPIADO!';
                 setTimeout(() => btnCopy.innerHTML = '<span>📋</span> COPIAR REPORTE COMPLETO', 2000);
-            }).catch(err => console.error('Error al copiar:', err));
+            }).catch(err => log.error('Error al copiar:', err));
         };
     }
 
@@ -4970,7 +5265,7 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
                     btnSaveProfile.innerHTML = '<span>⚠️</span> NO DISPONIBLE';
                 }
             } catch (err) {
-                console.error('Error guardando en perfil:', err);
+                log.error('Error guardando en perfil:', err);
                 btnSaveProfile.innerHTML = '<span>❌</span> ERROR';
             }
             setTimeout(() => {

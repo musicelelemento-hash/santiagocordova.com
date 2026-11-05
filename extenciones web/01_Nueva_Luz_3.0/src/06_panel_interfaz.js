@@ -54,7 +54,7 @@ class SriAssistantPanel {
         try {
             // ELITE v13.0: XML Trap Escape (Bugs de PrimeFaces SRI)
             if (document instanceof XMLDocument || document.contentType?.includes('xml') || document.querySelector('partial-response')) {
-                console.error('❌ [SRI ELITE] Trampa XML detectada. El SRI colapsó el ViewState. Escapando vía puente SSO...');
+                log.error('❌ [SRI ELITE] Trampa XML detectada. El SRI colapsó el ViewState. Escapando vía puente SSO...');
                 window.location.href = SRI_PUENTE_FORMULARIO_IVA;
                 return;
             }
@@ -73,7 +73,7 @@ class SriAssistantPanel {
             
             // Seguridad extra por si el contenedor no soporta estilos
             if (!this.container.style) {
-                console.warn('⚠️ [SRI ELITE] El documento no soporta HTML styling. Abortando HUD.');
+                log.warn('⚠️ [SRI ELITE] El documento no soporta HTML styling. Abortando HUD.');
                 return;
             }
 
@@ -111,12 +111,12 @@ class SriAssistantPanel {
                 if (stored.ghost_manual_mode === true && !hasActiveAutoFlow && !this.manualMode) {
                     this.manualMode = true;
                     this.render();
-                    console.log('🛠️ [INIT] Modo Manual restaurado desde storage persistente.');
+                    log.debug('🛠️ [INIT] Modo Manual restaurado desde storage persistente.');
                 }
-            }).catch(e => console.warn('No se pudo recuperar assistantExpanded', e));
+            }).catch(e => log.warn('No se pudo recuperar assistantExpanded', e));
 
             // Operaciones asincronas retrasadas para no bloquear UI
-            this.checkRucChange().catch(e => console.warn('checkRucChange error', e));
+            this.checkRucChange().catch(e => log.warn('checkRucChange error', e));
 
             this.syncPauseState();
             this.startStorageListener();
@@ -125,7 +125,7 @@ class SriAssistantPanel {
             // Inicializar scanner si corresponde
             this.checkScanRequirement();
         } catch (e) {
-            console.error('❌ [SRI ELITE] Error Crítico en Initialization:', e);
+            log.error('❌ [SRI ELITE] Error Crítico en Initialization:', e);
             // Intento de recuperación mínima: Re-intentar render
             if (this.container && document.body) {
                 document.body.appendChild(this.container);
@@ -140,13 +140,13 @@ class SriAssistantPanel {
             try {
                 // --- VISIBILITY GUARD ---
             if (this.container && !document.getElementById('sri-assistant-panel-root')) {
-                console.log('🛡️ [VISIBILITY GUARD] Re-inyectando panel removido por SPA...');
+                log.debug('🛡️ [VISIBILITY GUARD] Re-inyectando panel removido por SPA...');
                 document.body.appendChild(this.container);
             }
 
             // --- URL CHANGE DETECTION (SPA) ---
             if (window.location.href !== this.lastUrl) {
-                console.log('🌍 [SPA NAVIGATION] URL detectada:', window.location.href);
+                log.debug('🌍 [SPA NAVIGATION] URL detectada:', window.location.href);
                 this.lastUrl = window.location.href;
                 this.suggestionShownOnThisPage = false;
                 this.checkScanRequirement();
@@ -155,7 +155,7 @@ class SriAssistantPanel {
             if (await checkSessionAlive()) {
                 if (!this._heartbeatLogged) {
                     this._heartbeatLogged = true;
-                    console.log('💓 Ghost Heartbeat: Sesión activa y protegida.');
+                    log.debug('💓 Ghost Heartbeat: Sesión activa y protegida.');
                 }
             }
             // --- SMART FORM DETECTION ---
@@ -163,7 +163,7 @@ class SriAssistantPanel {
             // --- SUCCESS DETECTION ---
             await this.checkMissionAccomplished();
             } catch (e) {
-                console.warn('💓 [HEARTBEAT] Error controlado:', e);
+                log.warn('💓 [HEARTBEAT] Error controlado:', e);
             }
         }, 3000); // Frecuencia aumentada para detección reactiva (3s)
     }
@@ -182,7 +182,7 @@ class SriAssistantPanel {
 
         if (enAreaDeEscaneo && !enLogin) {
             if (!this.scanInterval) {
-                console.log('📡 [SCANNER] Iniciando escáner de obligaciones en esta área...');
+                log.debug('📡 [SCANNER] Iniciando escáner de obligaciones en esta área...');
                 this._escaneosVacios = 0;
                 setTimeout(() => this.scanObligacionesSRI(), 800);
                 this.scanInterval = setInterval(() => this.scanObligacionesSRI(), 5000);
@@ -194,7 +194,7 @@ class SriAssistantPanel {
 
     detenerEscaner(motivo) {
         if (!this.scanInterval) return;
-        console.log(`🔕 [SCANNER] Escáner detenido (${motivo}).`);
+        log.debug(`🔕 [SCANNER] Escáner detenido (${motivo}).`);
         clearInterval(this.scanInterval);
         this.scanInterval = null;
     }
@@ -243,7 +243,7 @@ class SriAssistantPanel {
 
         if (found && !this.missionReportShown) {
             this.missionReportShown = true;
-            console.log('🏆 ¡MISIÓN CUMPLIDA! Declaración detectada con éxito.');
+            log.debug('🏆 ¡MISIÓN CUMPLIDA! Declaración detectada con éxito.');
             const info = this.extractClientInfo();
 
             // ELITE FIX: Limpiar estado pendiente de inmediato ANTES de capturar el PDF,
@@ -268,7 +268,7 @@ class SriAssistantPanel {
                 const printBtn = printSpans.length > 0 ? printSpans[printSpans.length - 1] : null;
 
                 if (!printBtn) {
-                    console.warn('⚠️ No se encontró el botón de Imprimir al final de la página, pero continuaremos con la sincronización...');
+                    log.warn('⚠️ No se encontró el botón de Imprimir al final de la página, pero continuaremos con la sincronización...');
                 }
 
                 // Esperar a que se capture el PDF (si se abre stream) y sincronizar a Supabase
@@ -309,7 +309,7 @@ class SriAssistantPanel {
                         // Sincronizar en la nube con Supabase incluyendo el objeto de PDF de respaldo
                         await syncDeclarationToSupabase(info.ruc, periodStr, clientPdf || null, info.name, preFetchedGhostData);
                         if (typeof clearCapturedPdf === 'function') clearCapturedPdf('declaration_success_cleanup');
-                    } catch(e) { console.warn('Error al actualizar historial:', e); }
+                    } catch(e) { log.warn('Error al actualizar historial:', e); }
                 }
 
                 // Cleanup ya realizado arriba por seguridad inmediata.
@@ -317,11 +317,11 @@ class SriAssistantPanel {
                 // Modo Auto Bucle Check (Poderes Auto Admin)
                 const sigueElLote = await loteDebeContinuar();
                 if (sigueElLote) {
-                    console.log('🔄 [MODO AUTO BUCLE] Declaración exitosa. Avanzando al siguiente cliente en 3 segundos...');
+                    log.debug('🔄 [MODO AUTO BUCLE] Declaración exitosa. Avanzando al siguiente cliente en 3 segundos...');
                     setTimeout(async () => {
                         const batchNext = await handleBatchNextClient();
                         if (!batchNext) {
-                            console.log('🏁 [SESIÓN] No hay más clientes en lote. Lote completado.');
+                            log.info('🏁 [SESIÓN] No hay más clientes en lote. Lote completado.');
                             if (typeof SriLoop !== 'undefined') await SriLoop.detener('Lote completado');
                             await SafeStorage.remove([
                                 'pending_sri_autofill', 'pendingAction', 'actionTimestamp',
@@ -330,7 +330,7 @@ class SriAssistantPanel {
                         }
                     }, 3000);
                 } else {
-                    console.log('🏁 [SESIÓN] Declaración única finalizada. Cerrando sesión en 3 segundos...');
+                    log.info('🏁 [SESIÓN] Declaración única finalizada. Cerrando sesión en 3 segundos...');
                     setTimeout(async () => {
                         this.showEliteToast({
                             title: "✅ Libre",
@@ -426,7 +426,7 @@ class SriAssistantPanel {
                             }
                         });
                         await GhostMemory.clearCurrent();
-                        console.log('🔒 Cerrando sesión SRI para iniciar con el siguiente cliente...');
+                        log.debug('🔒 Cerrando sesión SRI para iniciar con el siguiente cliente...');
                         cerrarSesionSRI();
                     };
                 }
@@ -446,7 +446,7 @@ class SriAssistantPanel {
         this.isOnForm = !!hasFormFields;
 
         if (this.isOnForm && !wasOnForm) {
-            console.log('✨ [Detection] ¡Formulario IVA Detectado! Mostrando HUD Elite.');
+            log.debug('✨ [Detection] ¡Formulario IVA Detectado! Mostrando HUD Elite.');
             this.toggleMinimize(false); // Expandir si aterrizamos en el form
             this.render();
 
@@ -460,7 +460,7 @@ class SriAssistantPanel {
 
                 if (isAutoActive) {
                     // En modo AUTO: disparar siempre, sin caché de storage
-                    console.log('🚀 [Detection] Modo auto activo – iniciando llenado en 1.5s...');
+                    log.debug('🚀 [Detection] Modo auto activo – iniciando llenado en 1.5s...');
                     setTimeout(() => this.suggestWorkflowStartOnForm(), 1500);
                 } else {
                     // En modo MANUAL: usar clave por RUC+periodo para no molestar de nuevo
@@ -472,7 +472,7 @@ class SriAssistantPanel {
                         await SafeStorage.set({ [cacheKey]: true });
                         setTimeout(() => this.suggestWorkflowStartOnForm(), 1500);
                     } else {
-                        console.log('🛑 [Detection] Sugerencia ya mostrada para este periodo (modo manual).');
+                        log.debug('🛑 [Detection] Sugerencia ya mostrada para este periodo (modo manual).');
                     }
                 }
             }
@@ -484,7 +484,7 @@ class SriAssistantPanel {
     // ELITE v12.7+: Toggle Modo Manual (persiste en storage)
     async toggleManualMode(val) {
         this.manualMode = val !== undefined ? val : !this.manualMode;
-        console.log(`🛠️ Modo Manual: ${this.manualMode ? 'ACTIVADO' : 'DESACTIVADO'}`);
+        log.debug(`🛠️ Modo Manual: ${this.manualMode ? 'ACTIVADO' : 'DESACTIVADO'}`);
 
         if (this.manualMode) {
             // DESACTIVAR auto-mode en storage persistente
@@ -518,14 +518,14 @@ class SriAssistantPanel {
     // ELITE v11: Proactive Workflow Suggestion on Form
     async suggestWorkflowStartOnForm() {
         if (this.suggestionDismissed) return; // ELITE FIX: No molestar si ya se ignoró
-        console.log('🔎 Analizando formulario para sugerencias proactivas...');
+        log.debug('🔎 Analizando formulario para sugerencias proactivas...');
 
         // 1. PRIMERO: Verificar si ya tenemos datos en memoria (GhostMemory)
         const data = await GhostMemory.getData();
         const hasData = data && (data.facturas || data.retenciones);
 
         if (hasData) {
-            console.log('✅ Datos en memoria detectados.');
+            log.info('✅ Datos en memoria detectados.');
 
             // ELITE v11: Sugerir llenado SOLO si fue extracción mensual (no bulk)
             const storage = await SafeStorage.get(['workflowPeriod', 'bulkFlow', 'autoDeclaration']);
@@ -536,7 +536,7 @@ class SriAssistantPanel {
             const isAutoActive = !!(storage.autoDeclaration || autoModeRes.sri_auto_mode);
 
             if (period) {
-                console.log(`🚀 [ELITE] Lanzando sugerencia de llenado fase 3 (Auto: ${isAutoActive})...`);
+                log.debug(`🚀 [ELITE] Lanzando sugerencia de llenado fase 3 (Auto: ${isAutoActive})...`);
                 this.suggestStep3(isAutoActive);
                 return;
             }
@@ -545,11 +545,11 @@ class SriAssistantPanel {
         // 2. SEGUNDO: Si NO hay datos en GhostMemory, verificar el estado del formulario
         const isEmpty = await this.isFormEmpty();
         if (!isEmpty) {
-            console.log('💎 Formulario con valores o sugeridos detectados en pantalla.');
+            log.debug('💎 Formulario con valores o sugeridos detectados en pantalla.');
             const storage = await SafeStorage.get(['workflowPeriod', 'autoDeclaration', 'sri_auto_mode', 'auto_batch_enabled']);
             const isAutoActive = !!(storage.autoDeclaration || storage.sri_auto_mode || storage.auto_batch_enabled);
 
-            console.log(`💎 Formulario con valores detectados. Mostrando resumen y temporizador (Auto: ${isAutoActive})...`);
+            log.debug(`💎 Formulario con valores detectados. Mostrando resumen y temporizador (Auto: ${isAutoActive})...`);
             this.suggestStep3(isAutoActive);
             return;
         }
@@ -598,7 +598,7 @@ class SriAssistantPanel {
             // Si hay algún valor > 0, no está vacío
             return (val401 === 0 && val500 === 0);
         } catch (e) {
-            console.warn('Error checking isFormEmpty', e);
+            log.warn('Error checking isFormEmpty', e);
             return false; // Ante la duda, no sugerimos
         }
     }
@@ -724,7 +724,7 @@ class SriAssistantPanel {
         const info = this.extractClientInfo();
         // Solo actuar si tenemos un RUC de ALTA CONFIANZA (extraído del header)
         if (!info.ruc || !info.highConfidence) {
-            console.log('🔎 RUC Detection: No hay RUC de alta confianza en el header.');
+            log.debug('🔎 RUC Detection: No hay RUC de alta confianza en el header.');
             return;
         }
 
@@ -732,7 +732,7 @@ class SriAssistantPanel {
 
         // CAMBIO DE CONTEXTO ELITE (SMART CONFLICT RESOLUTION)
         if (stored.lastRuc && stored.lastRuc !== info.ruc) {
-            console.log(`👤 Cambio de contexto de cliente detectado: ${stored.lastRuc} -> ${info.ruc}. Limpiando memoria previa...`);
+            log.debug(`👤 Cambio de contexto de cliente detectado: ${stored.lastRuc} -> ${info.ruc}. Limpiando memoria previa...`);
             await GhostMemory.clearCurrent();
             await SafeStorage.set({ lastRuc: info.ruc, sriAutomationPaused: false });
             this.updateSummary();
@@ -764,7 +764,7 @@ class SriAssistantPanel {
                     const cleanLines = text.split('\n').map(l => l.trim()).filter(l => l && !l.includes(res.ruc));
                     res.name = cleanLines.join(' ') || 'Cliente SRI';
                     res.highConfidence = true;
-                    console.log('💎 [ELITE] Cliente detectado via NAT Header Div:', res);
+                    log.debug('💎 [ELITE] Cliente detectado via NAT Header Div:', res);
                     return res;
                 }
             }
@@ -780,7 +780,7 @@ class SriAssistantPanel {
                     res.ruc = rText.match(/\d{13}/)[0];
                     res.name = nText;
                     res.highConfidence = true;
-                    console.log('💎 [ELITE] Cliente detectado via Angular Profile:', res);
+                    log.debug('💎 [ELITE] Cliente detectado via Angular Profile:', res);
                     return res;
                 }
             }
@@ -796,7 +796,7 @@ class SriAssistantPanel {
                         res.ruc = rMatch[0];
                         res.name = nuevoNameEl.innerText.trim();
                         res.highConfidence = true;
-                        console.log('💎 [ELITE] Cliente detectado via Topbar ID:', res);
+                        log.debug('💎 [ELITE] Cliente detectado via Topbar ID:', res);
                         return res;
                     }
                 }
@@ -809,7 +809,7 @@ class SriAssistantPanel {
                 res.highConfidence = true;
                 return res;
             }
-        } catch (e) { console.warn('Error en detección Angular:', e); }
+        } catch (e) { log.warn('Error en detección Angular:', e); }
 
         const BLACKLIST_RUCS = ['1791321453001', '1768152560001']; // SRI default or restricted RUCs
 
@@ -857,7 +857,7 @@ class SriAssistantPanel {
 
                     if (rawName.length > 3) res.name = rawName;
 
-                    console.log(`🔎 RUC detectado por selector [${sel}]:`, res);
+                    log.debug(`🔎 RUC detectado por selector [${sel}]:`, res);
                     return res;
                 }
             }
@@ -907,7 +907,7 @@ class SriAssistantPanel {
                                     .replace(/\s+/g, ' ')
                                     .trim();
 
-                                console.log('🔎 RUC detectado por Escaneo Espacial:', res);
+                                log.debug('🔎 RUC detectado por Escaneo Espacial:', res);
                                 return res;
                             }
                         }
@@ -915,7 +915,7 @@ class SriAssistantPanel {
                 }
             }
         } catch (e) {
-            console.warn("Error en Escaneo Espacial de RUC:", e);
+            log.warn("Error en Escaneo Espacial de RUC:", e);
         }
 
         // 3. ESTRATEGIA: Perfil (Fallback)
@@ -1010,7 +1010,7 @@ class SriAssistantPanel {
         // hay obligaciones que escanear. (Antes se buscaba un input llamado
         // 'usuario', que en el login del SRI no existe.)
         if (typeof encontrarCamposLogin === 'function' && encontrarCamposLogin()) {
-            console.log('🔒 [ELITE SCANNER] Pantalla de login detectada. Escáner silenciado.');
+            log.debug('🔒 [ELITE SCANNER] Pantalla de login detectada. Escáner silenciado.');
             return;
         }
 
@@ -1021,7 +1021,7 @@ class SriAssistantPanel {
             // 🚀 ELITE: Si estamos en perfil y no hay rastro de obligaciones, intentar expandir
             const panelProximas = findByText('Próximas Obligaciones', 'span') || findByText('próximas obligaciones', 'div');
             if (isPerfil && panelProximas && retryCounter === 0) {
-                console.log('📬 [ELITE SCANNER] Forzando expansión de panel de obligaciones...');
+                log.debug('📬 [ELITE SCANNER] Forzando expansión de panel de obligaciones...');
                 const expandBtn = panelProximas.closest('.ui-panel-header') || panelProximas;
                 expandBtn.click();
                 await sleep(600); // Espera mínima optimizada
@@ -1035,7 +1035,7 @@ class SriAssistantPanel {
                     return t.includes('obligacion') || t.includes('declaracion');
                 });
                 if (matPanels.length > 0) {
-                    console.log(`📬 [ELITE SCANNER] Auto-expandiendo ${matPanels.length} paneles Angular (Solo Obligaciones)...`);
+                    log.debug(`📬 [ELITE SCANNER] Auto-expandiendo ${matPanels.length} paneles Angular (Solo Obligaciones)...`);
                     matPanels.forEach(p => p.click());
                     await sleep(800);
                     return tryScan(1);
@@ -1091,7 +1091,7 @@ class SriAssistantPanel {
                     const cacheKey = `filed_${ruc}_2011_${monthIndex}_${detectedYear}`;
                     const lastSuccess = await SafeStorage.get([cacheKey]);
                     if (lastSuccess[cacheKey] && (Date.now() - lastSuccess[cacheKey] < 5 * 24 * 60 * 60 * 1000)) {
-                        console.log(`🔕 [SMART SILENCE] Obligación ${detectedMonth} ya procesada localmente y registrada.`);
+                        log.debug(`🔕 [SMART SILENCE] Obligación ${detectedMonth} ya procesada localmente y registrada.`);
                         return;
                     }
 
@@ -1102,14 +1102,14 @@ class SriAssistantPanel {
                         isExpired = new Date() > expirationDate;
                     }
 
-                    console.log(`🎯 [ELITE SCANNER] Detectada: ${detectedMonth} ${detectedYear} (Vencido: ${isExpired})`);
+                    log.debug(`🎯 [ELITE SCANNER] Detectada: ${detectedMonth} ${detectedYear} (Vencido: ${isExpired})`);
 
                     // El temporizador automático solo puede arrancar si el
                     // semáforo está en CORRIENDO.
                     const isAuto = await SriLoop.puedeAvanzar();
 
                     if (isAuto) {
-                        console.log('⚡ [ELITE SCANNER] Modo automático activo: iniciando TURBO_FULL de inmediato hacia Comprobantes Recibidos...');
+                        log.debug('⚡ [ELITE SCANNER] Modo automático activo: iniciando TURBO_FULL de inmediato hacia Comprobantes Recibidos...');
                         this.runUnifiedWorkflow('TURBO_FULL', { monthIndex, year: detectedYear });
                         return;
                     }
@@ -1366,7 +1366,7 @@ class SriAssistantPanel {
      * Si detecta algo desconocido, retorna false para detener el bot.
      */
     async validarAdvertenciasSRI() {
-        console.log('🛡️ [ELITE] Validando advertencias del SRI...');
+        log.debug('🛡️ [ELITE] Validando advertencias del SRI...');
         this.setStatus('🛡️ Validando advertencias...');
         
         let todasPermitidas = true;
@@ -1383,7 +1383,7 @@ class SriAssistantPanel {
         const mensajes = mensajeEls.map(li => li.innerText.trim()).filter(t => t.length > 0);
         
         if (mensajes.length === 0) {
-            console.log('✅ No hay advertencias presentes en pantalla.');
+            log.info('✅ No hay advertencias presentes en pantalla.');
             return true;
         }
 
@@ -1415,11 +1415,11 @@ class SriAssistantPanel {
             const esPermitida = SAFE_PATTERNS.some(pat => normalizedMsg.includes(pat));
             
             if (!esPermitida) {
-                console.error(`🚨 ADVERTENCIA NO PERMITIDA DETECTADA: "${msg}"`);
+                log.error(`🚨 ADVERTENCIA NO PERMITIDA DETECTADA: "${msg}"`);
                 todasPermitidas = false;
                 break;
             } else {
-                console.log(`✅ Advertencia Permitida Verificada: "${msg}"`);
+                log.info(`✅ Advertencia Permitida Verificada: "${msg}"`);
             }
         }
 
@@ -1439,7 +1439,7 @@ class SriAssistantPanel {
             duration: 3500
         });
 
-        console.log('✅ Advertencias validadas: Todas corresponden a reglas permitidas (Casillero 625).');
+        log.info('✅ Advertencias validadas: Todas corresponden a reglas permitidas (Casillero 625).');
         return true;
     }
 
@@ -1576,7 +1576,7 @@ class SriAssistantPanel {
             const enResumen = typeof estaEnResumenDeclaracion === 'function'
                 ? estaEnResumenDeclaracion() : true;
             if (!enResumen) {
-                console.warn('🛑 [CIERRE] Todavía no estamos en el resumen de pago. No se concluye ningún saldo.');
+                log.warn('🛑 [CIERRE] Todavía no estamos en el resumen de pago. No se concluye ningún saldo.');
                 await anotarBitacora('⛔ no se envió', 'no estábamos en el resumen de pago');
             }
 
@@ -1615,7 +1615,7 @@ class SriAssistantPanel {
                     await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
                     if (typeof handleBatchNextClient === 'function') await handleBatchNextClient();
                 } catch (e) {
-                    console.warn('⏭️ No se pudo pasar al siguiente cliente:', e.message);
+                    log.warn('⏭️ No se pudo pasar al siguiente cliente:', e.message);
                 }
                 return;
             }
@@ -1769,10 +1769,10 @@ class SriAssistantPanel {
                 anotarBitacora('⛔ NO se envió', motivo);
 
                 if (pide.textos.length > 0) {
-                    console.warn('📋 [FORMULARIO] Lo que el SRI reclama, con sus palabras:');
-                    pide.textos.forEach((t) => console.warn('   · ' + t));
+                    log.warn('📋 [FORMULARIO] Lo que el SRI reclama, con sus palabras:');
+                    pide.textos.forEach((t) => log.warn('   · ' + t));
                     if (pide.casilleros.indexOf('203') !== -1) {
-                        console.warn('   → El 203 es el DECRETO que habilita la tarifa reducida del 5%. ' +
+                        log.warn('   → El 203 es el DECRETO que habilita la tarifa reducida del 5%. ' +
                                      'Es una elección legal: la hace el contador, el bot no la adivina.');
                     }
 
@@ -1847,7 +1847,7 @@ class SriAssistantPanel {
                             revisado: false
                         };
                         await SafeStorage.set({ sc_declaraciones_por_pagar_aviso: avisos });
-                    } catch (eAvisos) { console.warn('Error guardando aviso persistente:', eAvisos); }
+                    } catch (eAvisos) { log.warn('Error guardando aviso persistente:', eAvisos); }
                 }
 
                 if (info.ruc && typeof syncDeclarationToSupabase === 'function') {
@@ -1910,7 +1910,7 @@ class SriAssistantPanel {
 
         } catch (e) {
             this.log('❌ Error en Cierre Mágico: ' + e.message);
-            console.error(e);
+            log.error(e);
         } finally {
             this.state.isProcessingFinal = false;
         }
@@ -1940,9 +1940,9 @@ class SriAssistantPanel {
             if (extraRuc && extraMonthIndex !== null && extraYear) {
                 const key = `filed_${extraRuc}_2011_${extraMonthIndex}_${extraYear}`;
                 await SafeStorage.set({ [key]: Date.now() });
-                console.log(`✅ Registro de Declaración guardado en memoria persistente: ${key}`);
+                log.info(`✅ Registro de Declaración guardado en memoria persistente: ${key}`);
             }
-        } catch (e) { console.warn('Error extrayendo datos finales', e); }
+        } catch (e) { log.warn('Error extrayendo datos finales', e); }
 
         this.clearCards();
         this.showContextCard({
@@ -2268,13 +2268,13 @@ class SriAssistantPanel {
             }
             if (e.target.id === 'btn-force-scan') {
                 e.stopPropagation();
-                console.log('🔍 [FORCE SCAN] Ejecutando escaneo manual...');
+                log.debug('🔍 [FORCE SCAN] Ejecutando escaneo manual...');
                 this.scanObligacionesSRI();
                 return;
             }
             if (e.target.id === 'btn-force-sync') {
                 e.stopPropagation();
-                console.log('✨ [FORCE SYNC] Ejecutando cierre mágico manual...');
+                log.debug('✨ [FORCE SYNC] Ejecutando cierre mágico manual...');
                 this.ejecutarCierreMagico();
                 return;
             }
@@ -2529,7 +2529,7 @@ class SriAssistantPanel {
         const syncPanelBtn = this.container.querySelector('#btn-force-sync-panel');
         if (syncPanelBtn) {
             syncPanelBtn.onclick = () => {
-                console.log('✨ [FORCE SYNC] Ejecutando cierre mágico manual desde panel grande...');
+                log.debug('✨ [FORCE SYNC] Ejecutando cierre mágico manual desde panel grande...');
                 this.ejecutarCierreMagico();
             };
         }
@@ -2728,10 +2728,10 @@ class SriAssistantPanel {
                     clients = merged.map(c => ({ ...c, sri_declaraciones: c.declarations }));
                     await chrome.storage.local.set({ sc_clients_cache: clients, sc_clients_cache_ts: Date.now() });
                 } else {
-                    console.warn("fetchClientsFromSupabase: Sin clientes nuevos, manteniendo caché actual.");
+                    log.warn("fetchClientsFromSupabase: Sin clientes nuevos, manteniendo caché actual.");
                 }
             } catch (e) {
-                console.error("Error fetching clients from Supabase in panel:", e);
+                log.error("Error fetching clients from Supabase in panel:", e);
             }
         };
 
@@ -2764,7 +2764,7 @@ class SriAssistantPanel {
             if (clients.length === 0) {
                 await fetchClientsFromSupabase();
             }
-        } catch (e) { console.error(e); }
+        } catch (e) { log.error(e); }
 
         const monthNamesUpper = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
 
@@ -3299,7 +3299,7 @@ class SriAssistantPanel {
             this.setElText('#summary-nc-total', `$${(displayData?.notasCredito?.totalGeneral || 0).toFixed(2)}`);
             this.setElText('#summary-nc-count', `${displayData?.notasCredito?.totalNotas || 0} docs`);
         } catch (error) {
-            console.warn('⚠️ Error updating summary:', error);
+            log.warn('⚠️ Error updating summary:', error);
         }
     }
 
@@ -3540,12 +3540,12 @@ class SriAssistantPanel {
         if (typeof tipoDeDeclaracionEnPantalla === 'function') {
             const { esSustitutiva, marca } = tipoDeDeclaracionEnPantalla();
             if (esSustitutiva) {
-                console.error(`🛑 [BLOQUEO ESTRICTO] Prohibido avanzar al resumen: la declaración es "${marca}".`);
+                log.error(`🛑 [BLOQUEO ESTRICTO] Prohibido avanzar al resumen: la declaración es "${marca}".`);
                 this.log(`🛑 Bloqueo estricto: es una ${marca}. No se avanza al resumen.`);
                 return false;
             }
         }
-        console.log('🚀 [FORMULARIO] Buscando botón "Siguiente" para avanzar al resumen...');
+        log.debug('🚀 [FORMULARIO] Buscando botón "Siguiente" para avanzar al resumen...');
         await SafeStorage.remove('summary_page_clicked');
         await sleep(1500);
         const btnSiguiente = document.getElementById('frmFlujoDeclaracion:btnFormularioSiguiente') ||
@@ -3562,7 +3562,7 @@ class SriAssistantPanel {
             if (typeof frenarSiFaltaDecreto203 === 'function') {
                 await frenarSiFaltaDecreto203();
             }
-            console.log('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
+            log.info('✅ Botón "Siguiente" localizado. Clickeando para avanzar al resumen SRI...');
             // 🛑 Si el usuario pidió parar (DETENER/🛑/⏸) mientras se llenaba,
             // NO se clickea Siguiente: el formulario queda como borrador y el
             // bot no sigue tocando nada. (09-sep-2026: seguía hasta el final.)
@@ -3571,7 +3571,7 @@ class SriAssistantPanel {
             else btnSiguiente.click();
 
             // Leer y aprobar automáticamente cualquier cuadro de advertencias o validaciones normales del SRI
-            console.log('🛡️ Verificando y desmisseando advertencias normales de validación SRI (Bucle extendido para conexiones lentas)...');
+            log.debug('🛡️ Verificando y desmisseando advertencias normales de validación SRI (Bucle extendido para conexiones lentas)...');
             let reachedSummary = false;
             for (let i = 0; i < 25; i++) {
                 if (await cortarSiPidieronParar('espera de advertencias del SRI')) return false;
@@ -3581,7 +3581,7 @@ class SriAssistantPanel {
                 // Salida temprana si el resumen ya cargó (verificación robusta)
                 const btnAceptarRes = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : null;
                 if (btnAceptarRes && (typeof esVisible === 'function' ? esVisible(btnAceptarRes) : true)) {
-                    console.log('✅ Resumen real detectado (Botón Aceptar visible). Saliendo del bucle de advertencias temprano.');
+                    log.info('✅ Resumen real detectado (Botón Aceptar visible). Saliendo del bucle de advertencias temprano.');
                     reachedSummary = true;
                     break;
                 }
@@ -3611,7 +3611,7 @@ class SriAssistantPanel {
                 );
 
                 if (allSafe) {
-                    console.log(`✅ [ELITE] Solo advertencias informativas del casillero 625 detectadas (${msgTexts.length}). Re-clickeando "Siguiente" para continuar...`);
+                    log.info(`✅ [ELITE] Solo advertencias informativas del casillero 625 detectadas (${msgTexts.length}). Re-clickeando "Siguiente" para continuar...`);
                     if (window.sriAssistant) {
                         window.sriAssistant.showEliteToast({
                             title: '⚠️ Advertencias 625 Ignoradas',
@@ -3636,13 +3636,13 @@ class SriAssistantPanel {
                             // Verificar robustamente si llegamos al resumen
                             const btnAceptarRes = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : null;
                             if (btnAceptarRes && (typeof esVisible === 'function' ? esVisible(btnAceptarRes) : true)) {
-                                console.log('✅ [ELITE] Resumen real detectado tras advertencias 625 (Botón Aceptar visible). Bucle terminado.');
+                                log.info('✅ [ELITE] Resumen real detectado tras advertencias 625 (Botón Aceptar visible). Bucle terminado.');
                                 break;
                             }
                         }
                     }
                 } else if (msgTexts.length > 0) {
-                    console.warn('⚠️ [ELITE] Hay mensajes en panelMensajes que NO son seguros para ignorar:', msgTexts);
+                    log.warn('⚠️ [ELITE] Hay mensajes en panelMensajes que NO son seguros para ignorar:', msgTexts);
                     // 📐 AUTOMÁTICO (AGENTS §0c): el SRI acaba de reclamar un
                     // casillero en este camino («Siguiente» del formulario, p.
                     // ej. el 203 del 09-sep-2026). Igual que en el bloqueo del
@@ -3685,17 +3685,17 @@ class SriAssistantPanel {
                 // 🛑 Si se pidió parar, no se invoca el Cierre Mágico: ese
                 // camino valida y PUEDE ENVIAR. Parado, no se envía nada.
                 if (await cortarSiPidieronParar('cierre mágico')) return false;
-                console.log('🚀 [FORMULARIO] Invocando Cierre Mágico Automático de forma segura (verificando saldos)...');
+                log.debug('🚀 [FORMULARIO] Invocando Cierre Mágico Automático de forma segura (verificando saldos)...');
                 if (typeof this.ejecutarCierreMagico === 'function') {
                     await this.ejecutarCierreMagico();
                 } else {
-                    console.error('❌ [ELITE] no se encontró ejecutarCierreMagico');
+                    log.error('❌ [ELITE] no se encontró ejecutarCierreMagico');
                 }
             }
 
             return true;
         } else {
-            console.warn('⚠️ No se encontró automáticamente el botón "Siguiente".');
+            log.warn('⚠️ No se encontró automáticamente el botón "Siguiente".');
             return false;
         }
     }
@@ -3707,7 +3707,7 @@ class SriAssistantPanel {
         try {
             const storage = (await GhostMemory.getData()) || {};
             if (!storage.facturas && !storage.retenciones) {
-                console.log('ℹ️ Sin facturas previas en memoria. Procediendo con sugeridos y valores del formulario...');
+                log.debug('ℹ️ Sin facturas previas en memoria. Procediendo con sugeridos y valores del formulario...');
                 storage.facturas = { totalFacturas: 0, iva15: { cantidad: 0, baseImponible: 0, montoIva: 0 }, iva0: { cantidad: 0, baseImponible: 0 } };
                 storage.retenciones = { totalRetenciones: 0, retIva: 0, retRenta: 0, baseImponible: 0 };
             }
@@ -3820,7 +3820,7 @@ class SriAssistantPanel {
             }
 
             if (!window.location.href.toLowerCase().includes('comprobantesrecibidos.jsf')) {
-                console.log('🚀 [TURBO_FULL] Navegando vía puente SSO a Comprobantes Recibidos...');
+                log.debug('🚀 [TURBO_FULL] Navegando vía puente SSO a Comprobantes Recibidos...');
                 window.location.href = SRI_PUENTE_RECIBIDOS;
             } else {
                 window.location.reload(); // Recargar para iniciar el flujo limpio
@@ -3855,7 +3855,7 @@ class SriAssistantPanel {
                 actionTimestamp: Date.now(),
                 skipSafetyCheck: true
             });
-            console.log('🚀 [NAVIGATE_AND_FILL] Navegando vía puente SSO oficial al Formulario IVA...');
+            log.debug('🚀 [NAVIGATE_AND_FILL] Navegando vía puente SSO oficial al Formulario IVA...');
             if (window.location.href.includes('recibirDeclaracion')) {
                 if (typeof ejecutarNavegacionDeclaracion === 'function') {
                     ejecutarNavegacionDeclaracion(period);
@@ -3877,7 +3877,7 @@ class SriAssistantPanel {
                 actionTimestamp: Date.now(),
                 skipSafetyCheck: true
             });
-            console.log('🚀 [NAVIGATE_ONLY] Navegando vía puente SSO oficial al Formulario IVA...');
+            log.debug('🚀 [NAVIGATE_ONLY] Navegando vía puente SSO oficial al Formulario IVA...');
             if (window.location.href.includes('recibirDeclaracion')) {
                 if (typeof ejecutarNavegacionDeclaracion === 'function') {
                     ejecutarNavegacionDeclaracion(p);
@@ -3890,7 +3890,7 @@ class SriAssistantPanel {
         } else {
             // Sin esta rama, un workType no soportado dejaba el panel bloqueado
             // en estado "trabajando" sin ninguna señal para el usuario.
-            console.warn('⚠️ [WORKFLOW] Tipo de flujo no soportado:', workType);
+            log.warn('⚠️ [WORKFLOW] Tipo de flujo no soportado:', workType);
             this.log(`⚠️ Flujo "${workType}" no disponible.`);
             this.setWorking(false);
         }
@@ -4003,7 +4003,7 @@ class SriAssistantPanel {
         // empate a resolver a ojo. Manda lo que el bot le PIDIÓ al portal
         // —que es lo que efectivamente se declaró— y queda dicho en el log.
         if (dePantalla && deLote && dePantalla !== deLote) {
-            console.warn(`⚠️ [PERÍODO] La pantalla dice ${dePantalla} y el lote ${deLote}. ` +
+            log.warn(`⚠️ [PERÍODO] La pantalla dice ${dePantalla} y el lote ${deLote}. ` +
                          `Se archiva como ${deLote}, que es el período que se navegó. ` +
                          'Si esto se repite, hay que mirarlo: el comprobante se guarda con esta fecha.');
             if (typeof anotarBitacora === 'function') {
@@ -4022,7 +4022,7 @@ class SriAssistantPanel {
         let cYear = now.getFullYear();
         if (cMonth < 0) { cMonth = 11; cYear--; }
         const supuesto = comoTexto(cYear, cMonth + 1);
-        console.warn(`⚠️ [PERÍODO] Ni la pantalla ni el lote dijeron el período. ` +
+        log.warn(`⚠️ [PERÍODO] Ni la pantalla ni el lote dijeron el período. ` +
                      `Se supone ${supuesto} (el mes anterior). Revisá dónde quedó el comprobante.`);
         return supuesto;
     }
@@ -4051,7 +4051,7 @@ class SriAssistantPanel {
             if (match) return match[1];
             const matchGen = bodyTxt.match(/\b\d{12,18}\b/);
             if (matchGen) return matchGen[0];
-        } catch (e) {}
+        } catch (e) { /* sin texto del comprobante: no hay RUC que extraer */ }
         return '';
     }
 
@@ -4067,7 +4067,7 @@ class SriAssistantPanel {
                 });
             if (btn) {
                 const targetBtn = btn.closest('button, a') || btn;
-                console.log('📄 [POST-ENVÍO] Asegurando descarga nativa con botón oficial:', targetBtn);
+                log.debug('📄 [POST-ENVÍO] Asegurando descarga nativa con botón oficial:', targetBtn);
                 if (typeof clickElement === 'function') {
                     clickElement(targetBtn, 'Descarga nativa comprobante');
                 } else {
@@ -4076,7 +4076,7 @@ class SriAssistantPanel {
                 await sleep(1500);
             }
         } catch (e) {
-            console.warn('⚠️ No se pudo disparar clic en botón de comprobante nativo:', e);
+            log.warn('⚠️ No se pudo disparar clic en botón de comprobante nativo:', e);
         }
     }
 
@@ -4114,7 +4114,7 @@ class SriAssistantPanel {
                 const m = texto.match(/pendiente\s+por\s+cubrir\s*:?\s*(?:USD)?\s*([\d.,]+)/i);
                 const pendiente = m ? parseImporteEstricto(m[1]) : null;
                 if (pendiente !== null && pendiente > 0) {
-                    console.warn(`💰 [SALDO] "Pendiente por cubrir" = ${pendiente}. ` +
+                    log.warn(`💰 [SALDO] "Pendiente por cubrir" = ${pendiente}. ` +
                                  'Manda sobre el total a pagar: hay plata sin cubrir.');
                     return pendiente;
                 }
@@ -4134,7 +4134,7 @@ class SriAssistantPanel {
 
             if (remision.length) {
                 const v = Math.max(...remision);
-                console.log(`💰 [SALDO] resumen de pago (${remision.join(' / ')}) → ${v}`);
+                log.debug(`💰 [SALDO] resumen de pago (${remision.join(' / ')}) → ${v}`);
                 return v;
             }
 
@@ -4144,7 +4144,7 @@ class SriAssistantPanel {
             if (spanResumen) {
                 const v = parseImporteEstricto(spanResumen.innerText || spanResumen.textContent);
                 if (v !== null) {
-                    console.log('💰 [SALDO] frmFlujoDeclaracion:totalAPagar =', v);
+                    log.debug('💰 [SALDO] frmFlujoDeclaracion:totalAPagar =', v);
                     return v;
                 }
             }
@@ -4155,7 +4155,7 @@ class SriAssistantPanel {
             if (inputTotales) {
                 const v = parseImporteEstricto(inputTotales.value || inputTotales.getAttribute('value'));
                 if (v !== null) {
-                    console.log('💰 [SALDO] concepto2610 (TOTALES) =', v);
+                    log.debug('💰 [SALDO] concepto2610 (TOTALES) =', v);
                     return v;
                 }
             }
@@ -4169,12 +4169,12 @@ class SriAssistantPanel {
                 const valueEl = container.querySelector('.ui-outputtext, b, td:last-child');
                 const v = parseImporteEstricto(valueEl ? (valueEl.innerText || valueEl.textContent) : null);
                 if (v !== null) {
-                    console.log('💰 [SALDO] leído por texto =', v);
+                    log.debug('💰 [SALDO] leído por texto =', v);
                     return v;
                 }
             }
 
-            console.warn('⚠️ [SALDO] No se pudo leer el saldo en esta pantalla.');
+            log.warn('⚠️ [SALDO] No se pudo leer el saldo en esta pantalla.');
             return null;
     }
     /**
@@ -4192,7 +4192,7 @@ class SriAssistantPanel {
                 : getComputedStyle(panelErrores).display !== 'none';
             if (visible) {
                 const detalle = (panelErrores.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-                console.warn('🛑 [MENSAJES SRI] El portal muestra su panel de ERRORES:', detalle);
+                log.warn('🛑 [MENSAJES SRI] El portal muestra su panel de ERRORES:', detalle);
                 return 'con_inconsistencias';
             }
             // Oculto = el portal dice que no hay errores. Es prueba positiva,
@@ -4200,7 +4200,7 @@ class SriAssistantPanel {
             const principal = document.getElementById('mensajePrincipal');
             const txtPrincipal = principal ? (principal.innerText || '') : '';
             if (/errores en su declaraci/i.test(txtPrincipal)) {
-                console.warn('🛑 [MENSAJES SRI] mensajePrincipal anuncia errores:', txtPrincipal.trim().slice(0, 160));
+                log.warn('🛑 [MENSAJES SRI] mensajePrincipal anuncia errores:', txtPrincipal.trim().slice(0, 160));
                 return 'con_inconsistencias';
             }
 
@@ -4208,10 +4208,10 @@ class SriAssistantPanel {
             if (panelAdv && (typeof esVisible === 'function' ? esVisible(panelAdv) : getComputedStyle(panelAdv).display !== 'none')) {
                 // Las advertencias NO impiden declarar -el casillero 625 sale
                 // siempre-, pero quedan anotadas por si hay que revisarlas.
-                console.log('ℹ️ [MENSAJES SRI] Advertencias del portal:',
+                log.debug('ℹ️ [MENSAJES SRI] Advertencias del portal:',
                     (panelAdv.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 200));
             }
-            console.log('✅ [MENSAJES SRI] El portal tiene su panel de errores oculto: sin inconsistencias.');
+            log.info('✅ [MENSAJES SRI] El portal tiene su panel de errores oculto: sin inconsistencias.');
             return 'limpio';
         }
 
@@ -4251,7 +4251,7 @@ class SriAssistantPanel {
             if (INFORMATIVAS.some((x) => t.includes(x))) continue;   // ruido conocido
             if (MALAS.some((x) => t.includes(x))) { hayMalo = true; continue; }
             if (/ui-messages-(error|fatal)/.test(el.className)) { hayMalo = true; continue; }
-            console.warn('⚠️ [MENSAJES SRI] Mensaje no catalogado, se trata como inconsistencia:', t.slice(0, 140));
+            log.warn('⚠️ [MENSAJES SRI] Mensaje no catalogado, se trata como inconsistencia:', t.slice(0, 140));
             hayMalo = true;
         }
 
@@ -4300,10 +4300,10 @@ class SriAssistantPanel {
 
             const reporte = L.join('\n');
             await SafeStorage.set({ sri_diagnostico_resumen: { at: Date.now(), reporte } });
-            console.log('🔎 [DIAGNÓSTICO RESUMEN SRI]\n' + reporte);
+            log.debug('🔎 [DIAGNÓSTICO RESUMEN SRI]\n' + reporte);
             return reporte;
         } catch (e) {
-            console.warn('No se pudo capturar el diagnóstico del resumen:', e);
+            log.warn('No se pudo capturar el diagnóstico del resumen:', e);
             return '';
         }
     }
@@ -4313,10 +4313,10 @@ class SriAssistantPanel {
         const r = await SafeStorage.get(['sri_diagnostico_resumen']);
         const d = r.sri_diagnostico_resumen;
         if (!d) {
-            console.log('ℹ️ Todavía no hay diagnóstico: se captura al llegar a la pantalla de resumen/pago.');
+            log.debug('ℹ️ Todavía no hay diagnóstico: se captura al llegar a la pantalla de resumen/pago.');
             return null;
         }
-        console.log('🔎 Diagnóstico del ' + new Date(d.at).toLocaleString('es-EC') + ':\n\n' + d.reporte);
+        log.debug('🔎 Diagnóstico del ' + new Date(d.at).toLocaleString('es-EC') + ':\n\n' + d.reporte);
         return d.reporte;
     }
 
@@ -4331,30 +4331,30 @@ class SriAssistantPanel {
         const mapa = r.sri_radiografias_reclamo || {};
         const nums = Object.keys(mapa);
         if (nums.length === 0) {
-            console.log('ℹ️ No hay radiografías de reclamo guardadas. Se toman solas cuando el SRI ' +
+            log.debug('ℹ️ No hay radiografías de reclamo guardadas. Se toman solas cuando el SRI ' +
                         'reclama un casillero (p. ej. el 203).');
             return null;
         }
-        console.log('📐 Radiografías de reclamo guardadas: ' + nums.join(', '));
+        log.debug('📐 Radiografías de reclamo guardadas: ' + nums.join(', '));
         for (const num of nums) {
             const d = mapa[num];
-            console.log('\n═══ Casillero ' + num + ' · ' + new Date(d.at).toLocaleString('es-EC') + ' ═══');
-            console.log('ruta: ' + d.url);
+            log.debug('\n═══ Casillero ' + num + ' · ' + new Date(d.at).toLocaleString('es-EC') + ' ═══');
+            log.debug('ruta: ' + d.url);
             if (d.filas && d.filas.length) {
                 d.filas.forEach((f) => {
-                    console.log(`  fila: ${f.casillero} → id=${f.id} · ${f.rotulo} · valor="${f.valor}" ${f.editable ? '' : '(solo lectura)'}`);
+                    log.debug(`  fila: ${f.casillero} → id=${f.id} · ${f.rotulo} · valor="${f.valor}" ${f.editable ? '' : '(solo lectura)'}`);
                 });
             } else {
-                console.log('  (el mapa no encontró una fila numerada para este casillero)');
+                log.debug('  (el mapa no encontró una fila numerada para este casillero)');
             }
             if (d.desplegables && d.desplegables.length) {
                 d.desplegables.forEach((sel) => {
-                    console.log(`  desplegable: ${sel.id} · ${sel.rotulo} · elegida="${sel.elegida}"`);
+                    log.debug(`  desplegable: ${sel.id} · ${sel.rotulo} · elegida="${sel.elegida}"`);
                     (sel.opciones || []).forEach((o) =>
-                        console.log(`       [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
+                        log.debug(`       [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
                 });
             }
-            if (d.markdown) console.log('\n' + d.markdown);
+            if (d.markdown) log.debug('\n' + d.markdown);
         }
         return mapa;
     }
@@ -4387,7 +4387,7 @@ class SriAssistantPanel {
     }
 
     log(msg) {
-        console.log(`🤖 SRI LOG: ${msg}`);
+        log.debug(`🤖 SRI LOG: ${msg}`);
         const statusEl = document.getElementById('sri-panel-status');
         if (statusEl) {
             statusEl.innerHTML = `📡 ${msg}`;
@@ -4518,7 +4518,7 @@ class SriAssistantPanel {
     if (despierta) {
         window.sriAssistant = new SriAssistantPanel();
     } else {
-        console.log('💤 [SRI ELITE] Extensión dormida en el portal. Se despierta desde tu web o el popup.');
+        log.debug('💤 [SRI ELITE] Extensión dormida en el portal. Se despierta desde tu web o el popup.');
     }
 })();
 

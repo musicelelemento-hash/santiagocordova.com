@@ -26,22 +26,22 @@ async function calculateEliteFinancials(targetField) {
         if (totalVentas > 0) {
             factor = Math.min(1, Math.max(0, ventas15 / totalVentas));
         }
-        console.log(`   💡 Proporcionalidad: Ventas15=$${ventas15}, Ventas0=$${ventas0}, Total=$${totalVentas} -> Factor=${factor.toFixed(4)}, IVA Compras=$${ivaCompras}`);
+        log.debug(`   💡 Proporcionalidad: Ventas15=$${ventas15}, Ventas0=$${ventas0}, Total=$${totalVentas} -> Factor=${factor.toFixed(4)}, IVA Compras=$${ivaCompras}`);
 
         const credito564 = Math.round((ivaCompras * factor) * 100) / 100;
         const gasto565 = Math.max(0, Math.round((ivaCompras - credito564) * 100) / 100);
 
         result = (targetField === '564') ? credito564 : gasto565;
-        console.log(`   💡 Cálculo ${targetField}: 564=$${credito564}, 565=$${gasto565} (Suma=$${(credito564 + gasto565).toFixed(2)})`);
+        log.debug(`   💡 Cálculo ${targetField}: 564=$${credito564}, 565=$${gasto565} (Suma=$${(credito564 + gasto565).toFixed(2)})`);
     } else if (targetField === '615') {
         // Crédito Tributario próximo mes: (Crédito Total) - (Lo usado para cubrir 601)
         result = Math.max(0, totalCredito - impCausado);
-        console.log(`   💡 Cálculo 615: (${totalCredito}) - ${impCausado} = ${result}`);
+        log.debug(`   💡 Cálculo 615: (${totalCredito}) - ${impCausado} = ${result}`);
     } else if (targetField === '617') {
         // Retenciones próximo mes: (Retenciones Total) - (Lo usado para cubrir el restante de 601 si el Crédito no alcanzó)
         const remanenteImpuesto = Math.max(0, impCausado - totalCredito);
         result = Math.max(0, totalRetenciones - remanenteImpuesto);
-        console.log(`   💡 Cálculo 617: (${totalRetenciones}) - remanente(${remanenteImpuesto}) = ${result}`);
+        log.debug(`   💡 Cálculo 617: (${totalRetenciones}) - remanente(${remanenteImpuesto}) = ${result}`);
     }
 
     console.groupEnd();
@@ -73,14 +73,14 @@ async function autoLlenarFormulario(data) {
 
         // 1. VENTAS
         if (await cortarSiPidieronParar('llenado (FASE 1 · ventas)')) return false;
-        console.log('--- FASE 1: VENTAS ---');
+        log.debug('--- FASE 1: VENTAS ---');
         safeStatus('📊 Llenando Ventas...');
         total += await llenarVentas(data);
         await sleep(800);
 
         // 2. COMPRAS
         if (await cortarSiPidieronParar('llenado (FASE 2 · compras)')) return false;
-        console.log('--- FASE 2: COMPRAS ---');
+        log.debug('--- FASE 2: COMPRAS ---');
         safeStatus('🛍️ Llenando Compras...');
         total += await llenarCompras(data);
         await sleep(800);
@@ -111,7 +111,7 @@ async function autoLlenarFormulario(data) {
                 total++;
                 await sleep(400);
             } else if (['564', '565', '615', '617'].includes(f)) {
-                console.log(`📡 Refuerzo Técnico para campo ${f}...`);
+                log.debug(`📡 Refuerzo Técnico para campo ${f}...`);
                 const technicalVal = await calculateEliteFinancials(f);
                 if (technicalVal > 0) {
                     if (await llenarCampo(f, technicalVal)) total++;
@@ -130,11 +130,11 @@ async function autoLlenarFormulario(data) {
             window.sriAssistant.log(`✅ Operación total finalizada: ${total} campos.`);
         }
 
-        console.log(`🚀 RESULTADO FINAL: ${total} campos exitosos.`);
+        log.debug(`🚀 RESULTADO FINAL: ${total} campos exitosos.`);
         return total;
 
     } catch (e) {
-        console.error('Error en llenado maestro:', e);
+        log.error('Error en llenado maestro:', e);
         if (window.sriAssistant) window.sriAssistant.log('❌ Error: ' + e.message);
         return false;
     } finally {
@@ -149,7 +149,7 @@ async function autoLlenarFormulario(data) {
 }
 
 async function llenarVentas(data) {
-    console.log('📋 Procesando VENTAS (Espejo de Columnas: Bruto -> Neto) ...');
+    log.debug('📋 Procesando VENTAS (Espejo de Columnas: Bruto -> Neto) ...');
     let camposLlenados = 0;
 
     // Expandir Sección Ventas (Sequential Visual)
@@ -174,17 +174,17 @@ async function llenarVentas(data) {
         try {
             const valor = await leerCampo(idOrigen);
             if (valor > 0) {
-                console.log(`   ➤ [Ventas] Origen ${idOrigen} ($${valor}) -> Destino ${idDestino}`);
+                log.debug(`   ➤ [Ventas] Origen ${idOrigen} ($${valor}) -> Destino ${idDestino}`);
                 const exito = await llenarCampo(idDestino, valor);
                 if (exito) camposLlenados++;
             }
         } catch (e) {
-            console.warn(`   ⚠️ Error procesando par ${idOrigen}->${idDestino}:`, e);
+            log.warn(`   ⚠️ Error procesando par ${idOrigen}->${idDestino}:`, e);
         }
     }
 
     try {
-        console.log('🔍 [Ventas] Extrayendo Valores Sugeridos de Ventas para las métricas...');
+        log.debug('🔍 [Ventas] Extrayendo Valores Sugeridos de Ventas para las métricas...');
         const base15 = await leerCampo('401') || 0;
         const base0 = (await leerCampo('403') || 0) + (await leerCampo('402') || 0);
         const base5 = await leerCampo('404') || 0;
@@ -208,14 +208,14 @@ async function llenarVentas(data) {
             retIvaForm,
             retRentaForm
         });
-        console.log('✅ [Ventas] Valores de Ventas y Retenciones guardados en GhostMemory:', {
+        log.info('✅ [Ventas] Valores de Ventas y Retenciones guardados en GhostMemory:', {
             base15, base0, base5, base8, iva15, iva5, iva8, retIvaForm, retRentaForm
         });
     } catch(e) {
-        console.warn('⚠️ [Ventas] Error extrayendo métricas de ventas:', e);
+        log.warn('⚠️ [Ventas] Error extrayendo métricas de ventas:', e);
     }
 
-    console.log(`📊 FINALIZADO VENTAS: ${camposLlenados} campos procesados.`);
+    log.info(`📊 FINALIZADO VENTAS: ${camposLlenados} campos procesados.`);
     
     // Colapsar Sección Ventas (Sequential Visual)
     await toggleSriSection('Ventas', false);
@@ -230,17 +230,286 @@ async function llenarVentas(data) {
     return camposLlenados;
 }
 
+/**
+ * El IVA que corresponde a una base, según la tarifa que el propio período
+ * declara.
+ *
+ * Se usa cuando no hay facturas que mirar —un monto fijado a mano o un resumen
+ * viejo—: la tarifa efectiva sale del balde (IVA extraído ÷ su base), no de
+ * suponer 15%. Si el balde no dice nada, devuelve 0 y quien llama decide si
+ * eso es un cero legítimo o un dato que falta.
+ */
+function ivaProporcionalDeBase(base, balde) {
+    const b = Number(base) || 0;
+    const baseBalde = parseDecimal(balde && balde.baseImponible || 0);
+    const ivaBalde = parseDecimal(balde && balde.montoIva || 0);
+    if (!(b > 0) || !(baseBalde > 0)) return 0;
+    return redondear(b * (ivaBalde / baseBalde));
+}
+
+/**
+ * Reparte las compras gravadas entre las que dan crédito tributario y las que
+ * no, mirando QUIÉN emitió cada comprobante.
+ *
+ * **Es una función pura**: recibe el detalle por factura, el mapa de decisiones
+ * y un par de banderas. No lee el portal, no lee el almacén, no escribe nada.
+ * Así se puede probar con números, que es la única forma de confiar en una
+ * cuenta que mueve plata entre casilleros.
+ *
+ * Tres reglas, y las tres importan:
+ *
+ *  1. Sólo se aparta lo que alguien **decidió**. `null` (nadie lo decidió) no es
+ *     «no da crédito»: esa compra va donde iba siempre. Mandarla al 502 por las
+ *     dudas le quita al contribuyente un crédito que quizá le corresponde.
+ *  2. Si el contribuyente vende **sólo al 0%** (centro médico, escuela,
+ *     transporte), ninguna compra gravada le da crédito, y eso no depende del
+ *     proveedor: se apartan todas.
+ *  3. Los montos que salen de acá **nunca** se suman aparte del total: el
+ *     llamador calcula «con crédito = total − sin crédito», así el 500/510 de
+ *     hoy sigue cuadrando al centavo y no se pierde ni se duplica plata.
+ *
+ * @param {{quince?: Array<object>, cinco?: Array<object>}} detalles
+ *        Facturas gravadas con su emisor: `{ruc, base, iva, numero, rucRazon}`.
+ * @param {Map<string, {deducible: boolean, origen?: string, ambito?: string}>} mapa
+ *        Decisiones explícitas por RUC de proveedor (`Proveedores.mapaCredito`).
+ * @param {{soloCero?: boolean}} opciones
+ * @returns {{sinCredito15: number, sinCredito5: number, conCredito15: number,
+ *            conCredito5: number, detalleSinCredito: Array<object>,
+ *            sinClasificar: number, soloCero: boolean}}
+ */
+function repartirCreditoCompras(detalles, mapa, opciones = {}) {
+    const d = detalles || {};
+    const quince = Array.isArray(d.quince) ? d.quince : [];
+    const cinco = Array.isArray(d.cinco) ? d.cinco : [];
+    const m = mapa instanceof Map ? mapa : new Map();
+    const soloCero = opciones.soloCero === true;
+
+    const r = {
+        conCredito15: 0, conCredito5: 0,
+        sinCredito15: 0, sinCredito5: 0,
+        // El IVA de cada bloque se acumula aparte: es lo que permite mostrar
+        // «$X de crédito» y «$Y de IVA que se va a costo» en el perfil del
+        // cliente sin volver a leer las facturas.
+        ivaConCredito15: 0, ivaConCredito5: 0,
+        ivaSinCredito15: 0, ivaSinCredito5: 0,
+        detalleSinCredito: [],
+        sinClasificar: 0,
+        soloCero
+    };
+
+    const mirar = (f, tarifa) => {
+        if (!f) return;
+        const ruc = String(f.ruc || '').replace(/\D/g, '');
+        const base = Number(f.base) || 0;
+        const iva = Number(f.iva) || 0;
+        // Sólo la base gravada. Una factura de $0 no mueve nada, y dejar que
+        // entre acá abriría la puerta a restar de más.
+        if (!(base > 0)) return;
+
+        const dec = m.get(ruc) || null;
+        const sinCredito = soloCero || (dec && dec.deducible === false);
+        if (!sinCredito && !dec) r.sinClasificar++;
+
+        if (sinCredito) {
+            r['sinCredito' + tarifa] += base;
+            r['ivaSinCredito' + tarifa] += iva;
+            r.detalleSinCredito.push({
+                ruc,
+                nombre: String(f.rucRazon || '').trim(),
+                base,
+                iva,
+                tarifa,
+                motivo: soloCero ? 'soloCero' : (dec && dec.ambito) || 'contador'
+            });
+        } else {
+            r['conCredito' + tarifa] += base;
+            r['ivaConCredito' + tarifa] += iva;
+        }
+    };
+
+    quince.forEach((f) => mirar(f, '15'));
+    cinco.forEach((f) => mirar(f, '5'));
+
+    ['conCredito15', 'conCredito5', 'sinCredito15', 'sinCredito5',
+     'ivaConCredito15', 'ivaConCredito5', 'ivaSinCredito15', 'ivaSinCredito5'].forEach((k) => {
+        r[k] = redondear(r[k]);
+    });
+    return r;
+}
+
+/**
+ * La misma pregunta, atada al contribuyente que se está declarando.
+ *
+ * Junta lo que ya se guardó —la decisión por proveedor en 🏷️ y el perfil del
+ * cliente— y se lo pasa a `repartirCreditoCompras`. Si algo no está, devuelve
+ * cero sin crédito, que es exactamente el comportamiento de siempre.
+ *
+ * @param {object} facturas Resumen del 04 (`detalle15`, `detalle5`, baldes).
+ * @returns {Promise<ReturnType<typeof repartirCreditoCompras>>}
+ */
+async function repartirComprasPorCredito(facturas) {
+    const vacio = {
+        conCredito15: 0, conCredito5: 0, sinCredito15: 0, sinCredito5: 0,
+        ivaConCredito15: 0, ivaConCredito5: 0, ivaSinCredito15: 0, ivaSinCredito5: 0,
+        detalleSinCredito: [], sinClasificar: 0, soloCero: false
+    };
+    if (!facturas) return vacio;
+
+    let rucCliente = '';
+    try {
+        rucCliente = (typeof rucDelClienteActual === 'function')
+            ? await rucDelClienteActual() : '';
+    } catch (e) { rucCliente = ''; }
+
+    let mapa = new Map();
+    let soloCero = false;
+    try {
+        if (typeof Proveedores !== 'undefined' && rucCliente) {
+            mapa = await Proveedores.mapaCredito(rucCliente);
+        }
+        if (typeof CreditoCliente !== 'undefined' && rucCliente) {
+            soloCero = await CreditoCliente.soloCero(rucCliente);
+        }
+    } catch (e) {
+        log.warn('🏷️ [CRÉDITO] No se pudo leer lo clasificado:', e.message);
+        return vacio;
+    }
+
+    const detalle = {
+        quince: copiaDeLista(facturas.detalle15),
+        cinco: copiaDeLista(facturas.detalle5)
+    };
+    const r = repartirCreditoCompras(detalle, mapa, { soloCero });
+
+    // ── Un monto puesto a mano manda ────────────────────────────────────
+    // `base15SinCredito` es una decisión explícita de quien llama (o del
+    // contador, en un resumen viejo). No se discute: se respeta. Pero no se
+    // deja que se lleve más base que la que hay: restaría plata de un 500 que
+    // no la tiene y el total de compras dejaría de cuadrar.
+    const manual = Number(facturas.base15SinCredito);
+    if (Number.isFinite(manual) && manual > 0) {
+        const tope = parseDecimal(facturas.iva15 && facturas.iva15.baseImponible || 0);
+        const valor = tope > 0 ? Math.min(redondear(manual), tope) : redondear(manual);
+        if (tope > 0 && manual > tope + 0.005) {
+            log.warn(`⚖️ [CRÉDITO] Dijo $${manual.toFixed(2)} sin derecho, pero el 15% del período ` +
+                         `es $${tope.toFixed(2)}. Se usa el total: no se puede apartar más de lo que hay.`);
+        }
+        log.debug(`⚖️ [CRÉDITO] El resumen trae $${valor.toFixed(2)} sin derecho a crédito puestos a mano: manda eso.`);
+        r.sinCredito15 = valor;
+        // El 522 no lo calcula el SRI: su IVA sale de la tarifa efectiva del
+        // balde del período. Sin esto quedaba en 0.00 y el formulario reclamaba.
+        r.ivaSinCredito15 = ivaProporcionalDeBase(valor, facturas.iva15);
+        r.detalleSinCredito = r.detalleSinCredito.filter((x) => x.tarifa !== '15');
+        r.detalleSinCredito.push({ ruc: '', nombre: '(monto fijado a mano)', base: valor, tarifa: '15', motivo: 'manual' });
+    } else if (soloCero) {
+        // Sin detalle por factura no hay a quién preguntarle, pero con «vende
+        // sólo al 0%» la respuesta es la misma para todas: se toma el balde
+        // entero. Es el único caso donde se usa el total sin desglose.
+        if (!detalle.quince.length && facturas.iva15 && facturas.iva15.baseImponible > 0) {
+            r.sinCredito15 = redondear(facturas.iva15.baseImponible);
+            r.ivaSinCredito15 = ivaProporcionalDeBase(r.sinCredito15, facturas.iva15);
+            r.detalleSinCredito.push({ ruc: '', nombre: '(todas las compras gravadas)', base: r.sinCredito15, tarifa: '15', motivo: 'soloCero' });
+        }
+        if (!detalle.cinco.length && facturas.iva5 && facturas.iva5.baseImponible > 0) {
+            r.sinCredito5 = redondear(facturas.iva5.baseImponible);
+            r.ivaSinCredito5 = ivaProporcionalDeBase(r.sinCredito5, facturas.iva5);
+            r.detalleSinCredito.push({ ruc: '', nombre: '(todas las compras gravadas)', base: r.sinCredito5, tarifa: '5', motivo: 'soloCero' });
+        }
+    }
+
+    // ── Lo que queda dicho en el log, para poder auditarlo después ──────
+    const total15 = parseDecimal(facturas.iva15 && facturas.iva15.baseImponible || 0);
+    const total5 = parseDecimal(facturas.iva5 && facturas.iva5.baseImponible || 0);
+    if (r.sinCredito15 > 0 || r.sinCredito5 > 0) {
+        const con15 = Math.max(0, redondear(total15 - r.sinCredito15));
+        const con5 = Math.max(0, redondear(total5 - r.sinCredito5));
+        log.debug(`⚖️ [CRÉDITO] Reparto para ${rucCliente || '(sin RUC)'}:`);
+        log.debug(`   ${soloCero ? 'Vende SÓLO al 0%' : 'Proveedores marcados sin derecho'} · ` +
+                    `$${con15.toFixed(2)} al 500/510 · $${r.sinCredito15.toFixed(2)} al 502/512` +
+                    (r.sinCredito5 > 0 ? ` · $${r.sinCredito5.toFixed(2)} del 5% también al 502/512` : ''));
+        r.detalleSinCredito.forEach((x) => {
+            log.debug(`   · ${x.nombre || x.ruc} — $${x.base.toFixed(2)} (${x.tarifa}%) — ${x.motivo}`);
+        });
+    } else if (r.sinClasificar > 0) {
+        log.debug(`⚖️ [CRÉDITO] ${r.sinClasificar} factura(s) gravadas de proveedores sin clasificar: ` +
+                    'van a los casilleros de siempre. Nunca al 502 por las dudas.');
+    }
+
+    return r;
+}
+
+/** Copia defensiva: el reparto no puede tocar el resumen guardado. */
+function copiaDeLista(lista) {
+    return Array.isArray(lista) ? lista.slice() : [];
+}
+
+/**
+ * Cuánto IVA (casillero **522**) corresponde a las compras SIN derecho a
+ * crédito tributario.
+ *
+ * El SRI **no lo calcula solo**. El 05-nov-2026, con el inspector del
+ * formulario real, se vio el campo del 522 (`concepto1480`) en `0.00` y pintado
+ * de rojo después de escribir el 502/512. La fila es 502 (bruto) · 512 (neto) ·
+ * 522 (IVA): si se declara base, hay que declarar su impuesto. Sin él el portal
+ * no deja avanzar y la declaración no sale.
+ *
+ * Se prefiere el IVA **real** de cada factura apartada. Si la base salió de un
+ * resumen viejo (monto a mano) se aplica la tarifa efectiva del período. Si
+ * tampoco hay balde, devuelve `falta: true`: quien llama NO inventa un
+ * impuesto, lo anota y el cierre mágico frena el envío.
+ *
+ * @returns {{iva: number, falta: boolean}}
+ */
+function ivaDelBloqueSinCredito(reparto, facturas) {
+    const r = reparto || {};
+    const detalle = Array.isArray(r.detalleSinCredito) ? r.detalleSinCredito : [];
+    let iva = 0;
+    let falta = false;
+
+    for (const tarifa of ['15', '5']) {
+        const base = Number(r['sinCredito' + tarifa]) || 0;
+        if (!(base > 0)) continue;
+
+        const ivaFacturas = Number(r['ivaSinCredito' + tarifa]) || 0;
+        const baseFacturas = detalle
+            .filter((x) => String(x && x.tarifa) === tarifa)
+            .reduce((a, x) => a + (Number(x && x.base) || 0), 0);
+
+        if (ivaFacturas > 0 && baseFacturas > 0) {
+            // Proporción: cubre el caso en que el monto se fijó a mano sobre
+            // una base distinta de la que suman las facturas.
+            iva += ivaFacturas * (base / baseFacturas);
+            continue;
+        }
+
+        const balde = tarifa === '5'
+            ? (facturas && facturas.iva5)
+            : (facturas && facturas.iva15);
+        const derivado = ivaProporcionalDeBase(base, balde);
+        if (derivado > 0) iva += derivado;
+        else falta = true;
+    }
+
+    return { iva: redondear(iva), falta };
+}
+
 async function llenarCompras(data) {
     console.group('🛍️ Llenado de COMPRAS v2.0 (Zero-Touch Elite)');
 
     // Con qué criterio se reparte. Preguntado por el usuario el 07-sep-2026:
     // «no vi si clasifica por IVA o por actividad». No lo decía en ningún
     // lado, y una decisión sobre plata que no se explica no se puede auditar.
-    console.log('   ⚖️ Criterio: se reparte por TARIFA — el cociente IVA/base de cada factura.');
-    console.log('      15% → 500/510   ·   5% → 540/550   ·   0% → 507/517');
-    console.log('      La ACTIVIDAD del proveedor y la del cliente todavía NO deciden nada: el ' +
-                '502/512 (sin derecho a crédito) queda sin usar hasta que exista el mapa, que ' +
-                'es criterio contable. Lo que se sabe de cada proveedor está en 🏷️, en el cajón 🧰.');
+    //
+    // Desde el 04-nov-2026 el reparto tiene DOS ejes, y el segundo sólo actúa
+    // cuando alguien lo afirmó:
+    //   1. la TARIFA (cociente IVA/base), que ya estaba;
+    //   2. el CRÉDITO TRIBUTARIO según la actividad — proveedor marcado sin
+    //      derecho en 🏷️, o contribuyente que vende sólo al 0%.
+    // Sin clasificar, la compra va donde iba siempre. Nunca al 502 por las dudas.
+    log.debug('   ⚖️ Criterio: primero la TARIFA — el cociente IVA/base de cada factura.');
+    log.debug('      15% → 500/510   ·   5% → 540/550   ·   0% → 507/517');
+    log.debug('      Después el CRÉDITO: lo que un contador marcó sin derecho (o todo, si el ' +
+                'cliente vende sólo al 0%) va al 502/512. Lo no clasificado no se mueve.');
     let camposLlenados = 0;
 
     // Robusto: detectamos si nos pasan el objeto raíz o el de facturas
@@ -248,20 +517,20 @@ async function llenarCompras(data) {
     const notasCredito = data.notasCredito || null;
 
     if (!facturas || (!facturas.iva15 && !facturas.iva0)) {
-        console.warn('⚠️ No hay datos de facturas válidos.');
-        console.log('Datos recibidos:', JSON.stringify(data, null, 2));
+        log.warn('⚠️ No hay datos de facturas válidos.');
+        log.debug('Datos recibidos:', JSON.stringify(data, null, 2));
         console.groupEnd();
         return 0;
     }
 
-    console.log('📊 Datos de facturas detectados:');
-    console.log('  - Tarifa plena (12/13/14/15%):', facturas.iva15);
-    console.log('  - IVA 5%:', facturas.iva5);
-    console.log('  - IVA 0%:', facturas.iva0);
+    log.debug('📊 Datos de facturas detectados:');
+    log.debug('  - Tarifa plena (12/13/14/15%):', facturas.iva15);
+    log.debug('  - IVA 5%:', facturas.iva5);
+    log.debug('  - IVA 0%:', facturas.iva0);
     if (notasCredito) {
-        console.log('📄 Notas de Crédito:');
-        console.log('  - NC IVA 15%:', notasCredito.iva15);
-        console.log('  - NC IVA 0%:', notasCredito.iva0);
+        log.debug('📄 Notas de Crédito:');
+        log.debug('  - NC IVA 15%:', notasCredito.iva15);
+        log.debug('  - NC IVA 0%:', notasCredito.iva0);
     }
 
     // ─── PASO 1: Expandir Sección COMPRAS si está colapsada ───────────────────
@@ -299,7 +568,7 @@ async function llenarCompras(data) {
                         // es indistinguible de una falla, y fue justo lo que
                         // pasó: «tampoco vi la sugerencia».
                         const enc = await NotasDeVenta.estaEncendido();
-                        console.log(enc
+                        log.debug(enc
                             ? '📒 Paso 1.2: a este contribuyente no se le pregunta por notas de venta ' +
                               '(tres períodos seguidos en cero). Se lo despierta con sriNotasDeVentaPreguntar("RUC").'
                             : '📒 Paso 1.2: no se pregunta por notas de venta porque el interruptor 📒 está APAGADO. ' +
@@ -310,14 +579,14 @@ async function llenarCompras(data) {
             }
         } catch (e) {
             // Preguntar por las notas de venta nunca puede tumbar el llenado.
-            console.warn('📒 [NOTAS DE VENTA] No se pudo preguntar:', e.message);
+            log.warn('📒 [NOTAS DE VENTA] No se pudo preguntar:', e.message);
         }
     }
 
     // ─── PASO 1.5: Número de Comprobantes (Casillero 115) ───────────────────
     const docsCount = facturas.totalFacturas || facturas.recibidosCount || 0;
     if (docsCount > 0) {
-        console.log(`  📝 Casillero 115 (No. Comprobantes) = ${docsCount}`);
+        log.debug(`  📝 Casillero 115 (No. Comprobantes) = ${docsCount}`);
         // El usuario mencionó que el ID es concepto256 en su inspección, pero el casillero es 115
         if (await llenarCampo('115', docsCount)) {
             camposLlenados++;
@@ -327,53 +596,138 @@ async function llenarCompras(data) {
 
 
     // ─── PASO 2: Compras con IVA (15%) - Segregación 500 (Crédito) vs 502 (Sin Crédito) ────
-    console.log('\n🔍 Paso 2: Compras con IVA (15%)...');
+    log.debug('\n🔍 Paso 2: Compras con IVA (15%)...');
     const base15Total = parseDecimal(facturas.iva15?.baseImponible || 0);
     const nc15 = parseDecimal(notasCredito?.iva15?.baseImponible || 0);
 
-    // Segregación de compras con y sin crédito tributario (Art. 66 LRTI)
-    const base15SinCredito = parseDecimal(facturas.base15SinCredito || facturas.sinCredito || 0);
-    const base15ConCredito = (base15SinCredito > 0 && base15Total >= base15SinCredito)
-        ? Math.round((base15Total - base15SinCredito) * 100) / 100
-        : (facturas.base15ConCredito !== undefined ? parseDecimal(facturas.base15ConCredito) : base15Total);
+    // Lo que no encuentra casillero se anota y el cierre mágico frena el envío.
+    // Se declara acá arriba porque ahora también lo usa el 502.
+    const sinUbicar = [];
+
+    // ── El reparto por crédito tributario (Art. 66 LRTI) ─────────────────
+    // La tarifa dice CUÁNTO IVA hay; la actividad dice si ese IVA es crédito.
+    // Son dos preguntas distintas y hasta hoy sólo se contestaba la primera:
+    // todo el 15% iba al 500 y el 502 quedaba vacío aunque el contador ya
+    // pudiera marcar proveedores como «sin derecho» en 🏷️. Marcar no hacía
+    // nada, que es peor que no ofrecer el botón.
+    const reparto = await repartirComprasPorCredito(facturas);
+
+    // El 15% con derecho sale de RESTAR, nunca de sumar aparte: así el 500
+    // sigue cuadrando al centavo con el balde que se declaraba antes, y no se
+    // pierde ni se duplica plata si el detalle viene incompleto.
+    const base15SinCredito = Math.max(0, reparto.sinCredito15);
+    const base15ConCredito = Math.max(0, Math.round((base15Total - base15SinCredito) * 100) / 100);
 
     if (base15ConCredito > 0 || nc15 > 0) {
-        console.log(`  Base Imponible 15% con Crédito (500): $${base15ConCredito.toFixed(2)} | NC: $${nc15.toFixed(2)}`);
+        log.debug(`  Base Imponible 15% con Crédito (500): $${base15ConCredito.toFixed(2)} | NC: $${nc15.toFixed(2)}`);
 
-        console.log('  📝 Casillero 500 (Compras 15% con Crédito - Bruto)...');
+        log.debug('  📝 Casillero 500 (Compras 15% con Crédito - Bruto)...');
         if (await llenarCampo('500', base15ConCredito)) {
             camposLlenados++;
-            console.log('  ⏳ Pausa para recálculo SRI tras 500...');
+            log.debug('  ⏳ Pausa para recálculo SRI tras 500...');
             await sleep(1500);
         }
 
         const valor510 = Math.max(0, base15ConCredito - nc15);
-        console.log(`  📝 Casillero 510 = $${base15ConCredito.toFixed(2)} - $${nc15.toFixed(2)} (NC) = $${valor510.toFixed(2)}`);
+        log.debug(`  📝 Casillero 510 = $${base15ConCredito.toFixed(2)} - $${nc15.toFixed(2)} (NC) = $${valor510.toFixed(2)}`);
         if (await llenarCampo('510', valor510)) camposLlenados++;
         await sleep(800);
 
         // ─── ELITE v13.2: Notas de Crédito por compensar (15% -> 544) ─────────
         const valor544 = Math.max(0, nc15 - base15ConCredito);
         if (valor544 > 0) {
-            console.log(`  📝 [NC SURPLUS] Casillero 544 (Compensación 15%): $${valor544.toFixed(2)} (NC:$${nc15.toFixed(2)} > Base:$${base15ConCredito.toFixed(2)})`);
+            log.debug(`  📝 [NC SURPLUS] Casillero 544 (Compensación 15%): $${valor544.toFixed(2)} (NC:$${nc15.toFixed(2)} > Base:$${base15ConCredito.toFixed(2)})`);
             if (await llenarCampo('544', valor544)) camposLlenados++;
             await sleep(600);
         }
     } else {
-        console.log('  ℹ️ Sin compras ni NC con IVA (15%) con derecho a crédito.');
+        log.debug('  ℹ️ Sin compras ni NC con IVA (15%) con derecho a crédito.');
     }
 
-    // ─── PASO 2.2: Adquisiciones 15% SIN Derecho a Crédito Tributario (502 y 512) ────
-    if (base15SinCredito > 0) {
-        console.log(`\n🔍 Paso 2.2: Compras 15% SIN derecho a crédito tributario (502/512)... $${base15SinCredito.toFixed(2)}`);
+    // ─── PASO 2.2: Adquisiciones gravadas SIN Derecho a Crédito (502, 512 y 522) ─
+    // El 502 es «otras adquisiciones y pagos gravados tarifa distinta de cero,
+    // SIN derecho a crédito tributario»: entran el 15% y también el 5% que no
+    // da crédito. El 512 es su NETO (bruto menos notas de crédito) y el 522 su
+    // IVA. OJO: el SRI **no** calcula el 522 solo —se comprobó con el inspector
+    // del formulario real el 05-nov-2026—; si queda en 0.00, el campo se pinta
+    // de rojo y el portal no deja avanzar.
+    //
+    // Se escribe SÓLO lo que un contador marcó sin derecho, o todo si el
+    // contribuyente vende únicamente al 0%. Lo demás se queda en el 500/540.
+    const base5SinCredito = Math.max(0, reparto.sinCredito5);
+    const baseSinCredito = redondear(base15SinCredito + base5SinCredito);
+    let ivaSinCreditoDeclarado = 0;
+    if (baseSinCredito > 0) {
+        log.debug(`\n🔍 Paso 2.2: Compras SIN derecho a crédito tributario (502/512/522)... $${baseSinCredito.toFixed(2)}` +
+                    ` (15%: $${base15SinCredito.toFixed(2)} · 5%: $${base5SinCredito.toFixed(2)})`);
         const input502 = await encontrarInputPorCasillero('502');
-        if (await llenarCampo('502', base15SinCredito, input502)) {
+        if (await llenarCampo('502', baseSinCredito, input502)) {
             camposLlenados++;
-            console.log('  ⏳ Pausa para recálculo SRI tras 502...');
+            log.debug('  ⏳ Pausa para recálculo SRI tras 502...');
             await sleep(1000);
             const input512 = await encontrarInputPorCasillero('512');
-            if (await llenarCampo('512', base15SinCredito, input512)) camposLlenados++;
+            // El 512 es el bruto menos las notas de crédito de ESA compra. Las
+            // NC del período no se pueden atribuir a un proveedor concreto, así
+            // que acá no se resta ninguna: se aplicaron al bloque CON crédito,
+            // y eso queda dicho en el log de abajo. Restarlas dos veces sería
+            // inventar una imputación.
+            if (await llenarCampo('512', baseSinCredito, input512)) camposLlenados++;
+            else sinUbicar.push('no se encontró el casillero 512 (neto sin derecho a crédito): ' +
+                                `el 502 quedó cargado con $${baseSinCredito.toFixed(2)} y el 512 no`);
             await sleep(800);
+
+            // ── El 522 es el IVA de la MISMA fila: 502 · 512 · 522 ───────────
+            // Se prefiere el sugerido oficial del SRI si trae un valor positivo
+            // (el usuario lo señaló en el inspector); si no hay sugerido, se
+            // escribe el IVA real de las facturas apartadas. Nunca se deja en 0
+            // una base que sí tiene impuesto: eso es lo que bloqueaba el envío.
+            const ref512 = (await encontrarInputPorCasillero('512')) || input512;
+            const ivaSinCredito = ivaDelBloqueSinCredito(reparto, facturas);
+            const sugerido522 = leerSugeridoEnFila(ref512);
+            const valor522 = sugerido522 !== null ? sugerido522 : ivaSinCredito.iva;
+
+            if (valor522 > 0) {
+                ivaSinCreditoDeclarado = valor522;
+                log.debug(`  📝 Casillero 522 (IVA de compras sin derecho) = $${valor522.toFixed(2)}` +
+                            (sugerido522 !== null ? ' · tomado del sugerido del SRI' : ' · calculado de las facturas'));
+                let ok522 = await llenarCampo('522', valor522);
+                if (!ok522 && ref512) {
+                    // El 522 vive a la derecha del 512. Mismo rescate que el
+                    // 550 y el 518: si el buscador por número no lo ve, se toma
+                    // el vecino de fila en vez de rendirse.
+                    const vecino = vecinoDeFila(ref512);
+                    if (vecino) {
+                        log.debug(`  🔎 El 522 no salió por número; se toma el vecino de fila del 512: id=${vecino.id || '(sin id)'}`);
+                        ok522 = await llenarCampo('522', valor522, vecino);
+                    }
+                }
+                if (ok522) camposLlenados++;
+                else sinUbicar.push('no se encontró el casillero 522 (IVA de compras sin derecho): ' +
+                                    `el 502/512 quedó con $${baseSinCredito.toFixed(2)} y el IVA no`);
+                await sleep(800);
+            } else {
+                // La base está declarada y el IVA no se pudo determinar. No se
+                // inventa un impuesto: se anota y el cierre mágico frena.
+                sinUbicar.push('no se pudo determinar el IVA (casillero 522) de las compras sin derecho: ' +
+                               `el 502/512 quedó con $${baseSinCredito.toFixed(2)} y el IVA en 0`);
+            }
+
+            // Traza: si mañana alguien pregunta por qué este contribuyente
+            // pagó lo que pagó, acá está el motivo y el monto.
+            if (typeof anotarBitacora === 'function') {
+                await anotarBitacora('compras sin derecho',
+                    `$${baseSinCredito.toFixed(2)} al 502 · IVA $${ivaSinCreditoDeclarado.toFixed(2)} al 522 ` +
+                    `(${reparto.detalleSinCredito.length} factura/s)`);
+            }
+        } else {
+            // No se manda esta plata al 500: eso inflaría el crédito, que es el
+            // error caro de este proyecto. Se deja constancia y el cierre frena.
+            sinUbicar.push(`no se encontró el casillero 502: $${baseSinCredito.toFixed(2)} de compras ` +
+                           'marcadas SIN derecho a crédito quedaron sin declarar');
+        }
+        if (nc15 > 0 || parseDecimal(notasCredito?.iva5?.baseImponible || 0) > 0) {
+            log.warn('  📄 Hay notas de crédito en el período. Se aplicaron al bloque CON derecho ' +
+                         'a crédito: no se pueden imputar a un proveedor en concreto desde la tabla.');
         }
     }
 
@@ -382,26 +736,28 @@ async function llenarCompras(data) {
     // acá caía en el 500 junto con el 15%, y como el SRI calcula el 520
     // (impuesto generado en compras) a partir del 510, eso inflaba el crédito:
     // el contribuyente terminaba pagando de menos con la firma del contador.
-    const base5 = parseDecimal(facturas.iva5?.baseImponible || 0);
+    const base5Total = parseDecimal(facturas.iva5?.baseImponible || 0);
     const nc5 = parseDecimal(notasCredito?.iva5?.baseImponible || 0);
-    const sinUbicar = [];
+    // …y lo que se marcó sin derecho ya salió al 502 más arriba: acá queda
+    // sólo la parte que sí da crédito.
+    const base5 = Math.max(0, Math.round((base5Total - base5SinCredito) * 100) / 100);
 
     if (base5 > 0 || nc5 > 0) {
-        console.log(`\n🔍 Paso 2.5: Compras al 5%... Base $${base5.toFixed(2)} | NC $${nc5.toFixed(2)}`);
+        log.debug(`\n🔍 Paso 2.5: Compras al 5%... Base $${base5.toFixed(2)} | NC $${nc5.toFixed(2)}`);
 
         // Los ids reales del 540 y el 550 no están en la Matriz Tatuada: se
         // buscan por el número de casillero, que es el camino que ya usa el
         // resto del formulario. Si no aparecen NO se inventa un destino ni se
         // los manda al 500: se anota y el cierre mágico frena el envío.
-        console.log('  📝 Casillero 540 (Compras 5% - Bruto)...');
+        log.debug('  📝 Casillero 540 (Compras 5% - Bruto)...');
         const input540 = await encontrarInputPorCasillero('540');
         if (await llenarCampo('540', base5, input540)) {
             camposLlenados++;
-            console.log('  ⏳ Pausa para recálculo SRI tras 540...');
+            log.debug('  ⏳ Pausa para recálculo SRI tras 540...');
             await sleep(1500);
 
             const valor550 = Math.max(0, base5 - nc5);
-            console.log(`  📝 Casillero 550 = $${base5.toFixed(2)} - $${nc5.toFixed(2)} (NC) = $${valor550.toFixed(2)}`);
+            log.debug(`  📝 Casillero 550 = $${base5.toFixed(2)} - $${nc5.toFixed(2)} (NC) = $${valor550.toFixed(2)}`);
 
             let ok550 = await llenarCampo('550', valor550);
 
@@ -418,10 +774,10 @@ async function llenarCompras(data) {
             if (!ok550 && ref540) {
                 const vecino = vecinoDeFila(ref540);
                 if (vecino) {
-                    console.log(`  🔎 El 550 no salió por número; se toma el vecino de fila del 540: id=${vecino.id || '(sin id)'}`);
+                    log.debug(`  🔎 El 550 no salió por número; se toma el vecino de fila del 540: id=${vecino.id || '(sin id)'}`);
                     ok550 = await llenarCampo('550', valor550, vecino);
                 } else {
-                    console.warn('  ⚠️ El 550 tampoco salió por vecindad. Se anota y NO se envía.');
+                    log.warn('  ⚠️ El 550 tampoco salió por vecindad. Se anota y NO se envía.');
                 }
             }
 
@@ -434,38 +790,38 @@ async function llenarCompras(data) {
     }
 
     // ─── PASO 3: Compras sin IVA (casilleros 507 y 517) ──────────────────────
-    console.log('\n🔍 Paso 3: Compras sin IVA (0%)...');
+    log.debug('\n🔍 Paso 3: Compras sin IVA (0%)...');
     const base0 = parseDecimal(facturas.iva0?.baseImponible || 0);
     const nc0 = parseDecimal(notasCredito?.iva0?.baseImponible || 0);
 
     if (base0 > 0 || nc0 > 0) {
-        console.log(`  Base Imponible 0%: $${base0.toFixed(2)} | NC: $${nc0.toFixed(2)}`);
+        log.debug(`  Base Imponible 0%: $${base0.toFixed(2)} | NC: $${nc0.toFixed(2)}`);
 
-        console.log('  📝 Casillero 507 (Compras 0% - Bruto)...');
+        log.debug('  📝 Casillero 507 (Compras 0% - Bruto)...');
         if (await llenarCampo('507', base0)) camposLlenados++;
         await sleep(800);
 
         const valor517 = Math.max(0, base0 - nc0);
-        console.log(`  📝 Casillero 517 = $${base0.toFixed(2)} - $${nc0.toFixed(2)} (NC) = $${valor517.toFixed(2)}`);
+        log.debug(`  📝 Casillero 517 = $${base0.toFixed(2)} - $${nc0.toFixed(2)} (NC) = $${valor517.toFixed(2)}`);
         if (await llenarCampo('517', valor517)) camposLlenados++;
         await sleep(800);
 
         // ─── ELITE v13.2: Notas de Crédito por compensar (0% -> 543) ──────────
         const valor543 = Math.max(0, nc0 - base0);
         if (valor543 > 0) {
-            console.log(`  📝 [NC SURPLUS] Casillero 543 (Compensación 0%): $${valor543.toFixed(2)} (NC:$${nc0.toFixed(2)} > Base:$${base0.toFixed(2)})`);
+            log.debug(`  📝 [NC SURPLUS] Casillero 543 (Compensación 0%): $${valor543.toFixed(2)} (NC:$${nc0.toFixed(2)} > Base:$${base0.toFixed(2)})`);
             if (await llenarCampo('543', valor543)) camposLlenados++;
             await sleep(600);
         }
     } else {
-        console.log('  ℹ️ Sin compras ni NC tarifa 0%.');
+        log.debug('  ℹ️ Sin compras ni NC tarifa 0%.');
     }
 
     // ─── PASO 3.5: Notas de venta: escribir lo que se preguntó al abrir ──────
     // La PREGUNTA se hizo en el paso 1.2, con la sección recién abierta. Acá
     // sólo se escribe, y en el orden en que el formulario lista los casilleros.
     if (nvPendiente && (nvPendiente.monto > 0 || nvPendiente.cantidad > 0)) {
-        console.log(`
+        log.debug(`
 📒 Paso 3.5: Notas de venta · $${nvPendiente.monto.toFixed(2)} en ${nvPendiente.cantidad} comprobante(s)...`);
         // Los id del 508 y el 117 no están en la Matriz Tatuada: se buscan por
         // número. Si no aparecen, la plata NO se manda a otro casillero — se
@@ -481,7 +837,7 @@ async function llenarCompras(data) {
             // neto, no del bruto.
             const ncNv = Number(nvPendiente.nc) || 0;
             const valor518 = Math.max(0, nvPendiente.monto - ncNv);
-            console.log(`  📝 Casillero 518 = $${nvPendiente.monto.toFixed(2)} - $${ncNv.toFixed(2)} (NC) = $${valor518.toFixed(2)}`);
+            log.debug(`  📝 Casillero 518 = $${nvPendiente.monto.toFixed(2)} - $${ncNv.toFixed(2)} (NC) = $${valor518.toFixed(2)}`);
 
             let ok518 = await llenarCampo('518', valor518);
             // Y si no sale por número, es el vecino de fila del 508. Misma
@@ -492,7 +848,7 @@ async function llenarCompras(data) {
             if (!ok518 && ref508) {
                 const vecino = vecinoDeFila(ref508);
                 if (vecino) {
-                    console.log(`  🔎 El 518 no salió por número; se toma el vecino de fila del 508: id=${vecino.id || '(sin id)'}`);
+                    log.debug(`  🔎 El 518 no salió por número; se toma el vecino de fila del 508: id=${vecino.id || '(sin id)'}`);
                     ok518 = await llenarCampo('518', valor518, vecino);
                 }
             }
@@ -505,23 +861,27 @@ async function llenarCompras(data) {
             else sinUbicar.push('no se encontró el casillero 117: la cantidad de notas de venta quedó sin declarar');
         }
     } else if (nvPendiente) {
-        console.log('📒 Paso 3.5: el contador dijo que este período no tiene notas de venta. No se toca el 508 ni el 117.');
+        log.debug('📒 Paso 3.5: el contador dijo que este período no tiene notas de venta. No se toca el 508 ni el 117.');
     }
 
     // ─── PASO 4: Valores Sugeridos (564 y 565) ───────────────────────────────
-    console.log('\n🔍 Paso 4: Valores sugeridos (564 y 565)...');
+    log.debug('\n🔍 Paso 4: Valores sugeridos (564 y 565)...');
     try {
         const sugeridos = await llenarValorSugerido();
         camposLlenados += sugeridos;
-        console.log(`  ✅ ${sugeridos} valor(es) sugerido(s) llenados.`);
+        log.info(`  ✅ ${sugeridos} valor(es) sugerido(s) llenados.`);
     } catch (e) {
-        console.error('  ❌ Error capturando sugeridos:', e);
+        log.error('  ❌ Error capturando sugeridos:', e);
     }
 
     if (window.sriAssistant?.showEliteToast && camposLlenados > 0) {
         window.sriAssistant.showEliteToast({
             title: '✅ Compras Llenadas',
-            msg: `Casilleros 500/510/507/517/564/565 procesados (${camposLlenados} campos).`
+            msg: `Casilleros 500/510/507/517/564/565 procesados (${camposLlenados} campos)` +
+                 (baseSinCredito > 0
+                     ? ` · $${baseSinCredito.toFixed(2)} SIN derecho al 502/512` +
+                       (ivaSinCreditoDeclarado > 0 ? ` · IVA $${ivaSinCreditoDeclarado.toFixed(2)} al 522` : '')
+                     : '') + '.'
         });
     }
 
@@ -546,7 +906,7 @@ async function llenarCompras(data) {
 }
 
 async function llenarRetenciones(data) {
-    console.log('📋 Procesando RETENCIONES ...');
+    log.debug('📋 Procesando RETENCIONES ...');
     let camposLlenados = 0;
     const { retenciones } = data;
 
@@ -557,16 +917,16 @@ async function llenarRetenciones(data) {
 
     // 1. IVA Retenido (Casillero 609)
     if (retenciones.ivaRetenido && retenciones.ivaRetenido.total > 0) {
-        console.log(`💎 IVA Retenido: ${retenciones.ivaRetenido.total}`);
+        log.debug(`💎 IVA Retenido: ${retenciones.ivaRetenido.total}`);
         if (await llenarCampo('609', retenciones.ivaRetenido.total)) {
             camposLlenados++;
-            console.log('   ✅ Campo 609 (Retenciones IVA) llenado.');
+            log.info('   ✅ Campo 609 (Retenciones IVA) llenado.');
         }
     }
 
     // 2. RENTA Retenida (¡ELITE FIX: NO INYECTAR EN IVA!)
     if (retenciones.rentaRetenida && retenciones.rentaRetenida.total > 0) {
-        console.log(`💡 Info: Retención de Renta ($${retenciones.rentaRetenida.total}) detectada. Ignorada para formulario de IVA mensual.`);
+        log.debug(`💡 Info: Retención de Renta ($${retenciones.rentaRetenida.total}) detectada. Ignorada para formulario de IVA mensual.`);
     }
 
     // No colapsamos aquí porque luego suelen venir los sugeridos en la misma sección (Resumen)
@@ -576,7 +936,7 @@ async function llenarRetenciones(data) {
 }
 
 async function llenarValorSugerido() {
-    console.log('📋 Procesando Valores Sugeridos en COMPRAS (564, 565)...');
+    log.debug('📋 Procesando Valores Sugeridos en COMPRAS (564, 565)...');
 
     // Paso clave: Forzar el recálculo del backend SRI (AJAX PrimeFaces).
     // Al hacer blur del foco activo y un click en body, PrimeFaces
@@ -588,37 +948,37 @@ async function llenarValorSugerido() {
     document.body.click();
 
     // Pausa de estabilidad: dar tiempo al SRI para calcular los sugeridos
-    console.log('⏳ Esperando recálculo SRI para valores sugeridos (1.5s)...');
+    log.debug('⏳ Esperando recálculo SRI para valores sugeridos (1.5s)...');
     await sleep(1500);
 
     let totalLlenados = 0;
 
     // Campo 564 (IVA en compras / Crédito Tributario del período)
-    console.log('🔍 Procesando campo sugerido → 564...');
+    log.debug('🔍 Procesando campo sugerido → 564...');
     if (await procesarCampoConSugerido('564')) {
         totalLlenados++;
-        console.log('✅ Campo 564 llenado con valor sugerido.');
+        log.info('✅ Campo 564 llenado con valor sugerido.');
         await sleep(600);
     } else {
-        console.log('ℹ️ Campo 564: sin sugerido en DOM, aplicando Refuerzo Técnico...');
+        log.debug('ℹ️ Campo 564: sin sugerido en DOM, aplicando Refuerzo Técnico...');
         const val564 = await calculateEliteFinancials('564');
         if (val564 > 0 && await llenarCampo('564', val564)) {
             totalLlenados++;
-            console.log(`✅ Campo 564 llenado con Refuerzo Técnico ($${val564}).`);
+            log.info(`✅ Campo 564 llenado con Refuerzo Técnico ($${val564}).`);
         }
     }
 
     // Campo 565 (Gasto sin crédito tributario / Factor de Proporcionalidad)
-    console.log('🔍 Procesando campo sugerido → 565...');
+    log.debug('🔍 Procesando campo sugerido → 565...');
     if (await procesarCampoConSugerido('565')) {
         totalLlenados++;
-        console.log('✅ Campo 565 llenado con valor sugerido.');
+        log.info('✅ Campo 565 llenado con valor sugerido.');
     } else {
-        console.log('ℹ️ Campo 565: sin sugerido en DOM, aplicando Refuerzo Técnico...');
+        log.debug('ℹ️ Campo 565: sin sugerido en DOM, aplicando Refuerzo Técnico...');
         const val565 = await calculateEliteFinancials('565');
         if (val565 > 0 && await llenarCampo('565', val565)) {
             totalLlenados++;
-            console.log(`✅ Campo 565 llenado con Refuerzo Técnico ($${val565}).`);
+            log.info(`✅ Campo 565 llenado con Refuerzo Técnico ($${val565}).`);
         }
     }
 
@@ -630,7 +990,7 @@ async function llenarValorSugerido() {
 // Estrategia A: XPath por fila del casillero.
 // Estrategia B: Detección por proximidad visual (original).
 async function procesarCampoConSugerido(casillero) {
-    console.log(`🔍 [Sugerido] Procesando casillero ${casillero}...`);
+    log.debug(`🔍 [Sugerido] Procesando casillero ${casillero}...`);
     await sleep(400);
 
     const sugeridoMap = {
@@ -654,13 +1014,13 @@ async function procesarCampoConSugerido(casillero) {
             if (parsed === null) {
                 // La caja existe pero no dice nada. Eso NO es un sugerido: se
                 // deja pasar al Refuerzo Técnico en vez de fingir un 0 oficial.
-                console.log(`  [${casillero}] ⬜ El campo sugerido (${id}) está vacío. No hay sugerido del SRI.`);
+                log.debug(`  [${casillero}] ⬜ El campo sugerido (${id}) está vacío. No hay sugerido del SRI.`);
                 continue;
             }
-            console.log(`  [${casillero}] 📍 SugeridoMap detectado por ID (${id}) = ${parsed} (raw: "${rawVal}")`);
+            log.debug(`  [${casillero}] 📍 SugeridoMap detectado por ID (${id}) = ${parsed} (raw: "${rawVal}")`);
 
             if (parsed > 0) {
-                console.log(`  [${casillero}] ✏️ Aplicando sugerido SRI positivo ${parsed}...`);
+                log.debug(`  [${casillero}] ✏️ Aplicando sugerido SRI positivo ${parsed}...`);
                 const ok = await llenarCampo(casillero, parsed);
                 if (ok) return true;
 
@@ -676,7 +1036,7 @@ async function procesarCampoConSugerido(casillero) {
                     return true;
                 }
             } else {
-                console.log(`  [${casillero}] ℹ️ El valor sugerido SRI oficial por ID (${id}) es 0.00. Se respeta en 0.`);
+                log.debug(`  [${casillero}] ℹ️ El valor sugerido SRI oficial por ID (${id}) es 0.00. Se respeta en 0.`);
                 return true; // El SRI indica 0.00 oficialmente. Lo consideramos manejado para no usar fallbacks.
             }
         }
@@ -695,13 +1055,13 @@ async function procesarCampoConSugerido(casillero) {
                 // null = la caja está ahí pero vacía. Eso no es un sugerido:
                 // se sigue buscando por las otras estrategias.
                 if (parsed === null) {
-                    console.log(`  [${casillero}] ⬜ El sugerido de la fila está vacío. No hay sugerido del SRI.`);
+                    log.debug(`  [${casillero}] ⬜ El sugerido de la fila está vacío. No hay sugerido del SRI.`);
                 } else if (parsed > 0) {
-                    console.log(`  [${casillero}] 📍 Sugerido de fila (${sugEl.id || sugEl.className}) = ${parsed}. Aplicando...`);
+                    log.debug(`  [${casillero}] 📍 Sugerido de fila (${sugEl.id || sugEl.className}) = ${parsed}. Aplicando...`);
                     const ok = await llenarCampo(casillero, parsed);
                     if (ok) return true;
                 } else {
-                    console.log(`  [${casillero}] ℹ️ El valor sugerido SRI en la fila es 0.00. Se respeta en 0.`);
+                    log.debug(`  [${casillero}] ℹ️ El valor sugerido SRI en la fila es 0.00. Se respeta en 0.`);
                     return true; // El SRI indica 0.00 en el DOM de la fila. Lo consideramos manejado.
                 }
             }
@@ -731,25 +1091,25 @@ async function procesarCampoConSugerido(casillero) {
                 // escrito por el SRI. parseImporteEstricto devuelve null.
                 const val = parseImporteEstricto(sugeridoInput.value);
                 if (val === null) {
-                    console.log(`  [${casillero}] ⬜ El sugerido XPath (${sugeridoInput.id}) está vacío. No hay sugerido del SRI.`);
+                    log.debug(`  [${casillero}] ⬜ El sugerido XPath (${sugeridoInput.id}) está vacío. No hay sugerido del SRI.`);
                     continue;
                 }
-                console.log(`  [${casillero}] XPath sugerido: ${sugeridoInput.id} = ${val}`);
+                log.debug(`  [${casillero}] XPath sugerido: ${sugeridoInput.id} = ${val}`);
                 if (val > 0) {
                     const ok = await llenarCampo(casillero, val);
                     if (ok) return true;
                 } else {
-                    console.log(`  [${casillero}] ℹ️ Valor sugerido XPath es 0.00. Se respeta en 0.`);
+                    log.debug(`  [${casillero}] ℹ️ Valor sugerido XPath es 0.00. Se respeta en 0.`);
                     return true;
                 }
             }
         } catch (e) {
-            console.warn(`  XPath error para casillero ${casillero}:`, e.message);
+            log.warn(`  XPath error para casillero ${casillero}:`, e.message);
         }
     }
 
     // ── ESTRATEGIA B: Fallback por proximidad visual (solo si no hay ningún elemento .sugerido) ──
-    console.log(`  [${casillero}] Fallback: detección por proximidad visual...`);
+    log.debug(`  [${casillero}] Fallback: detección por proximidad visual...`);
     let resultado = { found: false, value: 0 };
 
     for (let i = 0; i < 5; i++) {
@@ -758,7 +1118,7 @@ async function procesarCampoConSugerido(casillero) {
 
         resultado = await detectarValorSugeridoEnDOM(casillero, input);
         if (resultado.found && resultado.value > 0) {
-            console.log(`  ✨ [${casillero}] Detectado por proximidad: ${resultado.value}`);
+            log.debug(`  ✨ [${casillero}] Detectado por proximidad: ${resultado.value}`);
             break;
         }
         await sleep(300);
@@ -768,7 +1128,7 @@ async function procesarCampoConSugerido(casillero) {
         return await llenarCampo(casillero, resultado.value);
     }
 
-    console.log(`ℹ️ Sin valor sugerido positivo para ${casillero}. Se mantiene en 0.00.`);
+    log.debug(`ℹ️ Sin valor sugerido positivo para ${casillero}. Se mantiene en 0.00.`);
     return false;
 }
 
@@ -793,7 +1153,7 @@ async function toggleSriSection(sectionName, expand = true) {
                      return txt.includes(sectionName.toUpperCase()) || (sectionName === 'COMPRAS' && txt.includes('ADQUISICIONES'));
                  });
 
-    if (!header) return console.warn(`⚠️ No se encontró la sección ${sectionName}`);
+    if (!header) return log.warn(`⚠️ No se encontró la sección ${sectionName}`);
 
     // ELITE FIX: Verificar estado real de forma más robusta (Header + Contenedor)
     const container = document.querySelector(`[id*="${target}"]:not(.ui-accordion-header)`);
@@ -802,15 +1162,15 @@ async function toggleSriSection(sectionName, expand = true) {
                       (container && container.style.display !== 'none' && container.offsetHeight > 0);
     
     if (expand && !isExpanded) {
-        console.log(`🔓 [ELITE] Expandiendo sección: ${sectionName}`);
+        log.debug(`🔓 [ELITE] Expandiendo sección: ${sectionName}`);
         header.click();
         await sleep(1500); // Aumentado para estabilidad del DOM
     } else if (!expand && isExpanded) {
-        console.log(`🔒 [ELITE] Colapsando sección: ${sectionName}`);
+        log.debug(`🔒 [ELITE] Colapsando sección: ${sectionName}`);
         header.click();
         await sleep(600);
     } else {
-        console.log(`ℹ️ [ELITE] Sección ${sectionName} ya está en el estado deseado (${expand ? 'Expandido' : 'Colapsado'}).`);
+        log.debug(`ℹ️ [ELITE] Sección ${sectionName} ya está en el estado deseado (${expand ? 'Expandido' : 'Colapsado'}).`);
     }
 }
 
@@ -830,18 +1190,18 @@ async function llenarCampo(casillero, valor, inputDado) {
     }
 
     if (!input) {
-        console.warn(`🚫 Casillero ${casillero} NO ENCONTRADO en el DOM.`);
+        log.warn(`🚫 Casillero ${casillero} NO ENCONTRADO en el DOM.`);
         return false;
     }
 
     // --- ELITE FIX: Auto-expandir si el elemento está oculto ---
     if (typeof esVisible === 'function' ? !esVisible(input) : input.offsetParent === null) {
-        console.log(`🔍 Casillero ${casillero} encontrado pero OCULTO. Intentando expandir sección...`);
+        log.debug(`🔍 Casillero ${casillero} encontrado pero OCULTO. Intentando expandir sección...`);
         const parentSection = input.closest('.ui-accordion-content') || input.closest('fieldset') || input.closest('div[id*="seccion"]');
         if (parentSection) {
             const header = parentSection.previousElementSibling || document.querySelector(`a[aria-controls="${parentSection.id}"]`);
             if (header) {
-                console.log('📂 Click en cabecera para mostrar campo...');
+                log.debug('📂 Click en cabecera para mostrar campo...');
                 header.click();
                 await sleep(800);
             }
@@ -849,7 +1209,7 @@ async function llenarCampo(casillero, valor, inputDado) {
     }
 
     if (input.disabled || input.readOnly) {
-        console.warn(`🚫 Casillero ${casillero} está BLOQUEADO (disabled: ${input.disabled}, readOnly: ${input.readOnly}).`);
+        log.warn(`🚫 Casillero ${casillero} está BLOQUEADO (disabled: ${input.disabled}, readOnly: ${input.readOnly}).`);
         return false;
     }
 
@@ -886,23 +1246,23 @@ async function llenarCampo(casillero, valor, inputDado) {
         // nada raro en la consola.
         const quedo = parseDecimal(input.value);
         if (quedo !== esperado) {
-            console.error(`❌ ${casillero}: pedí ${valorFormateado} y quedó "${input.value}". El casillero NO se llenó.`);
+            log.error(`❌ ${casillero}: pedí ${valorFormateado} y quedó "${input.value}". El casillero NO se llenó.`);
             if (typeof anotarBitacora === 'function') {
                 await anotarBitacora('casillero sin llenar', `${casillero} · esperaba ${valorFormateado}`);
             }
             return false;
         }
 
-        console.log(`✅ ${casillero}: ${valorFormateado}`);
+        log.info(`✅ ${casillero}: ${valorFormateado}`);
         return true;
     } catch (e) {
-        console.error(`❌ Error en ${casillero}:`, e);
+        log.error(`❌ Error en ${casillero}:`, e);
         return false;
     }
 }
 
 async function leerCampo(casillero) {
-    console.log(`   🔍 Leyendo casillero ${casillero}...`);
+    log.debug(`   🔍 Leyendo casillero ${casillero}...`);
 
     // 1. PRIORIDAD: Buscar en la tabla usando XPath EXACTO (para campos calculados como 401, 403)
     // IMPORTANTE: NO usar starts-with() — causa falsos positivos entre casilleros vecinos (ej. 401 vs 403)
@@ -924,7 +1284,7 @@ async function leerCampo(casillero) {
                 if (inputInterno) {
                     // SIEMPRE usar el valor del input cuando existe — evita concatenación de textContent
                     const valorInput = parseDecimal(inputInterno.value);
-                    console.log(`   📖 Casillero ${casillero} (XPath+Input[text]) = ${valorInput}`);
+                    log.debug(`   📖 Casillero ${casillero} (XPath+Input[text]) = ${valorInput}`);
                     return valorInput;
                 } else {
                     // Solo usar textContent si la celda NO tiene input (celda de solo lectura)
@@ -937,11 +1297,11 @@ async function leerCampo(casillero) {
                         }
                     }
                     const valorTexto = textoDirecto ? parseDecimal(textoDirecto) : parseDecimal(celda.textContent.trim());
-                    console.log(`   📖 Casillero ${casillero} (XPath Texto) = ${valorTexto}`);
+                    log.debug(`   📖 Casillero ${casillero} (XPath Texto) = ${valorTexto}`);
                     return valorTexto;
                 }
             }
-        } catch (e) { }
+        } catch (e) { /* sin valor legible: se prueba otra fuente */ }
     }
 
     // 2. FALLBACK: Intentar encontrar como Input directo
@@ -952,7 +1312,7 @@ async function leerCampo(casillero) {
 
         // Si el input tiene un valor válido > 0, usarlo
         if (valorNumerico > 0) {
-            console.log(`   📖 Casillero ${casillero} (Input) = ${valorTexto}`);
+            log.debug(`   📖 Casillero ${casillero} (Input) = ${valorTexto}`);
             return valorNumerico;
         }
 
@@ -965,18 +1325,18 @@ async function leerCampo(casillero) {
                 if (texto.match(/[\d\.,]+/) && !texto.includes(casillero)) {
                     const valorSpan = parseDecimal(texto);
                     if (valorSpan > 0) {
-                        console.log(`   📖 Casillero ${casillero} (Span cerca de Input) = ${texto}`);
+                        log.debug(`   📖 Casillero ${casillero} (Span cerca de Input) = ${texto}`);
                         return valorSpan;
                     }
                 }
             }
         }
 
-        console.log(`   📖 Casillero ${casillero} (Input) = ${valorTexto}`);
+        log.debug(`   📖 Casillero ${casillero} (Input) = ${valorTexto}`);
         return valorNumerico;
     }
 
-    console.warn(`   ⚠️ No se encontró campo ni valor para casillero ${casillero}`);
+    log.warn(`   ⚠️ No se encontró campo ni valor para casillero ${casillero}`);
     return 0;
 }
 
@@ -1236,10 +1596,10 @@ function sriMapaCasilleros(opciones = {}) {
         primerosIds: entradas.slice(0, 12).map((e) => e.id || '(sin id)')
     };
 
-    console.log(`📋 ${mapa.length} casilleros encontrados.`);
+    log.debug(`📋 ${mapa.length} casilleros encontrados.`);
     if (mapa.length && console.table) console.table(mapa);
-    else mapa.forEach((f) => console.log(`   ${f.casillero}  ${String(f.id).padEnd(16)} ${f.rotulo}`));
-    console.log('🔎 Lo que hay en pantalla:', diagnostico);
+    else mapa.forEach((f) => log.debug(`   ${f.casillero}  ${String(f.id).padEnd(16)} ${f.rotulo}`));
+    log.debug('🔎 Lo que hay en pantalla:', diagnostico);
 
     // Para pegar en la Biblia sin tener que transcribir a mano.
     // Las OPCIONES de cada desplegable van enteras: para el 203 son los
@@ -1259,19 +1619,19 @@ function sriMapaCasilleros(opciones = {}) {
 
     if (copiar && navigator.clipboard) {
         navigator.clipboard.writeText(comoTabla)
-            .then(() => console.log('📎 Copiado al portapapeles, listo para pegar en la Biblia.'))
-            .catch(() => console.log('No se pudo copiar. Está en window.__mapaCasilleros.'));
+            .then(() => log.info('📎 Copiado al portapapeles, listo para pegar en la Biblia.'))
+            .catch(() => log.debug('No se pudo copiar. Está en window.__mapaCasilleros.'));
     }
     window.__mapaCasilleros = { filas: mapa, desplegables, markdown: comoTabla, diagnostico };
 
     if (desplegables.length) {
-        console.log(`🔽 ${desplegables.length} desplegable(s) en esta pantalla:`);
+        log.debug(`🔽 ${desplegables.length} desplegable(s) en esta pantalla:`);
         desplegables.forEach((d) => {
-            console.log(`   ${d.casillero} → ${d.id} · ${d.rotulo}`);
-            d.opciones.forEach((o) => console.log(`        \u00b7 [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
+            log.debug(`   ${d.casillero} → ${d.id} · ${d.rotulo}`);
+            d.opciones.forEach((o) => log.debug(`        \u00b7 [${o.valor}] ${o.texto}${o.elegida ? '  ← elegida' : ''}`));
         });
     } else {
-        console.log('🔽 No hay ningún desplegable en esta pantalla.');
+        log.debug('🔽 No hay ningún desplegable en esta pantalla.');
     }
 
     // El 203 entra acá aunque sea un desplegable: es lo que hoy impide enviar
@@ -1280,10 +1640,10 @@ function sriMapaCasilleros(opciones = {}) {
         .filter((f) => /5\s*%|tarifa reducida|decreto/i.test(f.rotulo) ||
                        ['203','502','512','540','550','560'].includes(f.casillero));
     if (cincoPorCiento.length) {
-        console.log('🟡 Candidatos para el 5% / sin derecho a crédito:');
-        cincoPorCiento.forEach((f) => console.log(`   ${f.casillero} → ${f.id} · ${f.rotulo}`));
+        log.debug('🟡 Candidatos para el 5% / sin derecho a crédito:');
+        cincoPorCiento.forEach((f) => log.debug(`   ${f.casillero} → ${f.id} · ${f.rotulo}`));
     } else {
-        console.log('🟡 Ni rastro del 5% ni del 502/512 en esta pantalla.');
+        log.debug('🟡 Ni rastro del 5% ni del 502/512 en esta pantalla.');
     }
 
     return mapa;
@@ -1333,7 +1693,7 @@ async function radiografiarReclamo(casilleros = []) {
                 snap = (typeof window !== 'undefined' && window.__mapaCasilleros) || null;
                 mapa = snap ? snap.filas : [];
             } catch (e) {
-                console.warn(`📐 [AUTO] No se pudo leer el casillero ${num}: ${e.message}`);
+                log.warn(`📐 [AUTO] No se pudo leer el casillero ${num}: ${e.message}`);
             }
 
             // Lo que importa para resolver el reclamo: el id real, el rótulo,
@@ -1359,7 +1719,7 @@ async function radiografiarReclamo(casilleros = []) {
                 diagnostico: (snap && snap.diagnostico) || null
             };
             nuevas++;
-            console.log(`📐 [AUTO] Radiografía del casillero ${num} guardada ` +
+            log.debug(`📐 [AUTO] Radiografía del casillero ${num} guardada ` +
                 `(${filas.length} fila(s), ${deps.length} desplegable(s) con sus opciones).`);
         }
 
@@ -1369,7 +1729,7 @@ async function radiografiarReclamo(casilleros = []) {
         }
     } catch (e) {
         // El 📐 es diagnóstico: jamás tumba el flujo que iba a frenar igual.
-        console.warn('📐 [AUTO] No se pudo guardar la radiografía:', e.message);
+        log.warn('📐 [AUTO] No se pudo guardar la radiografía:', e.message);
     }
     return false;
 }
@@ -1396,7 +1756,7 @@ async function frenarSiFaltaDecreto203() {
         const neto550 = document.getElementById('concepto1262');
         const neto = neto550 ? parseImporteEstricto(neto550.value) : null;
         if (neto && neto > 0) {
-            console.log(`🟡 [5%] Compras al 5% netas por $${neto.toFixed(2)} (casillero 550). ` +
+            log.debug(`🟡 [5%] Compras al 5% netas por $${neto.toFixed(2)} (casillero 550). ` +
                         'El portal no pide decreto para el 5%: se avanza normal.');
         }
     } catch (e) { /* informativo: no puede tumbar nada */ }
@@ -1441,7 +1801,7 @@ function vecinoDeFila(referencia) {
         const i = todos.indexOf(referencia);
         const siguiente = (i >= 0 && i + 1 < todos.length) ? todos[i + 1] : null;
         if (siguiente) {
-            console.log('   📐 Sin geometría (¿sección colapsada?): se toma el siguiente ' +
+            log.debug('   📐 Sin geometría (¿sección colapsada?): se toma el siguiente ' +
                         'input de la fila por orden del DOM.');
         }
         return siguiente;
@@ -1468,6 +1828,46 @@ function vecinoDeFila(referencia) {
             .sort((a, b) => a.r.left - b.r.left);
 
         if (candidatos.length) return candidatos[0].el;
+    }
+    return null;
+}
+
+/**
+ * Busca un valor **sugerido oficial** para una casilla.
+ *
+ * Primero prueba el hermano `.sugerido` con su mismo id (`concepto1480.sugerido`),
+ * después cualquier `.sugerido` de su fila. Devuelve `null` si no hay nada, que
+ * **no es lo mismo que un 0 oficial**: un 0 del SRI se respeta; una ausencia no
+ * puede borrar un dato que sí calculamos.
+ *
+ * @param {HTMLElement} referencia La casilla editable ya encontrada.
+ * @returns {number|null}
+ */
+function leerSugeridoEnFila(referencia) {
+    const leer = (el) => {
+        if (!el) return null;
+        const raw = el.value || el.getAttribute('value') || el.innerText || '';
+        const v = parseImporteEstricto(raw);
+        return (v !== null && v > 0) ? v : null;
+    };
+    if (!referencia) return null;
+
+    if (referencia.id) {
+        const directo = leer(document.getElementById(referencia.id + '.sugerido'));
+        if (directo !== null) return directo;
+    }
+
+    // La fila más cercana puede ser la tabla anidada de la celda; se sube hasta
+    // la fila real y se mira ahí.
+    for (let n = referencia.parentElement; n && n !== document.body; n = n.parentElement) {
+        if (n.tagName !== 'TR') continue;
+        const sugeridos = Array.from(n.querySelectorAll(
+            'input.sugerido, input[id*="sugerido"], span.sugerido, span[id*="sugerido"]'
+        ));
+        for (const el of sugeridos) {
+            const v = leer(el);
+            if (v !== null) return v;
+        }
     }
     return null;
 }
@@ -1503,6 +1903,11 @@ async function encontrarInputPorCasillero(casillero) {
         '520': 'concepto1290', // Impuesto Generado Compras (Fuente para 564)
         '564': 'concepto2130', // Crédito tributario periodo de acuerdo al factor de proporcionalidad
         '565': 'concepto1276', // Valor de IVA no considerado como crédito tributario por factor de proporcionalidad
+        // 522 · IVA de las compras SIN derecho a crédito. Confirmado por el
+        // usuario con el inspector del formulario real el 05-nov-2026: es el
+        // input que quedaba en 0.00 con fondo rojo al escribir el 502/512.
+        // Sin este IVA el portal no deja avanzar.
+        '522': 'concepto1480',
         '615': 'concepto2220', // Saldo crédito próximo mes (Calculado)
         '617': 'concepto2230', // Saldo retenciones próximo mes (Calculado)
         '421': 'concepto470',  // Impuesto generado ventas diferente de 0%
@@ -1535,7 +1940,7 @@ async function encontrarInputPorCasillero(casillero) {
     if (fieldMap[casillero]) {
         const mappedInput = document.getElementById(fieldMap[casillero]);
         if (mappedInput) {
-            console.log(`   ✅ Encontrado por FieldMap (${casillero} -> ${fieldMap[casillero]})`);
+            log.info(`   ✅ Encontrado por FieldMap (${casillero} -> ${fieldMap[casillero]})`);
             return mappedInput;
         }
     }
@@ -1561,10 +1966,10 @@ async function encontrarInputPorCasillero(casillero) {
             const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
             const el = result.singleNodeValue;
             if (el && el.tagName === 'INPUT' && el.type === 'text') {
-                console.log(`   ✅ Encontrado por XPath Strict [type=text] (${casillero}): id=${el.id}`);
+                log.info(`   ✅ Encontrado por XPath Strict [type=text] (${casillero}): id=${el.id}`);
                 return el;
             }
-        } catch (e) { }
+        } catch (e) { /* XPath sin resultado: se prueba el siguiente */ }
     }
 
     // 2.5 A LA MISMA ALTURA. La red que atrapa lo que las de arriba dejan pasar.
@@ -1627,7 +2032,7 @@ async function encontrarInputPorCasillero(casillero) {
 
             if (candidatos.length) {
                 const el = candidatos[0].el;
-                console.log(`   ✅ Encontrado a la misma altura (${casillero}): id=${el.id || '(sin id)'}`);
+                log.info(`   ✅ Encontrado a la misma altura (${casillero}): id=${el.id || '(sin id)'}`);
                 return el;
             }
         }
@@ -1639,7 +2044,7 @@ async function encontrarInputPorCasillero(casillero) {
 
     for (const input of inputs) {
         if (regex.test(input.id) || regex.test(input.name)) {
-            console.log(`   ✅ Encontrado por Regex (${casillero}): ID=${input.id}`);
+            log.info(`   ✅ Encontrado por Regex (${casillero}): ID=${input.id}`);
             return input;
         }
     }
@@ -1667,7 +2072,8 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
     await sleep(150); // Reducido de 400 a 150
     const inputRect = inputElement.getBoundingClientRect();
 
-    console.log(`      [*] [${casillero}] OJO DE HALCON Turbo V8.1...`);
+    // Por casillero, y el cierre mágico recorre decenas: sólo con depuración.
+    log.debug(`      [*] [${casillero}] OJO DE HALCON Turbo V8.1...`);
 
     const parseRobust = (t) => {
         if (!t) return null;
@@ -1704,7 +2110,7 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
     const ambito = inputElement.closest('tr') || inputElement.closest('table') ||
                    inputElement.closest('form');
     if (!ambito) {
-        console.log(`      [*] [${casillero}] El campo no está dentro de una fila del formulario. No busco por proximidad.`);
+        log.debug(`      [*] [${casillero}] El campo no está dentro de una fila del formulario. No busco por proximidad.`);
         return { found: false, value: 0 };
     }
     // Y nunca leer de lo que dibuja la propia extensión.
@@ -1762,7 +2168,7 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
         }
 
     } catch (e) {
-        console.warn("Error en Ojo de Halcón:", e);
+        log.warn("Error en Ojo de Halcón:", e);
     }
 
     return { found: false, value: 0 };

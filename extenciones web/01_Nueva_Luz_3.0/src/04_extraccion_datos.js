@@ -3,23 +3,23 @@ async function navegarAComprobantes() {
     const url = window.location.href.toLowerCase();
     // Si estamos en login, ni lo intentamos
     if (url.includes('/auth/realms/') || url.includes('login')) {
-        console.warn('🔒 Navegación abortada: Estamos en la página de login.');
+        log.warn('🔒 Navegación abortada: Estamos en la página de login.');
         return false;
     }
 
     // Si ya estamos en la página de comprobantes recibidos
     if (url.includes('comprobantesrecibidos.jsf')) {
-        console.log('✅ Ya estamos en Comprobantes Recibidos.');
+        log.info('✅ Ya estamos en Comprobantes Recibidos.');
         return true;
     }
-    console.log('🚀 [REGLA INMUTABLE] Navegando a Comprobantes Electrónicos Recibidos vía Puente SSO...');
+    log.debug('🚀 [REGLA INMUTABLE] Navegando a Comprobantes Electrónicos Recibidos vía Puente SSO...');
     if (typeof safeStatus === 'function') safeStatus('🚀 Abriendo Comprobantes Recibidos...');
     window.location.href = SRI_PUENTE_RECIBIDOS;
     return true;
 }
 
 async function autoLlenarPeriodoFiscal(data) {
-    console.log('📅 Auto-llenando Periodo Fiscal...');
+    log.debug('📅 Auto-llenando Periodo Fiscal...');
 
     let anio, mesIndex;
     if (data && data.year) {
@@ -33,7 +33,7 @@ async function autoLlenarPeriodoFiscal(data) {
     }
 
     const valorPeriodo = `${(mesIndex + 1).toString().padStart(2, '0')}/${anio}`;
-    console.log(`   🎯 Periodo objetivo: ${valorPeriodo}`);
+    log.debug(`   🎯 Periodo objetivo: ${valorPeriodo}`);
 
     let camposLlenados = 0;
 
@@ -48,10 +48,10 @@ async function autoLlenarPeriodoFiscal(data) {
                 if (s.value !== opt.value) {
                     s.value = opt.value;
                     s.dispatchEvent(new Event('change', { bubbles: true }));
-                    console.log('   ✅ Obligación seleccionada');
+                    log.info('   ✅ Obligación seleccionada');
                     obligacionSeleccionada = true;
                 } else {
-                    console.log('   ℹ️ Obligación ya estaba seleccionada');
+                    log.debug('   ℹ️ Obligación ya estaba seleccionada');
                     obligacionSeleccionada = true;
                 }
                 break;
@@ -72,7 +72,7 @@ async function autoLlenarPeriodoFiscal(data) {
     }
 
     // 3. Llenar Periodo
-    console.log('   🔍 Buscando campo Periodo...');
+    log.debug('   🔍 Buscando campo Periodo...');
     let inputPeriodo = null;
 
     // Estrategia 1: XPath exacto (Label -> Input)
@@ -87,10 +87,10 @@ async function autoLlenarPeriodoFiscal(data) {
             const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
             if (result.singleNodeValue) {
                 inputPeriodo = result.singleNodeValue;
-                console.log(`   ✅ Encontrado por XPath: ${xpath}`);
+                log.info(`   ✅ Encontrado por XPath: ${xpath}`);
                 break;
             }
-        } catch (e) { }
+        } catch (e) { /* XPath inválido: se prueba el siguiente */ }
     }
 
     // Estrategia 2: Selectores de ID comunes en PrimeFaces (calendar inputs)
@@ -104,7 +104,7 @@ async function autoLlenarPeriodoFiscal(data) {
             if ((id.includes('periodo') || id.includes('fecha') || id.includes('fiscal')) &&
                 (placeholder.includes('/') || inp.classList.contains('hasDatepicker') || inp.className.includes('calendar'))) {
                 inputPeriodo = inp;
-                console.log(`   ✅ Encontrado por ID/Class: ${inp.id}`);
+                log.info(`   ✅ Encontrado por ID/Class: ${inp.id}`);
                 break;
             }
         }
@@ -119,25 +119,25 @@ async function autoLlenarPeriodoFiscal(data) {
         // Intento 1: Escribir directo
         inputPeriodo.value = valorPeriodo;
         if (inputPeriodo.value !== valorPeriodo) {
-            console.warn('   ⚠️ Input tiene máscara/bloqueo, intentando forzar...');
+            log.warn('   ⚠️ Input tiene máscara/bloqueo, intentando forzar...');
         }
 
         // PrimeFaces no lee el .value asignado por script hasta que se notifica.
         inputPeriodo.dispatchEvent(new Event('input', { bubbles: true }));
         inputPeriodo.dispatchEvent(new Event('change', { bubbles: true }));
         inputPeriodo.blur();
-        console.log(`   ✅ Periodo fiscal establecido: ${valorPeriodo}`);
+        log.info(`   ✅ Periodo fiscal establecido: ${valorPeriodo}`);
     }
 }
 
 async function extraerTodasLasFacturas() {
-    console.log('Iniciando extracción de facturas...');
+    log.debug('Iniciando extracción de facturas...');
 
     const todasLasFacturas = [];
     let paginaActual = 1;
 
     while (true) {
-        console.log('Procesando página ' + paginaActual);
+        log.debug('Procesando página ' + paginaActual);
         if (await cortarSiPidieronParar('extracción de facturas')) break;
         await esperarTabla();
 
@@ -147,7 +147,7 @@ async function extraerTodasLasFacturas() {
         }
 
         const facturasPagina = extraerFacturasPaginaActual();
-        console.log('Extraídas ' + facturasPagina.length + ' facturas');
+        log.debug('Extraídas ' + facturasPagina.length + ' facturas');
 
         if (facturasPagina.length === 0) break;
 
@@ -162,7 +162,7 @@ async function extraerTodasLasFacturas() {
         await esperarAjaxSri(null, `página ${paginaActual} de facturas`);
     }
 
-    console.log('Total: ' + todasLasFacturas.length + ' facturas');
+    log.debug('Total: ' + todasLasFacturas.length + ' facturas');
 
     // §7 · Cada proveedor que aparece queda anotado. No se le pregunta nada a
     // nadie: se aprende mirando, y lo aprendido sirve para todos los clientes
@@ -174,7 +174,7 @@ async function extraerTodasLasFacturas() {
             // Se pide DESPUÉS de anotar, así el 5% que aparezca en esta misma
             // extracción ya cuenta para las mezcladas de esta misma extracción.
             rucsAl5 = await Proveedores.losQueFacturanAl5();
-        } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+        } catch (e) { log.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
     }
 
     const resumen = calcularResumen(todasLasFacturas, { rucsAl5 });
@@ -207,7 +207,7 @@ async function extraerTodasLasFacturas() {
                          fila: f.numero - 1, veredicto, xml };
             });
             revisadas.forEach((f) => {
-                console.warn(`   🧾 [XML 5%] Fila ${f.numero}: ${f.rucRazon} · base $${f.base} · IVA $${f.iva} → ${f.veredicto}`);
+                log.warn(`   🧾 [XML 5%] Fila ${f.numero}: ${f.rucRazon} · base $${f.base} · IVA $${f.iva} → ${f.veredicto}`);
             });
             const clienteRuc = (typeof rucDelClienteActual === 'function') ? await rucDelClienteActual() : '';
             await SafeStorage.set({
@@ -218,11 +218,11 @@ async function extraerTodasLasFacturas() {
                 }
             });
             if (revisadas.some((f) => f.veredicto.includes('5 REAL'))) {
-                console.warn('   🧾 [XML 5%] Al menos una es 5% REAL → el 203 la va a frenar (decisión del contador).');
+                log.warn('   🧾 [XML 5%] Al menos una es 5% REAL → el 203 la va a frenar (decisión del contador).');
             }
         } catch (e) {
             // El XML es diagnóstico: jamás tumba la extracción.
-            console.warn('🧾 [XML 5%] No se pudo bajar el XML de las candidatas:', e.message);
+            log.warn('🧾 [XML 5%] No se pudo bajar el XML de las candidatas:', e.message);
         }
     }
 
@@ -259,20 +259,28 @@ async function extraerTodasLasFacturas() {
                     ruc: clienteRuc,
                     timestamp: Date.now(),
                     totalFacturas: todasLasFacturas.length,
-                    totalBase: Number((resumen.baseTotal || 0).toFixed(2)),
-                    totalIva: Number((resumen.ivaTotal || 0).toFixed(2)),
-                    base15: Number((resumen.iva15?.base || 0).toFixed(2)),
-                    iva15: Number((resumen.iva15?.iva || 0).toFixed(2)),
-                    base5: Number((resumen.iva5?.base || (resumen.al5 || []).reduce((acc, x) => acc + (x.base || 0), 0)).toFixed(2)),
-                    iva5: Number((resumen.iva5?.iva || (resumen.al5 || []).reduce((acc, x) => acc + (x.iva || 0), 0)).toFixed(2)),
-                    base0: Number((resumen.tarifaCero?.base || 0).toFixed(2)),
+                    // Estos campos se leían de `resumen.baseTotal`, `iva15.base`,
+                    // `tarifaCero`… que NO EXISTEN: el arqueo se guardaba en
+                    // ceros y un diagnóstico que miente es peor que ninguno.
+                    // Ahora salen de los tres baldes que sí se calculan.
+                    totalBase: redondear((resumen.iva0?.baseImponible || 0) +
+                                         (resumen.iva5?.baseImponible || 0) +
+                                         (resumen.iva15?.baseImponible || 0)),
+                    totalIva: redondear((resumen.iva0?.montoIva || 0) +
+                                        (resumen.iva5?.montoIva || 0) +
+                                        (resumen.iva15?.montoIva || 0)),
+                    base15: redondear(resumen.iva15?.baseImponible || 0),
+                    iva15: redondear(resumen.iva15?.montoIva || 0),
+                    base5: redondear(resumen.iva5?.baseImponible || 0),
+                    iva5: redondear(resumen.iva5?.montoIva || 0),
+                    base0: redondear(resumen.iva0?.baseImponible || 0),
                     topProveedores
                 }
             });
-            console.log(`📊 [ARQUEO COMPRAS] Resumen guardado para ${clienteRuc}: ${todasLasFacturas.length} facturas.`);
+            log.debug(`📊 [ARQUEO COMPRAS] Resumen guardado para ${clienteRuc}: ${todasLasFacturas.length} facturas.`);
         }
     } catch (e) {
-        console.warn('📊 [ARQUEO COMPRAS] No se pudo guardar el arqueo:', e.message);
+        log.warn('📊 [ARQUEO COMPRAS] No se pudo guardar el arqueo:', e.message);
     }
 
     return resumen;
@@ -313,11 +321,11 @@ async function resolverAmbiguasConXml(resumen, facturas) {
         resumen.ambiguas.forEach((amb) => {
             const xml = xmls.get(amb.numero - 1) || null;
             if (!xml || !xml.porTarifa) {
-                console.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: no se pudo leer el XML. Sigue ambigua.`);
+                log.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: no se pudo leer el XML. Sigue ambigua.`);
                 return;
             }
             if ((xml.tarifasDesconocidas || []).length > 0) {
-                console.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: el XML trae una tarifa que no se ` +
+                log.warn(`   ⚠️ [XML AMBIGUA] Fila ${amb.numero}: el XML trae una tarifa que no se ` +
                              `reconoce (${xml.tarifasDesconocidas.join(', ')}). Sigue ambigua, la mira el contador.`);
                 return;
             }
@@ -332,32 +340,54 @@ async function resolverAmbiguasConXml(resumen, facturas) {
             resumen.iva15.total -= totalOriginal;
 
             repartirXmlEnResumen(resumen, xml);
+
+            // El detalle tiene que seguir al resumen. Esta fila ya no está
+            // entera en el 15%: sale su entrada vieja y entran las porciones
+            // que dice el XML, con el mismo emisor.
+            resumen.detalle15 = (resumen.detalle15 || []).filter((d) => d.numero !== amb.numero);
+            resumen.detalle5 = (resumen.detalle5 || []).filter((d) => d.numero !== amb.numero);
+            const emisorXml = original ? rucDeFactura(original) : '';
+            Object.keys(xml.porTarifa).forEach((k) => {
+                const t = Number(k);
+                const p = xml.porTarifa[k];
+                if (!p) return;
+                const fila = {
+                    numero: amb.numero,
+                    ruc: emisorXml,
+                    rucRazon: amb.rucRazon,
+                    base: redondear(p.base),
+                    iva: redondear(p.iva)
+                };
+                if (t === 5) resumen.detalle5.push(fila);
+                else if (t !== 0) resumen.detalle15.push(fila);
+            });
+
             resueltas.add(amb.numero);
-            console.log(`   🧾 [XML AMBIGUA] Fila ${amb.numero} resuelta: ${amb.rucRazon} → ` +
+            log.debug(`   🧾 [XML AMBIGUA] Fila ${amb.numero} resuelta: ${amb.rucRazon} → ` +
                         `${Object.keys(xml.porTarifa).map((t) => `${t}%`).join('+')}.`);
         });
 
         if (resueltas.size) {
             resumen.ambiguas = resumen.ambiguas.filter((a) => !resueltas.has(a.numero));
-            console.log(`🧾 [XML AMBIGUA] ${resueltas.size} de ${indices.length} ambigua(s) resuelta(s) con el XML.`);
+            log.debug(`🧾 [XML AMBIGUA] ${resueltas.size} de ${indices.length} ambigua(s) resuelta(s) con el XML.`);
         }
     } catch (e) {
         // Si falla, el resumen queda exactamente como estaba antes de
         // esta función: nunca peor que sin el XML.
-        console.warn('🧾 [XML AMBIGUA] No se pudo bajar el XML de las ambiguas:', e.message);
+        log.warn('🧾 [XML AMBIGUA] No se pudo bajar el XML de las ambiguas:', e.message);
     }
 
     return resumen;
 }
 
 function extraerFacturasPaginaActual() {
-    console.log('🔍 DEBUG: Iniciando extraerFacturasPaginaActual');
+    log.debug('🔍 DEBUG: Iniciando extraerFacturasPaginaActual');
     const facturas = [];
 
     // NUEVA ESTRATEGIA: Buscar tabla por encabezados de columna
     let tabla = null;
     const todasLasTablas = document.querySelectorAll('table');
-    console.log(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
+    log.debug(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
 
     for (const t of todasLasTablas) {
         const encabezados = t.querySelectorAll('thead th, thead td');
@@ -368,15 +398,15 @@ function extraerFacturasPaginaActual() {
             textoEncabezados.includes('iva') &&
             textoEncabezados.includes('importe total')) {
             tabla = t;
-            console.log(`✅ DEBUG: Encontrada tabla de comprobantes por encabezados: id="${t.id}", class="${t.className}"`);
-            console.log(`   Encabezados: ${textoEncabezados.substring(0, 100)}...`);
+            log.info(`✅ DEBUG: Encontrada tabla de comprobantes por encabezados: id="${t.id}", class="${t.className}"`);
+            log.debug(`   Encabezados: ${textoEncabezados.substring(0, 100)}...`);
             break;
         }
     }
 
     // Fallback: Intentar selectores tradicionales si no se encontró por encabezados
     if (!tabla) {
-        console.log('🔍 DEBUG: No se encontró por encabezados, intentando selectores tradicionales...');
+        log.debug('🔍 DEBUG: No se encontró por encabezados, intentando selectores tradicionales...');
         tabla = document.querySelector('table[id*="dtComprobantes"]');
     }
 
@@ -391,7 +421,7 @@ function extraerFacturasPaginaActual() {
     // Buscar tabla RichFaces con clase rf-dt que tenga datos de comprobantes
     if (!tabla) {
         const tablasRF = document.querySelectorAll('table.rf-dt');
-        console.log(`🔍 DEBUG: Buscando entre ${tablasRF.length} tablas RichFaces...`);
+        log.debug(`🔍 DEBUG: Buscando entre ${tablasRF.length} tablas RichFaces...`);
 
         for (const t of tablasRF) {
             const primeraFila = t.querySelector('tbody tr');
@@ -400,29 +430,29 @@ function extraerFacturasPaginaActual() {
                 // Verificar si contiene datos que parecen de comprobantes (números largos, RUC, etc)
                 if (texto.match(/\d{13}/) || texto.toLowerCase().includes('factura') || texto.includes('$')) {
                     tabla = t;
-                    console.log(`✅ DEBUG: Encontrada tabla RichFaces con datos de comprobantes: id="${t.id}"`);
+                    log.info(`✅ DEBUG: Encontrada tabla RichFaces con datos de comprobantes: id="${t.id}"`);
                     break;
                 }
             }
         }
     }
 
-    console.log('🔍 DEBUG: Tabla encontrada:', tabla ? 'SÍ' : 'NO');
+    log.debug('🔍 DEBUG: Tabla encontrada:', tabla ? 'SÍ' : 'NO');
 
     if (!tabla) {
-        console.error('❌ DEBUG: No se encontró tabla con ningún selector');
-        console.error('⚠️ POSIBLES CAUSAS:');
-        console.error('   1. No has hecho clic en el botón "Consultar" después de configurar la búsqueda');
-        console.error('   2. El CAPTCHA no se resolvió correctamente');
-        console.error('   3. No hay resultados para el período seleccionado');
+        log.error('❌ DEBUG: No se encontró tabla con ningún selector');
+        log.error('⚠️ POSIBLES CAUSAS:');
+        log.error('   1. No has hecho clic en el botón "Consultar" después de configurar la búsqueda');
+        log.error('   2. El CAPTCHA no se resolvió correctamente');
+        log.error('   3. No hay resultados para el período seleccionado');
 
-        console.log('📊 DEBUG: Tablas encontradas en la página:');
+        log.debug('📊 DEBUG: Tablas encontradas en la página:');
         todasLasTablas.forEach((t, i) => {
             const headers = t.querySelectorAll('thead th, thead td');
             const headerText = Array.from(headers).map(h => h.textContent.trim()).join(', ');
-            console.log(`   Tabla ${i}: id="${t.id}", class="${t.className}"`);
+            log.debug(`   Tabla ${i}: id="${t.id}", class="${t.className}"`);
             if (headerText) {
-                console.log(`      Headers: ${headerText.substring(0, 80)}`);
+                log.debug(`      Headers: ${headerText.substring(0, 80)}`);
             }
         });
         return facturas;
@@ -446,27 +476,27 @@ function extraerFacturasPaginaActual() {
                 idxImporteTotal = index;
             }
         });
-        console.log(`   🎯 Columnas detectadas: SinImpuestos=${idxValorSinImpuestos}, IVA=${idxIva}, Total=${idxImporteTotal}`);
+        log.debug(`   🎯 Columnas detectadas: SinImpuestos=${idxValorSinImpuestos}, IVA=${idxIva}, Total=${idxImporteTotal}`);
     }
 
     const filas = tabla.querySelectorAll('tbody tr');
-    console.log('📋 DEBUG: Filas encontradas en tbody:', filas.length);
+    log.debug('📋 DEBUG: Filas encontradas en tbody:', filas.length);
 
     filas.forEach((fila, idx) => {
         try {
             const celdas = fila.querySelectorAll('td');
-            console.log(`   Fila ${idx}: ${celdas.length} columnas`);
+            log.debug(`   Fila ${idx}: ${celdas.length} columnas`);
 
             // Verificar que no sea mensaje de "no encontrado"
             const textoCompleto = fila.textContent.trim();
             if (textoCompleto.includes('No se encontraron')) {
-                console.log(`   ⚠️ Fila ${idx} descartada: mensaje "No se encontraron"`);
+                log.warn(`   ⚠️ Fila ${idx} descartada: mensaje "No se encontraron"`);
                 return;
             }
 
             // Necesitamos al menos 7 columnas para extraer datos básicos
             if (celdas.length < 7) {
-                console.warn(`   ⚠️ Fila ${idx} descartada: solo tiene ${celdas.length} columnas (se requieren al menos 7)`);
+                log.warn(`   ⚠️ Fila ${idx} descartada: solo tiene ${celdas.length} columnas (se requieren al menos 7)`);
                 return;
             }
 
@@ -517,7 +547,7 @@ function extraerFacturasPaginaActual() {
                 const quien = celdas[1] ? celdas[1].textContent.trim().slice(0, 90)
                              : (celdas[0] ? celdas[0].textContent.trim().slice(0, 90) : '');
                 const pareceTotal = /total|subtotal|suma/i.test(textoCompleto.slice(0, 200));
-                console.warn(`   ⚠️ [AUDITORÍA] Fila ${idx} sin montos leíbles ` +
+                log.warn(`   ⚠️ [AUDITORÍA] Fila ${idx} sin montos leíbles ` +
                              `(SinImp=${valorSinImpuestos}, Total=${importeTotal})` +
                              (pareceTotal ? ' — parece fila de TOTALES' : '') +
                              ` — ${quien || 'sin identificación'}. Cuenta en el total del portal, no en lo declarado.`);
@@ -537,12 +567,12 @@ function extraerFacturasPaginaActual() {
                     if (Math.abs(ivaSegunResta - iva) > 0.02) {
                         const otrosTrib = redondear(ivaSegunResta - iva);
                         if (otrosTrib > 0) {
-                            console.log(`   🍺 [Factura ${idx + 1}] Detectado ICE/otros tributos ($${otrosTrib}). Se conserva el IVA oficial del SRI: $${iva}.`);
+                            log.debug(`   🍺 [Factura ${idx + 1}] Detectado ICE/otros tributos ($${otrosTrib}). Se conserva el IVA oficial del SRI: $${iva}.`);
                         }
                     }
                 } else if (ivaSegunResta > 0.005 && ivaSegunResta <= redondear(valorSinImpuestos * 0.16)) {
                     // Solo si la columna no traía IVA legible y la resta cabe en una tarifa de IVA válida (<= 16%)
-                    console.warn(`   ⚠️ [Factura ${idx + 1}] Columna IVA en 0 pero total - base da $${ivaSegunResta} (<= 16%). Se adopta la resta como fallback.`);
+                    log.warn(`   ⚠️ [Factura ${idx + 1}] Columna IVA en 0 pero total - base da $${ivaSegunResta} (<= 16%). Se adopta la resta como fallback.`);
                     iva = ivaSegunResta;
                 }
             }
@@ -556,25 +586,25 @@ function extraerFacturasPaginaActual() {
                 tieneIva: iva > 0
             });
 
-            console.log(`      Factura agregada: SinImp=${valorSinImpuestos}, IVA=${iva}, Total=${importeTotal}`);
+            log.debug(`      Factura agregada: SinImp=${valorSinImpuestos}, IVA=${iva}, Total=${importeTotal}`);
         } catch (error) {
-            console.error('❌ Error en fila ' + idx, error);
+            log.error('❌ Error en fila ' + idx, error);
         }
     });
 
-    console.log(`✅ DEBUG: Total facturas extraídas: ${facturas.length}`);
+    log.info(`✅ DEBUG: Total facturas extraídas: ${facturas.length}`);
     return facturas;
 }
 
 async function extraerTodasLasRetenciones() {
-    console.log("🚀 SRI Bot Content Script v4.0 - RETENCIONES FIX LOADED");
-    console.log('🚀 Iniciando extracción de retenciones...');
-    console.log('⚠️ MODO DEBUG ACTIVADO - Revisa la consola para detalles');
+    log.debug("🚀 SRI Bot Content Script v4.0 - RETENCIONES FIX LOADED");
+    log.debug('🚀 Iniciando extracción de retenciones...');
+    log.warn('⚠️ MODO DEBUG ACTIVADO - Revisa la consola para detalles');
 
     // Usar la misma estrategia de detección por encabezados
     let tabla = null;
     const todasLasTablas = document.querySelectorAll('table');
-    console.log(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
+    log.debug(`🔍 DEBUG: Analizando ${todasLasTablas.length} tablas en la página...`);
 
     for (const t of todasLasTablas) {
         const encabezados = t.querySelectorAll('thead th, thead td');
@@ -584,14 +614,14 @@ async function extraerTodasLasRetenciones() {
         if ((textoEncabezados.includes('clave de acceso') || textoEncabezados.includes('clave acceso')) &&
             (textoEncabezados.includes('comprobante') || textoEncabezados.includes('retención'))) {
             tabla = t;
-            console.log(`✅ DEBUG: Encontrada tabla de retenciones por encabezados: id="${t.id}"`);
+            log.info(`✅ DEBUG: Encontrada tabla de retenciones por encabezados: id="${t.id}"`);
             break;
         }
     }
 
     // Fallback: selector tradicional
     if (!tabla) {
-        console.log('🔍 DEBUG: Intentando selector tradicional...');
+        log.debug('🔍 DEBUG: Intentando selector tradicional...');
         tabla = document.querySelector('table[id*="dtComprobantes"]');
     }
 
@@ -601,43 +631,43 @@ async function extraerTodasLasRetenciones() {
         : { encontrado: false };
 
     if (noDataWarn.encontrado) {
-        console.warn(`⚡ [Fast-Fail Verídico] Confirmado por SRI: ${noDataWarn.texto}`);
+        log.warn(`⚡ [Fast-Fail Verídico] Confirmado por SRI: ${noDataWarn.texto}`);
         return { totalRetenciones: 0, ivaRetenido: { cantidad: 0, total: 0 }, rentaRetenida: { cantidad: 0, total: 0 } };
     }
 
     if (!tabla) {
-        console.error('❌ No se encontró tabla de retenciones');
-        console.error('⚠️ Asegúrate de:');
-        console.error('   1. Haber seleccionado "Comprobante de Retención" en el tipo');
-        console.error('   2. Haber hecho clic en "Consultar"');
-        console.error('   3. Que existan retenciones para el período');
+        log.error('❌ No se encontró tabla de retenciones');
+        log.error('⚠️ Asegúrate de:');
+        log.error('   1. Haber seleccionado "Comprobante de Retención" en el tipo');
+        log.error('   2. Haber hecho clic en "Consultar"');
+        log.error('   3. Que existan retenciones para el período');
         return { totalRetenciones: 0, ivaRetenido: { cantidad: 0, total: 0 }, rentaRetenida: { cantidad: 0, total: 0 } };
     }
 
     const filas = tabla.querySelectorAll('tbody tr');
-    console.log('📋 Filas encontradas:', filas.length);
+    log.debug('📋 Filas encontradas:', filas.length);
 
     if (filas.length > 0) {
         const primeraFila = filas[0];
         const celdas = primeraFila.querySelectorAll('td');
-        console.log('📊 Columnas en primera fila:', celdas.length);
+        log.debug('📊 Columnas en primera fila:', celdas.length);
 
         if (celdas.length >= 4) {
             const celdaClaveAcceso = celdas[3];
-            console.log('🔍 Contenido celda [3]:', celdaClaveAcceso.textContent.substring(0, 50));
-            console.log('🔍 HTML celda [3]:', celdaClaveAcceso.innerHTML.substring(0, 200));
+            log.debug('🔍 Contenido celda [3]:', celdaClaveAcceso.textContent.substring(0, 50));
+            log.debug('🔍 HTML celda [3]:', celdaClaveAcceso.innerHTML.substring(0, 200));
 
             const enlace = celdaClaveAcceso.querySelector('a');
-            console.log('🔗 Enlace encontrado:', enlace ? 'SÍ' : 'NO');
+            log.debug('🔗 Enlace encontrado:', enlace ? 'SÍ' : 'NO');
 
             if (enlace) {
-                console.log('✅ Href:', enlace.href);
-                console.log('✅ Texto:', enlace.textContent.substring(0, 30));
+                log.info('✅ Href:', enlace.href);
+                log.info('✅ Texto:', enlace.textContent.substring(0, 30));
             } else {
-                console.warn('⚠️ NO HAY ENLACE - Buscando alternativas...');
+                log.warn('⚠️ NO HAY ENLACE - Buscando alternativas...');
                 // Intentar buscar cualquier elemento clickeable
                 const clickeable = celdaClaveAcceso.querySelector('span, div, button');
-                console.log('🔍 Elemento clickeable alternativo:', clickeable ? clickeable.tagName : 'NINGUNO');
+                log.debug('🔍 Elemento clickeable alternativo:', clickeable ? clickeable.tagName : 'NINGUNO');
             }
         }
     }
@@ -646,7 +676,7 @@ async function extraerTodasLasRetenciones() {
     let paginaActual = 1;
 
     while (true) {
-        console.log(`📄 Procesando página ${paginaActual} de retenciones`);
+        log.debug(`📄 Procesando página ${paginaActual} de retenciones`);
         if (await cortarSiPidieronParar('extracción de retenciones')) break;
         await esperarTabla();
 
@@ -656,7 +686,7 @@ async function extraerTodasLasRetenciones() {
         }
 
         const retencionesPagina = await extraerRetencionesPaginaActual();
-        console.log(`   Extraídas ${retencionesPagina.length} retenciones`);
+        log.debug(`   Extraídas ${retencionesPagina.length} retenciones`);
 
         if (retencionesPagina.length === 0) break;
 
@@ -669,17 +699,17 @@ async function extraerTodasLasRetenciones() {
         await esperarAjaxSri(null, `página ${paginaActual} de retenciones`);
     }
 
-    console.log(`✅ Total: ${todasLasRetenciones.length} retenciones`);
+    log.info(`✅ Total: ${todasLasRetenciones.length} retenciones`);
 
     const resumen = calcularResumenRetenciones(todasLasRetenciones);
-    console.log('📊 Resumen final:', resumen);
+    log.debug('📊 Resumen final:', resumen);
 
     // GUARDAR RESPALDO: Por si el mensaje falla
     try {
         await SafeStorage.set({ retenciones: resumen });
-        console.log('💾 Backup de retenciones guardado en storage');
+        log.debug('💾 Backup de retenciones guardado en storage');
     } catch (e) {
-        console.warn('No se pudo guardar backup', e);
+        log.warn('No se pudo guardar backup', e);
     }
 
     return resumen;
@@ -704,12 +734,12 @@ async function extraerRetencionesPaginaActual() {
     }
 
     if (!tabla) {
-        console.warn('⚠️ No se encontró tabla en extraerRetencionesPaginaActual');
+        log.warn('⚠️ No se encontró tabla en extraerRetencionesPaginaActual');
         return retenciones;
     }
 
     const filas = tabla.querySelectorAll('tbody tr');
-    console.log(`   🔍 Procesando ${filas.length} filas...`);
+    log.debug(`   🔍 Procesando ${filas.length} filas...`);
 
     for (let idx = 0; idx < filas.length; idx++) {
         const fila = filas[idx];
@@ -717,24 +747,24 @@ async function extraerRetencionesPaginaActual() {
         try {
             const celdas = fila.querySelectorAll('td');
             if (celdas.length < 9) {
-                console.log(`   ⚠️ Fila ${idx} descartada: solo ${celdas.length} columnas`);
+                log.warn(`   ⚠️ Fila ${idx} descartada: solo ${celdas.length} columnas`);
                 continue;
             }
 
             const textoCompleto = fila.textContent.trim();
             if (textoCompleto.includes('No se encontraron')) continue;
 
-            console.log(`   📋 Procesando retención ${idx + 1}`);
+            log.debug(`   📋 Procesando retención ${idx + 1}`);
 
             const celdaClaveAcceso = celdas[3];
             const enlace = celdaClaveAcceso.querySelector('a');
 
             if (!enlace) {
-                console.warn(`   ❌ No se encontró enlace en fila ${idx + 1}`);
+                log.warn(`   ❌ No se encontró enlace en fila ${idx + 1}`);
                 continue;
             }
 
-            console.log(`   🔗 Abriendo modal de retención fila ${idx + 1}...`);
+            log.debug(`   🔗 Abriendo modal de retención fila ${idx + 1}...`);
             
             // 1. Asegurar que no haya overlay o modal previo bloqueando el click (Fix Burp Item 109)
             await waitFor(() => {
@@ -784,10 +814,10 @@ async function extraerRetencionesPaginaActual() {
                         baseImponibleRenta: datosRetencion.baseImponibleRenta
                     });
 
-                    console.log(`   ⚡ Retención ${idx + 1} extraída en tiempo récord: IVA $${datosRetencion.ivaRetenido} (Base $${datosRetencion.baseImponibleIva}), Renta $${datosRetencion.rentaRetenida} (Base $${datosRetencion.baseImponibleRenta})`);
+                    log.debug(`   ⚡ Retención ${idx + 1} extraída en tiempo récord: IVA $${datosRetencion.ivaRetenido} (Base $${datosRetencion.baseImponibleIva}), Renta $${datosRetencion.rentaRetenida} (Base $${datosRetencion.baseImponibleRenta})`);
                 }
             } else {
-                console.warn(`   ⚠️ Timeout esperando modal de retención fila ${idx + 1}`);
+                log.warn(`   ⚠️ Timeout esperando modal de retención fila ${idx + 1}`);
             }
 
             // 4. Cerrar modal inmediatamente y esperar a que el DOM y el overlay queden libres
@@ -802,20 +832,20 @@ async function extraerRetencionesPaginaActual() {
             await sleep(80);
 
         } catch (error) {
-            console.error(`   ❌ Error en fila ${idx}:`, error);
+            log.error(`   ❌ Error en fila ${idx}:`, error);
             await cerrarModal();
         }
     }
 
     // POR SI ACASO: Asegurar que cualquier modal residual quede cerrado
-    console.log('   🧹 Limpieza final: Asegurando cierre de modales...');
+    log.debug('   🧹 Limpieza final: Asegurando cierre de modales...');
     await cerrarModal();
 
     return retenciones;
 }
 
 function procesarTablaRetencion(tabla) {
-    console.log(`      📊 Procesando tabla específica...`);
+    log.debug(`      📊 Procesando tabla específica...`);
 
     let ivaRetenido = 0;
     let rentaRetenida = 0;
@@ -835,11 +865,11 @@ function procesarTablaRetencion(tabla) {
             const texto = th.textContent.toLowerCase().trim();
             if (texto.includes('valor retenido') || texto.includes('valor ret')) {
                 indiceValorRetenido = index;
-                console.log(`      🎯 Columna 'Valor Retenido' detectada en índice: ${index}`);
+                log.debug(`      🎯 Columna 'Valor Retenido' detectada en índice: ${index}`);
             }
             if (texto.includes('base imponible') || texto.includes('base imp')) {
                 indiceBaseImponible = index;
-                console.log(`      🎯 Columna 'Base Imponible' detectada en índice: ${index}`);
+                log.debug(`      🎯 Columna 'Base Imponible' detectada en índice: ${index}`);
             }
         });
     }
@@ -852,7 +882,7 @@ function procesarTablaRetencion(tabla) {
             if (celdas.length >= 5) {
                 indiceValorRetenido = 4; // Estándar SRI
                 indiceBaseImponible = 2; // Estándar SRI
-                console.log(`      ⚠️ Headers no detectados mediante texto. Usando índices estándar: Ret=${indiceValorRetenido}, Base=${indiceBaseImponible}`);
+                log.warn(`      ⚠️ Headers no detectados mediante texto. Usando índices estándar: Ret=${indiceValorRetenido}, Base=${indiceBaseImponible}`);
             }
         }
     }
@@ -892,17 +922,17 @@ function procesarTablaRetencion(tabla) {
 
             if (esRenta && esIva) {
                 // Las dos a la vez no puede ser, y adivinar mueve plata.
-                console.warn(`      ⚠️ Fila de retención que dice renta E IVA a la vez ($${val}). ` +
+                log.warn(`      ⚠️ Fila de retención que dice renta E IVA a la vez ($${val}). ` +
                              'No la sumo a ninguna: revisala a mano. ' +
                              `"${textoFila.replace(/\s+/g, ' ').trim().slice(0, 100)}"`);
             } else if (esRenta && !esFecha) {
                 rentaRetenida += val;
                 baseImponibleRenta += valBase;
-                console.log(`      ✅ RENTA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
+                log.info(`      ✅ RENTA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
             } else if (esIva && !esFecha) {
                 ivaRetenido += val;
                 baseImponibleIva += valBase;
-                console.log(`      ✅ IVA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
+                log.info(`      ✅ IVA (idx ${indiceValorRetenido}): Val=${val}, Base=${valBase}`);
             }
         }
         // FALLBACK ANTIGUO (Solo si falló detección de índice)
@@ -923,12 +953,12 @@ function procesarTablaRetencion(tabla) {
                         // pero podríamos asumir que es i - 2 (si i es 4, base es 2)
                         if (celdas[i - 2]) baseImponibleRenta += parseDecimal(celdas[i - 2].textContent);
 
-                        console.log(`      ✅ RENTA (Fallback col ${i}): ${val}`);
+                        log.info(`      ✅ RENTA (Fallback col ${i}): ${val}`);
                         break;
                     } else if (/\biva\b/.test(textoFila)) {
                         ivaRetenido += val;
                         if (celdas[i - 2]) baseImponibleIva += parseDecimal(celdas[i - 2].textContent);
-                        console.log(`      ✅ IVA (Fallback col ${i}): ${val}`);
+                        log.info(`      ✅ IVA (Fallback col ${i}): ${val}`);
                         break;
                     }
                 }
@@ -973,7 +1003,7 @@ async function cerrarModal() {
             await sleep(80);
         }
     } catch (error) {
-        console.warn('Error cerrando modal:', error);
+        log.warn('Error cerrando modal:', error);
     }
 }
 
@@ -1041,7 +1071,7 @@ async function optimizarTamanoPagina() {
         }
 
         if (targetOption && dropdownRPP.value !== targetOption.value) {
-            console.log(`🚀 Optimizando tamaño de página a: ${targetOption.text}`);
+            log.debug(`🚀 Optimizando tamaño de página a: ${targetOption.text}`);
             dropdownRPP.value = targetOption.value;
             dropdownRPP.dispatchEvent(new Event('change', { bubbles: true }));
 
@@ -1051,7 +1081,7 @@ async function optimizarTamanoPagina() {
             return true;
         }
     } catch (e) {
-        console.warn('⚠️ No se pudo optimizar el tamaño de la página:', e);
+        log.warn('⚠️ No se pudo optimizar el tamaño de la página:', e);
     }
     return false;
 }
@@ -1097,13 +1127,13 @@ async function descargarXmlComprobante(indiceFila) {
     };
     const viewState = document.querySelector('input[name="javax.faces.ViewState"]');
     if (!viewState) {
-        console.warn('📄 [XML] No hay ViewState en la página: no se puede pedir el comprobante.');
+        log.warn('📄 [XML] No hay ViewState en la página: no se puede pedir el comprobante.');
         return null;
     }
 
     const enlace = `frmPrincipal:tablaCompRecibidos:${indiceFila}:lnkXml`;
     if (!document.getElementById(enlace)) {
-        console.warn(`📄 [XML] La fila ${indiceFila} no tiene enlace de XML en pantalla.`);
+        log.warn(`📄 [XML] La fila ${indiceFila} no tiene enlace de XML en pantalla.`);
         return null;
     }
 
@@ -1125,17 +1155,17 @@ async function descargarXmlComprobante(indiceFila) {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
             body: cuerpo.toString()
         });
-        if (!r.ok) { console.warn(`📄 [XML] El portal devolvió HTTP ${r.status} en la fila ${indiceFila}.`); return null; }
+        if (!r.ok) { log.warn(`📄 [XML] El portal devolvió HTTP ${r.status} en la fila ${indiceFila}.`); return null; }
 
         const texto = await r.text();
         // Si la sesión caducó el portal devuelve HTML, no el comprobante.
         if (!texto.trimStart().startsWith('<?xml') && !texto.includes('<infoTributaria')) {
-            console.warn(`📄 [XML] La respuesta de la fila ${indiceFila} no es un comprobante (¿sesión caducada?).`);
+            log.warn(`📄 [XML] La respuesta de la fila ${indiceFila} no es un comprobante (¿sesión caducada?).`);
             return null;
         }
         return parsearXmlComprobante(texto);
     } catch (err) {
-        console.warn(`📄 [XML] Falló la descarga de la fila ${indiceFila}:`, err.message);
+        log.warn(`📄 [XML] Falló la descarga de la fila ${indiceFila}:`, err.message);
         return null;
     }
 }
@@ -1159,7 +1189,7 @@ async function traerXmlDeComprobantes(indices, opciones = {}) {
     const salida = new Map();
 
     if ((indices || []).length > tope) {
-        console.warn(`📄 [XML] Se pidieron ${indices.length} comprobantes; se bajan los primeros ${tope}.`);
+        log.warn(`📄 [XML] Se pidieron ${indices.length} comprobantes; se bajan los primeros ${tope}.`);
     }
 
     for (let i = 0; i < pedidos.length; i++) {
@@ -1168,12 +1198,12 @@ async function traerXmlDeComprobantes(indices, opciones = {}) {
         if (xml) {
             salida.set(idx, xml);
             const tarifas = Object.keys(xml.porTarifa).map((k) => `${k}%: $${xml.porTarifa[k].base}`).join(' · ');
-            console.log(`   📄 [XML ${i + 1}/${pedidos.length}] fila ${idx} → ${tarifas || 'sin IVA'}`);
+            log.debug(`   📄 [XML ${i + 1}/${pedidos.length}] fila ${idx} → ${tarifas || 'sin IVA'}`);
         }
         if (i < pedidos.length - 1) await sleep(pausaMs);
     }
 
-    console.log(`📄 [XML] ${salida.size} de ${pedidos.length} comprobantes leídos.`);
+    log.debug(`📄 [XML] ${salida.size} de ${pedidos.length} comprobantes leídos.`);
     return salida;
 }
 
@@ -1223,11 +1253,11 @@ function parsearXmlComprobante(xmlTexto) {
     try {
         doc = new DOMParser().parseFromString(texto, 'text/xml');
     } catch (e) {
-        console.error('❌ [XML] No se pudo parsear el comprobante:', e);
+        log.error('❌ [XML] No se pudo parsear el comprobante:', e);
         return null;
     }
     if (!doc || doc.querySelector('parsererror')) {
-        console.error('❌ [XML] El contenido no es un XML válido.');
+        log.error('❌ [XML] El contenido no es un XML válido.');
         return null;
     }
 
@@ -1257,7 +1287,7 @@ function parsearXmlComprobante(xmlTexto) {
         if (tarifa === undefined) {
             // Un código nuevo no se reparte a ojo: se anota y lo mira el contador.
             tarifasDesconocidas.push(cp);
-            console.warn(`   ⚠️ [XML] codigoPorcentaje "${cp}" desconocido: base $${base}, IVA $${valor}.`);
+            log.warn(`   ⚠️ [XML] codigoPorcentaje "${cp}" desconocido: base $${base}, IVA $${valor}.`);
             return;
         }
 
@@ -1330,7 +1360,7 @@ async function descargarTxtRecibidos(tipo = TIPO_COMPROBANTE.factura) {
     };
     const viewState = document.querySelector('input[name="javax.faces.ViewState"]');
     if (!viewState) {
-        console.warn('📄 [TXT] No hay ViewState en la página: no se puede pedir el listado.');
+        log.warn('📄 [TXT] No hay ViewState en la página: no se puede pedir el listado.');
         return null;
     }
 
@@ -1352,12 +1382,12 @@ async function descargarTxtRecibidos(tipo = TIPO_COMPROBANTE.factura) {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
             body: cuerpo.toString()
         });
-        if (!r.ok) { console.warn(`📄 [TXT] El portal devolvió HTTP ${r.status}.`); return null; }
+        if (!r.ok) { log.warn(`📄 [TXT] El portal devolvió HTTP ${r.status}.`); return null; }
 
         const texto = await r.text();
         // Si la sesión caducó, el portal devuelve HTML en vez del archivo.
         if (!texto.startsWith('RUC_EMISOR')) {
-            console.warn('📄 [TXT] La respuesta no es el listado (¿sesión caducada?).');
+            log.warn('📄 [TXT] La respuesta no es el listado (¿sesión caducada?).');
             return null;
         }
         const filas = parsearTxtRecibidos(texto);
@@ -1368,12 +1398,12 @@ async function descargarTxtRecibidos(tipo = TIPO_COMPROBANTE.factura) {
         if (typeof Proveedores !== 'undefined' && tipo !== TIPO_COMPROBANTE.retencion) {
             try {
                 await Proveedores.registrarLote(filas, await rucDelClienteActual());
-            } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+            } catch (e) { log.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
         }
 
         return filas;
     } catch (err) {
-        console.warn('📄 [TXT] Falló la descarga:', err.message);
+        log.warn('📄 [TXT] Falló la descarga:', err.message);
         return null;
     }
 }
@@ -1435,9 +1465,9 @@ async function auditarExtraccionConTxt(tipo, cantidadLeida, totalLeido = null) {
     };
 
     if (informe.cuadra) {
-        console.log(`✅ [AUDITORÍA] ${filas.length} comprobantes según el portal y según la extracción. Cuadra.`);
+        log.info(`✅ [AUDITORÍA] ${filas.length} comprobantes según el portal y según la extracción. Cuadra.`);
     } else {
-        console.error(`🚨 [AUDITORÍA] El portal informa ${filas.length} comprobantes y la extracción leyó ${cantidadLeida}. ` +
+        log.error(`🚨 [AUDITORÍA] El portal informa ${filas.length} comprobantes y la extracción leyó ${cantidadLeida}. ` +
                       'Falta o sobra algo: revisá la paginación antes de declarar.');
         if (typeof anotarBitacora === 'function') {
             await anotarBitacora('⚠️ auditoría no cuadra', `portal=${filas.length} · leídos=${cantidadLeida}`);
@@ -1447,7 +1477,7 @@ async function auditarExtraccionConTxt(tipo, cantidadLeida, totalLeido = null) {
     if (totalLeido !== null && informe.totalTxt) {
         const dif = Math.abs(informe.totalTxt - totalLeido);
         if (dif > 0.02) {
-            console.warn(`⚠️ [AUDITORÍA] Importe total: portal $${informe.totalTxt} vs extracción $${totalLeido} (difieren $${dif.toFixed(2)}).`);
+            log.warn(`⚠️ [AUDITORÍA] Importe total: portal $${informe.totalTxt} vs extracción $${totalLeido} (difieren $${dif.toFixed(2)}).`);
         }
     }
 
@@ -1459,7 +1489,7 @@ if (typeof window !== 'undefined') {
     window.sriTxt = async (tipo) => {
         const filas = await descargarTxtRecibidos(tipo || TIPO_COMPROBANTE.factura);
         if (!filas) return null;
-        console.log(`📄 ${filas.length} comprobantes en el listado del portal.`);
+        log.debug(`📄 ${filas.length} comprobantes en el listado del portal.`);
         console.table(filas.slice(0, 40).map((f) => ({
             emisor: f.razonSocial.slice(0, 34), tipo: f.tipo, serie: f.serie,
             base: f.sinImpuestos, iva: f.iva, total: f.total
@@ -1696,6 +1726,11 @@ function calcularResumen(facturas, opciones = {}) {
         ambiguas: [],   // ni una tarifa sola ni un reparto posible: las mira el contador
         mezcladas: [],  // repartidas por aritmética entre tarifa plena y 0%
         al5: [],        // leídas al 5% por el cociente: su XML decide si son 5 real o mezcladas
+        // El detalle por comprobante. Los baldes dicen CUÁNTO va al 15%; esto
+        // dice QUIÉN lo emitió, que es lo único que permite separar después lo
+        // que da crédito tributario de lo que no (500/510 vs 502/512).
+        detalle15: [],
+        detalle5: [],
         periodo: periodo
     };
 
@@ -1713,7 +1748,7 @@ function calcularResumen(facturas, opciones = {}) {
                 base: redondear(factura.valorSinImpuestos),
                 iva: redondear(factura.iva)
             });
-            console.log(`   🟡 [Factura ${factura.numero || i + 1}] Leída al 5%: base $${factura.valorSinImpuestos}, IVA $${factura.iva}. Va al 540/550, no al 500.`);
+            log.debug(`   🟡 [Factura ${factura.numero || i + 1}] Leída al 5%: base $${factura.valorSinImpuestos}, IVA $${factura.iva}. Va al 540/550, no al 500.`);
         } else if (tarifa !== null) {
             destino = resumen.iva15;
         } else {
@@ -1746,6 +1781,16 @@ function calcularResumen(facturas, opciones = {}) {
                 resumen.iva15.montoIva += factura.iva;
                 resumen.iva15.total += partes.basePlena + factura.iva;
 
+                // Al detalle va SÓLO la parte gravada: la del 0% no da ni quita
+                // crédito, y sumarla acá mandaría al 502 plata que no es.
+                resumen.detalle15.push({
+                    numero: factura.numero || i + 1,
+                    ruc: rucDeFactura(factura),
+                    rucRazon: factura.rucRazon || 'S/N',
+                    base: redondear(partes.basePlena),
+                    iva: redondear(factura.iva)
+                });
+
                 if (partes.base0 > 0.005) {
                     resumen.iva0.cantidad++;
                     resumen.iva0.baseImponible += partes.base0;
@@ -1759,7 +1804,7 @@ function calcularResumen(facturas, opciones = {}) {
                     basePlena: partes.basePlena,
                     base0: partes.base0
                 });
-                console.log(`   🧾 [Factura ${factura.numero || i + 1}] Mezclada: ` +
+                log.debug(`   🧾 [Factura ${factura.numero || i + 1}] Mezclada: ` +
                             `$${partes.basePlena} al ${TARIFA_PLENA}% + $${partes.base0} al 0%.`);
                 return;   // ya quedó repartida; no cae en ningún balde único
             }
@@ -1778,13 +1823,25 @@ function calcularResumen(facturas, opciones = {}) {
                       `o $${repartirMezclada(factura.valorSinImpuestos, factura.iva, 5, factura.importeTotal).basePlena} al 5%`
                     : ' — y el reparto entre tarifa plena y 0% no cierra')
             });
-            console.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);
+            log.warn(`   ⚠️ [Factura ${factura.numero || i + 1}] ${motivo}`);
         }
 
         destino.cantidad++;
         destino.total += factura.importeTotal;
         destino.baseImponible += factura.valorSinImpuestos;
         destino.montoIva += factura.iva;
+
+        // Y queda anotado QUIÉN la emitió, para el reparto por crédito
+        // tributario del llenado. Las del 0% no entran: no mueven crédito.
+        const fila = {
+            numero: factura.numero || i + 1,
+            ruc: rucDeFactura(factura),
+            rucRazon: factura.rucRazon || 'S/N',
+            base: redondear(factura.valorSinImpuestos),
+            iva: redondear(factura.iva)
+        };
+        if (destino === resumen.iva15) resumen.detalle15.push(fila);
+        else if (destino === resumen.iva5) resumen.detalle5.push(fila);
     });
 
     [resumen.iva0, resumen.iva5, resumen.iva15].forEach((b) => {
@@ -1794,16 +1851,16 @@ function calcularResumen(facturas, opciones = {}) {
     });
 
     if (resumen.iva5.cantidad > 0) {
-        console.log(`   🟡 ${resumen.iva5.cantidad} factura(s) al 5%: base $${resumen.iva5.baseImponible}. Casilleros 540 / 550.`);
+        log.debug(`   🟡 ${resumen.iva5.cantidad} factura(s) al 5%: base $${resumen.iva5.baseImponible}. Casilleros 540 / 550.`);
     }
     if (resumen.mezcladas.length > 0) {
         const alPleno = redondear(resumen.mezcladas.reduce((a, m) => a + m.basePlena, 0));
         const alCero = redondear(resumen.mezcladas.reduce((a, m) => a + m.base0, 0));
-        console.log(`   🧾 ${resumen.mezcladas.length} factura(s) de tarifas mezcladas, repartidas: ` +
+        log.debug(`   🧾 ${resumen.mezcladas.length} factura(s) de tarifas mezcladas, repartidas: ` +
                     `$${alPleno} al ${TARIFA_PLENA}% y $${alCero} al 0%.`);
     }
     if (resumen.ambiguas.length > 0) {
-        console.warn(`   ⚠️ ${resumen.ambiguas.length} factura(s) sin tarifa reconocible y sin reparto posible. ` +
+        log.warn(`   ⚠️ ${resumen.ambiguas.length} factura(s) sin tarifa reconocible y sin reparto posible. ` +
                      'No se envía hasta que las mires.');
     }
 
@@ -1867,12 +1924,12 @@ function calcularResumenRetenciones(retenciones) {
 // ============================================
 
 async function extraerTodasLasNotasCredito() {
-    console.log('🚀 Iniciando extracción de Notas de Crédito...');
+    log.debug('🚀 Iniciando extracción de Notas de Crédito...');
     const todasLasNC = [];
     let paginaActual = 1;
 
     while (true) {
-        console.log('Procesando página ' + paginaActual + ' de NC');
+        log.debug('Procesando página ' + paginaActual + ' de NC');
         if (await cortarSiPidieronParar('extracción de notas de crédito')) break;
         await esperarTabla();
 
@@ -1882,7 +1939,7 @@ async function extraerTodasLasNotasCredito() {
         }
 
         const ncPagina = await extraerNotasCreditoPaginaActualDeep();
-        console.log('Extraídas ' + ncPagina.length + ' notas de crédito');
+        log.debug('Extraídas ' + ncPagina.length + ' notas de crédito');
 
         if (ncPagina.length === 0 && paginaActual === 1) {
             // Check if "No existen datos" message is present
@@ -1891,7 +1948,7 @@ async function extraerTodasLasNotasCredito() {
                 : { encontrado: false };
 
             if (noDataNC.encontrado) {
-                console.log(`ℹ️ [Fast-Fail Verídico] Confirmado por SRI: ${noDataNC.texto}`);
+                log.debug(`ℹ️ [Fast-Fail Verídico] Confirmado por SRI: ${noDataNC.texto}`);
                 break;
             }
         }
@@ -1907,20 +1964,20 @@ async function extraerTodasLasNotasCredito() {
         await esperarAjaxSri(null, `página ${paginaActual} de notas de crédito`);
     }
 
-    console.log('Total: ' + todasLasNC.length + ' notas de crédito');
+    log.debug('Total: ' + todasLasNC.length + ' notas de crédito');
 
     // Una nota de crédito la emite el mismo proveedor: cuenta igual.
     if (typeof Proveedores !== 'undefined') {
         try {
             await Proveedores.registrarLote(todasLasNC, await rucDelClienteActual());
-        } catch (e) { console.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
+        } catch (e) { log.warn('🏷️ [PROVEEDORES] No se pudieron anotar:', e.message); }
     }
 
     return calcularResumenNotasCredito(todasLasNC);
 }
 
 function extraerNotasCreditoPaginaActual() {
-    console.log('🔍 DEBUG: Iniciando extraerNotasCreditoPaginaActual');
+    log.debug('🔍 DEBUG: Iniciando extraerNotasCreditoPaginaActual');
     const notas = [];
 
     // Reusar lógica de búsqueda de tabla de Facturas (misma estructura generalmente)
@@ -1936,7 +1993,7 @@ function extraerNotasCreditoPaginaActual() {
             textoEncabezados.includes('importe total') &&
             esVisible(t)) {
             tabla = t;
-            console.log(`✅ Tabla NC encontrada: ${t.id} (Headers: ${textoEncabezados})`);
+            log.info(`✅ Tabla NC encontrada: ${t.id} (Headers: ${textoEncabezados})`);
             break;
         }
     }
@@ -1946,7 +2003,7 @@ function extraerNotasCreditoPaginaActual() {
     if (!tabla) tabla = document.querySelector('table[id*="Comprobantes"]');
 
     if (!tabla) {
-        console.warn('⚠️ No se encontró tabla de Notas de Crédito');
+        log.warn('⚠️ No se encontró tabla de Notas de Crédito');
         return notas;
     }
 
@@ -2016,7 +2073,7 @@ function extraerNotasCreditoPaginaActual() {
             });
 
         } catch (e) {
-            console.error('Error procesando fila NC ' + idx, e);
+            log.error('Error procesando fila NC ' + idx, e);
         }
     });
 
@@ -2043,7 +2100,7 @@ async function extraerNotasCreditoPaginaActualDeep() {
     if (!tabla) tabla = document.querySelector('table[id*="dtComprobantes"]');
 
     if (!tabla) {
-        console.warn('⚠️ No se encontró tabla de Notas de Crédito');
+        log.warn('⚠️ No se encontró tabla de Notas de Crédito');
         return notas;
     }
 
@@ -2061,7 +2118,7 @@ async function extraerNotasCreditoPaginaActualDeep() {
     }
 
     const filas = tabla.querySelectorAll('tbody tr');
-    console.log(`🔍 Deep NC: Procesando ${filas.length} filas en tabla [${tabla.id || 'sin id'}]...`);
+    log.debug(`🔍 Deep NC: Procesando ${filas.length} filas en tabla [${tabla.id || 'sin id'}]...`);
 
     for (let idx = 0; idx < filas.length; idx++) {
         const fila = filas[idx];
@@ -2074,11 +2131,11 @@ async function extraerNotasCreditoPaginaActualDeep() {
             const enlace = celdaEnlace.querySelector('a');
 
             if (!enlace) {
-                console.warn(`   ⚠️ No se encontró enlace en fila ${idx + 1}`);
+                log.warn(`   ⚠️ No se encontró enlace en fila ${idx + 1}`);
                 continue;
             }
 
-            console.log(`📄 Deep NC [${idx + 1}]: Abriendo modal de detalle...`);
+            log.debug(`📄 Deep NC [${idx + 1}]: Abriendo modal de detalle...`);
             enlace.click();
 
             // Esperar que el modal se abra (Checking for specific table presence)
@@ -2098,9 +2155,9 @@ async function extraerNotasCreditoPaginaActualDeep() {
                     iva0: datosModal.iva0,
                     iva15: datosModal.iva15
                 });
-                console.log(`   ✅ Detalle NC [${idx + 1}]: Base0=$${datosModal.iva0}, Base15=$${datosModal.iva15}, IVA=$${datosModal.valorIva}`);
+                log.info(`   ✅ Detalle NC [${idx + 1}]: Base0=$${datosModal.iva0}, Base15=$${datosModal.iva15}, IVA=$${datosModal.valorIva}`);
             } else {
-                console.warn(`   ⚠️ Falló extracción en modal NC [${idx + 1}], usando datos de tabla externa.`);
+                log.warn(`   ⚠️ Falló extracción en modal NC [${idx + 1}], usando datos de tabla externa.`);
 
                 // Usar índices detectados o fallback fijo
                 const cValSin = idxValSin !== -1 ? idxValSin : 6;
@@ -2134,7 +2191,7 @@ async function extraerNotasCreditoPaginaActualDeep() {
                     // La columna dice una cosa y la aritmética otra. Pasa
                     // cuando el índice apunta a una columna que no es el IVA
                     // (una de tarifa, por ejemplo: «15%» se lee como 15).
-                    console.warn(`   ⚠️ [NC ${idx + 1}] La columna del IVA dice $${valIva} pero total - base da $${deducido}. ` +
+                    log.warn(`   ⚠️ [NC ${idx + 1}] La columna del IVA dice $${valIva} pero total - base da $${deducido}. ` +
                                  'Mando la resta, que es la que no puede mentir.');
                     valIva = deducido;
                     comoSeSupo = 'deducido (la columna no coincidía)';
@@ -2144,7 +2201,7 @@ async function extraerNotasCreditoPaginaActualDeep() {
                     // Ni leído ni deducible. Antes esto se declaraba como 0%
                     // en silencio; ahora se avisa, porque de este corte
                     // dependen los casilleros.
-                    console.error(`   🚨 [NC ${idx + 1}] No pude leer ni deducir el IVA de esta nota. Se declara como 0% pero HAY QUE REVISARLA A MANO: "${(fila.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)}"`);
+                    log.error(`   🚨 [NC ${idx + 1}] No pude leer ni deducir el IVA de esta nota. Se declara como 0% pero HAY QUE REVISARLA A MANO: "${(fila.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120)}"`);
                     if (typeof anotarBitacora === 'function') {
                         await anotarBitacora('⚠️ NC sin IVA legible', `nota ${idx + 1} · revisar a mano`);
                     }
@@ -2164,14 +2221,14 @@ async function extraerNotasCreditoPaginaActualDeep() {
                     iva0: con15 ? 0 : valSin,
                     iva15: con15 ? valSin : 0
                 });
-                console.log(`   🔸 Fallback NC [${idx + 1}]: Sin=$${valSin}, IVA=$${valIva} (${comoSeSupo}) → ${con15 ? '15%' : '0%'}`);
+                log.debug(`   🔸 Fallback NC [${idx + 1}]: Sin=$${valSin}, IVA=$${valIva} (${comoSeSupo}) → ${con15 ? '15%' : '0%'}`);
             }
 
             await cerrarModal();
             await sleep(500);
 
         } catch (e) {
-            console.error(`   ❌ Error en Deep NC fila ${idx}`, e);
+            log.error(`   ❌ Error en Deep NC fila ${idx}`, e);
             await cerrarModal();
         }
     }
@@ -2208,7 +2265,7 @@ async function extraerDatosModalNC() {
             return null;
         }
 
-        console.log(`      ✅ Tabla NC hallada con ${filasTotales.length} filas de impuestos.`);
+        log.info(`      ✅ Tabla NC hallada con ${filasTotales.length} filas de impuestos.`);
         let iva0 = 0;
         let iva5 = 0;
         let iva15 = 0;
@@ -2245,7 +2302,7 @@ async function extraerDatosModalNC() {
         return { iva0, iva5, iva15, valorIva, processed: true };
 
     } catch (e) {
-        console.error('❌ Error parseando modal NC:', e);
+        log.error('❌ Error parseando modal NC:', e);
         return null;
     }
 }

@@ -55,10 +55,21 @@
   // ══ A · el permiso que tenía rota la subida ═════════════════════════════
   sec('A · los host_permissions que hacen falta');
   const H = MANIFEST.host_permissions;
-  push('R2 directo está permitido',  H.includes('https://*.r2.cloudflarestorage.com/*'), true);
-  push('el Worker relay también',    H.includes('https://*.workers.dev/*'), true);
-  push('y Supabase',                 H.includes('https://*.supabase.co/*'), true);
+  push('R2 directo está permitido',  H.includes('https://5daf9742bb674b34c0a69fb60557c90b.r2.cloudflarestorage.com/*'), true);
+  push('el Worker relay también',    H.includes('https://santiagocordova-r2-vault.workers.dev/*'), true);
+  push('y Supabase',                 H.includes('https://afssvsxlxiwqgtcgvqxp.supabase.co/*'), true);
   push('el portal del SRI, claro',   H.includes('https://srienlinea.sri.gob.ec/*'), true);
+
+  // ══ A2 · estrechados a propósito ════════════════════════════════════════
+  // El comodín `*.r2.cloudflarestorage.com` le daba a la extensión permiso
+  // sobre la cuenta de almacenamiento de CUALQUIERA. Ahora es el host exacto
+  // del bucket: si mañana se amplía de nuevo, esto lo delata.
+  push('sin comodín sobre todo Cloudflare R2',
+       H.some((p) => p === 'https://*.r2.cloudflarestorage.com/*'), false);
+  push('sin comodín sobre todos los workers',
+       H.some((p) => p === 'https://*.workers.dev/*'), false);
+  push('sin comodín sobre todo Supabase',
+       H.some((p) => p === 'https://*.supabase.co/*'), false);
 
   // ══ B · «Failed to fetch» traducido a algo accionable ═══════════════════
   sec('B · por qué falló, dicho en castellano');
@@ -72,16 +83,16 @@
        /No es la red ni las credenciales/.test(sinPermiso), true);
 
   // Con permiso, la culpa es de otra cosa — y Burp es la sospechosa habitual.
-  const conPermiso = porQueFalloElFetch(falla, 'https://algo.r2.cloudflarestorage.com/bucket/x');
+  const conPermiso = porQueFalloElFetch(falla, 'https://5daf9742bb674b34c0a69fb60557c90b.r2.cloudflarestorage.com/bucket/x');
   push('con permiso, se apunta a la red o al TLS', /el permiso está/.test(conPermiso), true);
   push('y se nombra a Burp, que es lo que suele ser', /Burp/.test(conPermiso), true);
 
-  // El comodín *.workers.dev tiene que cubrir un subdominio real.
-  push('el comodín cubre el subdominio del worker',
-       /el permiso está/.test(porQueFalloElFetch(falla, 'https://sc-r2-vault.workers.dev/upload/x')), true);
+  // El host exacto del worker tiene que estar cubierto.
+  push('el host del worker está cubierto',
+       /el permiso está/.test(porQueFalloElFetch(falla, 'https://santiagocordova-r2-vault.workers.dev/upload/x')), true);
   // …pero no un dominio que solo *termina* parecido.
   push('y no cubre a un impostor',
-       /NO está en host_permissions/.test(porQueFalloElFetch(falla, 'https://malo-workers.dev/x')), true);
+       /NO está en host_permissions/.test(porQueFalloElFetch(falla, 'https://falso-santiagocordova-r2-vault.workers.dev/x')), true);
 
   // Un error que no es de red se deja pasar tal cual: no hay que disfrazarlo.
   push('un error que no es de red no se toca',

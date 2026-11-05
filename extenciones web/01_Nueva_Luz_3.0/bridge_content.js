@@ -245,6 +245,139 @@ function syncFullClientsMatrix() {
 syncFullClientsMatrix();
 setInterval(syncFullClientsMatrix, 2500);
 
+/**
+ * Arma la lista de proveedores de UN cliente a partir de la base cruda.
+ *
+ * La web no puede leer `chrome.storage`, así que el bridge hace la misma
+ * cuenta que `Proveedores.deCliente()` y se la deja en `localStorage` bajo
+ * `sc_proveedores_cliente_<ruc>`. Es la única forma de que el perfil del
+ * cliente muestre sus proveedores históricos aunque la pestaña del SRI esté
+ * cerrada.
+ */
+function construirProveedoresDeCliente(base, rucCliente, periodo) {
+  const rc = String(rucCliente || '').replace(/\D/g, '');
+  const salida = [];
+  if (rc.length !== 13 || !base) {
+    return { ruc: rc, periodo: periodo || '', actualizado: Date.now(), proveedores: salida, metricas: { proveedores: 0, clasificados: 0, conActividad: 0, conPeriodo: 0, nivel: 0 } };
+  }
+  const resolver = (p) => {
+    const suyo = (p.porCliente || {})[rc];
+    if (suyo && typeof suyo.deducible === 'boolean') {
+      return { deducible: suyo.deducible, origen: suyo.origen || null, ambito: 'cliente' };
+    }
+    if (typeof p.deducible === 'boolean') {
+      return { deducible: p.deducible, origen: p.origen || null, ambito: 'global' };
+    }
+    return { deducible: null, origen: null, ambito: null };
+  };
+  Object.keys(base).forEach((rucProv) => {
+    const p = base[rucProv] || {};
+    const c = (p.clientes || {})[rc] || null;
+    const loVio = Array.isArray(p.vistoEn) && p.vistoEn.includes(rc);
+    if (!c && !loVio) return;
+    const per = (c && c.periodos && periodo) ? c.periodos[periodo] : null;
+    const fac = per && per.facturas ? per.facturas : null;
+    const nc = per && per.notasCredito ? per.notasCredito : null;
+    salida.push({
+      ruc: rucProv,
+      nombre: (c && c.nombre) || p.nombre || '',
+      veces: c ? (c.veces || 0) : 0,
+      base: c ? (c.base || 0) : 0,
+      iva: c ? (c.iva || 0) : 0,
+      total: c ? (c.total || 0) : 0,
+      tarifas: (c && c.tarifas) || p.tarifas || {},
+      periodos: c && c.periodos ? Object.keys(c.periodos).sort() : [],
+      enPeriodo: !!(fac || nc),
+      basePeriodo: ((fac && fac.base) || 0) - ((nc && nc.base) || 0),
+      ivaPeriodo: ((fac && fac.iva) || 0) - ((nc && nc.iva) || 0),
+      sinMontos: !c,
+      actividad: p.actividad || null,
+      categoria: p.categoria || null,
+      estadoSri: p.estadoSri || null,
+      decision: resolver(p)
+    });
+  });
+  salida.sort((a, b) =>
+    (b.enPeriodo ? 1 : 0) - (a.enPeriodo ? 1 : 0) ||
+    (b.basePeriodo || 0) - (a.basePeriodo || 0) ||
+    (b.base || 0) - (a.base || 0) ||
+    String(a.nombre).localeCompare(String(b.nombre)));
+
+  const total = salida.length;
+  const clasificados = salida.filter(p => p.decision && p.decision.deducible !== null).length;
+  const conActividad = salida.filter(p => p.actividad).length;
+  const conPeriodo = salida.filter(p => p.enPeriodo).length;
+  const conMontos = salida.filter(p => !p.sinMontos).length;
+  const nivel = total === 0 ? 0 : Math.round(
+    (clasificados / total) * 50 + (conActividad / total) * 25 +
+    (conMontos / total) * 15 + (conPeriodo / total) * 10
+  );
+  return {
+    ruc: rc,
+    periodo: periodo || '',
+    actualizado: Date.now(),
+    proveedores: salida,
+    metricas: { proveedores: total, clasificados, conActividad, conPeriodo, conMontos, nivel: Math.max(0, Math.min(100, nivel)), faltan: Math.max(0, total - clasificados) }
+  };
+}
+
+function publicarProveedoresDeCliente(ruc, periodo) {
+  if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+  chrome.storage.local.get(['sc_proveedores'], (st) => {
+    const payload = construirProveedoresDeCliente(st.sc_proveedores || {}, ruc, periodo);
+    try { localStorage.setItem(`sc_proveedores_cliente_${payload.ruc}`, JSON.stringify(payload)); } catch (e) {}
+    window.postMessage({ source: 'SC_PRO_EXTENSION', type: 'SRI_CLIENT_PROVIDERS_SYNC', data: payload }, '*');
+  });
+}
+
+// Al abrir el dashboard, el perfil del cliente tiene que encontrar lo que la
+// extensión ya sabía. Antes sólo se copiaba mientras la pestaña del SRI estaba
+// abierta y el arqueo se perdía en la siguiente visita.
+try {
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(['sri_ultimo_arqueo_compras', 'pending_sri_autofill', 'workflowPeriod'], (st) => {
+      const compras = st.sri_ultimo_arqueo_compras;
+      if (compras && compras.ruc) {
+        try { localStorage.setItem(`sc_compras_${compras.ruc}`, JSON.stringify(compras)); } catch (e) {}
+      }
+      const af = st.pending_sri_autofill || {};
+      if (af.ruc) {
+        const wp = st.workflowPeriod;
+        const periodo = wp && typeof wp === 'object' && wp.year
+          ? `${wp.year}-${String((Number(wp.monthIndex) || 0) + 1).padStart(2, '0')}`
+          : '';
+        publicarProveedoresDeCliente(af.ruc, periodo);
+      }
+    });
+  }
+} catch (e) {}
+
+// ── Validación de lo que entra desde la página ──────────────────────────────
+// El bridge recibe órdenes por postMessage. Cualquier script de la web puede
+// mandarlas, así que el content script no puede confiar en la forma: se
+// aceptan sólo los tipos conocidos, con RUC de 13 dígitos, claves de largo
+// razonable y un tope de clientes. No autentica (imposible entre página y
+// content script), pero evita que un payload roto o gigante deje el lote en un
+// estado raro o llene el almacén.
+const MAX_CLIENTES_LOTE = 500;
+const MAX_CLIENTES_MATRIZ = 2000;
+
+function rucValido(ruc) {
+  return /^\d{13}$/.test(String(ruc || '').replace(/\D/g, ''));
+}
+
+function clavePlausible(valor) {
+  return valor === undefined || (typeof valor === 'string' && valor.length <= 128);
+}
+
+function clienteDeLoteValido(c) {
+  if (!c || typeof c !== 'object') return false;
+  if (!rucValido(c.ruc)) return false;
+  if (!clavePlausible(c.sriPassword) || !clavePlausible(c.password)) return false;
+  if (c.name !== undefined && typeof c.name !== 'string') return false;
+  return true;
+}
+
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
 
@@ -266,10 +399,16 @@ window.addEventListener("message", (event) => {
 
   if (data && data.source === 'SC_PRO_DASHBOARD') {
     if (data.type === 'SRI_FULL_MATRIX_DATA' && Array.isArray(data.data)) {
-      processAndSaveClientsList(data.data);
+      processAndSaveClientsList(data.data.slice(0, MAX_CLIENTES_MATRIZ));
     }
 
     if (data.type === 'SRI_AUTOFILL_DATA' && data.data) {
+      if (!rucValido(data.data.ruc) ||
+          !clavePlausible(data.data.password) ||
+          !clavePlausible(data.data.sriPassword)) {
+        console.warn('🛡️ [Bridge] SRI_AUTOFILL_DATA ignorado: RUC o clave con forma inválida.');
+        return;
+      }
       console.log("🚀 Credenciales SRI recibidas para RUC:", data.data.ruc);
       
       let periodToUse = extractPeriodFromData(data.data);
@@ -376,6 +515,8 @@ window.addEventListener("message", (event) => {
       const pStr = `${periodToUse.year}-${String(periodToUse.monthIndex + 1).padStart(2, '0')}`;
 
       const queue = (data.data.clients || [])
+        .slice(0, MAX_CLIENTES_LOTE)
+        .filter(clienteDeLoteValido)
         .filter(c => {
           if (isTestKeys) return true;
           if (c.hasPdf === true) {
@@ -541,6 +682,20 @@ window.addEventListener("message", (event) => {
         });
       }
     }
+
+    // El perfil del cliente pide bajo demanda los proveedores de ESE RUC.
+    // Bajo demanda y no de entrada porque `sc_proveedores` puede tener cientos
+    // de emisores; mandarlos todos a `localStorage` lo llenaría al pedo.
+    if (data.type === 'SRI_REQUEST_CLIENT_PROVIDERS' && data.data) {
+      if (!rucValido(data.data.ruc)) {
+        console.warn('🛡️ [Bridge] SRI_REQUEST_CLIENT_PROVIDERS ignorado: RUC inválido.');
+        return;
+      }
+      publicarProveedoresDeCliente(
+        String(data.data.ruc).replace(/\D/g, ''),
+        String(data.data.periodo || '').slice(0, 7)
+      );
+    }
   }
 });
 
@@ -641,6 +796,21 @@ try {
           type: 'SRI_PURCHASES_EXTRACTED',
           data: compras
         }, '*');
+      }
+      // Cuando el bot aprende un proveedor nuevo o el contador lo clasifica,
+      // el perfil del cliente que está abierto se actualiza en el acto.
+      if (area === 'local' && changes.sc_proveedores && changes.sc_proveedores.newValue) {
+        chrome.storage.local.get(['sri_ultimo_arqueo_compras', 'pending_sri_autofill', 'workflowPeriod'], (st) => {
+          const af = st.pending_sri_autofill || {};
+          const compras = st.sri_ultimo_arqueo_compras || {};
+          const ruc = af.ruc || compras.ruc;
+          if (!ruc) return;
+          const wp = st.workflowPeriod;
+          const periodo = wp && typeof wp === 'object' && wp.year
+            ? `${wp.year}-${String((Number(wp.monthIndex) || 0) + 1).padStart(2, '0')}`
+            : '';
+          publicarProveedoresDeCliente(ruc, periodo);
+        });
       }
     });
   }

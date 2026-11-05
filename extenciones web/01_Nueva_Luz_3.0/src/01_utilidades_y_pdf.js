@@ -3,6 +3,8 @@
 // __SC_BUILD__ lo reemplaza vite al compilar (ver vite.config.mjs).
 const SC_BUILD = "__SC_BUILD__";
 
+// Único `console.log` a propósito: corre ANTES de que exista `log` (el logger
+// se define más abajo, y usar `log` acá sería un ReferenceError por TDZ).
 console.log(
   `%c👻 SRI ASISTENTE GHOST · build ${SC_BUILD} · INICIADO`,
   "background: #f8fafc; color: #64748b; font-size: 16px; font-weight: bold; padding: 10px; border-radius: 5px; border: 2px solid #cbd5e1; box-shadow: 0 0 15px rgba(0,0,0,0.1);",
@@ -10,6 +12,72 @@ console.log(
 
 // Para verificar desde la consola qué build está cargado realmente.
 if (typeof window !== "undefined") window.sriBuild = () => SC_BUILD;
+
+// ── Registro con niveles ────────────────────────────────────────────────────
+// El content script corre en cada página del SRI y llegó a tener 614
+// `console.log`. La consola dejaba de servir: lo importante se perdía entre el
+// latido y las detecciones. Esto separa las dos cosas:
+//
+//   log.info/warn/error  → siempre salen (lo que hay que ver)
+//   log.debug            → sólo con «modo depuración» encendido en Ajustes
+//                          (`sc_debug` en storage), que se puede prender y
+//                          apagar sin recargar la extensión.
+//
+// Además guarda las últimas 300 líneas en memoria: `window.scLogBuffer()`
+// permite copiar el contexto cuando algo falla, sin haber tenido la consola
+// abierta desde el principio.
+const SC_LOG = { debug: false, max: 300, buffer: [] };
+
+function scLogAplicarDebug(valor) {
+    SC_LOG.debug = valor === true;
+}
+
+try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['sc_debug'], (r) => scLogAplicarDebug(r && r.sc_debug));
+        if (chrome.storage.onChanged) {
+            chrome.storage.onChanged.addListener((ch, area) => {
+                if (area === 'local' && ch.sc_debug) scLogAplicarDebug(ch.sc_debug.newValue);
+            });
+        }
+    }
+} catch (e) { /* sin almacén: queda el nivel por defecto */ }
+
+function scLog(nivel, ...args) {
+    try {
+        SC_LOG.buffer.push({
+            t: Date.now(),
+            nivel,
+            texto: args.map((a) => {
+                if (typeof a === 'string') return a;
+                try { return JSON.stringify(a); } catch (e) { return String(a); }
+            }).join(' ')
+        });
+        if (SC_LOG.buffer.length > SC_LOG.max) SC_LOG.buffer.shift();
+    } catch (e) { /* el buffer no puede romper el registro */ }
+
+    if (nivel === 'debug' && !SC_LOG.debug) return;
+    const salida = nivel === 'error' ? console.error
+        : (nivel === 'warn' ? console.warn : console.log);
+    salida(...args);
+}
+
+const log = {
+    debug: (...a) => scLog('debug', ...a),
+    info: (...a) => scLog('info', ...a),
+    warn: (...a) => scLog('warn', ...a),
+    error: (...a) => scLog('error', ...a),
+    buffer: () => SC_LOG.buffer.slice(-SC_LOG.max)
+};
+
+// NO reasignar `window.scLog` acá: `scLog` ya es global por ser una función
+// de nivel superior (el bundle concatena sin IIFE — ver AGENTS.md §9d).
+// Pisarla con el objeto `log` bajo el mismo nombre rompe las llamadas
+// `scLog('debug', ...)` de dentro de `log.debug/info/warn/error`, que dejan
+// de ver la función y llaman al objeto como si fuera invocable.
+if (typeof window !== 'undefined') {
+    window.scLogBuffer = log.buffer;
+}
 
 // ── Configuración central (ver shared_config.js) ──────────────────────
 // La URL y la llave `anon` viven en UN solo lugar: shared_config.js.
@@ -43,7 +111,7 @@ function aplicarCredencialesSupabaseGuardadas(items) {
   if (g.SUPABASE_ANON_KEY) {
     SC_SUPABASE_ANON_KEY = g.SUPABASE_ANON_KEY;
     SC_SUPABASE_ORIGEN = 'de Ajustes';
-    console.log('🔑 [WEB] Usando la llave de Supabase guardada en Ajustes, no la del código.');
+    log.debug('🔑 [WEB] Usando la llave de Supabase guardada en Ajustes, no la del código.');
   }
 }
 const SC_R2_UPLOAD_ENDPOINT = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT)
@@ -53,7 +121,7 @@ const SC_R2_PUBLIC_URL = (typeof window !== 'undefined' && window.SC_CONFIG && w
   ? window.SC_CONFIG.R2_PUBLIC_URL
   : null;
 if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
-  console.error('[Nueva Luz 3.0] shared_config.js no cargado: faltan credenciales de Supabase.');
+  log.error('[Nueva Luz 3.0] shared_config.js no cargado: faltan credenciales de Supabase.');
 }
 
 // ── Rutas Canónicas y Puentes SSO del SRI (Tatuadas) ──────────────────────────────
@@ -115,8 +183,86 @@ function instalarEstilosSC() {
     .sc-btn--peligro{ background:rgba(239,68,68,.16); color:var(--sc-mal) }
     .sc-btn--fantasma{ background:transparent; border:1px solid var(--sc-borde); color:var(--sc-suave) }
     .sc-rotulo{
-      font-size:9.5px; letter-spacing:.09em; color:var(--sc-tenue);
+      font-size:10.5px; letter-spacing:.09em; color:var(--sc-tenue);
       font-weight:800; text-transform:uppercase;
+    }
+
+    /* ── Piso de legibilidad ────────────────────────────────────────────────
+       El portal se usa a 100% y con la mitad de la pantalla ocupada por el
+       formulario. 9–10px ahí no se lee: se adivina. Estos selectores suben
+       SÓLO lo que está por debajo del piso, y sólo dentro de la interfaz de
+       la extensión — nunca tocan el HTML del SRI. 11px es el mínimo; 11.5px
+       para los textos de 10px, que suelen ser datos y no adorno. */
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size:9px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size: 9px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size:9px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size: 9px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size:9.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size:9.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size: 9.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size: 9.5px"]{
+      font-size:11px !important;
+    }
+
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size:10px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size: 10px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size:10px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size: 10px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size:10.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size:10.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size: 10.5px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size: 10.5px"]{
+      font-size:11.5px !important;
+    }
+
+    /* Foco visible: con teclado, en el portal no se sabía dónde estaba el
+       cursor. Sólo aparece con :focus-visible, así que no ensucia el clic. */
+    :is(#sri-assistant-panel-root, #sri-loop-hud, #sri-dynamic-island,
+        #sri-island-minibar, #sc-saludo, .sri-elite-pill,
+        .sri-elite-context-card) :is(button, a, [role="button"], input):focus-visible{
+      outline:2px solid var(--sc-activo);
+      outline-offset:2px;
+      border-radius:6px;
+    }
+
+    /* Antialiasing sólo en la interfaz propia: el formulario del SRI se queda
+       con la tipografía que eligió el SRI. */
+    :is(#sri-assistant-panel-root, #sri-loop-hud, #sri-dynamic-island,
+        #sri-island-minibar, #sc-saludo, .sri-elite-pill,
+        .sri-elite-context-card){
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+
+    /* Quien pidió menos movimiento en el sistema lo pidió también acá. */
+    @media (prefers-reduced-motion: reduce){
+      :is(#sri-assistant-panel-root, #sri-loop-hud, #sri-dynamic-island,
+          #sri-island-minibar, #sc-saludo, .sri-elite-pill,
+          .sri-elite-context-card),
+      :is(#sri-assistant-panel-root, #sri-loop-hud, #sri-dynamic-island,
+          #sri-island-minibar, #sc-saludo, .sri-elite-pill,
+          .sri-elite-context-card) *{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+        scroll-behavior:auto !important;
+      }
     }
   `;
   (document.head || document.documentElement).appendChild(st);
@@ -190,7 +336,7 @@ const SriCredentialVault = {
 
     if (entry && (entry.status === 'locked' || entry.status === 'blocked')) {
       if (options.isManual || options.force) {
-        console.log(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado por el usuario.`);
+        log.debug(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado por el usuario.`);
         return { allowed: true, manualOverride: true };
       }
       return {
@@ -201,7 +347,7 @@ const SriCredentialVault = {
 
     if (flagged[ruc] === 'error_credenciales' || (entry && entry.status === 'failed')) {
       if (options.isManual || options.force) {
-        console.log(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado con la clave actual.`);
+        log.debug(`🔓 [VAULT] Disparo manual para ${ruc}: concediendo intento supervisado con la clave actual.`);
         return { allowed: true, manualOverride: true };
       }
       const currentSig = this.getSignature(password);
@@ -215,7 +361,7 @@ const SriCredentialVault = {
       // Si la clave cambió en la base/caché, conceder 1 intento para la nueva clave
       // La marca NO se imprime, ni la vieja ni la nueva. Un log se pega en un
       // chat, en un ticket o en un correo; que ahí no haya nada de la clave.
-      console.log(`🔑 [VAULT] La clave guardada de ${ruc} cambió desde el último rechazo. Concediendo 1 intento.`);
+      log.debug(`🔑 [VAULT] La clave guardada de ${ruc} cambió desde el último rechazo. Concediendo 1 intento.`);
     }
 
     return { allowed: true };
@@ -234,7 +380,7 @@ const SriCredentialVault = {
       attempts: ((tried[ruc] && tried[ruc].attempts) || 0) + 1
     };
     await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
-    console.warn(`🛡️ [VAULT] Credencial fallida registrada para ${ruc}. Intentos: ${tried[ruc].attempts}. Motivo: ${reason}`);
+    log.warn(`🛡️ [VAULT] Credencial fallida registrada para ${ruc}. Intentos: ${tried[ruc].attempts}. Motivo: ${reason}`);
   },
 
   async recordLocked(ruc, reason) {
@@ -249,7 +395,7 @@ const SriCredentialVault = {
       locked: true
     };
     await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
-    console.error(`🚨 [VAULT] Cuenta BLOQUEADA por SRI registrada para ${ruc}: ${reason}`);
+    log.error(`🚨 [VAULT] Cuenta BLOQUEADA por SRI registrada para ${ruc}: ${reason}`);
   },
 
   async recordSuccess(ruc, password) {
@@ -272,7 +418,7 @@ const SriCredentialVault = {
       flagged_errors: flagged,
       sc_sesion_confirmada: { ruc, ts: Date.now() }
     });
-    console.log(`✅ [VAULT] Acceso exitoso registrado para ${ruc}. Bóveda actualizada.`);
+    log.info(`✅ [VAULT] Acceso exitoso registrado para ${ruc}. Bóveda actualizada.`);
   },
 
   async resetClient(ruc) {
@@ -281,7 +427,7 @@ const SriCredentialVault = {
     delete tried[ruc];
     delete flagged[ruc];
     await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
-    console.log(`🔄 [VAULT] Registro de seguridad reiniciado para ${ruc}.`);
+    log.info(`🔄 [VAULT] Registro de seguridad reiniciado para ${ruc}.`);
   }
 };
 
@@ -336,7 +482,7 @@ async function frenarSiEsSustitutiva(donde = '') {
   const { esSustitutiva, marca } = tipoDeDeclaracionEnPantalla();
   if (!esSustitutiva) return false;
 
-  console.error(`🛑 [SUSTITUTIVA] El portal marca esta declaración como "${marca}"${donde ? ' (' + donde + ')' : ''}. ` +
+  log.error(`🛑 [SUSTITUTIVA] El portal marca esta declaración como "${marca}"${donde ? ' (' + donde + ')' : ''}. ` +
                 'Ese período YA fue declarado. El bot no presenta sustitutivas: se detiene.');
 
   if (typeof anotarBitacora === 'function') {
@@ -360,7 +506,7 @@ async function frenarSiEsSustitutiva(donde = '') {
 
       // 🧾 Si tenemos el periodo, vamos a Consulta de declaraciones a traer el comprobante oficial
       if (af.workflowPeriod && typeof irARecuperarComprobante === 'function') {
-        console.log(`🧾 [SUSTITUTIVA] Redirigiendo a Consulta de declaraciones para recuperar el comprobante de ${quien.name || quien.ruc}...`);
+        log.debug(`🧾 [SUSTITUTIVA] Redirigiendo a Consulta de declaraciones para recuperar el comprobante de ${quien.name || quien.ruc}...`);
         if (window.sriAssistant && window.sriAssistant.showEliteToast) {
           window.sriAssistant.showEliteToast({
             title: '🧾 Redirigiendo a Consulta',
@@ -391,14 +537,14 @@ async function frenarSiEsSustitutiva(donde = '') {
                       (typeof SriLoop !== 'undefined' ? await SriLoop.puedeAvanzar() : false);
 
   if (puedeSeguir && typeof handleBatchNextClient === 'function') {
-    console.log('⏩ [SUSTITUTIVA] Cliente ya declarado. Avanzando al siguiente cliente del lote...');
+    log.debug('⏩ [SUSTITUTIVA] Cliente ya declarado. Avanzando al siguiente cliente del lote...');
     await SafeStorage.remove(['pendingAction', 'actionTimestamp']);
     setTimeout(async () => {
       try {
         const hasNext = await handleBatchNextClient();
         if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI();
       } catch (err) {
-        console.warn('⚠️ Error al avanzar al siguiente cliente tras sustitutiva:', err);
+        log.warn('⚠️ Error al avanzar al siguiente cliente tras sustitutiva:', err);
       }
     }, 2000);
   } else {
@@ -856,7 +1002,7 @@ async function semillaDeRutas() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   const semilla = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   try { await SafeStorage.set({ sc_semilla_rutas: semilla }); } catch (e) { /* nada */ }
-  console.log('🔐 [RUTAS] Semilla nueva creada. Las rutas de los comprobantes dejan de ser adivinables.');
+  log.debug('🔐 [RUTAS] Semilla nueva creada. Las rutas de los comprobantes dejan de ser adivinables.');
   return semilla;
 }
 
@@ -892,7 +1038,7 @@ async function rutaDeComprobante(ruc, periodo, archivo) {
   } catch (e) {
     // Si el navegador no diera WebCrypto, es preferible una ruta con azar sin
     // memoria —que puede duplicar una subida— antes que una adivinable.
-    console.warn('🔐 [RUTAS] No se pudo derivar la ruta; se usa uno al azar:', e.message);
+    log.warn('🔐 [RUTAS] No se pudo derivar la ruta; se usa uno al azar:', e.message);
     const azar = Array.from(crypto.getRandomValues(new Uint8Array(11)),
                             (b) => b.toString(16).padStart(2, '0')).join('');
     return `declaraciones/${ruc}/${azar}/${archivo}`;
@@ -977,13 +1123,13 @@ const GhostBlackBox = {
     const entry = { time, category, message, details };
     this.logs.push(entry);
     if (this.logs.length > 100) this.logs.shift();
-    console.log(
+    log.debug(
       `🖤 [BLACKBOX ${time}] [${category}] ${message}`,
       details || "",
     );
     try {
       SafeStorage.set({ ghost_blackbox_logs: this.logs });
-    } catch (e) {}
+    } catch (e) { /* sin espacio para la caja negra: no corta el flujo */ }
   },
   async getHistory() {
     const data = await SafeStorage.get("ghost_blackbox_logs");
@@ -999,7 +1145,7 @@ const GhostBlackBox = {
 // 🛑 CONTROL DE PARADA DE EMERGENCIA DEL BUCLE
 // ============================================================
 async function detenerBucleSRI() {
-  console.log('🛑 [DETENER BUCLE] Solicitud de parada de emergencia recibida.');
+  log.debug('🛑 [DETENER BUCLE] Solicitud de parada de emergencia recibida.');
   marcarParadaPedida();
 
   // 🚦 El semáforo es la ÚNICA autoridad del bucle (AGENTS §2): puedeAvanzar()
@@ -1092,7 +1238,7 @@ async function sePidioParar() {
 /** Devuelve true si se pidió parar y deja constancia en la consola. */
 async function cortarSiPidieronParar(rotulo = '') {
     if (!(await sePidioParar())) return false;
-    console.warn('🛑 [PARADA] ' + (rotulo || 'Trabajo en curso') +
+    log.warn('🛑 [PARADA] ' + (rotulo || 'Trabajo en curso') +
                  ' cortado: el usuario pidió detener.');
     return true;
 }
@@ -1141,12 +1287,12 @@ async function cerrarSesionSRI(force = false) {
   if (!force && typeof SriLoop !== 'undefined') {
     const puede = await SriLoop.puedeAvanzar();
     if (!puede) {
-      console.log("ℹ️ [LOGOUT PROTEGIDO] No hay lote activo corriendo. Manteniendo la sesión abierta para el usuario.");
+      log.debug("ℹ️ [LOGOUT PROTEGIDO] No hay lote activo corriendo. Manteniendo la sesión abierta para el usuario.");
       return;
     }
   }
 
-  console.log(
+  log.debug(
     "🔒 [LOGOUT] Cerrando sesión SRI con purga extrema (Cierre Limpio Radical)...",
   );
   clearCapturedPdf('cerrarSesionSRI');
@@ -1156,9 +1302,9 @@ async function cerrarSesionSRI(force = false) {
   try {
     sessionStorage.clear();
     localStorage.clear();
-    console.log("💣 Caché local de la SPA destruido.");
+    log.debug("💣 Caché local de la SPA destruido.");
   } catch (e) {
-    console.warn("⚠️ No se pudo purgar el almacenamiento local:", e);
+    log.warn("⚠️ No se pudo purgar el almacenamiento local:", e);
   }
 
   // 2. Exterminio de Cookies Total (SW Cookie Bomb + document.cookie)
@@ -1168,7 +1314,7 @@ async function cerrarSesionSRI(force = false) {
     document.cookie =
       "KEYCLOAK_IDENTITY=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
   } catch (e) {
-    console.warn("⚠️ No se pudieron limpiar las cookies locales:", e);
+    log.warn("⚠️ No se pudieron limpiar las cookies locales:", e);
   }
 
   // Purga profunda de cookies HttpOnly en todas las sub-apps del SRI vía Service Worker
@@ -1176,14 +1322,14 @@ async function cerrarSesionSRI(force = false) {
     await new Promise((resolve) => {
       chrome.runtime.sendMessage({ tipo: "SC_LIMPIAR_SESION_SRI" }, (resp) => {
         if (resp && resp.ok) {
-          console.log(`🍪 [LOGOUT SW] ${resp.eliminadas} cookies del SRI destruidas en el navegador.`);
+          log.debug(`🍪 [LOGOUT SW] ${resp.eliminadas} cookies del SRI destruidas en el navegador.`);
         }
         resolve();
       });
       setTimeout(resolve, 800);
     });
   } catch (e) {
-    console.warn("⚠️ Error solicitando purga de cookies al Service Worker:", e);
+    log.warn("⚠️ Error solicitando purga de cookies al Service Worker:", e);
   }
 
   // El último candidato, `[title*="Cerrar"]`, es peligrosamente amplio:
@@ -1211,11 +1357,11 @@ async function cerrarSesionSRI(force = false) {
       const enlaceDelIcono = logoutIcon.closest('a, button, li');
       const hrefDelIcono = (enlaceDelIcono && enlaceDelIcono.getAttribute('href')) || '';
       if (hrefDelIcono.toLowerCase().startsWith('javascript:')) {
-        console.log('🚪 [LOGOUT] El icono del portal usa una URL «javascript:», que la CSP bloquea. ' +
+        log.debug('🚪 [LOGOUT] El icono del portal usa una URL «javascript:», que la CSP bloquea. ' +
                     'Se va directo al endpoint de cierre.');
         throw new Error('icono con javascript: — se usa el endpoint canónico');
       }
-      console.log("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
+      log.info("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
       clickElement(logoutIcon, "Icono Cerrar Sesión SRI");
       const parentLink = logoutIcon.closest("a, button, li");
       if (parentLink) {
@@ -1225,13 +1371,13 @@ async function cerrarSesionSRI(force = false) {
         }
       }
     } catch (e) {
-      console.warn("Error al hacer clic en logoutIcon:", e);
+      log.warn("Error al hacer clic en logoutIcon:", e);
     }
   }
   await sleep(600);
 
   // 3. El Cierre Atómico (Hard Reload + Canonic Logout)
-  console.log("🚀 Redirigiendo a Endpoint Canónico de Cierre de Sesión...");
+  log.debug("🚀 Redirigiendo a Endpoint Canónico de Cierre de Sesión...");
   const targetLogout = window.location.href.includes('sri-declaraciones-web-internet')
     ? SRI_SALIR_URL
     : 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/logout?redirect_uri=' + encodeURIComponent('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT');
@@ -1275,14 +1421,14 @@ function getActiveClientRuc() {
         return String(info.ruc).trim();
       }
     }
-  } catch (e) {}
+  } catch (e) { /* sin RUC del asistente: se prueba el DOM */ }
   try {
     const el = document.querySelector('[id*="ruc"], [name*="ruc"], #lblRuc, .ruc-usuario, #usuario');
     if (el) {
       const val = (el.value || el.textContent || '').match(/\b(0[1-9]\d{8,11})\b/);
       if (val && val[1]) return val[1];
     }
-  } catch (e) {}
+  } catch (e) { /* sin RUC en el DOM: queda nulo */ }
   return null;
 }
 
@@ -1292,7 +1438,7 @@ function setCapturedPdf(base64, origen = "") {
   // 🛡️ VALIDACIÓN ESTRUCTURAL: Asegurar que sea un PDF binario legítimo (inicia con %PDF / JVBERi)
   const esPdfValido = base64.startsWith("data:application/pdf") || base64.includes("JVBERi");
   if (!esPdfValido || base64.length < 2500) {
-    console.warn(`⚠️ [PDF CAPTURE RECHAZADO] Objeto capturado desde ${origen} no es un PDF legítimo o es demasiado pequeño (${base64.length} chars).`);
+    log.warn(`⚠️ [PDF CAPTURE RECHAZADO] Objeto capturado desde ${origen} no es un PDF legítimo o es demasiado pequeño (${base64.length} chars).`);
     return;
   }
 
@@ -1300,14 +1446,14 @@ function setCapturedPdf(base64, origen = "") {
   capturedPdfBase64 = base64;
   capturedPdfRuc = rucDetectado;
   capturedPdfPeriod = __sriCurrentWorkflowPeriod;
-  console.log(
+  log.debug(
     `📄 [PDF CAPTURE] ¡PDF Oficial SRI capturado mediante ${origen}! Tamaño: ${base64.length} chars | RUC certificado: ${capturedPdfRuc || 'desconocido'} | Período: ${capturedPdfPeriod || 'desconocido'}`
   );
 }
 
 function clearCapturedPdf(motivo = "") {
   if (capturedPdfBase64) {
-    console.log(
+    log.debug(
       `🧹 [PDF PURGE] Limpiando PDF capturado en memoria (${capturedPdfBase64.length} chars, RUC: ${capturedPdfRuc || 'desconocido'}). Motivo: ${motivo || 'desconocido'}`
     );
   }
@@ -1348,11 +1494,11 @@ try {
             setCapturedPdf(base64, "createObjectURL");
           }
         })
-        .catch((e) => console.warn("Error convirtiendo Blob:", e));
+        .catch((e) => log.warn("Error convirtiendo Blob:", e));
     }
     return url;
   };
-} catch (e) {}
+} catch (e) { /* sin intercepción de URL: la descarga sigue normal */ }
 
 // 2. Interceptar XMLHttpRequest (Para peticiones AJAX de PrimeFaces que retornan el PDF binario)
 try {
@@ -1382,11 +1528,11 @@ try {
             });
           }
         }
-      } catch (e) {}
+      } catch (e) { /* si el parche XHR falla, la petición original sigue */ }
     });
     return origXHRSend.apply(this, arguments);
   };
-} catch (e) {}
+} catch (e) { /* sin parche XHR: se pierde la captura, no el flujo */ }
 
 // 3. Interceptar window.fetch
 try {
@@ -1410,10 +1556,10 @@ try {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { /* si la copia falla, la respuesta original sigue */ }
     return res;
   };
-} catch (e) {}
+} catch (e) { /* sin parche fetch: se pierde la captura, no el flujo */ }
 
 // 4. Interceptar window.open
 try {
@@ -1423,7 +1569,7 @@ try {
       typeof url === "string" &&
       (url.includes(".pdf") || url.includes("pdf") || url.includes("blob:"))
     ) {
-      console.log(
+      log.debug(
         "📄 [PDF INTERCEPTOR] Capturando URL de comprobante en window.open:",
         url,
       );
@@ -1436,16 +1582,16 @@ try {
           }
         })
         .catch((e) =>
-          console.warn("No se pudo descargar Blob del PDF en window.open:", e),
+          log.warn("No se pudo descargar Blob del PDF en window.open:", e),
         );
     }
     return origOpen.apply(this, arguments);
   };
-} catch (e) {}
+} catch (e) { /* sin parche window.open: se pierde la captura, no el flujo */ }
 
 // 5. DOM Scraper para buscar elementos PDF en la pantalla del SRI (iframe, object, embed, links)
 async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
-  console.log(
+  log.debug(
     "🔍 [PDF SCRAPER] Buscando PDF oficial del SRI en elementos del DOM...",
   );
 
@@ -1465,7 +1611,7 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
         src.includes("imprimir"))
     ) {
       try {
-        console.log(
+        log.debug(
           "📄 [PDF SCRAPER] Intentando descargar PDF oficial desde elemento DOM:",
           src,
         );
@@ -1479,7 +1625,7 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
           }
         }
       } catch (e) {
-        console.warn("No se pudo obtener Blob desde elemento:", src, e);
+        log.warn("No se pudo obtener Blob desde elemento:", src, e);
       }
     }
   }
@@ -1511,14 +1657,14 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
       const idx = printBtns.indexOf(btnComprobantePago);
       if (idx !== -1) printBtns.splice(idx, 1);
       printBtns.unshift(btnComprobantePago);
-      console.log("🎯 [PDF MASTER] Botón 'Imprimir comprobante de pago' priorizado sobre formulario.");
+      log.debug("🎯 [PDF MASTER] Botón 'Imprimir comprobante de pago' priorizado sobre formulario.");
     } else if (confirmedPrintBtn && esVisible(confirmedPrintBtn) && !printBtns.includes(confirmedPrintBtn)) {
       printBtns.unshift(confirmedPrintBtn);
     }
 
     if (printBtns.length > 0) {
       const btn = printBtns[0];
-      console.log(
+      log.debug(
         "📄 [PDF MASTER] Intentando hacer un fetch directo del formulario para obtener el PDF genuino...",
       );
       try {
@@ -1590,12 +1736,12 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
-              } catch (err) {}
+              } catch (err) { /* sin descarga directa: queda el enlace de respaldo */ }
 
               return true;
             }
           } else {
-            console.warn(
+            log.warn(
               "⚠️ [PDF MASTER] La respuesta no fue un PDF:",
               blob.type,
               blob.size,
@@ -1603,16 +1749,16 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
           }
         }
       } catch (e) {
-        console.warn("⚠️ Falló el fetch directo del PDF:", e);
+        log.warn("⚠️ Falló el fetch directo del PDF:", e);
       }
 
-      console.log(
+      log.debug(
         "📄 [PDF SCRAPER] Fallback: Clickeando botón de comprobante en DOM para forzar captura nativa...",
       );
       try {
         clickElement(btn, "Botón Comprobante SRI");
         await sleep(1500);
-      } catch (e) {}
+      } catch (e) { /* si el botón no aparece, se sigue por el camino normal */ }
     }
   }
 
@@ -1645,12 +1791,12 @@ function ensureJsPdfLoaded() {
       // visible para nosotros y nunca para la página del SRI.
       new Function(code).call(window);
       const ok = !!(window.jspdf && window.jspdf.jsPDF);
-      console.log(ok
+      log.debug(ok
         ? "✅ [jsPDF] Cargado bajo demanda."
         : "⚠️ [jsPDF] Se evaluó pero no expuso window.jspdf.");
       return ok;
     } catch (e) {
-      console.warn("⚠️ [jsPDF] No disponible; se usará el PDF de respaldo simple:", e.message);
+      log.warn("⚠️ [jsPDF] No disponible; se usará el PDF de respaldo simple:", e.message);
       return false;
     }
   })();
@@ -1799,7 +1945,7 @@ function generateValidPdfBase64(
       const b64 = doc.output("datauristring");
       return b64.split(",")[1];
     } catch (e) {
-      console.warn("Error jsPDF Fallback SRI clone:", e);
+      log.warn("Error jsPDF Fallback SRI clone:", e);
     }
   }
 
@@ -1894,23 +2040,23 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
       config: cfg,
     });
   } catch (e) {
-    console.error("❌ [R2] No se pudo hablar con el service worker:", e.message);
-    console.error("   Si la extensión se acaba de actualizar, recargá la página.");
+    log.error("❌ [R2] No se pudo hablar con el service worker:", e.message);
+    log.error("   Si la extensión se acaba de actualizar, recargá la página.");
     throw new Error("Service worker no disponible");
   }
 
   if (r && r.ok && r.url) {
-    console.log(`✅ [R2] Comprobante subido (${r.via}):`, r.url);
+    log.info(`✅ [R2] Comprobante subido (${r.via}):`, r.url);
     anotarBitacora('PDF SUBIDO', r.via);
     return r.url;
   }
 
   anotarBitacora('PDF NO SUBIÓ', (r && r.error) || 'sin detalle');
-  console.error("❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.");
+  log.error("❌ [R2] Ningún camino de subida funcionó. El comprobante NO quedó en la nube.");
   // Un motivo por camino, para poder arreglarlo en vez de adivinar.
   const motivos = (r && r.motivos) || (r && r.error ? [r.error] : []);
-  motivos.forEach((m) => console.error("   ·", m));
-  console.error("   Probá sriProbarSubida() en Chrome normal: por un proxy como Burp esto puede fallar por el TLS.");
+  motivos.forEach((m) => log.error("   ·", m));
+  log.error("   Probá sriProbarSubida() en Chrome normal: por un proxy como Burp esto puede fallar por el TLS.");
   throw new Error("No se pudo subir a Cloudflare R2");
 }
 
@@ -1920,28 +2066,28 @@ async function uploadToCloudflareR2Direct(key, blob, contentType = "application/
  */
 async function probarSubida() {
   const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
-  console.log('🧪 Probando la subida con un archivo mínimo...');
+  log.debug('🧪 Probando la subida con un archivo mínimo...');
 
   let r;
   try {
     r = await chrome.runtime.sendMessage({ tipo: 'SC_DIAGNOSTICO_SUBIDA', config: cfg });
   } catch (e) {
-    console.error('❌ No se pudo hablar con el service worker:', e.message);
-    console.error('   Recargá la extensión en chrome://extensions y volvé a probar.');
+    log.error('❌ No se pudo hablar con el service worker:', e.message);
+    log.error('   Recargá la extensión en chrome://extensions y volvé a probar.');
     return null;
   }
 
-  if (!r) { console.error('❌ El service worker no respondió nada.'); return null; }
+  if (!r) { log.error('❌ El service worker no respondió nada.'); return null; }
 
   const cfgInforme = r.configurado || {};
-  console.log('── Configuración ──');
+  log.debug('── Configuración ──');
   console.table([{
     'Worker relay': cfgInforme.worker ? '✅ configurado' : '❌ falta',
     'Claves S3': cfgInforme.s3 ? '✅ presentes' : '❌ faltan',
     'Bucket': cfgInforme.bucket || '(sin definir)'
   }]);
 
-  console.log('── Qué pasó en cada intento ──');
+  log.debug('── Qué pasó en cada intento ──');
   console.table((r.intentos || []).map((i) => ({
     via: i.via,
     resultado: i.omitido ? '⏭️ ' + i.omitido
@@ -1952,11 +2098,11 @@ async function probarSubida() {
   })));
 
   if (r.ok) {
-    console.log(`✅ LA SUBIDA FUNCIONA (vía ${r.via}).`, r.url);
-    console.log('   El comprobante de una declaración va a llegar a la nube.');
+    log.info(`✅ LA SUBIDA FUNCIONA (vía ${r.via}).`, r.url);
+    log.debug('   El comprobante de una declaración va a llegar a la nube.');
   } else {
-    console.error('❌ LA SUBIDA NO FUNCIONA por ningún camino.');
-    console.error('   Los comprobantes NO se están guardando en la nube.');
+    log.error('❌ LA SUBIDA NO FUNCIONA por ningún camino.');
+    log.error('   Los comprobantes NO se están guardando en la nube.');
   }
   return r;
 }
@@ -1997,13 +2143,13 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
       let cuerpo = '';
       try { cuerpo = await r.text(); } catch (e) { /* si no se puede leer, se sigue */ }
       const dijo = (typeof loQueDijoSupabase === 'function') ? loQueDijoSupabase(cuerpo) : '';
-      console.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}` +
+      log.warn(`⚠️ [WEB] No pude consultar a ${ruc}: HTTP ${r.status}` +
                    (dijo || avisoLlaveWeb(r.status)));
       return false;
     }
 
     const filas = await r.json();
-    if (!filas.length) { console.warn(`⚠️ [WEB] ${ruc} no está en la base web; no se marca nada.`); return false; }
+    if (!filas.length) { log.warn(`⚠️ [WEB] ${ruc} no está en la base web; no se marca nada.`); return false; }
 
     const cli = filas[0];
     const perfil = (cli.tax_profile && typeof cli.tax_profile === 'object') ? cli.tax_profile : {};
@@ -2030,13 +2176,13 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
       body: JSON.stringify({ tax_profile: perfil, updated_at: new Date().toISOString() })
     });
 
-    if (!p.ok) { console.warn(`⚠️ [WEB] No pude marcar a ${ruc}: HTTP ${p.status}`); return false; }
-    console.log(estado === 'ok'
+    if (!p.ok) { log.warn(`⚠️ [WEB] No pude marcar a ${ruc}: HTTP ${p.status}`); return false; }
+    log.debug(estado === 'ok'
       ? `🌐 [WEB] ${ruc}: clave verificada OK, último ingreso registrado en Supabase.`
       : `🌐 [WEB] ${ruc} marcado en la web: clave ${estado}.`);
     return true;
   } catch (e) {
-    console.warn('⚠️ [WEB] Error marcando la credencial:', e);
+    log.warn('⚠️ [WEB] Error marcando la credencial:', e);
     return false;
   }
 }
@@ -2073,7 +2219,7 @@ async function syncDeclarationToSupabase(
   // Por ende, NO existe comprobante oficial de presentación para este período.
   const noEsDeclaracionEnviada = (customStatus === 'por_pagar' || customStatus === 'inconsistencia' || customStatus === 'sin_declarar');
   if (noEsDeclaracionEnviada) {
-    console.log(`🛑 [PDF GUARD] Declaración con estado '${customStatus}' (${ruc}, ${canonicalPeriod}): NO se adjunta comprobante PDF porque la declaración no fue presentada.`);
+    log.debug(`🛑 [PDF GUARD] Declaración con estado '${customStatus}' (${ruc}, ${canonicalPeriod}): NO se adjunta comprobante PDF porque la declaración no fue presentada.`);
     clearCapturedPdf('estado_no_enviado_' + customStatus);
     pdfContentBase64 = null;
   }
@@ -2086,7 +2232,7 @@ async function syncDeclarationToSupabase(
     const rucValido = !capturedPdfRuc || capturedPdfRuc === ruc;
     const periodoValido = !capturedPdfPeriod || capturedPdfPeriod === canonicalPeriod;
     if (!rucValido || !periodoValido) {
-      console.warn(`🚨 [PDF CONTAMINATION GUARD] Descartando PDF de memoria: RUC=${capturedPdfRuc || 'null'} (esperado: ${ruc}), Período=${capturedPdfPeriod || 'null'} (esperado: ${canonicalPeriod}).`);
+      log.warn(`🚨 [PDF CONTAMINATION GUARD] Descartando PDF de memoria: RUC=${capturedPdfRuc || 'null'} (esperado: ${ruc}), Período=${capturedPdfPeriod || 'null'} (esperado: ${canonicalPeriod}).`);
       clearCapturedPdf('ruc_o_periodo_mismatch');
       if (pdfContentBase64 === capturedPdfBase64) pdfContentBase64 = null;
     }
@@ -2096,7 +2242,7 @@ async function syncDeclarationToSupabase(
   let realPdf = noEsDeclaracionEnviada ? null : (pdfContentBase64 || capturedPdfBase64);
   if (typeof realPdf !== "string") realPdf = null;
   if (!noEsDeclaracionEnviada && !realPdf) {
-    console.log(
+    log.debug(
       "⏳ [PDF SYNC] Esperando emisión y captura del PDF oficial del SRI...",
     );
     for (let attempt = 0; attempt < 16; attempt++) {
@@ -2110,7 +2256,7 @@ async function syncDeclarationToSupabase(
       realPdf = pdfContentBase64 || capturedPdfBase64;
       if (typeof realPdf !== "string") realPdf = null;
       if (realPdf && realPdf.length > 3000) {
-        console.log(
+        log.debug(
           "✅ [PDF SYNC] ¡PDF Oficial SRI capturado exitosamente! Tamaño:",
           realPdf.length,
         );
@@ -2129,7 +2275,7 @@ async function syncDeclarationToSupabase(
   if (!noEsDeclaracionEnviada && realPdf) {
     pdfData = realPdf;
   } else if (!noEsDeclaracionEnviada && !realPdf) {
-    console.warn(`⚠️ [COMPROBANTE PENDIENTE] No se capturó PDF oficial del SRI para ${ruc} (${canonicalPeriod}). Se registrará sin PDF para su posterior recuperación limpia y auténtica desde Consulta de declaraciones.`);
+    log.warn(`⚠️ [COMPROBANTE PENDIENTE] No se capturó PDF oficial del SRI para ${ruc} (${canonicalPeriod}). Se registrará sin PDF para su posterior recuperación limpia y auténtica desde Consulta de declaraciones.`);
   }
 
   try {
@@ -2145,7 +2291,7 @@ async function syncDeclarationToSupabase(
     if (pdfData && !noEsDeclaracionEnviada) {
       // ── TIER 1: CLOUDFLARE R2 (.r2.cloudflarestorage.com + Worker Relay) ──
       try {
-        console.log("⚡ [STORAGE TIER 1] Subiendo PDF a Cloudflare R2 Vault ($0 Egress)...");
+        log.debug("⚡ [STORAGE TIER 1] Subiendo PDF a Cloudflare R2 Vault ($0 Egress)...");
         const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
         const byteCharacters = atob(cleanPdfData);
         const byteNumbers = new Array(byteCharacters.length);
@@ -2157,9 +2303,9 @@ async function syncDeclarationToSupabase(
 
         pdfUrl = await uploadToCloudflareR2Direct(vaultPath, pdfBlob, "application/pdf");
         storageProvider = "cloudflare_r2";
-        console.log("🚀 [STORAGE TIER 1] ¡PDF subido exitosamente a Cloudflare R2 ($0 Egress)! URL:", pdfUrl);
+        log.debug("🚀 [STORAGE TIER 1] ¡PDF subido exitosamente a Cloudflare R2 ($0 Egress)! URL:", pdfUrl);
       } catch (r2Err) {
-        console.warn("⚠️ [STORAGE TIER 1] Error subiendo a Cloudflare R2, recurriendo a Tier 2 (Supabase):", r2Err);
+        log.warn("⚠️ [STORAGE TIER 1] Error subiendo a Cloudflare R2, recurriendo a Tier 2 (Supabase):", r2Err);
       }
 
       // ── TIER 2: SUPABASE STORAGE (Fallback Cloud) ────────────────────────────
@@ -2170,21 +2316,21 @@ async function syncDeclarationToSupabase(
           const lenVault = parseInt(headVault.headers.get("content-length") || "0", 10);
           if (headVault.ok && lenVault > 4000) {
             pdfUrl = publicUrlVault;
-            console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault (${lenVault} bytes). Subida omitida.`);
+            log.debug(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en clients-vault (${lenVault} bytes). Subida omitida.`);
           } else {
             const headProofs = await fetch(publicUrlProofs, { method: "HEAD" });
             const lenProofs = parseInt(headProofs.headers.get("content-length") || "0", 10);
             if (headProofs.ok && lenProofs > 4000) {
               pdfUrl = publicUrlProofs;
-              console.log(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs (${lenProofs} bytes). Subida omitida.`);
+              log.debug(`⏩ [SUPABASE TOKEN SAVER] PDF para RUC ${ruc} (${periodStr}) ya existe en sri_proofs (${lenProofs} bytes). Subida omitida.`);
             }
           }
         } catch (headErr) {
-          console.warn("⚠️ Check HEAD error:", headErr);
+          log.warn("⚠️ Check HEAD error:", headErr);
         }
 
         if (!pdfUrl) {
-          console.log("⏳ [SUPABASE STORAGE] PDF faltante. Subiendo PDF a Storage...");
+          log.debug("⏳ [SUPABASE STORAGE] PDF faltante. Subiendo PDF a Storage...");
           try {
             const cleanPdfData = pdfData.includes("base64,") ? pdfData.split("base64,")[1] : pdfData;
             const byteCharacters = atob(cleanPdfData);
@@ -2212,7 +2358,7 @@ async function syncDeclarationToSupabase(
 
             if (uploadRes.ok) {
               pdfUrl = publicUrlVault;
-              console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a clients-vault:", pdfUrl);
+              log.info("✅ [SUPABASE STORAGE] PDF subido con éxito a clients-vault:", pdfUrl);
             } else {
               // Fallback a bucket 'sri_proofs'
               uploadRes = await fetch(
@@ -2231,13 +2377,13 @@ async function syncDeclarationToSupabase(
 
               if (uploadRes.ok) {
                 pdfUrl = publicUrlProofs;
-                console.log("✅ [SUPABASE STORAGE] PDF subido con éxito a sri_proofs:", pdfUrl);
+                log.info("✅ [SUPABASE STORAGE] PDF subido con éxito a sri_proofs:", pdfUrl);
               } else {
-                console.error("❌ [SUPABASE STORAGE] Error subiendo PDF en ambos buckets:", await uploadRes.text());
+                log.error("❌ [SUPABASE STORAGE] Error subiendo PDF en ambos buckets:", await uploadRes.text());
               }
             }
           } catch (storageErr) {
-            console.error("❌ [SUPABASE STORAGE] Excepción al subir PDF:", storageErr);
+            log.error("❌ [SUPABASE STORAGE] Excepción al subir PDF:", storageErr);
           }
         }
       }
@@ -2254,7 +2400,7 @@ async function syncDeclarationToSupabase(
         } else if (!noEsDeclaracionEnviada) {
           await anotarBitacora('⚠️ sin comprobante', 'la declaración quedó sin PDF en la nube');
         }
-      } catch (e) { console.warn('No se pudo registrar el estado del PDF:', e); }
+      } catch (e) { log.warn('No se pudo registrar el estado del PDF:', e); }
     }
 
     // 🛡️ Registrar hito en SriAuditor para rastreo determinista de comprobante
@@ -2267,7 +2413,7 @@ async function syncDeclarationToSupabase(
             nombre: clientName
           });
         }
-      } catch (eAud) { console.warn('SriAuditor hito error:', eAud); }
+      } catch (eAud) { log.warn('SriAuditor hito error:', eAud); }
     }
 
     const fetchRes = await fetch(
@@ -2389,12 +2535,12 @@ async function syncDeclarationToSupabase(
       });
 
       if (res1.ok || res1.status === 201 || res1.status === 204) {
-        console.log(`✅ [SUPABASE] sri_declaraciones guardado (upsert): ${ruc} (${canonicalPeriod}).`);
+        log.info(`✅ [SUPABASE] sri_declaraciones guardado (upsert): ${ruc} (${canonicalPeriod}).`);
       } else {
         const errText = await res1.text().catch(() => "");
         // Si falló con 401/42501 (falta de política UPDATE en RLS para anon), intentar INSERT directo
         if (res1.status === 401 || errText.includes("42501")) {
-          console.warn(`⚠️ [SUPABASE] Upsert bloqueado por RLS (401/42501). Probando INSERT directo para ${ruc}...`);
+          log.warn(`⚠️ [SUPABASE] Upsert bloqueado por RLS (401/42501). Probando INSERT directo para ${ruc}...`);
           const resDirect = await fetch(`${SUPABASE_URL}/rest/v1/sri_declaraciones`, {
             method: "POST",
             headers: {
@@ -2406,18 +2552,18 @@ async function syncDeclarationToSupabase(
           });
 
           if (resDirect.ok || resDirect.status === 201) {
-            console.log(`✅ [SUPABASE] sri_declaraciones guardado (INSERT directo): ${ruc} (${canonicalPeriod}).`);
+            log.info(`✅ [SUPABASE] sri_declaraciones guardado (INSERT directo): ${ruc} (${canonicalPeriod}).`);
           } else if (resDirect.status === 409) {
-            console.log(`ℹ️ [SUPABASE] sri_declaraciones ya existía para ${ruc} (${canonicalPeriod}).`);
+            log.debug(`ℹ️ [SUPABASE] sri_declaraciones ya existía para ${ruc} (${canonicalPeriod}).`);
           } else {
-            console.warn(`⚠️ [SUPABASE] sri_declaraciones INSERT falló: HTTP ${resDirect.status}`);
+            log.warn(`⚠️ [SUPABASE] sri_declaraciones INSERT falló: HTTP ${resDirect.status}`);
           }
         } else {
-          console.warn(`⚠️ [SUPABASE] sri_declaraciones POST HTTP ${res1.status}: ${errText.slice(0, 150)}`);
+          log.warn(`⚠️ [SUPABASE] sri_declaraciones POST HTTP ${res1.status}: ${errText.slice(0, 150)}`);
         }
       }
     } catch (e1) {
-      console.warn("⚠️ sri_declaraciones POST error:", e1);
+      log.warn("⚠️ sri_declaraciones POST error:", e1);
     }
 
     // 2. Doble sincronización en clients.declaration_history para máxima compatibilidad con el dashboard web
@@ -2466,15 +2612,15 @@ async function syncDeclarationToSupabase(
       });
 
       if (resPatch.ok || resPatch.status === 204) {
-        console.log(`✅ [SUPABASE] clients.declaration_history actualizado para ${ruc} (${canonicalPeriod}).`);
+        log.info(`✅ [SUPABASE] clients.declaration_history actualizado para ${ruc} (${canonicalPeriod}).`);
       } else {
-        console.warn(`⚠️ [SUPABASE] clients.declaration_history PATCH HTTP ${resPatch.status}`);
+        log.warn(`⚠️ [SUPABASE] clients.declaration_history PATCH HTTP ${resPatch.status}`);
       }
     } catch (patchErr) {
-      console.warn("⚠️ clients declaration_history PATCH error:", patchErr);
+      log.warn("⚠️ clients declaration_history PATCH error:", patchErr);
     }
 
-    console.log(
+    log.debug(
       "⚡ [SUPABASE WEBSYSTEM] Objeto proof_file con PDF real guardado en Supabase (sri_declaraciones + clients):",
       ruc,
       canonicalPeriod,
@@ -2513,10 +2659,10 @@ async function syncDeclarationToSupabase(
         });
       }
     } catch (cacheErr) {
-      console.warn("⚠️ Local cache sync error:", cacheErr);
+      log.warn("⚠️ Local cache sync error:", cacheErr);
     }
   } catch (e) {
-    console.warn("⚠️ Supabase sync error:", e);
+    log.warn("⚠️ Supabase sync error:", e);
   } finally {
     clearCapturedPdf('post_sync_complete');
   }
@@ -2540,7 +2686,7 @@ async function guardarReporteExtraccionEnPerfil(reportData) {
     try {
       const q = typeof quienEstaEnElPortal === 'function' ? quienEstaEnElPortal() : {};
       ruc = q.ruc || null;
-    } catch (e) {}
+    } catch (e) { /* sin contexto del portal: ruc queda nulo */ }
   }
   if (!ruc) return { ok: false, error: 'No se pudo detectar el RUC del contribuyente' };
 
@@ -2548,7 +2694,7 @@ async function guardarReporteExtraccionEnPerfil(reportData) {
   const periodLabel = reportData.periodLabel || (reportData.period ? (reportData.period.label || `AÑO_${reportData.period.year}`) : 'EXTRACCION');
   const anio = (reportData.period && reportData.period.year) ? parseInt(reportData.period.year, 10) : new Date().getFullYear();
 
-  console.log(`💾 [EXTRACTOR] Guardando reporte de ${ruc} (${periodLabel})...`, totals);
+  log.debug(`💾 [EXTRACTOR] Guardando reporte de ${ruc} (${periodLabel})...`, totals);
 
   // 1. Guardar en memoria local (SafeStorage / sc_declaraciones_locales)
   try {
@@ -2565,9 +2711,9 @@ async function guardarReporteExtraccionEnPerfil(reportData) {
       breakdown: reportData.breakdown || []
     };
     await SafeStorage.set({ sc_declaraciones_locales: loc });
-    console.log(`✅ [LOCAL] Reporte guardado localmente bajo clave: ${key}`);
+    log.info(`✅ [LOCAL] Reporte guardado localmente bajo clave: ${key}`);
   } catch (eLoc) {
-    console.warn('⚠️ Error guardando reporte local:', eLoc);
+    log.warn('⚠️ Error guardando reporte local:', eLoc);
   }
 
   // 2. Sincronizar en Supabase clients.declaration_history si hay conectividad
@@ -2624,12 +2770,12 @@ async function guardarReporteExtraccionEnPerfil(reportData) {
           });
           if (resPatch.ok || resPatch.status === 204) {
             nubeOk = true;
-            console.log(`✅ [NUBE] Reporte sincronizado con clients.declaration_history de ${ruc}`);
+            log.info(`✅ [NUBE] Reporte sincronizado con clients.declaration_history de ${ruc}`);
           }
         }
       }
     } catch (eNube) {
-      console.warn('⚠️ Error sincronizando reporte con Supabase:', eNube);
+      log.warn('⚠️ Error sincronizando reporte con Supabase:', eNube);
     }
   }
 
@@ -2646,7 +2792,7 @@ async function handleBatchNextClient() {
   // sriAutomationPaused:false en CADA salto, así que la pausa del usuario
   // moría al terminar el cliente en curso y el lote se resucitaba solo.
   if (typeof SriLoop !== 'undefined' && await SriLoop.debeFrenarTrasCliente()) {
-    console.log('⏸️ [BUCLE] No se salta al siguiente cliente: el lote está pausado o detenido.');
+    log.debug('⏸️ [BUCLE] No se salta al siguiente cliente: el lote está pausado o detenido.');
     if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
       window.sriAssistant.showEliteToast({
         title: '⏸️ Lote en pausa',
@@ -2688,12 +2834,12 @@ async function handleBatchNextClient() {
         batchEnabled = true;
         queue = loopData.cola;
         currentIndex = loopData.indice || 0;
-        console.log(`🚦 [BUCLE] Cola del semáforo: ${currentIndex + 1}/${queue.length}.`);
+        log.debug(`🚦 [BUCLE] Cola del semáforo: ${currentIndex + 1}/${queue.length}.`);
       }
     }
 
   if (!batchEnabled || queue.length === 0) {
-    console.log("🏁 [MODO AUTO BUCLE] No hay cola activa de lote.");
+    log.info("🏁 [MODO AUTO BUCLE] No hay cola activa de lote.");
     return false;
   }
 
@@ -2726,7 +2872,7 @@ async function handleBatchNextClient() {
   // 🗓️ Y si hay una ORDEN DE MESES activa, el tren se frena: la orden es del
   // cliente elegido y no queremos que se metan clientes sueltos en el medio.
   if (ordenActiva) {
-    console.log('🗓️ [ORDEN MESES] Ferrocarril desactivado: la cola es una orden del mismo contribuyente.');
+    log.debug('🗓️ [ORDEN MESES] Ferrocarril desactivado: la cola es una orden del mismo contribuyente.');
   } else {
   const benditaActiva = await leerBendita();   // null = inactiva = todos entran
   const benditaSet = benditaActiva === null ? null : new Set(benditaActiva.map(String));
@@ -2753,7 +2899,7 @@ async function handleBatchNextClient() {
   }
 
   if (nuevosAgregados > 0) {
-    console.log(`🚂 [FERROCARRIL] Se añadieron ${nuevosAgregados} nuevos clientes detectados a la cola del lote.`);
+    log.debug(`🚂 [FERROCARRIL] Se añadieron ${nuevosAgregados} nuevos clientes detectados a la cola del lote.`);
     await SafeStorage.set({ auto_batch_queue: queue });
     if (typeof SriLoop !== 'undefined') {
       const loopActual = await SriLoop.get();
@@ -2780,11 +2926,11 @@ async function handleBatchNextClient() {
     // subió, o si el cliente no estaba marcado para recuperar nada.
     const reg = registroLocal[`${clientRuc}|${clientPer}`];
     if (reg && (reg.pdfSubido || !item.soloRecuperar)) {
-      console.log(`🧾 [REGISTRO] ${clientRuc} ya declaró ${clientPer} en esta corrida.`);
+      log.debug(`🧾 [REGISTRO] ${clientRuc} ya declaró ${clientPer} en esta corrida.`);
       return true;
     }
     if (item.hasPdf === true) {
-      console.log(`🛡️ [BUCLE FERROCARRIL] ${clientRuc} ya posee comprobante confirmado (${clientPer}). Saltando.`);
+      log.debug(`🛡️ [BUCLE FERROCARRIL] ${clientRuc} ya posee comprobante confirmado (${clientPer}). Saltando.`);
       return true;
     }
     if (tried[clientRuc] && (tried[clientRuc].status === 'failed' || tried[clientRuc].status === 'locked' || tried[clientRuc].status === 'blocked')) return true;
@@ -2809,7 +2955,7 @@ async function handleBatchNextClient() {
     nextIndex < queue.length &&
     isClientDoneOrError(queue[nextIndex])
   ) {
-    console.log(
+    log.debug(
       `⏩ [MODO AUTO BUCLE] Saltando cliente ya realizado, con error o credencial fallida: ${queue[nextIndex].ruc}`,
     );
     nextIndex++;
@@ -2820,7 +2966,7 @@ async function handleBatchNextClient() {
     const clientPer = nextClient.period || targetPeriodStr;
     if (typeof setActiveWorkflowClient === 'function') setActiveWorkflowClient(nextClient.ruc, clientPer);
     if (typeof clearCapturedPdf === 'function') clearCapturedPdf('handleBatchNextClient_next_client');
-    console.log(
+    log.debug(
       `🚀 [MODO AUTO BUCLE] Siguiente cliente (${nextIndex + 1}/${queue.length}): ${nextClient.name} (${nextClient.ruc}) [Período: ${clientPer}] [Modo: ${res.auto_batch_mode || 'startIvaNavigation'}]`,
     );
 
@@ -2831,7 +2977,7 @@ async function handleBatchNextClient() {
         delete rb[nextClient.ruc];
         await SafeStorage.set({ sc_rebotes: rb });
       }
-    } catch (e) {}
+    } catch (e) { /* no se pudo limpiar el rebote: no es crítico */ }
 
     const pParts = clientPer.split("-");
     const pYear = parseInt(pParts[0]);
@@ -2850,7 +2996,7 @@ async function handleBatchNextClient() {
     // El orden «primero el comprobante» pedido por el usuario depende de que
     // ESTA rama también lo respete, no sólo la del primer cliente.
     if (nextClient.soloEstarAdentro || nextClient.pendingAction === 'solo_perfil') {
-      console.log(`🌐 [SOLO SESIÓN SRI] ${nextClient.name || nextClient.ruc}: solo entra al portal y permanece en escritorio.`);
+      log.debug(`🌐 [SOLO SESIÓN SRI] ${nextClient.name || nextClient.ruc}: solo entra al portal y permanece en escritorio.`);
       await SafeStorage.set({
         auto_batch_index: nextIndex,
         pending_sri_autofill: {
@@ -2869,7 +3015,7 @@ async function handleBatchNextClient() {
     }
 
     if (nextClient.soloProbarClave) {
-      console.log(`🔑 [PROBAR CLAVES] ${nextClient.name || nextClient.ruc}: sólo entra y sale, no declara nada.`);
+      log.debug(`🔑 [PROBAR CLAVES] ${nextClient.name || nextClient.ruc}: sólo entra y sale, no declara nada.`);
       await SafeStorage.set({
         auto_batch_index: nextIndex,
         pending_sri_autofill: {
@@ -2892,7 +3038,7 @@ async function handleBatchNextClient() {
     }
 
     if (nextClient.soloRecuperar) {
-      console.log(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc} ya declaró: solo se recupera su comprobante.`);
+      log.debug(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc} ya declaró: solo se recupera su comprobante.`);
       await SafeStorage.set({
         auto_batch_index: nextIndex,
         pending_sri_autofill: {
@@ -2927,7 +3073,7 @@ async function handleBatchNextClient() {
     // handler de `bajar_todos_comprobantes` en 03_ingreso_y_sesion.js sigue
     // con `continuarCon` en cuanto el barrido de años termina.
     if (nextClient.barrerAntes) {
-      console.log(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc}: primero el comprobante, después declarar.`);
+      log.debug(`🧾 [BUCLE] ${nextClient.name || nextClient.ruc}: primero el comprobante, después declarar.`);
       await SafeStorage.set({
         auto_batch_index: nextIndex,
         pending_sri_autofill: {
@@ -2997,7 +3143,7 @@ async function handleBatchNextClient() {
     const itemAnterior = queue[currentIndex] || {};
     const mismosRuc = !!(ordenActiva && nextClient.ruc && itemAnterior.ruc === nextClient.ruc);
     if (mismosRuc && !window.location.href.toLowerCase().includes('/auth/realms/')) {
-      console.log(
+      log.debug(
         '🗓️ [ORDEN MESES] Mismo contribuyente, siguiente mes sin cerrar sesión: navegando a Comprobantes...',
         `${nextClient.period || targetPeriodStr}`,
       );
@@ -3006,14 +3152,14 @@ async function handleBatchNextClient() {
       return true;
     }
 
-    console.log(
+    log.debug(
       "🔒 Cerrando sesión SRI para iniciar con el siguiente cliente...",
     );
     await sleep(1000);
     await cerrarSesionSRI();
     return true;
   } else {
-    console.log(
+    log.debug(
       "🎉 [MODO AUTO BUCLE] ¡Lote completado! Todos los clientes han sido procesados.",
     );
     // 🛑 DETENER EL SEMÁFORO Y PURGAR CREDENCIALES: Si no se detiene SriLoop y no se limpia
@@ -3060,7 +3206,7 @@ async function executeLogin(ruc, password) {
   if (typeof SriCredentialVault !== 'undefined') {
     const check = await SriCredentialVault.canAttemptLogin(ruc, password);
     if (!check.allowed) {
-      console.warn(`🛑 [BLINDAJE SEGURIDAD] executeLogin cancelado para ${ruc}: ${check.reason}`);
+      log.warn(`🛑 [BLINDAJE SEGURIDAD] executeLogin cancelado para ${ruc}: ${check.reason}`);
       if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
         window.sriAssistant.showEliteToast({
           title: '🛡️ Bloqueo Preventivo',
@@ -3083,7 +3229,7 @@ async function executeLogin(ruc, password) {
     escribirCampo(rucInput, ruc);
     escribirCampo(passInput, password);
 
-    console.log(
+    log.debug(
       "✅ Credenciales inyectadas desde Widget Flotante. Ingresando...",
     );
     setTimeout(() => {
@@ -3092,7 +3238,7 @@ async function executeLogin(ruc, password) {
     }, 300);
   } else {
     // Estamos en la portada de inicio (ej. sri-en-linea/inicio/NAT)
-    console.log(
+    log.debug(
       '🚪 Portada de inicio detectada. Buscando botón "Iniciar sesión"...',
     );
 
@@ -3115,7 +3261,7 @@ async function executeLogin(ruc, password) {
           : null);
 
       if (loginLink) {
-        console.log(
+        log.debug(
           '✅ Botón "Iniciar sesión" en portada detectado. Clickeando...',
           loginLink,
         );
@@ -3125,7 +3271,7 @@ async function executeLogin(ruc, password) {
         const parentLink = loginLink.closest("a, button");
         if (parentLink) parentLink.click();
       } else {
-        console.log("🔄 Redirigiendo a Keycloak SSO directamente...");
+        log.debug("🔄 Redirigiendo a Keycloak SSO directamente...");
         window.location.href =
           "https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&state=956332a7-6de0-48d7-8f53-a635625c30a5&nonce=4c3d7ddb-c8f7-4227-8186-babb562e36b3&response_mode=fragment&response_type=code&scope=openid";
       }
@@ -3352,7 +3498,7 @@ async function fetchClientsDirectly() {
     const list = Array.isArray(cache.sc_clients_cache) ? cache.sc_clients_cache : [];
     return list.filter(isClientMensual);
   } catch (err) {
-    console.warn("fetchClientsDirectly error:", err);
+    log.warn("fetchClientsDirectly error:", err);
     return [];
   }
 }

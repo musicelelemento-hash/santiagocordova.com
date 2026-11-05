@@ -114,6 +114,8 @@ const BANCOS = [
                        'Que la bisección encuentre los RUC —sobre todo los de los bordes— y que sugiera sin decidir.'],
   ['proveedores.html', 'La base de proveedores',
                        'Que se aprenda mirando y que una sugerencia jamás pise lo que decidió el contador.'],
+  ['credito.html',     'El crédito tributario: 500 vs 502',
+                       'Que una compra marcada sin derecho vaya al 502 y no al 500, y que lo no clasificado nunca se mande al 502 por las dudas.'],
   ['notasventa.html',  'Notas de venta (508 y 117)',
                        'Que si nadie contesta, el lote siga y NO se invente un cero.'],
   ['chequeo.html',     'El chequeo previo',
@@ -211,17 +213,27 @@ function correrUno(archivo, tope = 90000) {
   });
 }
 
-$('correr').addEventListener('click', async () => {
+/**
+ * Corre todos los bancos y devuelve el resultado, además de pintarlo.
+ *
+ * Devolverlo es lo que permite el modo `?auto=1`: un runner headless mira
+ * `window.__testResultado` y no necesita leer la tabla. Sin esto, los 888
+ * checks sólo existían si alguien abría la página y hacía clic.
+ */
+async function correrTodos() {
   const boton = $('correr');
   boton.disabled = true;
   boton.textContent = 'Corriendo…';
   BANCOS.forEach(([a]) => { $('r-' + a).textContent = '…'; $('r-' + a).className = 'num'; });
 
   let totales = 0, fallos = 0, rotos = 0;
+  const detalle = [];
+
   // De a uno: ocho bancos en paralelo se pisan el almacenamiento simulado y
   // el resultado dejaría de significar nada.
   for (const [archivo] of BANCOS) {
     const r = await correrUno(archivo);
+    detalle.push(r);
     const celda = $('r-' + archivo);
     const seg = (r.ms / 1000).toFixed(1) + 's';
 
@@ -258,5 +270,34 @@ $('correr').addEventListener('click', async () => {
 
   boton.disabled = false;
   boton.textContent = 'Correr de nuevo';
-});
+
+  return {
+    ok: !fallos && !rotos,
+    totales,
+    fallos,
+    rotos,
+    bancos: detalle,
+    cuando: Date.now()
+  };
+}
+
+$('correr').addEventListener('click', correrTodos);
+
+// ── Modo automático ─────────────────────────────────────────────────────────
+// `tests/index.html?auto=1` corre la suite y deja el veredicto en
+// `window.__testResultado` + `document.body.dataset.testEstado`. Lo usa
+// `tests/run.mjs` para que esto pueda correr en CI sin un navegador abierto.
+if (new URLSearchParams(location.search).has('auto')) {
+  document.body.dataset.testEstado = 'corriendo';
+  correrTodos().then((res) => {
+    window.__testResultado = res;
+    document.body.dataset.testEstado = res.ok ? 'ok' : 'mal';
+    document.body.dataset.testResumen = `${res.totales}|${res.fallos}|${res.rotos}`;
+    document.title = res.ok ? `OK ${res.totales}` : `FALLO ${res.fallos}/${res.totales}`;
+  }).catch((e) => {
+    window.__testResultado = { ok: false, error: String((e && e.stack) || e) };
+    document.body.dataset.testEstado = 'error';
+    document.title = 'ERROR';
+  });
+}
 </script>

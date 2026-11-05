@@ -1,5 +1,5 @@
 # ESTADO DEL PROYECTO — COLABORACIÓN ANTIGRAVITY & CLAUDE CODE
-> **Fecha de actualización:** 22-sep-2026  
+> **Fecha de actualización:** 05-nov-2026  
 > **Entorno de trabajo:** Multi-agente (Antigravity IDE + Claude Code en paralelo)  
 > **Rama activa en repositorio raíz:** `extension/nueva-luz-control-bucle`  
 > **Sub-repositorio web (`santiagocordova-main`):** `main`
@@ -41,6 +41,133 @@
 
 ---
 
+## 🏆 2₇ · HITOS DE HOY (05-NOV-2026)
+
+### 1. El 522 dejó de frenar el envío: el IVA de lo que va sin derecho a crédito
+
+- **El error real** (caso `PEREZ LOPEZ FELIX MANUEL`, RUC `0701694226001`,
+  octubre 2026): el bot escribía `502 = 11.73` y `512 = 11.73`, pero dejaba
+  `522 = 0.00`. El SRI pinta ese input de rojo y **no deja pasar de pantalla**.
+  El IVA correcto era `1.76` — el 15% de la base apartada.
+- **Por qué el sugerido no salvaba**: `concepto1276.sugerido` (casillero 565)
+  vino en `0.00`; no sirve de rescate cuando la base es distinta de cero. El
+  campo que hay que escribir es `concepto1480` (el input rojo del 522).
+- **Lo construido**: `ivaDelBloqueSinCredito()` calcula el IVA real de las
+  facturas apartadas; `leerSugeridoEnFila()` usa el sugerido **sólo si es
+  positivo**; PASO 2.2 escribe 502 → 512 → 522 y registra de dónde salió cada
+  número. Si no hay forma honesta de saber el IVA, va a `iva_sin_ubicar` y el
+  cierre mágico frena en vez de inventar un impuesto.
+- **Verificación**: `credito.html` 45 → 70 comprobaciones (incluye el caso real
+  y el sugerido en cero). Build **`3.1.0+20261105.1014`**.
+
+### 2. Cada cliente tiene su perfil de proveedores — y la web lo ve
+
+- **El problema**: `vistoEn` contestaba «¿alguna vez le facturó?», no «cuánto,
+  cuándo y a qué tarifa». El perfil del cliente mostraba una lista de nombres,
+  y correr la extracción dos veces —tabla y después TXT— **duplicaba** montos.
+- **Lo construido**:
+  - `registrarLote(lista, clienteRuc, periodo)` guarda una **foto por período**
+    en `p.clientes[ruc].periodos[YYYY-MM]` (`facturas` / `notasCredito` con
+    base, IVA, total, tarifas y veces). La foto **reemplaza**, no acumula: el
+    doble conteo desapareció.
+  - `deCliente()`, `perfilDeCliente()` y `sugerencias()`: proveedores del
+    cliente con montos y períodos, «nivel de perfil» (0–100: clasificados 50,
+    actividad 25, montos 15, período 10) y pistas para clasificar.
+  - La **nota de crédito resta** de la base y del IVA (`_recalcularCliente`).
+  - HUD 🏷️: todos los proveedores del cliente (histórico incluido), plata del
+    período vs. histórica, banda de nivel y una línea `💡` por fila. Tope 80.
+  - Puente a la web: `bridge_content.js` responde `SRI_REQUEST_CLIENT_PROVIDERS`
+    con `sc_proveedores_cliente_<ruc>` y refresca al cambiar `sc_proveedores`.
+    `SupplierCatalogService.getClientProviders()` lo lee y `ProfileTab` lo pinta
+    con el nivel y la lista completa («Ver los N proveedores»).
+- **Regla que no se tocó**: las pistas **no deciden**. Lo que marcó el contador
+  no lo pisa ninguna sugerencia; sin clasificar, la compra va donde iba antes —
+  nunca al 502 «por las dudas».
+- **Verificación**: `proveedores.html` 88 · `credito.html` 70 · suite completa
+  **888 comprobaciones, todas verdes**.
+
+### 3. Tanda 0 y 1: la extensión dejó de llevar secretos encima y los tests dejaron de ser manuales
+
+- **Claves R2 fuera del repositorio**: `shared_config.js` ya no contiene
+  `R2_ACCESS_KEY_ID` ni `R2_SECRET_ACCESS_KEY`. Van vacías y se cargan en
+  Ajustes → «Access Key ID de R2» / «Clave secreta de R2», que las guarda en
+  `chrome.storage.local` (el service worker ya las prefería). La subida por
+  Worker sigue igual; la directa a S3 queda deshabilitada hasta cargarlas.
+- **`host_permissions` estrechados**: fuera `*.supabase.co`, `*.workers.dev`,
+  `*.r2.cloudflarestorage.com` y `*.r2.dev`; quedan el proyecto exacto de
+  Supabase, el Worker del proyecto, el host exacto del bucket y el dominio
+  público de R2. Un comodín le daba a la extensión permiso sobre la cuenta de
+  almacenamiento de cualquiera.
+- **Bridge endurecido**: `bridge_content.js` valida forma y topes de lo que
+  llega por `postMessage` (RUC de 13 dígitos, claves ≤128 caracteres,
+  500 clientes por lote / 2000 por matriz). No autentica —imposible entre
+  página y content script— pero un payload roto ya no deja el lote en un
+  estado raro ni llena el almacén.
+- **Registro con niveles**: `SC_LOG` / `log.debug|info|warn|error` en
+  `01_utilidades_y_pdf.js`, con las últimas 300 líneas en memoria
+  (`scLogBuffer()`). El detalle ruidoso (latido, guard de visibilidad, ojo de
+  halcón, detección por topbar) sólo sale con el interruptor
+  **Ajustes → 🐞 Diagnóstico** (`sc_debug`), que se guarda al instante.
+- **Tests headless**: `tests/index.html?auto=1` deja el veredicto en
+  `window.__testResultado` y `tests/run.mjs` lo corre en el Chrome/Edge ya
+  instalado (CDP sobre el WebSocket nativo de Node, sin dependencias nuevas).
+  `npm test` sale 0/1 y sirve para CI; `npm test -- --headed` muestra el
+  navegador. `npm run check` valida sintaxis de todos los módulos y corre la
+  suite. `npm run build:dev` compila sin minificar (el stack queda legible).
+- **Verificación**: suite completa **891 comprobaciones, todas verdes** en
+  Chrome headless (57 s); `subidas.html` 30 (incluye que los comodines ya no
+  estén). Build **`3.1.0+20261105.1100`**.
+- **Deuda anotada, no resuelta**: las contraseñas SRI siguen en texto plano en
+  `sri_active_credentials`, `sc_clients_history`, `sc_clients_cache`,
+  `auto_batch_queue`, `sc_loop.cola` y `pending_sri_autofill`; están
+  entrelazadas con la cola del lote y un cambio apurado rompe el login. Y las
+  claves R2 viejas hay que **rotarlas en Cloudflare** y purgarlas del historial
+  de git: las dos cosas requieren acción del usuario.
+
+---
+
+## 🏆 2₆ · HITOS DE HOY (04-NOV-2026)
+
+### 1. El crédito tributario de las compras dejó de ser decorativo: 500/510 vs 502/512
+
+- **El problema real**: en 🏷️ se podía marcar un proveedor como «sin derecho a
+  crédito» desde el 06-sep, y **no pasaba nada**. `llenarCompras()` escribía
+  todo el 15% en 500/510 y el 502/512 no se usaba nunca. Un botón que no hace
+  nada es peor que no tenerlo: hace creer que el dato ya está declarado.
+- **Lo construido** (detalle en `.agents/AGENTS.md` §0b.1):
+  - `Proveedores` guarda la decisión **por cliente** (`porCliente`) además del
+    criterio general, y la resuelve con tres estados (`true` / `false` /
+    **`null`**). Nuevos: `creditoDe`, `mapaCredito`, `todos`,
+    `olvidarClasificacion`, `_resolver`.
+  - `CreditoCliente` (`sc_credito_cliente`): el flag `soloCero` —«vende sólo al
+    0%»: salud, educación, transporte— manda todas sus compras gravadas al 502
+    de una sola vez (razón #4 del criterio del contador, AGENTS §12).
+  - `calcularResumen()` devuelve `detalle15` / `detalle5`: emisor, base e IVA
+    por comprobante. De las mezcladas va **sólo la parte gravada**.
+  - `repartirCreditoCompras()` (función pura) y `repartirComprasPorCredito()`:
+    deciden cuánto va sin derecho. **Nunca** mueven lo que nadie clasificó.
+  - `llenarCompras()`: `500/510 = total − sin derecho`, y `502/512 = lo
+    marcado` (el 5% sin derecho también entra al 502). Si el 502 no está en
+    pantalla, **no** manda esa plata al 500 —eso inflaría el crédito—: anota
+    en `iva_sin_ubicar` y el cierre mágico frena el envío.
+  - Panel 🏷️: lista por cliente, lo del período primero, **vista previa en
+    dinero** (`$X → 500/510 · $Y → 502/512`), interruptor «vende sólo al 0%» y
+    `↺` para deshacer una clasificación.
+- **Arreglo colateral**: `sri_ultimo_arqueo_compras` se guardaba **en ceros**
+  (leía `resumen.baseTotal`, `iva15.base`, `tarifaCero`, campos que no
+  existen). Ahora sale de los tres baldes reales.
+- **Verificación**: `node --check` en los 7 módulos · build
+  **`3.1.0+20261104.2103`** · bancos: `credito.html` nuevo (45),
+  `proveedores.html` 58 → 88, `iva5.html` 194 (se actualizó su expectativa de
+  la botonera: el 🗓 `slh-periodo` ya existía en `src` y el bundle viejo no lo
+  tenía — el banco pasaba por desactualizado, no por sano).
+  **Suite completa: 24 bancos, 863 comprobaciones, todas verdes.**
+- **Lo que falta para cerrarlo del todo**: el mapa fino *CIIU del proveedor ×
+  actividad del cliente* («¿una ferretería es insumo de esta actividad?»). Hoy
+  lo responde el contador marcando proveedor por proveedor; el flag `soloCero`
+  cubre el caso masivo.
+
+---
 ## 🏆 2₅. HITOS DE HOY (14-OCT-2026)
 
 ### 1. Blindaje Triple Anti-Bucle en Auto-Login y Cierre Limpio de Sesión

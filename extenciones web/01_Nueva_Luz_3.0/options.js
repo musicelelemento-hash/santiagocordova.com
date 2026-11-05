@@ -16,6 +16,7 @@
 const CLAVE_IA = 'sc_ia_credenciales';
 const CLAVE_R2 = 'sc_r2_credenciales';
 const CLAVE_WEB = 'sc_supabase_credenciales';
+const CLAVE_DEBUG = 'sc_debug';
 
 const $ = (id) => document.getElementById(id);
 
@@ -32,7 +33,7 @@ function comoTermina(valor) {
 }
 
 async function pintarEstado() {
-    const g = await chrome.storage.local.get([CLAVE_IA, CLAVE_R2, CLAVE_WEB]);
+    const g = await chrome.storage.local.get([CLAVE_IA, CLAVE_R2, CLAVE_WEB, CLAVE_DEBUG]);
     const ia = (g[CLAVE_IA] || {}).apiKey;
     const r2 = (g[CLAVE_R2] || {}).R2_SECRET_ACCESS_KEY;
 
@@ -44,8 +45,19 @@ async function pintarEstado() {
     // El Access Key ID no es secreto —viaja en cada petición firmada—, así que
     // se muestra entero: sirve para comprobar de un vistazo que quedó el nuevo.
     const id = (g[CLAVE_R2] || {}).R2_ACCESS_KEY_ID;
-    $('estadoIdR2').textContent = id || 'no hay ninguno guardado (se usa el del código)';
+    $('estadoIdR2').textContent = id || 'no hay ninguno guardado';
     $('estadoIdR2').dataset.hay = id ? 'si' : 'no';
+
+    const debug = !!g[CLAVE_DEBUG];
+    const chk = $('chkDebug');
+    if (chk) chk.checked = debug;
+    const estadoDebug = $('estadoDebug');
+    if (estadoDebug) {
+        estadoDebug.textContent = debug
+            ? 'Encendido: la consola muestra el detalle de cada paso.'
+            : 'Apagado: sólo salen los avisos importantes.';
+        estadoDebug.dataset.hay = debug ? 'si' : 'no';
+    }
 
     const web = (g[CLAVE_WEB] || {}).SUPABASE_ANON_KEY;
     $('estadoWeb').textContent = web ? comoTermina(web) : 'no hay ninguna guardada (se usa la del código)';
@@ -355,6 +367,15 @@ document.addEventListener('DOMContentLoaded', () => {
         b.addEventListener('click', () => borrarUna(b.getAttribute('data-borra')));
     });
     $('btnProbarSubida').addEventListener('click', probarSubida);
+
+    // El modo depuración se guarda al instante: es un interruptor, no una
+    // credencial, y quien lo prende suele estar mirando la consola del SRI.
+    $('chkDebug')?.addEventListener('change', async (e) => {
+        if (e.target.checked) await chrome.storage.local.set({ [CLAVE_DEBUG]: true });
+        else await chrome.storage.local.remove([CLAVE_DEBUG]);
+        await pintarEstado();
+        avisar(e.target.checked ? '🐞 Depuración encendida' : '🐞 Depuración apagada');
+    });
 
     // Enter en cualquiera de los dos campos guarda: es lo que espera cualquiera
     // que acaba de pegar una clave.

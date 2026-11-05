@@ -5,7 +5,9 @@
   "main": "bridge_content.js",
   "scripts": {
     "build": "vite build",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:dev": "vite build",
+    "test": "node tests/run.mjs",
+    "check": "node --check src/01_utilidades_y_pdf.js && node --check src/02_servicios_y_memoria.js && node --check src/03_ingreso_y_sesion.js && node --check src/04_extraccion_datos.js && node --check src/05_llenado_formulario.js && node --check src/06_panel_interfaz.js && node --check src/07_navegacion_sri.js && node --check bridge_content.js && node --check options.js && node --check popup.js && node --check background.js && node --check tests/run.mjs && npm test"
   },
   "keywords": [],
   "author": "",

@@ -30,7 +30,7 @@ const SafeStorage = {
         }
     },
     handleDisconnection() {
-        console.error('🛑 [CRITICO] La extensión se ha desconectado o actualizado.');
+        log.error('🛑 [CRITICO] La extensión se ha desconectado o actualizado.');
         const overlay = document.createElement('div');
         overlay.id = 'sri-disconnection-overlay';
         overlay.innerHTML = `
@@ -225,7 +225,7 @@ const SriAuditor = {
         todos[cl] = actual;
         await SafeStorage.set({ [this._KEY]: todos });
 
-        console.log(`🛡️ [AUDITOR] Hito registrado [${hito}] para ${actual.nombre || ruc} (${normPer})`, extra);
+        log.debug(`🛡️ [AUDITOR] Hito registrado [${hito}] para ${actual.nombre || ruc} (${normPer})`, extra);
         if (typeof anotarBitacora === 'function') {
             anotarBitacora(`AUDITOR · ${hito}`, `${actual.nombre || ruc} · ${normPer}`);
         }
@@ -253,7 +253,7 @@ const SriAuditor = {
             const stor = await SafeStorage.get(['sc_declaraciones_locales']);
             const loc = stor.sc_declaraciones_locales || {};
             if (loc[cl] || loc[`${r}|${normPer}`] || loc[`${r}_${normPer}`]) return true;
-        } catch (e) {}
+        } catch (e) { /* sin declaraciones locales: se asume que falta */ }
 
         // Respaldo en formato histórico filed_RUC_2011_MES_AÑO
         try {
@@ -274,7 +274,7 @@ const SriAuditor = {
                 const legRes = await SafeStorage.get([legacyKey]);
                 if (legRes[legacyKey]) return true;
             }
-        } catch (e) {}
+        } catch (e) { /* sin clave legacy: se sigue con las actuales */ }
 
         return false;
     },
@@ -297,7 +297,7 @@ const SriAuditor = {
             const r = await SafeStorage.get(['sc_declaraciones_locales']);
             const loc = (r.sc_declaraciones_locales || {})[cl];
             if (loc && !loc.pdfSubido) return true;
-        } catch (e) {}
+        } catch (e) { /* sin registro local: no se puede afirmar que falte el PDF */ }
 
         return false;
     },
@@ -309,7 +309,7 @@ const SriAuditor = {
         const todos = await this.obtenerTodos();
         const filas = Object.values(todos).sort((a, b) => (b.actualizadoEn || 0) - (a.actualizadoEn || 0));
         if (!filas.length) {
-            console.log('🛡️ [AUDITOR] No hay registros de progreso aún.');
+            log.debug('🛡️ [AUDITOR] No hay registros de progreso aún.');
             return [];
         }
         console.table(filas.map(f => ({
@@ -331,7 +331,7 @@ const SriAuditor = {
         const todos = await this.obtenerTodos();
         delete todos[cl];
         await SafeStorage.set({ [this._KEY]: todos });
-        console.log(`🛡️ [AUDITOR] Limpiado registro para ${cl}`);
+        log.debug(`🛡️ [AUDITOR] Limpiado registro para ${cl}`);
     }
 };
 
@@ -370,7 +370,7 @@ const SriLoop = {
                     .filter((x) => x && x !== 'async').join(' ← ');
                 quien = pila ? `  [${pila}]` : '';
             } catch (e) { /* sin pila */ }
-            console.log(`🚦 [BUCLE] ${previo.estado} → ${nuevo.estado}${nuevo.motivo ? ' · ' + nuevo.motivo : ''}${quien}`);
+            log.debug(`🚦 [BUCLE] ${previo.estado} → ${nuevo.estado}${nuevo.motivo ? ' · ' + nuevo.motivo : ''}${quien}`);
             anotarBitacora(`semáforo ${previo.estado}→${nuevo.estado}`, nuevo.motivo || '');
         }
 
@@ -386,7 +386,7 @@ const SriLoop = {
         const e = await this.get();
         if (e.estado !== 'CORRIENDO') return false;
         if (e.latido && Date.now() - e.latido > this.TIMEOUT_LATIDO_MS) {
-            console.warn('🐕 [WATCHDOG] Sin avance en 15 min. Deteniendo el lote por seguridad.');
+            log.warn('🐕 [WATCHDOG] Sin avance en 15 min. Deteniendo el lote por seguridad.');
             await this.detener('Sin avance por más de 15 minutos');
             return false;
         }
@@ -399,7 +399,7 @@ const SriLoop = {
     },
 
     async iniciar(cola, periodo, indice = 0) {
-        console.log(`▶️ [BUCLE] Iniciando lote: ${cola.length} clientes.`);
+        log.debug(`▶️ [BUCLE] Iniciando lote: ${cola.length} clientes.`);
         await this._set({ estado: 'CORRIENDO', cola, indice, periodo, latido: Date.now(), motivo: '' });
         await this._sincronizarLegado(true);
         // Un arranque deliberado levanta la parada pedida en esta página.
@@ -412,7 +412,7 @@ const SriLoop = {
      *   y vuelve a frenar sin que el bot haya hecho nada.
      */
     async reanudar(faseAhora = null) {
-        console.log('▶️ [BUCLE] Reanudando.');
+        log.debug('▶️ [BUCLE] Reanudando.');
         const patch = { estado: 'CORRIENDO', latido: Date.now(), motivo: '' };
         if (faseAhora) patch.ultimaFase = faseAhora;
         await this._set(patch);
@@ -427,7 +427,7 @@ const SriLoop = {
         const patch = { paso };
         if (paso && faseAhora) patch.ultimaFase = faseAhora;
         await this._set(patch);
-        console.log(paso
+        log.debug(paso
             ? '👣 [BUCLE] Modo paso a paso: el lote frena al empezar cada fase.'
             : '🏃 [BUCLE] Modo corrido: el lote avanza sin parar.');
         anotarBitacora(paso ? 'modo paso a paso' : 'modo corrido', '');
@@ -452,7 +452,7 @@ const SriLoop = {
         await this._set({ estado: 'PAUSADO', ultimaFase: faseAhora,
                           motivo: 'Modo paso a paso' });
         await this._sincronizarLegado(false);
-        console.log(`👣 [PASO] Llegó a «${faseAhora}». Freno acá: pulsá ▶ para dar el paso.`);
+        log.debug(`👣 [PASO] Llegó a «${faseAhora}». Freno acá: pulsá ▶ para dar el paso.`);
         return faseAhora;
     },
 
@@ -464,14 +464,14 @@ const SriLoop = {
         const e = await this.get();
         if (e.estado !== 'CORRIENDO') return;
         await this._set({ indice, latido: Date.now() });
-        console.log(`🚦 [BUCLE] Avanzando a cliente ${indice + 1}/${(e.cola || []).length}.`);
+        log.debug(`🚦 [BUCLE] Avanzando a cliente ${indice + 1}/${(e.cola || []).length}.`);
     },
 
     /** Pausa suave: termina el cliente en curso y NO salta al siguiente. */
     async pausar() {
         const e = await this.get();
         if (e.estado !== 'CORRIENDO') return;
-        console.log('⏸️ [BUCLE] Pausa pedida: se terminará el cliente actual y ahí para.');
+        log.debug('⏸️ [BUCLE] Pausa pedida: se terminará el cliente actual y ahí para.');
         await this._set({ estado: 'PAUSANDO', motivo: 'Pausa pedida por el usuario' });
         if (typeof window !== 'undefined' && window.sriAssistant?.showEliteToast) {
             window.sriAssistant.showEliteToast({
@@ -490,7 +490,7 @@ const SriLoop = {
      * falla del bot cuando en realidad es alguien apretando el botón.
      */
     async emergencia(quien = 'el botón 🛑 del panel') {
-        console.warn(`🛑 [BUCLE] PARADA DE EMERGENCIA, pedida por ${quien}. No es una falla: el lote se cortó a mano.`);
+        log.warn(`🛑 [BUCLE] PARADA DE EMERGENCIA, pedida por ${quien}. No es una falla: el lote se cortó a mano.`);
         if (typeof marcarParadaPedida === 'function') marcarParadaPedida();
         if (typeof anotarBitacora === 'function') anotarBitacora('🛑 parada de emergencia', quien);
         await this._set({ estado: 'DETENIDO', motivo: `Parada de emergencia (${quien})` });
@@ -515,7 +515,7 @@ const SriLoop = {
         try {
             const r = await SafeStorage.get(['pendingAction']);
             if (!r.pendingAction) return;
-            console.log(`🧹 [BUCLE] Se descarta la acción «${r.pendingAction}» que quedó a medias` +
+            log.debug(`🧹 [BUCLE] Se descarta la acción «${r.pendingAction}» que quedó a medias` +
                         `${porQue ? ' por ' + porQue : ''}.`);
             await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'recuperarComprobante',
                                       'bajarTodos', 'accionEnCurso', 'accionVueltas',
@@ -524,7 +524,7 @@ const SriLoop = {
     },
 
     async detener(motivo = '') {
-        console.log('⏹️ [BUCLE] Detenido.', motivo);
+        log.debug('⏹️ [BUCLE] Detenido.', motivo);
         await this._set({ estado: 'DETENIDO', cola: [], indice: 0, motivo });
         await this._descartarLoPendiente('la detención del lote');
         await this._sincronizarLegado(false);
@@ -536,7 +536,7 @@ const SriLoop = {
         if (e.estado === 'PAUSANDO') {
             await this._set({ estado: 'PAUSADO' });
             await this._sincronizarLegado(false);
-            console.log('⏸️ [BUCLE] Cliente terminado. Lote en pausa: no se salta al siguiente.');
+            log.info('⏸️ [BUCLE] Cliente terminado. Lote en pausa: no se salta al siguiente.');
             return true;
         }
         return e.estado !== 'CORRIENDO';
@@ -566,7 +566,7 @@ const SriLoop = {
             // disparada desde la web. No es estado viejo/basura: inicializamos el semáforo en CORRIENDO.
             const recienIniciada = r.actionTimestamp && (Date.now() - r.actionTimestamp < 120000);
             if (recienIniciada && (r.pendingAction || r.auto_batch_enabled)) {
-                console.log('🚦 [BUCLE] Acción recién iniciada desde web sin semáforo previo. Inicializando semáforo en CORRIENDO...');
+                log.info('🚦 [BUCLE] Acción recién iniciada desde web sin semáforo previo. Inicializando semáforo en CORRIENDO...');
                 const qRes = await SafeStorage.get(['auto_batch_queue', 'workflowPeriod', 'auto_batch_period', 'pending_sri_autofill']);
                 const q = qRes.auto_batch_queue || (qRes.pending_sri_autofill ? [qRes.pending_sri_autofill] : []);
                 const p = qRes.workflowPeriod || qRes.auto_batch_period || this.periodoPorDefecto();
@@ -588,12 +588,12 @@ const SriLoop = {
             const basura = !!(r.auto_batch_enabled || r.sri_auto_mode ||
                               r.autoDeclaration || r.sri_master_switch_on);
             if (basura) {
-                console.warn('🧹 [BUCLE] Estado viejo encendido sin semáforo. Se apaga todo por seguridad; usá ▶ para arrancar.');
+                log.warn('🧹 [BUCLE] Estado viejo encendido sin semáforo. Se apaga todo por seguridad; usá ▶ para arrancar.');
             }
             await this.detener(basura ? 'Estado viejo normalizado' : '');
             return basura;
         } catch (e) {
-            console.warn('No se pudo normalizar el estado inicial:', e);
+            log.warn('No se pudo normalizar el estado inicial:', e);
             return false;
         }
     },
@@ -622,8 +622,8 @@ const SriLoop = {
             await GhostMemory.clearCurrent().catch(() => {});
         }
         await this.detener('Estado limpiado a mano');
-        console.log(`🧹 [BUCLE] Estado limpiado. Se borraron ${habia.length} claves:`, habia);
-        console.log('   Los clientes y sus claves NO se tocaron.');
+        log.debug(`🧹 [BUCLE] Estado limpiado. Se borraron ${habia.length} claves:`, habia);
+        log.debug('   Los clientes y sus claves NO se tocaron.');
         return habia;
     },
 
@@ -656,7 +656,7 @@ const SriLoop = {
             ...extra,
             declarado: true
         });
-        console.log(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
+        log.debug(`🧾 [REGISTRO] ${extra.nombre || ruc} declaró ${reg[clave].periodo}. No se volverá a declarar.`);
         anotarBitacora('DECLARADA', `${extra.nombre || ruc} · ${reg[clave].periodo}`);
     },
 
@@ -694,7 +694,7 @@ const SriLoop = {
         const r = await SafeStorage.get(['sc_declaraciones_locales']);
         const reg = r.sc_declaraciones_locales || {};
         const filas = Object.values(reg).sort((a, b) => b.cuando - a.cuando);
-        if (!filas.length) { console.log('🧾 Todavía no hay declaraciones registradas.'); return []; }
+        if (!filas.length) { log.debug('🧾 Todavía no hay declaraciones registradas.'); return []; }
         console.table(filas.map((d) => ({
             RUC: d.ruc,
             nombre: d.nombre,
@@ -841,7 +841,7 @@ const SriLoop = {
             }
             cola.push({ ruc: c.ruc, name: c.name || 'Cliente SRI', password: clave, soloProbarClave: true });
         }
-        console.log(`🔑 [PROBAR CLAVES] Cola: ${cola.length} por probar · ${sinClave} sin clave · ${excluidosSeguridad} excluidos por seguridad.`);
+        log.debug(`🔑 [PROBAR CLAVES] Cola: ${cola.length} por probar · ${sinClave} sin clave · ${excluidosSeguridad} excluidos por seguridad.`);
         return { cola, sinClave, excluidosSeguridad, total: lista.length };
     },
 
@@ -855,7 +855,7 @@ const SriLoop = {
         // que hace falta es abrir santiagocordova.com para sincronizar, no
         // salir a buscar clientes por otro lado.
         if (lista.length === 0) {
-            console.log('📭 [BUCLE] Caché local vacía. Abrí SantiagoCordova.com para sincronizar.');
+            log.debug('📭 [BUCLE] Caché local vacía. Abrí SantiagoCordova.com para sincronizar.');
         }
         const errs = r.flagged_errors || {};
         const tried = r.sri_tried_credentials || {};
@@ -941,18 +941,18 @@ const SriLoop = {
             cola = filtrado;
             sinPdf = sinPdf.filter((c) => set.has(String(c.ruc)));
             if (fuera > 0) {
-                console.log(`🕯️ [BENDITA] ${fuera} pendiente(s) NO corren: no están en la Lista Bendita.`);
+                log.debug(`🕯️ [BENDITA] ${fuera} pendiente(s) NO corren: no están en la Lista Bendita.`);
             }
         }
 
-        console.log(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
+        log.debug(`📋 [BUCLE] Cola para ${pStr}: ${cola.length} pendientes · ${yaHechos} ya con PDF · ${sinClave} sin clave${excluidosSeguridad ? ` · ${excluidosSeguridad} excluidos por seguridad/clave errónea` : ''}.`);
         if (excluidosSeguridad || sinClave) {
-            console.log(`   Los ${excluidosSeguridad + sinClave} que quedaron fuera están en el botón ⚠ del HUD, con qué hacer en cada caso.`);
+            log.warn(`   Los ${excluidosSeguridad + sinClave} que quedaron fuera están en el botón ⚠ del HUD, con qué hacer en cada caso.`);
         }
         if (sinPdf.length) {
-            console.warn(`🧾 [BUCLE] ${sinPdf.length} declararon pero su comprobante NO quedó guardado: ` +
+            log.warn(`🧾 [BUCLE] ${sinPdf.length} declararon pero su comprobante NO quedó guardado: ` +
                          sinPdf.map((c) => c.name).join(', '));
-            console.log('   Se recuperan desde Consulta de declaraciones, sin volver a declarar.');
+            log.debug('   Se recuperan desde Consulta de declaraciones, sin volver a declarar.');
         }
         return { cola, yaHechos, sinClave, excluidosSeguridad, sinPdf, total: lista.length };
     },
@@ -978,7 +978,7 @@ const SriLoop = {
         } catch (e) { /* un contador no puede tumbar el arranque */ }
 
         if (cliente.soloEstarAdentro || cliente.pendingAction === 'solo_perfil') {
-            console.log(`🌐 [SOLO SESIÓN SRI] ${cliente.name || cliente.ruc}: solo entrar al portal y quedarse en el escritorio.`);
+            log.debug(`🌐 [SOLO SESIÓN SRI] ${cliente.name || cliente.ruc}: solo entrar al portal y quedarse en el escritorio.`);
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
@@ -998,7 +998,7 @@ const SriLoop = {
         }
 
         if (cliente.soloProbarClave) {
-            console.log(`🔑 [PROBAR CLAVES] ${cliente.name || cliente.ruc}: sólo entra y sale, no declara nada.`);
+            log.debug(`🔑 [PROBAR CLAVES] ${cliente.name || cliente.ruc}: sólo entra y sale, no declara nada.`);
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
@@ -1018,7 +1018,7 @@ const SriLoop = {
         }
 
         if (cliente.soloRecuperar) {
-            console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
+            log.debug(`🧾 [BUCLE] ${cliente.name || cliente.ruc} ya declaró: solo se recupera su comprobante.`);
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
@@ -1057,7 +1057,7 @@ const SriLoop = {
         // si algo de esta cadena se traba, el cortacircuitos de `accionVueltas`
         // (§2) la descarta a los 8 recargos, igual que a cualquier otra.
         if (cliente.barrerAntes) {
-            console.log(`🧾 [BUCLE] ${cliente.name || cliente.ruc}: primero el comprobante, después declarar.`);
+            log.debug(`🧾 [BUCLE] ${cliente.name || cliente.ruc}: primero el comprobante, después declarar.`);
             await SafeStorage.set({
                 pending_sri_autofill: {
                     ruc: cliente.ruc, password: cliente.password, name: cliente.name,
@@ -1228,7 +1228,7 @@ const SriLoop = {
         const loop = await this.get();
         const queue = loop.cola || [];
         if (!queue.length) {
-            console.warn('⚠️ [BUCLE] No hay cola previa para reanudar.');
+            log.warn('⚠️ [BUCLE] No hay cola previa para reanudar.');
             return { ok: false, motivo: 'Cola vacía' };
         }
 
@@ -1242,7 +1242,7 @@ const SriLoop = {
             const c = queue[idx];
             const k = `${c.ruc}_${pStr}`;
             if (decls[k]) {
-                console.log(`⏩ [BUCLE] Cliente ${c.name || c.ruc} ya completado previamente. Saltando a siguiente...`);
+                log.info(`⏩ [BUCLE] Cliente ${c.name || c.ruc} ya completado previamente. Saltando a siguiente...`);
                 idx++;
             } else {
                 break;
@@ -1250,13 +1250,13 @@ const SriLoop = {
         }
 
         if (idx >= queue.length) {
-            console.log('🏁 [BUCLE] Todos los clientes de la cola ya fueron completados.');
+            log.info('🏁 [BUCLE] Todos los clientes de la cola ya fueron completados.');
             await this.detener('Lote completado');
             return { ok: true, completado: true };
         }
 
         const clientePendiente = queue[idx];
-        console.log(`▶️ [BUCLE] Reanudando lote en cliente ${idx + 1}/${queue.length}: ${clientePendiente.name || clientePendiente.ruc}`);
+        log.debug(`▶️ [BUCLE] Reanudando lote en cliente ${idx + 1}/${queue.length}: ${clientePendiente.name || clientePendiente.ruc}`);
 
         await this.prepararCliente(clientePendiente, p);
         await this._set({
@@ -1292,11 +1292,11 @@ if (typeof window !== 'undefined') {
     window.sriAgregarCliente = async (ruc, clave, nombre) => {
         ruc = String(ruc || '').trim();
         if (!/^\d{10,13}$/.test(ruc)) {
-            console.error('❌ RUC inválido. Esperaba 10 a 13 dígitos. Uso: sriAgregarCliente("1790000000001", "clave", "NOMBRE")');
+            log.error('❌ RUC inválido. Esperaba 10 a 13 dígitos. Uso: sriAgregarCliente("1790000000001", "clave", "NOMBRE")');
             return null;
         }
         if (!clave) {
-            console.error('❌ Falta la clave. Sin ella el auto-login no puede entrar.');
+            log.error('❌ Falta la clave. Sin ella el auto-login no puede entrar.');
             return null;
         }
 
@@ -1324,8 +1324,8 @@ if (typeof window !== 'undefined') {
         const errs = (await SafeStorage.get(['flagged_errors'])).flagged_errors || {};
         if (errs[ruc]) { delete errs[ruc]; await SafeStorage.set({ flagged_errors: errs }); }
 
-        console.log(`✅ ${entrada.name} (${ruc}) cargado. La caché tiene ${lista.length} cliente(s).`);
-        console.log('   Ahora pulsá ▶ en el HUD, o corré: window.sriProbarCon("' + ruc + '")');
+        log.info(`✅ ${entrada.name} (${ruc}) cargado. La caché tiene ${lista.length} cliente(s).`);
+        log.debug('   Ahora pulsá ▶ en el HUD, o corré: window.sriProbarCon("' + ruc + '")');
         return entrada.name;
     };
 
@@ -1341,12 +1341,12 @@ if (typeof window !== 'undefined') {
         const r = await SafeStorage.get(['sc_clients_cache']);
         const c = (r.sc_clients_cache || []).find((x) => x && x.ruc === String(ruc).trim());
         if (!c) {
-            console.error(`❌ ${ruc} no está en la caché. Cargalo primero: sriAgregarCliente("${ruc}", "clave", "NOMBRE")`);
+            log.error(`❌ ${ruc} no está en la caché. Cargalo primero: sriAgregarCliente("${ruc}", "clave", "NOMBRE")`);
             return false;
         }
         const pass = c.password || c.sri_password || c.sriPassword;
         if (!pass) {
-            console.error(`❌ ${c.name} no tiene clave guardada. Pasala: sriProbarCon("${ruc}", "clave")`);
+            log.error(`❌ ${c.name} no tiene clave guardada. Pasala: sriProbarCon("${ruc}", "clave")`);
             return false;
         }
 
@@ -1355,8 +1355,8 @@ if (typeof window !== 'undefined') {
         await SriLoop.prepararCliente({ ruc: c.ruc, name: c.name, password: pass }, periodo);
 
         const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-        console.log(`🚀 Lote de prueba iniciado con ${c.name} · periodo ${MESES[periodo.monthIndex]} ${periodo.year}.`);
-        console.log('   Redirigiendo al login del SRI; el auto-login sigue desde ahí.');
+        log.info(`🚀 Lote de prueba iniciado con ${c.name} · periodo ${MESES[periodo.monthIndex]} ${periodo.year}.`);
+        log.debug('   Redirigiendo al login del SRI; el auto-login sigue desde ahí.');
         await sleep(600);
         window.location.href = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&response_mode=fragment&response_type=code&scope=openid';
         return true;
@@ -1369,7 +1369,7 @@ if (typeof window !== 'undefined') {
         const lista = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
         const errs = r.flagged_errors || {};
         if (!lista.length) {
-            console.log('📭 La caché está vacía. Cargá uno con sriAgregarCliente("RUC", "clave", "NOMBRE").');
+            log.debug('📭 La caché está vacía. Cargá uno con sriAgregarCliente("RUC", "clave", "NOMBRE").');
             return [];
         }
         console.table(lista.map((c) => ({
@@ -1384,7 +1384,7 @@ if (typeof window !== 'undefined') {
     window.sriLimpiarEstado = () => SriLoop.limpiarEstado();
     window.sriEstado = async () => {
         const e = await SriLoop.get();
-        console.log('🚦 Semáforo:', e.estado,
+        log.debug('🚦 Semáforo:', e.estado,
                     '· cliente', (e.cola || []).length ? (e.indice + 1) + '/' + e.cola.length : '—',
                     e.motivo ? '· ' + e.motivo : '');
         return e;
@@ -1514,7 +1514,7 @@ const Omitidos = {
             };
             await SafeStorage.set({ [this._KEY]: lista });
             if (repetido) return;   // ya estaba dicho: no se repite el aviso
-            console.log(`⏭️ [OMITIDO] ${extra.nombre || ruc}: ${motivo}`);
+            log.debug(`⏭️ [OMITIDO] ${extra.nombre || ruc}: ${motivo}`);
             anotarBitacora('omitido', `${extra.nombre || ruc} · ${motivo}`);
         } catch (e) { /* nunca romper el lote por registrar */ }
     },
@@ -1537,7 +1537,7 @@ const Omitidos = {
         delete tried[ruc];
         await SafeStorage.set({ [this._KEY]: lista, flagged_errors: errs, sri_tried_credentials: tried });
 
-        console.log(habia
+        log.debug(habia
             ? `♻️ ${ruc} vuelve a la cola: se borraron su marca de omitido y sus banderas de error.`
             : `♻️ ${ruc} no estaba omitido, pero igual se limpiaron sus banderas.`);
         return habia;
@@ -1551,13 +1551,13 @@ const Omitidos = {
         const tried = r.sri_tried_credentials || {};
         const rucs = new Set([...Object.keys(lista), ...Object.keys(errs), ...Object.keys(tried)]);
         await SafeStorage.set({ [this._KEY]: {}, flagged_errors: {}, sri_tried_credentials: {} });
-        console.log(`♻️ [OMITIDOS] Se limpiaron las marcas y banderas de error para ${rucs.size} clientes. Todos vuelven a la cola.`);
+        log.error(`♻️ [OMITIDOS] Se limpiaron las marcas y banderas de error para ${rucs.size} clientes. Todos vuelven a la cola.`);
         return rucs.size;
     },
 
     async limpiar() {
         await SafeStorage.remove([this._KEY]);
-        console.log('🧹 Lista de omitidos vaciada. Las banderas de error NO se tocaron.');
+        log.error('🧹 Lista de omitidos vaciada. Las banderas de error NO se tocaron.');
     }
 };
 
@@ -1567,10 +1567,10 @@ const Omitidos = {
 const SriSincronizadorClaves = {
     async sincronizar() {
         if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
-            console.error('❌ [SINCRONIZAR] Falta URL o Key de Supabase configurada.');
+            log.error('❌ [SINCRONIZAR] Falta URL o Key de Supabase configurada.');
             return { ok: false, error: 'Faltan credenciales de Supabase' };
         }
-        console.log('🔄 [SINCRONIZAR CLAVES] Consultando base de datos central en Supabase...');
+        log.debug('🔄 [SINCRONIZAR CLAVES] Consultando base de datos central en Supabase...');
         try {
             const url = `${SC_SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=id,ruc,name,sri_password,is_active,tax_profile`;
             const res = await fetch(url, {
@@ -1584,7 +1584,7 @@ const SriSincronizadorClaves = {
                 throw new Error(`Error Supabase ${res.status}: ${txt}`);
             }
             const dbClients = await res.json();
-            console.log(`📦 [SINCRONIZAR CLAVES] Descargados ${dbClients.length} clientes desde la nube.`);
+            log.debug(`📦 [SINCRONIZAR CLAVES] Descargados ${dbClients.length} clientes desde la nube.`);
 
             const storageRes = await SafeStorage.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials']);
             let cacheList = Array.isArray(storageRes.sc_clients_cache) ? [...storageRes.sc_clients_cache] : [];
@@ -1659,10 +1659,10 @@ const SriSincronizadorClaves = {
                 sri_tried_credentials: tried
             });
 
-            console.log(`✅ [SINCRONIZAR CLAVES] Listo: ${actualizadas} actualizadas, ${agregados} agregados, ${omitidosInactivos} inactivos depurados.`);
+            log.info(`✅ [SINCRONIZAR CLAVES] Listo: ${actualizadas} actualizadas, ${agregados} agregados, ${omitidosInactivos} inactivos depurados.`);
             return { ok: true, actualizadas, agregados, total: cacheList.length };
         } catch (err) {
-            console.error('❌ [SINCRONIZAR CLAVES] Error al sincronizar:', err);
+            log.error('❌ [SINCRONIZAR CLAVES] Error al sincronizar:', err);
             return { ok: false, error: err.message };
         }
     }
@@ -1671,7 +1671,7 @@ const SriSincronizadorClaves = {
 if (typeof window !== 'undefined') {
     window.sriOmitidos = async () => {
         const l = await Omitidos.lista();
-        if (!l.length) { console.log('✅ No hay clientes omitidos.'); return []; }
+        if (!l.length) { log.info('✅ No hay clientes omitidos.'); return []; }
         console.table(l.map(o => ({
             RUC: o.ruc,
             nombre: o.nombre,
@@ -1679,7 +1679,7 @@ if (typeof window !== 'undefined') {
             'qué hacer': Omitidos.ARREGLO[o.motivo] || o.detalle || '—',
             cuando: new Date(o.cuando).toLocaleString('es-EC')
         })));
-        console.log('Para reintentar uno: sriReintentar("RUC")');
+        log.debug('Para reintentar uno: sriReintentar("RUC")');
         return l;
     };
     window.sriReintentar = (ruc) => Omitidos.reintentar(String(ruc).trim());
@@ -1766,16 +1766,16 @@ const SriApi = {
 
     async _get(ruta) {
         const token = this._token();
-        if (!token) { console.warn('🔌 [API SRI] No hay token de sesión todavía.'); return null; }
+        if (!token) { log.warn('🔌 [API SRI] No hay token de sesión todavía.'); return null; }
         try {
             const r = await fetch(this.BASE + ruta, {
                 credentials: 'include',
                 headers: { Accept: 'application/json', Authorization: 'bearer ' + token }
             });
-            if (!r.ok) { console.warn(`🔌 [API SRI] ${ruta} devolvió HTTP ${r.status}.`); return null; }
+            if (!r.ok) { log.warn(`🔌 [API SRI] ${ruta} devolvió HTTP ${r.status}.`); return null; }
             return await r.json();
         } catch (e) {
-            console.warn(`🔌 [API SRI] Falló ${ruta}:`, e.message);
+            log.warn(`🔌 [API SRI] Falló ${ruta}:`, e.message);
             return null;
         }
     },
@@ -1874,10 +1874,10 @@ if (typeof window !== 'undefined') {
     window.sriBuscarToken = () => {
         const h = SriApi._buscarToken(true);
         if (!h.length) {
-            console.warn('🔌 No hay ningún JWT visible para el content script.');
-            console.log('   Claves en sessionStorage:', Object.keys(sessionStorage));
-            console.log('   Claves en localStorage:  ', Object.keys(localStorage));
-            console.log('   Si están vacías, la SPA lo guarda solo en memoria y desde acá no se puede leer.');
+            log.warn('🔌 No hay ningún JWT visible para el content script.');
+            log.debug('   Claves en sessionStorage:', Object.keys(sessionStorage));
+            log.debug('   Claves en localStorage:  ', Object.keys(localStorage));
+            log.debug('   Si están vacías, la SPA lo guarda solo en memoria y desde acá no se puede leer.');
             return [];
         }
         console.table(h.map((x) => {
@@ -1885,17 +1885,17 @@ if (typeof window !== 'undefined') {
             try {
                 const c = JSON.parse(atob(x.jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
                 exp = c.exp ? new Date(c.exp * 1000).toLocaleTimeString('es-EC') : 'sin caducidad';
-            } catch (e) {}
+            } catch (e) { /* JWT ilegible: la caducidad queda como desconocida */ }
             return { donde: x.ruta, largo: x.jwt.length, vence: exp, vigente: SriApi._vigente(x.jwt) ? 'sí' : 'NO' };
         }));
-        console.log('(No se imprime el token: es una credencial de sesión.)');
+        log.debug('(No se imprime el token: es una credencial de sesión.)');
         return h.map((x) => x.ruta);
     };
 
-    window.sriApiPerfil = () => SriApi.perfil().then((r) => { console.log(r); return r; });
+    window.sriApiPerfil = () => SriApi.perfil().then((r) => { log.debug(r); return r; });
     window.sriApiPendiente = () => SriApi.ivaPendiente().then((r) => {
-        if (!r) console.log('🔌 Sin IVA pendiente a la vista (o sin sesión).');
-        else console.log(`🔌 IVA ${r.periodoTexto} · vence ${r.vence} (${r.dias} días) · ${r.estado}`);
+        if (!r) log.debug('🔌 Sin IVA pendiente a la vista (o sin sesión).');
+        else log.debug(`🔌 IVA ${r.periodoTexto} · vence ${r.vence} (${r.dias} días) · ${r.estado}`);
         return r;
     });
 }
@@ -1917,6 +1917,53 @@ async function rucDelClienteActual() {
             ? window.sriAssistant.extractClientInfo() : null;
         if (info && info.ruc) return String(info.ruc).replace(/\D/g, '');
     } catch (e) { /* nada */ }
+    return '';
+}
+
+/**
+ * El período que se está declarando, en el único formato que se guarda: `YYYY-MM`.
+ *
+ * Sirve para etiquetar cada compra con SU período. Sin eso, el historial de un
+ * proveedor no se puede separar por mes y «este proveedor le facturó en
+ * octubre» termina siendo «alguna vez le facturó».
+ *
+ * Acepta las tres formas que usa el proyecto: `{ year, monthIndex }` (0-based),
+ * `MM/YYYY` y `YYYY-MM`. Cuando no hay nada, devuelve `''` — nunca inventa un
+ * período, porque un dato falso es peor que un dato ausente.
+ *
+ * @param {string} [fechaEmision] Fecha de una factura, si la trae.
+ * @returns {Promise<string>} `YYYY-MM` o `''`.
+ */
+function periodoDeFechaEmision(fechaEmision = '') {
+    // Formatos vistos en el portal: `dd/mm/yyyy` y `yyyy-mm-dd`.
+    const f = String(fechaEmision || '').trim();
+    let m = f.match(/^(\d{4})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}`;
+    m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[3]}-${String(m[2]).padStart(2, '0')}`;
+    return '';
+}
+
+async function periodoDeTrabajo(fechaEmision = '') {
+    // La fecha de la propia factura es la fuente más honesta: si el TXT la
+    // trae, ese comprobante pertenece a ese mes aunque la consulta abarque otro.
+    const deLaFecha = periodoDeFechaEmision(fechaEmision);
+    if (deLaFecha) return deLaFecha;
+
+    let m;
+    try {
+        const st = await SafeStorage.get(['workflowPeriod', 'pending_sri_autofill']);
+        const p = st.workflowPeriod || (st.pending_sri_autofill && st.pending_sri_autofill.periodo);
+        if (p && typeof p === 'object' && p.year) {
+            return `${p.year}-${String((Number(p.monthIndex) || 0) + 1).padStart(2, '0')}`;
+        }
+        if (typeof p === 'string') {
+            m = p.match(/^(\d{4})-(\d{1,2})/);
+            if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}`;
+            m = p.match(/^(\d{1,2})\/(\d{4})/);
+            if (m) return `${m[2]}-${String(m[1]).padStart(2, '0')}`;
+        }
+    } catch (e) { /* sin período se guarda igual, con la etiqueta vacía */ }
     return '';
 }
 
@@ -2047,8 +2094,11 @@ const Chequeo = {
             if (p) {
                 const faltan = p.total - p.clasificados;
                 anotar('proveedores', 'Base de proveedores', faltan ? 'aviso' : 'ok',
-                    `${p.total} proveedor(es) · ${faltan} sin clasificar`,
-                    faltan ? 'Abrí 🏷️ y pulsá 🗂️ Catastro: completa la actividad de casi todos de una.' : '');
+                    `${p.total} proveedor(es) · ${faltan} sin clasificar` +
+                    (p.sinCredito ? ` · ${p.sinCredito} sin derecho a crédito` : ''),
+                    faltan ? 'Abrí 🏷️ y pulsá 🗂️ Catastro: completa la actividad de casi todos de una. ' +
+                             'Marcar «sin derecho» mueve esa compra al 502; sin marcar no se mueve nada.'
+                           : '');
             }
         } catch (e) { /* nada */ }
 
@@ -2227,7 +2277,7 @@ const NotasDeVenta = {
         const e = await this._estado();
         e.encendido = !e.encendido;
         await this._guardar(e);
-        console.log(`📒 [NOTAS DE VENTA] Interruptor ${e.encendido ? 'ENCENDIDO' : 'apagado'}.`);
+        log.debug(`📒 [NOTAS DE VENTA] Interruptor ${e.encendido ? 'ENCENDIDO' : 'apagado'}.`);
         return e.encendido;
     },
 
@@ -2279,7 +2329,7 @@ const NotasDeVenta = {
             c.ceros = (c.ceros || 0) + 1;
             if (c.ceros >= this.CEROS_PARA_DEJAR_DE_PREGUNTAR) {
                 c.noUsa = true;
-                console.log(`📒 [NOTAS DE VENTA] ${r}: ${c.ceros} períodos en cero. Dejo de preguntarle.`);
+                log.debug(`📒 [NOTAS DE VENTA] ${r}: ${c.ceros} períodos en cero. Dejo de preguntarle.`);
             }
         } else {
             c.ceros = 0;
@@ -2319,13 +2369,13 @@ const NotasDeVenta = {
         const segundos = Math.max(10, Number(e.segundos) || this.SEGUNDOS_POR_DEFECTO);
 
         if (typeof SriLoopHUD === 'undefined' || !SriLoopHUD.preguntarNotasDeVenta) {
-            console.warn('📒 [NOTAS DE VENTA] No hay dónde preguntar: sigo sin tocar el 508 ni el 117.');
+            log.warn('📒 [NOTAS DE VENTA] No hay dónde preguntar: sigo sin tocar el 508 ni el 117.');
             return null;
         }
 
         const r = await SriLoopHUD.preguntarNotasDeVenta({ ruc, nombre, periodo, segundos });
         if (!r) {
-            console.log(`📒 [NOTAS DE VENTA] Nadie contestó en ${segundos}s. ` +
+            log.debug(`📒 [NOTAS DE VENTA] Nadie contestó en ${segundos}s. ` +
                         'El 508 y el 117 quedan sin tocar, que es lo correcto: no se inventa un cero.');
             return null;
         }
@@ -2369,17 +2419,17 @@ const Catastro = {
                     fetch(url('vendor/ciiu.json')).then((r) => r.ok ? r.json() : null)
                 ]);
                 if (!t) {
-                    console.warn('🗂️ [CATASTRO] No está vendor/catastro_eloro.txt. ' +
+                    log.warn('🗂️ [CATASTRO] No está vendor/catastro_eloro.txt. ' +
                                  'Se genera con el script del proyecto a partir del ZIP del SRI.');
                     return false;
                 }
                 this._texto = t;
                 this._ciiu = c || {};
                 const n = Math.floor(this._texto.length / this._ANCHO);
-                console.log(`🗂️ [CATASTRO] ${n.toLocaleString('es-EC')} RUC cargados.`);
+                log.debug(`🗂️ [CATASTRO] ${n.toLocaleString('es-EC')} RUC cargados.`);
                 return true;
             } catch (e) {
-                console.warn('🗂️ [CATASTRO] No se pudo cargar:', e.message);
+                log.warn('🗂️ [CATASTRO] No se pudo cargar:', e.message);
                 return false;
             } finally {
                 this._cargando = null;
@@ -2498,12 +2548,20 @@ const Proveedores = {
      * @param {string} clienteRuc
      * @returns {Promise<number>} cuántos RUC distintos quedaron anotados.
      */
-    async registrarLote(lista, clienteRuc) {
+    async registrarLote(lista, clienteRuc, periodo = '') {
         if (!Array.isArray(lista) || !lista.length) return 0;
 
         const base = await this._todos();
         const cli = String(clienteRuc || '').replace(/\D/g, '');
         const nuevos = new Set();
+        const periodoBase = periodo || await periodoDeTrabajo();
+
+        // Una extracción es una FOTO completa del período, no un goteo de
+        // facturas. Por eso cada lote REEMPLAZA lo que había para ese
+        // (proveedor, cliente, período, tipo) en vez de sumársele: correr la
+        // extracción dos veces —tabla primero, TXT después— duplicaba montos
+        // y «comprobantes», y el perfil mostraba el doble de lo real.
+        const lotes = new Map();
 
         lista.forEach((f) => {
             // La tabla del portal da "RUC Razón social" pegados; el TXT los da
@@ -2519,6 +2577,19 @@ const Proveedores = {
             }
             if (ruc.length !== 13) return;
 
+            const esNC = f.esNotaCredito === true ||
+                /nota\s*de\s*cr[eé]dito/i.test(String(f.tipo || f.tipoComprobante || ''));
+            const tipo = esNC ? 'notasCredito' : 'facturas';
+            const clave = `${ruc}|${tipo}`;
+            const lote = lotes.get(clave) || { ruc, tipo, filas: [], nombre: '' };
+            lote.filas.push(f);
+            const limpio = String(nombre || '').replace(/^[\s\-·|]+/, '').trim();
+            if (limpio.length > lote.nombre.length) lote.nombre = limpio.slice(0, 120);
+            lotes.set(clave, lote);
+        });
+
+        lotes.forEach((lote) => {
+            const { ruc } = lote;
             const previo = base[ruc] || {
                 nombre: '', actividad: null, deducible: null, origen: null,
                 vistoEn: [], veces: 0, primero: Date.now(),
@@ -2528,39 +2599,191 @@ const Proveedores = {
             };
             if (!base[ruc]) nuevos.add(ruc);
 
-            const nom = nombre.replace(/^[\s\-·|]+/, '').trim();
-            if (nom.length > (previo.nombre || '').length) previo.nombre = nom.slice(0, 120);
+            if (lote.nombre.length > (previo.nombre || '').length) {
+                previo.nombre = lote.nombre;
+            }
 
-            previo.veces = (previo.veces || 0) + 1;
-            previo.ultimo = Date.now();
+            // ── Agregado por cliente y período ───────────────────────────
+            // `vistoEn` sólo decía «alguna vez le facturó». Esto dice CUÁNTO,
+            // CUÁNDO y A QUÉ TARIFA, que es lo que convierte la lista de
+            // proveedores en un perfil del cliente.
+            const foto = this._fotoDeLote(lote.filas, periodoBase);
 
-            // La tarifa se deduce del cociente IVA/base, igual que en el
-            // llenado. Se cuenta, no se promedia: un proveedor puede facturar
-            // al 15% y al 5% —materiales y obra— y las dos cosas son ciertas.
-            if (typeof clasificarTarifaIva === 'function' &&
-                typeof f.valorSinImpuestos === 'number') {
-                let t;
-                try { t = clasificarTarifaIva(f.valorSinImpuestos, f.iva || 0).tarifa; }
-                catch (e) { t = undefined; }
-                const nomFila = String(f.razonSocial || f.nombre || f.rucRazon || '');
-                const esMinorista = /farma|farmacia|medicity|economica|supermaxi|favorita|tia\b|coral\b|megamaxi|supermercado|comisariato|botica|minimarket|tienda/i.test(nomFila);
-                if (t === 5 && (f.valorSinImpuestos < 5 || esMinorista)) {
-                    t = null; // No registrar como 5%
+            let deltaVeces = foto.veces;
+            let deltaTarifas = foto.tarifas;
+
+            if (cli.length === 13) {
+                previo.clientes = previo.clientes || {};
+                const c = previo.clientes[cli] || { periodos: {}, primero: Date.now() };
+                const antesVeces = c.veces || 0;
+                const antesTarifas = { ...(c.tarifas || {}) };
+
+                const per = (foto.periodo || '') || '';
+                c.periodos = c.periodos || {};
+                c.periodos[per] = c.periodos[per] || {};
+                // Reemplaza SÓLO ese tipo dentro de ese período: las notas de
+                // crédito y las facturas se extraen en pasadas distintas y no
+                // pueden pisarse entre sí.
+                c.periodos[per][lote.tipo] = {
+                    veces: foto.veces,
+                    base: foto.base,
+                    iva: foto.iva,
+                    total: foto.total,
+                    tarifas: foto.tarifas,
+                    actualizado: Date.now()
+                };
+                if (lote.nombre && lote.nombre.length > String(c.nombre || '').length) {
+                    c.nombre = lote.nombre;
                 }
-                const clave = (t === null || t === undefined) ? '?' : String(t);
+                this._recalcularCliente(c);
+                c.ultimo = Date.now();
+                previo.clientes[cli] = c;
+                this._podarClientes(previo.clientes);
+
+                // El global avanza sólo por la DIFERENCIA de este cliente:
+                // re-extraer el mismo período ya no infla los contadores.
+                deltaVeces = (c.veces || 0) - antesVeces;
+                deltaTarifas = {};
+                Object.keys(c.tarifas || {}).forEach((k) => {
+                    const d = (c.tarifas[k] || 0) - (antesTarifas[k] || 0);
+                    if (d) deltaTarifas[k] = d;
+                });
+
+                if (!previo.vistoEn.includes(cli) &&
+                    previo.vistoEn.length < this._TOPE_CLIENTES) {
+                    previo.vistoEn.push(cli);
+                }
+            }
+
+            previo.veces = Math.max(0, (previo.veces || 0) + deltaVeces);
+            previo.ultimo = Date.now();
+            // La tarifa global se sigue contando como siempre: es la que usa
+            // `porQueDecidir()` para avisar del 5%.
+            Object.keys(deltaTarifas).forEach((k) => {
                 previo.tarifas = previo.tarifas || {};
-                previo.tarifas[clave] = (previo.tarifas[clave] || 0) + 1;
-            }
-            if (cli.length === 13 && !previo.vistoEn.includes(cli) &&
-                previo.vistoEn.length < this._TOPE_CLIENTES) {
-                previo.vistoEn.push(cli);
-            }
+                previo.tarifas[k] = Math.max(0, (previo.tarifas[k] || 0) + deltaTarifas[k]);
+            });
+
             base[ruc] = previo;
         });
 
         try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return 0; }
-        if (nuevos.size) console.log(`🏷️ [PROVEEDORES] ${nuevos.size} proveedor(es) nuevo(s) anotado(s).`);
+        if (nuevos.size) log.debug(`🏷️ [PROVEEDORES] ${nuevos.size} proveedor(es) nuevo(s) anotado(s).`);
         return nuevos.size;
+    },
+
+    /**
+     * Convierte las filas de UN lote en los totales que se guardan.
+     *
+     * No toca el almacén: es la misma cuenta para el agregado global y para el
+     * de cada cliente, y tenerla en un solo lugar evita que los dos números
+     * discrepen.
+     *
+     * @param {Array<object>} filas
+     * @param {string} periodoBase `YYYY-MM` de la consulta, por si la fila no trae fecha.
+     */
+    _fotoDeLote(filas, periodoBase = '') {
+        const foto = {
+            periodo: '', veces: 0, base: 0, iva: 0, total: 0, tarifas: {}
+        };
+        const fechas = new Set();
+
+        (filas || []).forEach((f) => {
+            const base = Number(f.valorSinImpuestos !== undefined ? f.valorSinImpuestos
+                        : (f.sinImpuestos !== undefined ? f.sinImpuestos : f.base)) || 0;
+            const iva = Number(f.iva) || 0;
+            const total = Number(f.importeTotal !== undefined ? f.importeTotal
+                          : (f.total !== undefined ? f.total : base + iva)) || 0;
+
+            foto.veces += 1;
+            foto.base += base;
+            foto.iva += iva;
+            foto.total += total;
+
+            const p = periodoDeFechaEmision(f.fechaEmision || f.fecha || '');
+            if (p) fechas.add(p);
+
+            // La tarifa se deduce del cociente IVA/base, igual que en el
+            // llenado. Se cuenta, no se promedia: un proveedor puede facturar
+            // al 15% y al 5% —materiales y obra— y las dos cosas son ciertas.
+            if (typeof clasificarTarifaIva === 'function' && typeof base === 'number') {
+                let t;
+                try { t = clasificarTarifaIva(base, iva).tarifa; }
+                catch (e) { t = undefined; }
+                const nomFila = String(f.razonSocial || f.nombre || f.rucRazon || '');
+                const esMinorista = /farma|farmacia|medicity|economica|supermaxi|favorita|tia\b|coral\b|megamaxi|supermercado|comisariato|botica|minimarket|tienda/i.test(nomFila);
+                if (t === 5 && (base < 5 || esMinorista)) t = null; // No registrar como 5%
+                const clave = (t === null || t === undefined) ? '?' : String(t);
+                foto.tarifas[clave] = (foto.tarifas[clave] || 0) + 1;
+            }
+        });
+
+        const red = (n) => (typeof redondear === 'function' ? redondear(n) : Math.round(n * 100) / 100);
+        foto.base = red(foto.base);
+        foto.iva = red(foto.iva);
+        foto.total = red(foto.total);
+        // Un período mezclado (la consulta abarca dos meses) se guarda en el
+        // mes más frecuente. Nunca se parte una factura en dos.
+        if (fechas.size === 1) {
+            foto.periodo = [...fechas][0];
+        } else if (fechas.size > 1) {
+            const cuenta = {};
+            (filas || []).forEach((f) => {
+                const p = periodoDeFechaEmision(f.fechaEmision || f.fecha || '');
+                if (p) cuenta[p] = (cuenta[p] || 0) + 1;
+            });
+            foto.periodo = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0] || periodoBase;
+        } else {
+            foto.periodo = periodoBase || '';
+        }
+        return foto;
+    },
+
+    /** Recalcula los totales de un cliente a partir de sus fotos por período. */
+    _recalcularCliente(c) {
+        const red = (n) => (typeof redondear === 'function' ? redondear(n) : Math.round(n * 100) / 100);
+        let veces = 0;
+        let baseFac = 0, baseNc = 0, ivaFac = 0, ivaNc = 0, totalFac = 0, totalNc = 0;
+        const tarifas = {};
+        Object.keys(c.periodos || {}).forEach((per) => {
+            ['facturas', 'notasCredito'].forEach((k) => {
+                const s = c.periodos[per] && c.periodos[per][k];
+                if (!s) return;
+                veces += s.veces || 0;
+                if (k === 'facturas') {
+                    baseFac += s.base || 0;
+                    ivaFac += s.iva || 0;
+                    totalFac += s.total || 0;
+                } else {
+                    baseNc += s.base || 0;
+                    ivaNc += s.iva || 0;
+                    totalNc += s.total || 0;
+                }
+                Object.keys(s.tarifas || {}).forEach((t) => {
+                    tarifas[t] = (tarifas[t] || 0) + s.tarifas[t];
+                });
+            });
+        });
+        c.veces = veces;
+        // La base que cuenta es la NETA: una nota de crédito devuelve plata y
+        // no puede seguir sumando como si fuera una compra.
+        c.base = red(baseFac - baseNc);
+        c.iva = red(ivaFac - ivaNc);
+        c.total = red(totalFac - totalNc);
+        c.baseBruto = red(baseFac);
+        c.notasCreditoBase = red(baseNc);
+        c.tarifas = tarifas;
+        if (!c.primero) c.primero = Date.now();
+    },
+
+    /** Mantiene el tope de clientes por proveedor, botando el más viejo. */
+    _podarClientes(clientes) {
+        const claves = Object.keys(clientes || {});
+        if (claves.length <= this._TOPE_CLIENTES) return;
+        claves.sort((a, b) => (clientes[a].ultimo || 0) - (clientes[b].ultimo || 0));
+        while (claves.length > this._TOPE_CLIENTES) {
+            delete clientes[claves.shift()];
+        }
     },
 
     /**
@@ -2619,6 +2842,10 @@ const Proveedores = {
                         'si la compra es compatible con su actividad.');
         }
 
+        // La decisión se resuelve para ESTE cliente: si el contador lo marcó
+        // para él, eso manda; si no, rige el criterio general del proveedor.
+        const decision = this._resolver(p, rc);
+
         return {
             proveedor: {
                 ruc: rp,
@@ -2635,10 +2862,89 @@ const Proveedores = {
             tarifas,
             // `null` es «nadie lo decidió», y no se convierte en un sí ni en un
             // no. Es la misma regla de todo el proyecto.
-            credito: p ? (p.deducible === undefined ? null : p.deducible) : null,
-            origen: (p && p.origen) || null,
+            credito: decision.deducible,
+            origen: decision.origen,
+            ambito: decision.ambito,
             avisos
         };
+    },
+
+    /**
+     * Sugerencias para clasificar, armadas con lo que ya se sabe.
+     *
+     * **Son sugerencias, no decisiones.** No escriben nada ni mueven plata al
+     * 502: sólo ponen delante del contador la pista que él tendría que buscar
+     * a mano. La regla de siempre —lo que decide una persona no lo pisa una
+     * máquina— sigue intacta.
+     *
+     * Se miran cuatro cosas, de la más barata a la más cara:
+     *
+     *   1. el nombre del proveedor (ferretería, farmacia, CNEL, banco…),
+     *   2. su tarifa (0% servicios básicos, 5% construcción),
+     *   3. cuántos meses le facturó (de 3 en adelante huele a gasto fijo),
+     *   4. si su rubro es compatible con la actividad del cliente.
+     *
+     * @param {object} p Registro del proveedor.
+     * @param {string} clienteRuc
+     * @param {string} [actividadCliente] Para comparar rubros.
+     * @returns {string[]} Sugerencias cortas, la más útil primero.
+     */
+    sugerencias(p, clienteRuc, actividadCliente = '') {
+        if (!p) return [];
+        const rc = String(clienteRuc || '').replace(/\D/g, '');
+        const c = (p.clientes || {})[rc] || null;
+        const nom = String(p.nombre || '').toUpperCase();
+        const tarifas = (c && c.tarifas) || p.tarifas || {};
+        const meses = c && c.periodos ? Object.keys(c.periodos).length : 0;
+        const cliente = String(actividadCliente || '').toUpperCase();
+        const out = [];
+
+        const rubros = [
+            [/FERRETER|CONSTRUC|CEMENT|HIERRO|ACERO|MATERIAL|BLOQUE|CERAMIC/, 'ferretería/construcción'],
+            [/FARMA|BOTICA|MEDIC|CLINIC|LABORATOR|SALUD|ODONTO/, 'salud/farmacia'],
+            [/SUPERMAXI|SUPERMERCADO|COMISARIATO|MINIMARKET|ALIMENT|PANADER|TIENDA/, 'alimentos/comercio'],
+            [/ELECTRIC|CNEL|AGUA|EPMAP|TELECOM|CNT\b|CLARO|MOVISTAR|INTERNET|CELULAR/, 'servicios básicos'],
+            [/BANCO|COOPERATIVA|FINANC|SEGURO|CREDITO|MUTUAL/, 'financiero/seguros'],
+            [/COMBUSTIBLE|GASOLIN|PETRO|ESTACION|LUBRICANT/, 'combustible'],
+            [/TRANSPORT|FLOTA|LOGISTIC|CARGA|FLETE/, 'transporte/logística'],
+            [/RESTAURANT|HOTEL|HOSTAL|CAFETER|COMIDA|CATERING/, 'alimentos/hospedaje'],
+            [/INMOBILIAR|ARQUITECT|URBANIZ|PROPIEDAD/, 'construcción/inmobiliaria'],
+            [/SOFTWARE|TECNOLOG|SISTEMA|COMPUT|LICENCIA|HOSTING/, 'tecnología'],
+            [/PUBLICIDAD|MARKETING|MEDIOS|RADIO|PRENSA|VALLAS/, 'publicidad'],
+            [/CAPACIT|EDUCAT|COLEGIO|UNIVERS|INSTITUTO|ACADEMIA/, 'educación'],
+            [/ASESOR|CONSULT|CONTAD|ABOGAD|PROFESIONAL|AUDITOR/, 'servicios profesionales'],
+            [/ARREND|ALQUIL|RENTA|INQUILIN/, 'arriendo']
+        ];
+
+        const rubro = rubros.find(([re]) => re.test(nom));
+        if (rubro) out.push(`El nombre sugiere ${rubro[1]}.`);
+
+        if (tarifas['5']) {
+            out.push(`Facturó al 5% (${tarifas['5']} comp.): tarifa de construcción. Verificá que el cliente sea del rubro.`);
+        }
+        if (tarifas['0'] || tarifas['?']) {
+            out.push('Tiene comprobantes al 0% o sin tarifa reconocible: no generan crédito por sí solos.');
+        }
+        if (meses >= 3) {
+            out.push(`Le facturó en ${meses} períodos: parece gasto fijo (arriendo, servicio, contrato).`);
+        }
+        const tieneNC = !!(c && c.notasCredito > 0) ||
+            !!(c && c.periodos && Object.values(c.periodos).some(
+                (x) => x && x.notasCredito && x.notasCredito.veces > 0));
+        if (tieneNC) {
+            out.push('Tiene notas de crédito: la base que cuenta es la neta, no la bruta.');
+        }
+        if (p.estadoSri && !/ACTIVO/i.test(String(p.estadoSri))) {
+            out.push(`El catastro lo da como ${p.estadoSri}: una compra a un RUC no activo es objetable.`);
+        }
+        if (rubro && cliente) {
+            const compatible = rubro[0].test(cliente) ||
+                /COMERCIO|SERVICIO|CONSTRUC|TRANSPORT|ALIMENT|SALUD|EDUCAC|PROFESIONAL|INMOBILIAR/.test(cliente);
+            if (!compatible) {
+                out.push(`Su rubro (${rubro[1]}) no coincide con la actividad declarada del cliente: revisá si es gasto personal.`);
+            }
+        }
+        return out;
     },
 
     /**
@@ -2679,8 +2985,14 @@ const Proveedores = {
      * cambiar una decisión del usuario.
      *
      * @param {string} ruc
-     * @param {{actividad?: string, deducible?: boolean, origen: string}} datos
+     * @param {{actividad?: string, deducible?: boolean, origen: string,
+     *          clienteRuc?: string}} datos
      *        origen: 'usuario' | 'catastro' | 'sugerido' | 'ia'
+     *        `clienteRuc`: si viene, la decisión vale para ESE contribuyente y
+     *        no para el proveedor en general. Es lo que hace falta para el IVA:
+     *        la ferretería de la esquina es crédito para un maestro constructor
+     *        y gasto personal para una odontóloga. `deducible` a secas sigue
+     *        siendo el criterio por defecto de todos los clientes.
      * @returns {Promise<boolean>} false si se rechazó por no pisar al usuario.
      */
     async clasificar(ruc, datos = {}) {
@@ -2690,13 +3002,40 @@ const Proveedores = {
         const base = await this._todos();
         const previo = base[limpio];
         if (!previo) {
-            console.warn(`🏷️ [PROVEEDORES] ${limpio} no está en la base: primero hay que verlo en una factura.`);
+            log.warn(`🏷️ [PROVEEDORES] ${limpio} no está en la base: primero hay que verlo en una factura.`);
             return false;
         }
 
         const origen = datos.origen || 'sugerido';
+        const cli = String(datos.clienteRuc || '').replace(/\D/g, '');
+
+        // ── Decisión POR CLIENTE ────────────────────────────────────────
+        // El crédito tributario no es una propiedad del proveedor: depende de
+        // si la compra alimenta la actividad gravada de quien la recibe. Por
+        // eso la decisión se puede guardar por contribuyente, y esa manda
+        // sobre la general. Una sugerencia no pisa a ninguna de las dos.
+        if (cli.length === 13 && datos.deducible !== undefined) {
+            previo.porCliente = previo.porCliente || {};
+            const suyo = previo.porCliente[cli] || null;
+            const yaDecidido = (suyo && suyo.origen === 'usuario') || previo.origen === 'usuario';
+            if (origen !== 'usuario' && yaDecidido) {
+                log.warn(`🏷️ [PROVEEDORES] ${limpio} ya lo clasificó el contador para ${cli}. ` +
+                             `Una sugerencia (${origen}) no lo pisa.`);
+                return false;
+            }
+            previo.porCliente[cli] = {
+                deducible: !!datos.deducible,
+                origen,
+                cuando: Date.now()
+            };
+            if (datos.actividad !== undefined) previo.porCliente[cli].actividad = datos.actividad;
+            base[limpio] = previo;
+            try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+            return true;
+        }
+
         if (previo.origen === 'usuario' && origen !== 'usuario') {
-            console.warn(`🏷️ [PROVEEDORES] ${limpio} ya lo clasificó el contador. ` +
+            log.warn(`🏷️ [PROVEEDORES] ${limpio} ya lo clasificó el contador. ` +
                          `Una sugerencia (${origen}) no lo pisa.`);
             return false;
         }
@@ -2712,21 +3051,277 @@ const Proveedores = {
     },
 
     /**
+     * Resuelve la decisión que le corresponde a un RUC, sin tocar el almacén.
+     *
+     * Tres estados, y el del medio no es un «no»:
+     *
+     *   - `true`  → la compra da crédito tributario
+     *   - `false` → se marcó sin derecho (el único caso que mueve plata al 502)
+     *   - `null`  → nadie decidió. **No es «no da crédito».**
+     *
+     * El `ambito` dice de dónde salió: `cliente` si lo decidió el contador para
+     * este contribuyente, `global` si es el criterio por defecto del proveedor.
+     *
+     * @param {object|null} p Registro del proveedor.
+     * @param {string} rucCliente
+     * @returns {{deducible: boolean|null, origen: string|null, ambito: string|null}}
+     */
+    _resolver(p, rucCliente) {
+        const rc = String(rucCliente || '').replace(/\D/g, '');
+        if (!p) return { deducible: null, origen: null, ambito: null };
+
+        const suyo = rc.length === 13 ? ((p.porCliente || {})[rc] || null) : null;
+        if (suyo && typeof suyo.deducible === 'boolean') {
+            return { deducible: suyo.deducible, origen: suyo.origen || null, ambito: 'cliente' };
+        }
+        if (typeof p.deducible === 'boolean') {
+            return { deducible: p.deducible, origen: p.origen || null, ambito: 'global' };
+        }
+        return { deducible: null, origen: null, ambito: null };
+    },
+
+    /**
+     * Qué le corresponde a este proveedor para ESTE contribuyente.
+     *
+     * Es la pregunta que hace el llenado del formulario, y la respuesta puede
+     * ser `null` — que significa «nadie lo decidió», no «no da crédito».
+     *
+     * @param {string} rucProveedor
+     * @param {string} rucCliente
+     * @returns {Promise<{deducible: boolean|null, origen: string|null, ambito: string|null}>}
+     */
+    async creditoDe(rucProveedor, rucCliente) {
+        const rp = String(rucProveedor || '').replace(/\D/g, '');
+        const base = await this._todos();
+        return this._resolver(base[rp] || null, rucCliente);
+    },
+
+    /**
+     * El mapa RUC → decisión para un contribuyente, de una sola lectura.
+     *
+     * El llenado del formulario recorre decenas de facturas; preguntar por cada
+     * una sería releer el almacén decenas de veces. Acá se lee una vez y se
+     * devuelve sólo lo que alguien decidió: los `null` no entran, y por eso un
+     * proveedor sin clasificar nunca puede caer en el 502.
+     *
+     * @param {string} rucCliente
+     * @returns {Promise<Map<string, {deducible: boolean, origen: string|null, ambito: string}>>}
+     */
+    async mapaCredito(rucCliente) {
+        const rc = String(rucCliente || '').replace(/\D/g, '');
+        const base = await this._todos();
+        const mapa = new Map();
+        Object.keys(base).forEach((ruc) => {
+            const d = this._resolver(base[ruc], rc);
+            if (d.deducible === true || d.deducible === false) mapa.set(ruc, d);
+        });
+        return mapa;
+    },
+
+    /**
+     * Toda la base, con la decisión ya resuelta para un contribuyente.
+     *
+     * El panel la usa para pintar los pendientes y, sobre todo, para poder
+     * **deshacer** una clasificación: sin ver lo ya decidido no hay forma de
+     * encontrar un click equivocado.
+     *
+     * @param {string} rucCliente
+     * @returns {Promise<Array<object>>}
+     */
+    async todos(rucCliente = '') {
+        const rc = String(rucCliente || '').replace(/\D/g, '');
+        const base = await this._todos();
+        return Object.keys(base).map((r) => ({
+            ruc: r,
+            ...base[r],
+            decision: this._resolver(base[r], rc)
+        }));
+    },
+
+    /**
+     * Todos los proveedores de UN cliente, con plata y períodos.
+     *
+     * `vistoEn` contestaba «¿alguna vez le facturó?»; esto contesta «cuánto,
+     * cuándo y a qué tarifa». Es la diferencia entre una lista de nombres y un
+     * perfil: con los montos se puede ver que el 80% de sus compras son de dos
+     * proveedores, o que uno le factura todos los meses y otro una sola vez.
+     *
+     * Incluye también los proveedores que sólo aparecen en `vistoEn` (datos
+     * anteriores a este agregado): no tienen montos, pero siguen siendo
+     * visibles y clasificables. `sinMontos` lo dice explícitamente.
+     *
+     * @param {string} rucCliente
+     * @param {string} [periodo] `YYYY-MM` para marcar quién facturó en el período.
+     * @returns {Promise<Array<object>>}
+     */
+    async deCliente(rucCliente, periodo = '') {
+        const rc = String(rucCliente || '').replace(/\D/g, '');
+        if (rc.length !== 13) return [];
+
+        const base = await this._todos();
+        const salida = [];
+
+        Object.keys(base).forEach((ruc) => {
+            const p = base[ruc];
+            const c = (p.clientes || {})[rc] || null;
+            const loVio = Array.isArray(p.vistoEn) && p.vistoEn.includes(rc);
+            if (!c && !loVio) return;
+
+            const per = (c && c.periodos && periodo) ? c.periodos[periodo] : null;
+            const sumaPer = (tipo) => (per && per[tipo]) ? per[tipo] : null;
+            const fac = sumaPer('facturas');
+            const nc = sumaPer('notasCredito');
+
+            salida.push({
+                ruc,
+                nombre: (c && c.nombre) || p.nombre || '',
+                veces: c ? (c.veces || 0) : 0,
+                base: c ? (c.base || 0) : 0,
+                iva: c ? (c.iva || 0) : 0,
+                total: c ? (c.total || 0) : 0,
+                tarifas: (c && c.tarifas) || p.tarifas || {},
+                periodos: c && c.periodos ? Object.keys(c.periodos).sort() : [],
+                primero: (c && c.primero) || p.primero || null,
+                ultimo: (c && c.ultimo) || p.ultimo || null,
+                enPeriodo: !!(fac || nc),
+                basePeriodo: ((fac && fac.base) || 0) - ((nc && nc.base) || 0),
+                ivaPeriodo: ((fac && fac.iva) || 0) - ((nc && nc.iva) || 0),
+                sinMontos: !c,
+                actividad: p.actividad || null,
+                categoria: p.categoria || null,
+                estadoSri: p.estadoSri || null,
+                decision: this._resolver(p, rc)
+            });
+        });
+
+        // Primero los del período (los que hay que declarar ahora), después
+        // por plata: clasificar al proveedor de $4.000 rinde más que al de $12.
+        salida.sort((a, b) =>
+            (b.enPeriodo ? 1 : 0) - (a.enPeriodo ? 1 : 0) ||
+            (b.basePeriodo || 0) - (a.basePeriodo || 0) ||
+            (b.base || 0) - (a.base || 0) ||
+            String(a.nombre).localeCompare(String(b.nombre)));
+
+        return salida;
+    },
+
+    /**
+     * El «nivel de perfil» de un cliente: cuánto se sabe de sus proveedores.
+     *
+     * No es una nota de crédito ni una decisión: es una medida de cuánto falta
+     * para poder clasificar sus compras sin adivinar. Se calcula con datos, no
+     * con una corazonada, y por eso se puede mostrar sin miedo.
+     *
+     * @param {string} rucCliente
+     * @param {string} [periodo]
+     * @returns {Promise<{proveedores: number, clasificados: number, conActividad: number,
+     *                    conPeriodo: number, conMontos: number, nivel: number,
+     *                    faltan: number}>}
+     */
+    async perfilDeCliente(rucCliente, periodo = '') {
+        const lista = await this.deCliente(rucCliente, periodo);
+        const total = lista.length;
+        const clasificados = lista.filter((p) => p.decision && p.decision.deducible !== null).length;
+        const conActividad = lista.filter((p) => p.actividad).length;
+        const conPeriodo = lista.filter((p) => p.enPeriodo).length;
+        const conMontos = lista.filter((p) => !p.sinMontos).length;
+
+        // Tres cosas hacen falta para no adivinar: saber A QUIÉN se le compra
+        // (montos), saber QUÉ hace (actividad) y haber decidido si da crédito.
+        // La actividad y el crédito pesan más porque son los que cambian el
+        // casillero; los montos son el contexto.
+        const nivel = total === 0 ? 0 : Math.round(
+            (clasificados / total) * 50 +
+            (conActividad / total) * 25 +
+            (conMontos / total) * 15 +
+            (conPeriodo / total) * 10
+        );
+
+        return {
+            proveedores: total,
+            clasificados,
+            conActividad,
+            conPeriodo,
+            conMontos,
+            nivel: Math.max(0, Math.min(100, nivel)),
+            faltan: Math.max(0, total - clasificados)
+        };
+    },
+
+    /**
+     * Deshace una clasificación.
+     *
+     * Con `clienteRuc` borra sólo la decisión de ese contribuyente y el
+     * proveedor vuelve a su criterio general. Sin él borra el criterio general.
+     * La actividad del catastro se conserva: eso no lo decidió nadie.
+     *
+     * @returns {Promise<boolean>}
+     */
+    async olvidarClasificacion(ruc, clienteRuc = '') {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        const rc = String(clienteRuc || '').replace(/\D/g, '');
+        if (limpio.length !== 13) return false;
+
+        const base = await this._todos();
+        const p = base[limpio];
+        if (!p) return false;
+
+        if (rc.length === 13) {
+            if (!p.porCliente || !p.porCliente[rc]) return false;
+            delete p.porCliente[rc];
+        } else {
+            p.deducible = null;
+            p.origen = null;
+            p.clasificado = null;
+        }
+        base[limpio] = p;
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+        return true;
+    },
+
+    /**
      * Los que faltan clasificar, los más frecuentes primero.
      *
      * El orden importa: clasificar el proveedor que aparece en 200 facturas
      * rinde doscientas veces más que el que aparece en una.
+     *
+     * Con `clienteRuc` se miran los pendientes **de ese contribuyente**: un
+     * proveedor con criterio general ya no está pendiente, y uno que le
+     * facturó a este cliente va primero. `leCompro` sirve para eso y se apoya
+     * en `vistoEn`, que tiene tope de 40 clientes por proveedor.
+     *
+     * @param {number} tope
+     * @param {string} clienteRuc
+     * @returns {Promise<Array<object>>}
      */
-    async pendientes(tope = 200) {
+    async pendientes(tope = 200, clienteRuc = '') {
+        const rc = String(clienteRuc || '').replace(/\D/g, '');
         const base = await this._todos();
         return Object.keys(base)
-            .filter((r) => base[r].origen === null || base[r].deducible === null)
-            .map((r) => ({ ruc: r, ...base[r] }))
-            .sort((a, b) => (b.veces || 0) - (a.veces || 0))
+            .filter((r) => this._resolver(base[r], rc).deducible === null)
+            .map((r) => ({
+                ruc: r,
+                ...base[r],
+                leCompro: rc.length === 13 && (base[r].vistoEn || []).includes(rc)
+            }))
+            .sort((a, b) => ((b.leCompro ? 1 : 0) - (a.leCompro ? 1 : 0)) ||
+                            ((b.veces || 0) - (a.veces || 0)))
             .slice(0, tope);
     },
 
-    async resumen() {
+    /**
+     * El estado de la base, para el panel.
+     *
+     * `sinCredito` es el número que importa de verdad: son los proveedores que
+     * un contador marcó sin derecho, o sea los únicos que mueven plata al 502.
+     * `sinClasificar` no es un error: es lo que todavía no se decidió y por eso
+     * sigue yendo a los casilleros de siempre.
+     *
+     * @param {string} clienteRuc Si viene, cuenta también las decisiones
+     *        propias de ese contribuyente.
+     */
+    async resumen(clienteRuc = '') {
+        const rc = String(clienteRuc || '').replace(/\D/g, '');
         const base = await this._todos();
         const rucs = Object.keys(base);
         const porOrigen = {};
@@ -2734,11 +3329,20 @@ const Proveedores = {
             const o = base[r].origen || 'sin clasificar';
             porOrigen[o] = (porOrigen[o] || 0) + 1;
         });
+        const decisiones = rucs.map((r) => this._resolver(base[r], rc));
         return {
             total: rucs.length,
-            clasificados: rucs.filter((r) => base[r].origen !== null).length,
+            clasificados: decisiones.filter((d) => d.deducible !== null).length,
             porOrigen,
-            comprobantes: rucs.reduce((a, r) => a + (base[r].veces || 0), 0)
+            comprobantes: rucs.reduce((a, r) => a + (base[r].veces || 0), 0),
+            porCliente: rc.length === 13
+                ? rucs.filter((r) => (base[r].porCliente || {})[rc]).length : 0,
+            // Proveedores con historial de compras de ESTE cliente. No es lo
+            // mismo que `porCliente` (que cuenta decisiones): acá hay plata.
+            conCompras: rc.length === 13
+                ? rucs.filter((r) => (base[r].clientes || {})[rc]).length : 0,
+            sinCredito: decisiones.filter((d) => d.deducible === false).length,
+            sinClasificar: decisiones.filter((d) => d.deducible === null).length
         };
     },
 
@@ -2812,7 +3416,7 @@ const Proveedores = {
 
         if (!r || !r.ok) {
             informe.error = (r && r.error) || 'La IA no contestó.';
-            console.warn('🤖 [IA] ' + informe.error);
+            log.warn('🤖 [IA] ' + informe.error);
             return informe;
         }
 
@@ -2830,7 +3434,7 @@ const Proveedores = {
         });
 
         if (toco) { try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { /* nada */ } }
-        console.log(`🤖 [IA] ${informe.sugeridos} de ${informe.preguntados} clasificados. ` +
+        log.debug(`🤖 [IA] ${informe.sugeridos} de ${informe.preguntados} clasificados. ` +
                     'Son SUGERENCIAS: quedan marcadas como tales hasta que las confirmes.');
         return informe;
     },
@@ -2886,9 +3490,107 @@ const Proveedores = {
 
         if (toco) { try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { /* nada */ } }
 
-        console.log(`🗂️ [CATASTRO] ${informe.sugeridos} actividad(es) sugerida(s) de ${informe.mirados} miradas · ` +
+        log.debug(`🗂️ [CATASTRO] ${informe.sugeridos} actividad(es) sugerida(s) de ${informe.mirados} miradas · ` +
                     `${informe.sinDatos} sin datos · ${informe.inactivos.length} no activo(s).`);
         return informe;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL PERFIL DE CRÉDITO DEL CONTRIBUYENTE
+// ═══════════════════════════════════════════════════════════════════════════
+// Hay una pregunta que no se contesta mirando al proveedor: **¿este cliente
+// vende algo gravado?** Un centro médico, una escuela o una cooperativa de
+// transporte venden al 0% (o exento): el IVA de sus compras al 15% o al 5% no
+// es crédito tributario, es costo. Ninguna clasificación de proveedor arregla
+// eso, porque no depende del proveedor.
+//
+// Lo dijo el usuario el 10-sep-2026, y es la razón #4 de su lista (AGENTS §12):
+// «un flag por cliente cubre muchísimo con una sola línea de criterio».
+//
+// Tres estados otra vez, y el del medio no es un «no»:
+//   - `soloCero: true`  → sus compras gravadas van SIN derecho a crédito
+//   - `soloCero: false` → el contador dijo que sí vende gravado
+//   - `null` / ausente  → nadie lo dijo, y no se supone nada
+//
+// **Esto no se deduce del catastro.** El CIIU dice a qué se dedica alguien, no
+// si su facturación es 0%. Deducirlo sería inventar un dato, y encima uno que
+// se lleva el crédito tributario de todo un período.
+const CreditoCliente = {
+    _KEY: 'sc_credito_cliente',
+
+    async _todos() {
+        try { return (await SafeStorage.get([this._KEY]))[this._KEY] || {}; }
+        catch (e) { return {}; }
+    },
+
+    /**
+     * El perfil guardado de un contribuyente, o `null` si nunca se dijo nada.
+     *
+     * @param {string} rucCliente
+     * @returns {Promise<{ruc: string, soloCero: boolean|null, actividad: string|null,
+     *                    origen: string|null, cuando: number|null}|null>}
+     */
+    async saber(rucCliente) {
+        const ruc = String(rucCliente || '').replace(/\D/g, '');
+        if (ruc.length !== 13) return null;
+        const base = await this._todos();
+        return base[ruc] ? { ruc, ...base[ruc] } : null;
+    },
+
+    /**
+     * Guarda el perfil. Una sugerencia no pisa lo que decidió el contador.
+     *
+     * @param {string} rucCliente
+     * @param {{soloCero?: boolean|null, actividad?: string|null, origen?: string}} datos
+     * @returns {Promise<boolean>} false si se rechazó por no pisar al usuario.
+     */
+    async poner(rucCliente, datos = {}) {
+        const ruc = String(rucCliente || '').replace(/\D/g, '');
+        if (ruc.length !== 13) return false;
+
+        const base = await this._todos();
+        const previo = base[ruc] || null;
+        const origen = datos.origen || 'usuario';
+
+        if (previo && previo.origen === 'usuario' && origen !== 'usuario') {
+            log.warn(`👤 [CRÉDITO] El perfil de ${ruc} ya lo decidió el contador. ` +
+                         `Una sugerencia (${origen}) no lo pisa.`);
+            return false;
+        }
+
+        const nuevo = previo || { soloCero: null, actividad: null, origen: null, cuando: null };
+        if (datos.soloCero !== undefined) nuevo.soloCero = datos.soloCero;
+        if (datos.actividad !== undefined) nuevo.actividad = datos.actividad;
+        nuevo.origen = origen;
+        nuevo.cuando = Date.now();
+
+        base[ruc] = nuevo;
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+        return true;
+    },
+
+    /** Borra el perfil de un contribuyente. */
+    async limpiar(rucCliente) {
+        const ruc = String(rucCliente || '').replace(/\D/g, '');
+        const base = await this._todos();
+        if (!base[ruc]) return false;
+        delete base[ruc];
+        try { await SafeStorage.set({ [this._KEY]: base }); } catch (e) { return false; }
+        return true;
+    },
+
+    /**
+     * ¿Este contribuyente vende SÓLO al 0%? Devuelve `true` únicamente cuando
+     * alguien lo afirmó: ni `null` ni `false` quitan crédito.
+     */
+    async soloCero(rucCliente) {
+        const p = await this.saber(rucCliente);
+        return !!(p && p.soloCero === true);
+    },
+
+    async olvidarTodo() {
+        try { await SafeStorage.remove(this._KEY); return true; } catch (e) { return false; }
     }
 };
 
@@ -2920,8 +3622,8 @@ async function anotarIvaSinUbicar(problemas = [], ambiguas = []) {
         return false;
     }
 
-    console.error('🛑 [IVA SIN UBICAR] Hay compras que no se pudieron declarar en su casillero:');
-    motivos.forEach((m) => console.error('   · ' + m));
+    log.error('🛑 [IVA SIN UBICAR] Hay compras que no se pudieron declarar en su casillero:');
+    motivos.forEach((m) => log.error('   · ' + m));
 
     try {
         await SafeStorage.set({
@@ -2951,9 +3653,9 @@ async function frenarSiHayIvaSinUbicar(donde = '') {
 
     if (!pendiente || !Array.isArray(pendiente.motivos) || pendiente.motivos.length === 0) return false;
 
-    console.error(`🛑 [IVA SIN UBICAR] No se envía${donde ? ' (' + donde + ')' : ''}: ` +
+    log.error(`🛑 [IVA SIN UBICAR] No se envía${donde ? ' (' + donde + ')' : ''}: ` +
                   `${pendiente.motivos.length} caso(s) de compras sin casillero.`);
-    pendiente.motivos.forEach((m) => console.error('   · ' + m));
+    pendiente.motivos.forEach((m) => log.error('   · ' + m));
 
     if (typeof anotarBitacora === 'function') {
         anotarBitacora('⛔ no se envió', 'compras sin casillero (IVA sin ubicar)');
@@ -3201,15 +3903,15 @@ async function elPortalVolvio() {
  * @returns {Promise<boolean>} `true` si va a reintentar (y la página se recarga).
  */
 async function manejarPortalCaido(salud, quien = {}) {
-    console.error(`🏥 [PORTAL] ${salud.motivo}.`);
-    console.error('   No es la clave, ni la sesión, ni la extensión: es el servidor del SRI.');
+    log.error(`🏥 [PORTAL] ${salud.motivo}.`);
+    log.error('   No es la clave, ni la sesión, ni la extensión: es el servidor del SRI.');
     anotarBitacora('portal caído', salud.motivo);
 
     const plan = await anotarPortalCaido();
 
     if (plan.seguir) {
         const seg = Math.round(plan.esperaMs / 1000);
-        console.warn(`⏳ [PORTAL] Intento ${plan.intento}: espero ${seg}s y vuelvo a probar. ` +
+        log.warn(`⏳ [PORTAL] Intento ${plan.intento}: espero ${seg}s y vuelvo a probar. ` +
                      'Insistir rápido contra un servidor saturado lo empeora.');
         if (typeof window !== 'undefined' && window.sriAssistant?.showEliteToast) {
             window.sriAssistant.showEliteToast({
@@ -3227,7 +3929,7 @@ async function manejarPortalCaido(salud, quien = {}) {
 
     // Se probó suficiente. Se para el lote y se dice por qué, sin inventarle
     // una falla al contribuyente.
-    console.error('🛑 [PORTAL] Sigue caído después de tres intentos con esperas crecientes. ' +
+    log.error('🛑 [PORTAL] Sigue caído después de tres intentos con esperas crecientes. ' +
                   'Se detiene el lote: con el portal así, el siguiente cliente falla igual.');
 
     if (quien.ruc && typeof Omitidos !== 'undefined') {
@@ -3262,7 +3964,7 @@ const Bitacora = {
             const af = r.pending_sri_autofill || {};
 
             let sem = {};
-            try { sem = await SriLoop.get(); } catch (e) {}
+            try { sem = await SriLoop.get(); } catch (e) { /* sin estado del bucle: sem queda vacío */ }
 
             lista.push({
                 t: Date.now(),
@@ -3338,12 +4040,12 @@ const Bitacora = {
 
     async limpiar() {
         await SafeStorage.remove([this._KEY]);
-        console.log('🧹 Bitácora vaciada.');
+        log.debug('🧹 Bitácora vaciada.');
     }
 };
 
 if (typeof window !== 'undefined') {
-    window.sriBitacora = async () => { console.log(await Bitacora.texto()); };
+    window.sriBitacora = async () => { log.debug(await Bitacora.texto()); };
     window.sriBitacoraTexto = () => Bitacora.texto();
     window.sriBitacoraLimpiar = () => Bitacora.limpiar();
 }
@@ -3373,7 +4075,7 @@ const findByText = (text, tag = '*') => {
         // Silencioso a propósito: se llama en bucles de escaneo y llenaba la
         // consola. Para verlo: window.sriDebug = true
         if (typeof window !== 'undefined' && window.sriDebug) {
-            console.log(`🔎 findByText("${text}"): 0 candidatos.`);
+            log.debug(`🔎 findByText("${text}"): 0 candidatos.`);
         }
         return null;
     }
@@ -3385,7 +4087,7 @@ const findByText = (text, tag = '*') => {
         return textA.length - textB.length;
     })[0];
 
-    console.log(`🎯 findByText("${text}") -> `, bestMatch);
+    log.debug(`🎯 findByText("${text}") -> `, bestMatch);
     return bestMatch;
 };
 
@@ -3404,7 +4106,7 @@ async function revisarVersionDelPortal() {
     const v = body && body.getAttribute && body.getAttribute('version');
     if (!v || v === SRI_VERSION_CALIBRADA) return v || null;
 
-    console.warn(`🐤 [CANARIO] El portal del SRI cambió de versión: ${SRI_VERSION_CALIBRADA} → ${v}. ` +
+    log.warn(`🐤 [CANARIO] El portal del SRI cambió de versión: ${SRI_VERSION_CALIBRADA} → ${v}. ` +
                  'Los selectores fijos están calibrados contra la anterior: revisá la Biblia antes de confiar en un lote largo.');
     try {
         const k = 'sc_version_portal_avisada';
@@ -3444,7 +4146,7 @@ async function clickCuandoSePueda(el, name, esperaMs = 8000) {
     const hasta = Date.now() + esperaMs;
     while (veloAjaxArriba() && Date.now() < hasta) await sleep(250);
     if (veloAjaxArriba()) {
-        console.warn(`⚠️ [AJAX] El velo siguió arriba ${Math.round(esperaMs / 1000)}s. No clickeo "${name}".`);
+        log.warn(`⚠️ [AJAX] El velo siguió arriba ${Math.round(esperaMs / 1000)}s. No clickeo "${name}".`);
         return false;
     }
     return clickElement(el, name);
@@ -3453,7 +4155,7 @@ async function clickCuandoSePueda(el, name, esperaMs = 8000) {
 const clickElement = (el, name) => {
     if (!el) {
         GhostBlackBox.add('CLICK_NULL', `Intento de clic fallido: ${name} (element null)`);
-        console.warn(`❌ No se pudo clickear: ${name} (Elemento null)`);
+        log.warn(`❌ No se pudo clickear: ${name} (Elemento null)`);
         return false;
     }
     // El velo de AJAX se come el clic: pulsar debajo no hace nada. Antes se
@@ -3461,12 +4163,12 @@ const clickElement = (el, name) => {
     // creyendo que el botón se pulsó. Ahora se dice que no se pudo.
     if (veloAjaxArriba()) {
         GhostBlackBox.add('CLICK_VELADO', `Clic no realizado por overlay AJAX: ${name}`);
-        console.warn(`⚠️ [AJAX] El velo de PrimeFaces está arriba: NO clickeo "${name}" porque el clic se perdería. ` +
+        log.warn(`⚠️ [AJAX] El velo de PrimeFaces está arriba: NO clickeo "${name}" porque el clic se perdería. ` +
                      'Usá clickCuandoSePueda() si hay que esperarlo.');
         return false;
     }
     GhostBlackBox.add('CLICK', `Clic en: ${name}`, { tag: el.tagName, id: el.id || 'sin-id', text: (el.innerText || '').trim().substring(0, 30) });
-    console.log(`✅ Clickeando: ${name}`, el);
+    log.info(`✅ Clickeando: ${name}`, el);
     const events = ['mouseover', 'mousedown', 'mouseup', 'click'];
     events.forEach(evtType => {
         el.dispatchEvent(new MouseEvent(evtType, { bubbles: true, cancelable: true, view: window }));
@@ -3489,7 +4191,7 @@ async function waitForRecaptchaReady(timeout = 4000) {
         return true;
     }
 
-    console.log('🤖 Verificando reCAPTCHA...');
+    log.debug('🤖 Verificando reCAPTCHA...');
     return await waitFor(() => {
         const recaptchaIframe = document.querySelector('iframe[src*="recaptcha"]');
         return recaptchaIframe !== null;
@@ -3632,7 +4334,7 @@ async function verifySessionConsistency() {
         const text = container.textContent || '';
         const match = text.match(/\b\d{13}\b/);
         if (match && match[0] !== info.ruc) {
-            console.warn(`🛑 Inconsistencia de cabecera: Header (${match[0]}) != Esperado (${info.ruc})`);
+            log.warn(`🛑 Inconsistencia de cabecera: Header (${match[0]}) != Esperado (${info.ruc})`);
             return false;
         }
     }
@@ -3652,7 +4354,7 @@ const waitFor = async (checkFn, timeoutMs = 8000, label = 'elemento') => {
         if (res) return res;
         await sleep(100);
     }
-    console.warn(`⏳ Timeout esperando: ${label}`);
+    log.warn(`⏳ Timeout esperando: ${label}`);
     return null;
 };
 
@@ -3692,8 +4394,8 @@ async function esperarAjaxSri(condicion, label = 'la respuesta del SRI', tope = 
     }
 
     const ms = Date.now() - t0;
-    if (listo) console.log(`⏱️ [SRI] ${label}: ${ms} ms`);
-    else console.warn(`⏱️ [SRI] ${label}: no apareció en ${ms} ms.`);
+    if (listo) log.info(`⏱️ [SRI] ${label}: ${ms} ms`);
+    else log.warn(`⏱️ [SRI] ${label}: no apareció en ${ms} ms.`);
     return listo;
 }
 
@@ -3711,7 +4413,7 @@ async function dismissSridialogs() {
         .filter(esVisible);
 
     for (const modal of modals) {
-        console.log('🛡️ SRI Assistant: Diálogo obstructor detectado. Limpiando...');
+        log.debug('🛡️ SRI Assistant: Diálogo obstructor detectado. Limpiando...');
 
         // Multi-estrategia para el botón Aceptar/OK
         // j_idt195 no aparece en ninguna traza real de Burp: era una suposición.
@@ -3783,13 +4485,13 @@ async function cerrarModalesNoPrimeFaces() {
 
         if (btnCerrar) {
             const resumen = (modal.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
-            console.log('🛡️ SRI Assistant: cerrando modal no-PrimeFaces:', resumen);
+            log.debug('🛡️ SRI Assistant: cerrando modal no-PrimeFaces:', resumen);
             clickElement(btnCerrar, 'Cerrar Modal Angular');
             await sleep(800);
             return true;
         }
 
-        console.warn('⚠️ Modal visible sin control de cierre reconocible. NO se pulsa nada por texto:',
+        log.warn('⚠️ Modal visible sin control de cierre reconocible. NO se pulsa nada por texto:',
             (modal.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80));
     }
 
@@ -3821,14 +4523,14 @@ const waitForPortal = async (maxWait = 10000) => {
         // El portal está listo cuando todos los bloqueos están ocultos
         if (overlayHidden && splashHidden && noDisabling) {
             await sleep(300); // Margen de seguridad
-            console.log('✅ waitForPortal: Portal listo');
+            log.info('✅ waitForPortal: Portal listo');
             return true;
         }
 
         await sleep(400);
     }
 
-    console.warn('⚠️ waitForPortal: Timeout alcanzado');
+    log.warn('⚠️ waitForPortal: Timeout alcanzado');
     return false;
 };
 
@@ -3836,7 +4538,7 @@ const waitForPortal = async (maxWait = 10000) => {
 // MENSAJES ESCUCHA (v3.2)
 // ============================================================
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('📨 Mensaje recibido en Content:', request.action);
+    log.debug('📨 Mensaje recibido en Content:', request.action);
 
     if (request.action === 'autoFillSearch') {
         autoLlenarBusqueda()
@@ -3965,7 +4667,7 @@ async function iniciarExtractorDocumentos(config = {}) {
         onlyExtract = true
     } = config;
 
-    console.log('🚀 [EXTRACTOR] Solicitud de extracción segura recibida:', config);
+    log.debug('🚀 [EXTRACTOR] Solicitud de extracción segura recibida:', config);
     if (window.sriAssistant) {
         window.sriAssistant.log(`🚀 Extractor solicitado: ${String(bulkType).toUpperCase()} ${year}...`);
         window.sriAssistant.setWorking(true);
@@ -4003,7 +4705,7 @@ async function iniciarExtractorDocumentos(config = {}) {
             if (window.sriAssistant) window.sriAssistant.setWorking(false);
             return { ok: true, totals };
         } catch (eCur) {
-            console.error('Error al extraer tabla actual:', eCur);
+            log.error('Error al extraer tabla actual:', eCur);
             if (window.sriAssistant) {
                 window.sriAssistant.showEliteToast({ title: 'Error', msg: 'No se pudo extraer la tabla actual: ' + eCur.message });
                 window.sriAssistant.setWorking(false);
@@ -4150,7 +4852,7 @@ if (typeof window !== 'undefined') {
 
     // ELITE v12.1: TRIGGER FLUJO MANUAL INDIVIDUAL
     if (request.action === 'START_MANUAL_FLOW') {
-        console.log('🚀 Iniciando FLUJO MANUAL INDIVIDUAL:', request.data.tipo);
+        log.debug('🚀 Iniciando FLUJO MANUAL INDIVIDUAL:', request.data.tipo);
 
         let nextAction = 'turbo_step1_facturas';
         if (request.data.tipo === 'RETENCIONES') nextAction = 'turbo_step3_retenciones';
@@ -4200,7 +4902,7 @@ function getNextTurboStep(currentStep, settings) {
 // ESCUCHADOR DE MENSAJES DE LA WEB (SantiagoCordova.com Bridge)
 window.addEventListener('message', async (event) => {
     if (!event.data || event.data.source !== 'SC_PRO_DASHBOARD') return;
-    console.log('⚡ [SC PRO Bridge] Mensaje de la web recibido en Content Script:', event.data.type);
+    log.debug('⚡ [SC PRO Bridge] Mensaje de la web recibido en Content Script:', event.data.type);
 
     if (event.data.type === 'SRI_AUTOFILL_DATA' && event.data.data) {
         const d = event.data.data;
@@ -4259,14 +4961,14 @@ window.addEventListener('message', async (event) => {
         let queue = (d.clients || []).filter(c => {
             // Si el cliente ya viene marcado con hasPdf === true explícitamente desde la web, omitirlo
             if (c.hasPdf === true) {
-                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante confirmado desde la web (${pStr}). Se omite.`);
+                log.debug(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante confirmado desde la web (${pStr}). Se omite.`);
                 return false;
             }
 
             // 1. Registro local
             const local = localRegs[`${c.ruc}|${pStr}`];
             if (local && local.pdfSubido) {
-                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en registro local (${pStr}). Se omite del lote.`);
+                log.debug(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en registro local (${pStr}). Se omite del lote.`);
                 return false;
             }
 
@@ -4277,7 +4979,7 @@ window.addEventListener('message', async (event) => {
                 dec && (dec.proof_file?.url || dec.proof_file || dec.pdfUrl) && String(dec.period || '').includes(pStr)
             );
             if (yaTienePdf) {
-                console.log(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en el sistema (${pStr}). Se omite para no repetir.`);
+                log.debug(`🛡️ [BUCLE] ${c.name || c.ruc} ya tiene comprobante en el sistema (${pStr}). Se omite para no repetir.`);
                 return false;
             }
             return true;
@@ -4360,7 +5062,7 @@ function initDeclarationSuccessWatcher() {
             const state = await SafeStorage.get(['declaration_synced_flag']);
             if (!state.declaration_synced_flag) {
                 await SafeStorage.set({ declaration_synced_flag: true });
-                console.log('🎉 [SRI WATCHER] ¡Pantalla de confirmación de declaración detectada!');
+                log.debug('🎉 [SRI WATCHER] ¡Pantalla de confirmación de declaración detectada!');
                 // Cierre POST-ENVÍO (la declaración ya fue aceptada por el SRI).
                 if (window.sriAssistant && typeof window.sriAssistant.finalizarPostEnvioSRI === 'function') {
                     await window.sriAssistant.finalizarPostEnvioSRI();
@@ -4381,7 +5083,7 @@ function findAceptarBtnOnSummary() {
     // 1. CONFIRMADO DOM REAL (03-sep-2026): id="frmFlujoDeclaracion:divBotonContinuarConfirmacion"
     const confirmedBtn = document.getElementById('frmFlujoDeclaracion:divBotonContinuarConfirmacion');
     if (confirmedBtn && esVisible(confirmedBtn) && !confirmedBtn.closest('.ui-dialog, .ui-helper-hidden')) {
-        console.log('🎯 [SUMMARY SEARCH] Botón oficial Aceptar/Enviar localizado por ID confirmado:', confirmedBtn);
+        log.debug('🎯 [SUMMARY SEARCH] Botón oficial Aceptar/Enviar localizado por ID confirmado:', confirmedBtn);
         return confirmedBtn;
     }
 
@@ -4394,7 +5096,7 @@ function findAceptarBtnOnSummary() {
     if (greenBtn && esVisible(greenBtn) && !greenBtn.closest('.ui-dialog, .ui-helper-hidden')) {
         const btnTxt = (greenBtn.innerText || greenBtn.textContent || '').toLowerCase();
         if (!btnTxt.includes('borrador')) {
-            console.log('🎯 [SUMMARY SEARCH] Botón principal Aceptar localizado por ID secundario:', greenBtn);
+            log.debug('🎯 [SUMMARY SEARCH] Botón principal Aceptar localizado por ID secundario:', greenBtn);
             return greenBtn;
         }
     }
@@ -4486,7 +5188,7 @@ async function autoDismissSriWarnings() {
                 return txt.includes('CASILLERO 625') || txt.includes('FACULTAD DETERMINADORA') || txt.includes('CRÉDITO TRIBUTARIO NO HAYA SUPERADO LOS 5 AÑOS');
             });
             if (!todosInofensivos) {
-                console.warn('⚠️ [SRI ELITE] Advertencia crítica detectada. Requiere revisión humana:', mensajes.map(m => m.textContent));
+                log.warn('⚠️ [SRI ELITE] Advertencia crítica detectada. Requiere revisión humana:', mensajes.map(m => m.textContent));
                 esSeguro = false;
             }
         } else if (textContent.includes('ERROR') || textContent.includes('INCONSISTENCIA')) {
@@ -4496,7 +5198,7 @@ async function autoDismissSriWarnings() {
         if (esSeguro) {
             const confirmBtn = findAceptarInContainer(dlg);
             if (confirmBtn) {
-                console.log('✅ [SRI DISMISS] Clickeando "Aceptar" en diálogo SRI seguro:', confirmBtn);
+                log.info('✅ [SRI DISMISS] Clickeando "Aceptar" en diálogo SRI seguro:', confirmBtn);
                 if (typeof clickElement === 'function') clickElement(confirmBtn, 'Aceptar Advertencia Modal SRI');
                 else confirmBtn.click();
                 await sleep(500);

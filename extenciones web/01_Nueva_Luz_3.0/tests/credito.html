@@ -1,0 +1,331 @@
+<!doctype html><meta charset="utf-8"><title>El crédito tributario: 500 vs 502</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Categorizar las compras por su crédito: lo que da derecho va al 500, lo que no al 502</h3>
+<p style="max-width:84ch;line-height:1.6;color:#9fb4d4">
+  Hasta hoy el bot metía <b>todas</b> las compras al 15% en el 500/510 y el
+  502/512 nunca se usaba: marcar un proveedor como «sin derecho» en 🏷️ no
+  movía un centavo. Ahora sí — pero sólo cuando un contador lo afirmó. Un
+  proveedor sin clasificar va donde iba siempre: <b>nunca al 502 por las
+  dudas</b>, porque eso le quita al contribuyente un crédito que quizá le
+  corresponde.
+</p>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(62)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const A = '0990123456001';   // ferretería: insumo para un constructor, gasto personal para una odontóloga
+  const B = '1791234567001';   // supermercado
+  const C1 = '0703891838001';  // el contribuyente que está declarando
+
+  // ══ A · la función pura: números, sin portal ni almacén ════════════════
+  sec('A · repartirCreditoCompras() — la cuenta, sola');
+
+  const quince = [
+    { numero: 1, ruc: A, rucRazon: 'FERRETERIA', base: 100, iva: 15 },
+    { numero: 2, ruc: B, rucRazon: 'SUPERMERCADO', base: 200, iva: 30 }
+  ];
+
+  let r = repartirCreditoCompras({ quince }, new Map(), {});
+  push('sin decisiones, todo va con crédito', [r.conCredito15, r.sinCredito15], [300, 0]);
+  push('y se cuentan las que nadie clasificó', r.sinClasificar, 2);
+  push('sin nada en el detalle del 502', r.detalleSinCredito, []);
+
+  r = repartirCreditoCompras({ quince }, new Map([[A, { deducible: false, ambito: 'cliente' }]]), {});
+  push('la marcada sin derecho se aparta', [r.conCredito15, r.sinCredito15], [200, 100]);
+  // El detalle lleva el IVA de la factura: es lo que después escribe el 522.
+  // Sin ese número el formulario quedaba con base declarada e impuesto en 0.
+  push('y queda dicho por qué', r.detalleSinCredito[0],
+       { ruc: A, nombre: 'FERRETERIA', base: 100, iva: 15, tarifa: '15', motivo: 'cliente' });
+  push('la otra sigue sin clasificar', r.sinClasificar, 1);
+
+  r = repartirCreditoCompras({ quince }, new Map([[A, { deducible: true }]]), {});
+  push('marcada CON derecho no se aparta', r.sinCredito15, 0);
+  push('y sólo cuenta la que falta', r.sinClasificar, 1);
+
+  // La regla que protege la firma: null no es «no».
+  r = repartirCreditoCompras({ quince }, new Map([[A, { deducible: null }]]), {});
+  push('un null en el mapa no aparta nada', r.sinCredito15, 0);
+
+  // Vende sólo al 0%: no depende del proveedor, se aparta todo.
+  r = repartirCreditoCompras({ quince }, new Map(), { soloCero: true });
+  push('si vende sólo al 0%, ninguna da crédito', r.sinCredito15, 300);
+  push('y todas quedan con ese motivo', r.detalleSinCredito.every((x) => x.motivo === 'soloCero'), true);
+
+  // El 5% también puede quedar sin derecho (el 502 es «tarifa distinta de cero»).
+  const cinco = [{ numero: 3, ruc: B, rucRazon: 'SUPERMERCADO', base: 50, iva: 2.5 }];
+  r = repartirCreditoCompras({ quince, cinco }, new Map([[B, { deducible: false }]]), {});
+  push('el 15% del marcado se aparta', r.sinCredito15, 200);
+  push('y su 5% también', r.sinCredito5, 50);
+  push('el 5% del otro sigue con crédito', r.conCredito5, 0);
+
+  // Centavos: se redondea una vez, al final.
+  r = repartirCreditoCompras({
+    quince: [{ ruc: A, base: 0.1, iva: 0.015 }, { ruc: A, base: 0.2, iva: 0.03 }]
+  }, new Map([[A, { deducible: false }]]), {});
+  push('0.1 + 0.2 son 0.3, no 0.30000000000000004', r.sinCredito15, 0.3);
+
+  // El IVA del bloque sin derecho (casillero 522): el SRI no lo calcula solo.
+  let ivaRep = ivaDelBloqueSinCredito({
+    sinCredito15: 100, sinCredito5: 0,
+    ivaSinCredito15: 15, ivaSinCredito5: 0,
+    detalleSinCredito: [{ tarifa: '15', base: 100 }]
+  }, {});
+  push('el 522 sale del IVA real de la factura', ivaRep.iva, 15);
+  push('y no falta nada',                        ivaRep.falta, false);
+
+  ivaRep = ivaDelBloqueSinCredito({
+    sinCredito15: 250, ivaSinCredito15: 0,
+    detalleSinCredito: [{ tarifa: '15', base: 250 }]
+  }, { iva15: { baseImponible: 300, montoIva: 45 } });
+  push('sin IVA por factura, se aplica la tarifa del balde', ivaRep.iva, 37.5);
+
+  ivaRep = ivaDelBloqueSinCredito({
+    sinCredito15: 100, ivaSinCredito15: 0,
+    detalleSinCredito: [{ tarifa: '15', base: 100 }]
+  }, {});
+  push('sin factura ni balde, NO se inventa el IVA', [ivaRep.iva, ivaRep.falta], [0, true]);
+
+  // Basura no rompe ni suma.
+  r = repartirCreditoCompras({ quince: [null, { ruc: A }, { ruc: A, base: 0 }, { ruc: A, base: -5 }] },
+                             new Map([[A, { deducible: false }]]), {});
+  push('sin base no hay nada que apartar', [r.sinCredito15, r.sinClasificar], [0, 0]);
+
+  // ══ A2 · de dónde sale el detalle: el resumen del 04 ═══════════════════
+  sec('A2 · calcularResumen() deja anotado QUIÉN emitió cada compra');
+  const rz = calcularResumen([
+    { numero: 1, rucEmisor: A, rucRazon: 'FERRETERIA', valorSinImpuestos: 100, iva: 15, importeTotal: 115 },
+    // Mezclada de supermercado: base 61 con IVA 1,83 → 12,20 al 15% + 48,80 al 0%.
+    { numero: 2, rucEmisor: B, rucRazon: 'SUPERMERCADO', valorSinImpuestos: 61, iva: 1.83, importeTotal: 62.83 },
+    { numero: 3, rucEmisor: B, rucRazon: 'SUPERMERCADO', valorSinImpuestos: 40, iva: 0, importeTotal: 40 }
+  ], {});
+
+  push('el detalle dice quién emitió cada una', rz.detalle15.map((f) => f.ruc), [A, B]);
+  push('de la mezclada va SÓLO la parte gravada', rz.detalle15[1].base, 12.2);
+  push('y la del 0% no entra', rz.detalle15.length, 2);
+  // Si el detalle no suma exactamente el balde, el reparto se come centavos.
+  push('el detalle cuadra con el balde del 15%',
+       redondear(rz.detalle15.reduce((a, f) => a + f.base, 0)), rz.iva15.baseImponible);
+
+  // ══ B · atado al contribuyente que se declara ══════════════════════════
+  sec('B · repartirComprasPorCredito() — con lo guardado');
+
+  await SafeStorage.set({ pending_sri_autofill: { ruc: C1 } });
+  await Proveedores.olvidarTodo();
+  await CreditoCliente.olvidarTodo();
+
+  await Proveedores.registrarLote([
+    { rucEmisor: A, razonSocial: 'FERRETERIA' },
+    { rucEmisor: B, razonSocial: 'SUPERMERCADO' }
+  ], C1);
+  await Proveedores.clasificar(A, { deducible: false, origen: 'usuario', clienteRuc: C1 });
+
+  const facturas = {
+    iva15: { baseImponible: 300, montoIva: 45, cantidad: 2 },
+    iva5: { baseImponible: 0 },
+    detalle15: quince,
+    detalle5: []
+  };
+
+  r = await repartirComprasPorCredito(facturas);
+  push('usa la decisión guardada del cliente', r.sinCredito15, 100);
+
+  // Un monto puesto a mano es una decisión explícita: manda.
+  r = await repartirComprasPorCredito({ ...facturas, base15SinCredito: 250 });
+  push('un monto a mano manda sobre el reparto', r.sinCredito15, 250);
+  push('y su IVA sale de la tarifa efectiva (45/300)', r.ivaSinCredito15, 37.5);
+  push('y queda dicho que fue a mano', r.detalleSinCredito.some((x) => x.motivo === 'manual'), true);
+
+  // …pero no puede llevarse más base que la que hay: el 500 quedaría en
+  // negativo y el total de compras dejaría de cuadrar.
+  r = await repartirComprasPorCredito({ ...facturas, base15SinCredito: 999 });
+  push('no se aparta más base que la declarada', r.sinCredito15, 300);
+
+  // Sin detalle por factura no se puede preguntar por proveedor, pero con
+  // «vende sólo al 0%» la respuesta es la misma para todas: el balde entero.
+  await CreditoCliente.poner(C1, { soloCero: true, origen: 'usuario' });
+  r = await repartirComprasPorCredito({ iva15: { baseImponible: 300 }, iva5: { baseImponible: 50 } });
+  push('sin detalle y sólo 0%, se aparta el balde entero', [r.sinCredito15, r.sinCredito5], [300, 50]);
+  await CreditoCliente.limpiar(C1);
+
+  // Un resumen viejo (sin detalle) y sin perfil: comportamiento de siempre.
+  r = await repartirComprasPorCredito({ iva15: { baseImponible: 300 } });
+  push('sin datos, no se aparta nada', r.sinCredito15, 0);
+
+  // ══ C · el formulario: 500/510 vs 502/512 ══════════════════════════════
+  sec('C · el llenado escribe en el casillero que corresponde');
+
+  const P = document.getElementById('portal');
+  const fila = (rotulo, numero, id) =>
+    `<tr><td>${rotulo}</td>` +
+    `<td><table><tbody><tr><td>${numero}</td></tr></tbody></table></td>` +
+    `<td><table><tbody><tr><td><input type="text" id="${id}" value="0.00"></td></tr></tbody></table></td></tr>`;
+  const ROT_CON = 'Adquisiciones y pagos (excluye activos fijos) gravados tarifa diferente de cero (con derecho a crédito tributario)';
+  const ROT_SIN = 'Otras adquisiciones y pagos gravados tarifa diferente de cero (sin derecho a crédito tributario)';
+  const form = (con502) => '<table><tbody>' +
+    fila(ROT_CON, '500', 'concepto500') +
+    fila(ROT_CON, '510', 'concepto510') +
+    (con502 ? fila(ROT_SIN, '502', 'concepto502') + fila(ROT_SIN, '512', 'concepto512') +
+              fila(ROT_SIN, '522', 'concepto1480') : '') +
+    fila('Adquisiciones y pagos locales gravados con tarifa 5% (con derecho a crédito tributario)', '540', 'concepto540') +
+    fila('Adquisiciones y pagos locales gravados con tarifa 5% (con derecho a crédito tributario)', '550', 'concepto550') +
+    '</tbody></table>';
+  const valor = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+
+  const datos = {
+    facturas: {
+      totalFacturas: 2,
+      iva15: { baseImponible: 300, montoIva: 45, cantidad: 2 },
+      iva5: { baseImponible: 0 },
+      iva0: { baseImponible: 0 },
+      detalle15: quince,
+      detalle5: []
+    },
+    notasCredito: null
+  };
+
+  // (1) Un proveedor marcado sin derecho: $100 salen del 500 y entran al 502.
+  P.innerHTML = form(true);
+  await SafeStorage.remove('iva_sin_ubicar');
+  const campos = await llenarCompras(datos);
+  push('el 500 queda con la parte CON derecho', valor('concepto500'), '200.00');
+  push('y el 510 también',                      valor('concepto510'), '200.00');
+  push('el 502 recibe la parte SIN derecho',    valor('concepto502'), '100.00');
+  push('y el 512, su neto',                     valor('concepto512'), '100.00');
+  push('y el 522, su IVA (lo que el SRI dejaba en rojo)', valor('concepto1480'), '15.00');
+  push('se contaron los casilleros llenados',   campos > 0, true);
+  push('y no quedó nada sin ubicar',            await SafeStorage.get(['iva_sin_ubicar']), {});
+
+  // (2) Sin clasificar, todo como siempre: 500 = 300 y el 502 ni se toca.
+  await Proveedores.olvidarTodo();
+  P.innerHTML = form(true);
+  await llenarCompras(datos);
+  push('sin clasificar, todo va al 500',     valor('concepto500'), '300.00');
+  push('y el 502 queda en cero',             valor('concepto502'), '0.00');
+  push('y el 510 también',                   valor('concepto510'), '300.00');
+  push('y el 522 no se toca',                valor('concepto1480'), '0.00');
+
+  // (3) Si el 502 no está en pantalla, esa plata NO se manda al 500 (inflaría
+  //     el crédito) y el cierre mágico queda advertido para frenar el envío.
+  await Proveedores.registrarLote([{ rucEmisor: A, razonSocial: 'FERRETERIA' }], C1);
+  await Proveedores.clasificar(A, { deducible: false, origen: 'usuario', clienteRuc: C1 });
+  P.innerHTML = form(false);
+  await SafeStorage.remove('iva_sin_ubicar');
+  await llenarCompras(datos);
+  push('el 500 no se infla con la parte sin derecho', valor('concepto500'), '200.00');
+  const pendiente = (await SafeStorage.get(['iva_sin_ubicar'])).iva_sin_ubicar;
+  push('y la plata sin casillero queda anotada', /502/.test(JSON.stringify(pendiente)), true);
+  push('con su monto a la vista',               /\$100\.00/.test(JSON.stringify(pendiente)), true);
+
+  await SafeStorage.remove('iva_sin_ubicar');
+  await Proveedores.olvidarTodo();
+
+  // ══ D · el panel muestra el reparto en dinero ══════════════════════════
+  sec('D · 🏷️ dice cuánto va a cada casillero, antes de declarar');
+
+  await Proveedores.registrarLote([
+    { rucEmisor: A, razonSocial: 'FERRETERIA' },
+    { rucEmisor: B, razonSocial: 'SUPERMERCADO' }
+  ], C1);
+  await Proveedores.clasificar(A, { deducible: false, origen: 'usuario', clienteRuc: C1 });
+  await SafeStorage.set({ [`data_${C1}_facturas`]: datos.facturas });
+
+  P.innerHTML = '';
+  SriLoopHUD._enSri = () => true;
+  SriLoopHUD._el = null;
+  await SriLoopHUD.montar();
+  await SriLoopHUD.pintarProveedores();
+  const panel = document.getElementById('slh-proveedores-panel');
+  push('el panel muestra lo que va al 502',   panel.innerHTML.includes('100.00'), true);
+  push('y lo que va al 500',                  panel.innerHTML.includes('200.00'), true);
+  push('con el rótulo del casillero',         /502\/512/.test(panel.innerHTML), true);
+  push('y el interruptor del «sólo 0%»',      !!panel.querySelector('#slh-prov-solocero'), true);
+  // El RUC del cliente no se pinta: es con quién opera el estudio.
+  push('no expone el RUC del contribuyente',  panel.innerHTML.includes(C1), false);
+
+  // El «sólo 0%» se puede tocar desde el panel y mueve TODO al 502.
+  await CreditoCliente.poner(C1, { soloCero: true, origen: 'usuario' });
+  await SriLoopHUD.pintarProveedores();
+  const panel2 = document.getElementById('slh-proveedores-panel');
+  push('con «sólo 0%» el 500 queda vacío de crédito', /0\.00<\/span> → 500\/510/.test(panel2.innerHTML), true);
+  push('y el 502 se lleva los $300', /300\.00<\/span> → 502\/512/.test(panel2.innerHTML), true);
+
+  // ══ E · el perfil del cliente: sus proveedores, con plata y sin doble conteo
+  sec('E · el perfil del cliente: sus proveedores, con plata y sin doble conteo');
+  await Proveedores.olvidarTodo();
+
+  const lote = [
+    { rucEmisor: A, razonSocial: 'FERRETERIA CENTRAL', fechaEmision: '05/10/2026', valorSinImpuestos: 100, iva: 15, importeTotal: 115 },
+    { rucEmisor: A, razonSocial: 'FERRETERIA CENTRAL', fechaEmision: '20/10/2026', valorSinImpuestos: 50, iva: 7.5, importeTotal: 57.5 },
+    { rucEmisor: B, razonSocial: 'SUPERMERCADO EL AHORRO', fechaEmision: '10/09/2026', valorSinImpuestos: 200, iva: 30, importeTotal: 230 }
+  ];
+  await Proveedores.registrarLote(lote, C1, '2026-10');
+  let delCli = await Proveedores.deCliente(C1, '2026-10');
+  push('ve los dos proveedores de este cliente', delCli.length, 2);
+  const fer = delCli.find(p => p.ruc === A);
+  push('con la base del período, no la global',    fer.basePeriodo, 150);
+  push('y su IVA del período',                     fer.ivaPeriodo, 22.5);
+  push('el del mes anterior queda como histórico', delCli.find(p => p.ruc === B).enPeriodo, false);
+  push('pero sigue en el perfil',                  delCli.find(p => p.ruc === B).base, 200);
+  push('y guarda en qué período facturó',          delCli.find(p => p.ruc === B).periodos, ['2026-09']);
+
+  // La extracción se corre dos veces (tabla y TXT): no puede duplicar.
+  await Proveedores.registrarLote(lote, C1, '2026-10');
+  delCli = await Proveedores.deCliente(C1, '2026-10');
+  push('re-extraer el mismo período no duplica',   delCli.find(p => p.ruc === A).basePeriodo, 150);
+  push('ni infla el total del cliente',            delCli.find(p => p.ruc === A).base, 150);
+
+  // Una nota de crédito devuelve plata: resta, no suma.
+  await Proveedores.registrarLote([
+    { rucEmisor: A, razonSocial: 'FERRETERIA CENTRAL', esNotaCredito: true, fechaEmision: '25/10/2026', valorSinImpuestos: 20, iva: 3, importeTotal: 23 }
+  ], C1, '2026-10');
+  delCli = await Proveedores.deCliente(C1, '2026-10');
+  push('la nota de crédito resta de la base',      delCli.find(p => p.ruc === A).basePeriodo, 130);
+  push('y también de su IVA',                      delCli.find(p => p.ruc === A).ivaPeriodo, 19.5);
+
+  let met = await Proveedores.perfilDeCliente(C1, '2026-10');
+  push('el nivel de perfil cuenta sus proveedores', met.proveedores, 2);
+  push('sin clasificar, avisa cuántos faltan',      met.faltan, 2);
+  await Proveedores.clasificar(A, { deducible: false, origen: 'usuario', clienteRuc: C1 });
+  met = await Proveedores.perfilDeCliente(C1, '2026-10');
+  push('clasificar sube el nivel',                  met.clasificados, 1);
+  push('y el nivel deja de ser cero',               met.nivel > 0, true);
+
+  // Las pistas ayudan a clasificar, pero no clasifican solas.
+  const pA = await Proveedores.saber(A);
+  const sug = Proveedores.sugerencias(pA, C1, 'CONSTRUCCION');
+  push('el nombre sugiere el rubro',                sug.some(s => /ferretería\/construcción/i.test(s)), true);
+  push('y la decisión sigue siendo del contador',   (await Proveedores.creditoDe(A, C1)).deducible, false);
+
+  // El período se normaliza a YYYY-MM desde las tres formas del proyecto.
+  await SafeStorage.set({ workflowPeriod: { year: 2026, monthIndex: 9 } });
+  push('el período sale del lote de trabajo',       await periodoDeTrabajo(), '2026-10');
+  push('y la fecha de la factura manda',            await periodoDeTrabajo('10/09/2026'), '2026-09');
+
+  document.getElementById('sri-loop-hud').remove();
+  await CreditoCliente.olvidarTodo();
+  await Proveedores.olvidarTodo();
+
+  const fallos = ok.filter(x=>!x).length;
+  document.getElementById('out').textContent =
+    L.join('\n') + '\n\n' + (fallos ? '✗ '+fallos+' de '+ok.length+' fallaron'
+                                    : '✓ '+ok.length+' comprobaciones, todas bien') +
+    (window.__errors.length ? '\n\nERRORES SUELTOS:\n'+window.__errors.join('\n') : '');
+})();
+</script>

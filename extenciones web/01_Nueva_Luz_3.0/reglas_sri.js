@@ -261,11 +261,11 @@
       id: 'R-LEY-502-512-SIN-DERECHO',
       severidad: 'critica',
       tipo: 'ley',
-      regla: 'Los casilleros 502/512 (compras sin derecho a crédito) existen; el bot no los usa hasta que el contador defina el mapa CIIU → deducible.',
-      porque: 'Mandarlo ahí por las dudas le quita al contribuyente un crédito que quizá le corresponde. AGENTS §0b.1.',
-      fuente: { doc: 'AGENTS.md §0b.1 y §9a' },
-      accion: 'hoy: todo va a 500/510; el 502/512 queda sin cablear hasta el mapa (decisión del contador)',
-      cobertura: [],
+      regla: 'Los casilleros 502/512 (compras sin derecho a crédito) se llenan SÓLO con lo que un contador marcó sin derecho —por proveedor para ese cliente, o porque el contribuyente vende únicamente al 0%—. Un proveedor sin clasificar va a los casilleros de siempre: nunca al 502 por las dudas.',
+      porque: 'Las dos equivocaciones cuestan plata y ninguna avisa: mandar al 502 lo que sí daba crédito se lo quita al contribuyente, y dejarlo en el 500 cuando no daba derecho lo hace pagar de menos con la firma del contador. AGENTS §0b.1 y §12.',
+      fuente: { doc: 'AGENTS.md §0b.1, §9a y §12' },
+      accion: 'el criterio es del contador y se guarda por cliente; el bot lo aplica y muestra el reparto en dinero antes de declarar',
+      cobertura: ['credito.html', 'proveedores.html'],
       estado: 'requiere_contador'
     },
     {

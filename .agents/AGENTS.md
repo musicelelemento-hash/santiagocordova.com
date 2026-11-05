@@ -460,7 +460,7 @@ sospecha puntual). Banco: `tests/lote.html`, secciones E2-E3.
 | Qué | Estado | Quién lo cierra | Dónde |
 | :--- | :--- | :--- | :--- |
 | Laboratorio de proveedores · el mapa CIIU → crédito | cimiento hecho, falta el mapa | **el contador** | §7 · §9b · §0b.1 |
-| Casilleros 502 / 512 (sin derecho a crédito) | `id` sin confirmar | 📐 + Biblia | §9a · §0b.5 |
+| Casilleros 502 / 512 (sin derecho a crédito) | ✅ cableado 04-nov-2026 — se buscan por NÚMERO de casillero, no por `id` | §9a · §0b.1 |
 | Casillero 560 (IVA generado del 540) | `id` sin confirmar | 📐 + Biblia | §6 C |
 | Notificar declaraciones por WhatsApp | sala de envío lista, falta el automático | código + cuenta Meta | §0b.6 |
 | Email automático con el PDF adjunto | decidido, no empezado | código | §0b.6 |
@@ -512,6 +512,40 @@ sospecha puntual). Banco: `tests/lote.html`, secciones E2-E3.
    modo «seguir» de hecho: un proveedor sin clasificar va donde va hoy y queda
    en la lista de pendientes. **Nunca al 502 por las dudas** — mandarlo ahí le
    quita al contribuyente un crédito que quizá le corresponde.
+
+**✅ HECHO el 04-nov-2026 — el laboratorio ya mueve plata, y sólo cuando se lo dijeron**
+
+> Pedido del usuario: *«pulir eso de categorizar las facturas de compras por si
+> son para crédito tributario según su clasificación de actividad»*. Hasta ese
+> día marcar un proveedor como «sin derecho» en 🏷️ **no movía un centavo**: el
+> 502/512 no se escribía nunca y todo el 15% caía en el 500. El botón existía y
+> no hacía nada, que es peor que no ofrecerlo.
+
+Lo que quedó construido:
+
+| Pieza | Qué hace |
+| :--- | :--- |
+| `Proveedores.clasificar(ruc, {deducible, origen, clienteRuc})` | La decisión se puede guardar **por contribuyente**. `deducible` a secas sigue siendo el criterio general de todos. |
+| `Proveedores.creditoDe(rucProv, rucCli)` / `mapaCredito(rucCli)` | Resuelven en tres estados —`true` / `false` / **`null`**— y dicen el ámbito (`cliente` / `global`). `null` sigue sin ser «no da crédito». |
+| `Proveedores._resolver()` | La cascada en un solo lugar: decisión del cliente ≫ criterio general ≫ `null`. Una sugerencia no pisa a un `usuario` en ninguno de los dos ámbitos. |
+| `Proveedores.olvidarClasificacion()` | Deshacer. Sin esto, un click equivocado quedaba grabado para siempre. |
+| `CreditoCliente` (`sc_credito_cliente`) | El perfil del contribuyente: `soloCero` — la razón **#4** del §12 hecha cable. `null` no es `false`. |
+| `calcularResumen()` → `detalle15` / `detalle5` | Cada balde trae el detalle por comprobante (emisor, base, IVA). De las mezcladas va **sólo la parte gravada**. |
+| `repartirCreditoCompras()` (05, pura) | Recibe detalle + mapa y dice cuánto va con y sin derecho. Se prueba con números, sin portal. |
+| `repartirComprasPorCredito()` (05) | La misma pregunta atada al cliente que se declara: lee `sc_proveedores` y `sc_credito_cliente`. |
+| `llenarCompras()` | Escribe **502/512** con lo marcado y calcula **500/510 por resta** (`total − sin derecho`), así el total sigue cuadrando al centavo. Si el 502 no aparece en pantalla, **no** manda esa plata al 500: anota y frena el envío (`iva_sin_ubicar`). |
+| Panel 🏷️ | Lista por cliente, lo del período primero, **vista previa en dinero** (`$X → 500/510 · $Y → 502/512`), interruptor «vende sólo al 0%» y `↺` para deshacer. |
+
+**Lo que NO cambió, a propósito**: un proveedor sin clasificar va donde iba
+siempre. Nunca al 502 por las dudas. Y el 502 se escribe buscando el casillero
+**por su número en la tabla**, no por un `id` supuesto (§0b.5): si el portal no
+lo muestra, se frena en vez de inventar.
+
+**Lo que sigue faltando**: el mapa fino de compatibilidad *CIIU del proveedor ×
+actividad del cliente* («¿una ferretería es insumo de esta actividad?»). Hoy esa
+respuesta la da el contador marcando el proveedor, cliente por cliente, y el
+flag `soloCero` cubre el caso masivo. Bancos: `tests/credito.html` (45) y
+`tests/proveedores.html` (88).
 
 **Y no se olvide**: esta base es de **tres** proyectos, no de uno (§7). El
 mismo dato responde al IVA, al Anexo de Gastos Personales y a la devolución de
@@ -1394,8 +1428,9 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 | **Casillero 401 (Ventas 15%)** | `concepto401` | Input casillero 401 |
 | **Casillero 411 (Ventas Netas 15%)** | `concepto411` | Input casillero 411 |
 | **Casillero 500 (Compras Brutas 15%)** | `concepto500` | Input casillero 500 |
-| **Casillero 502 (sin derecho a crédito)** | `concepto1470` — 📐 apretado 10-sep-2026 · falta inspección DOM | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
-| **Casillero 512 (NC del 502)** | `concepto1550` — 📐 apretado · **choca con la Biblia (concepto1480)** · falta DOM | Menos notas de crédito del 502 |
+| **Casillero 502 (sin derecho a crédito)** | `concepto1470` — 📐 apretado 10-sep-2026 | Otras adquisiciones tarifa ≠ 0 SIN crédito tributario · ver §9 |
+| **Casillero 512 (neto del 502)** | `concepto1550` — 📐 apretado 10-sep-2026 | Neto del 502 (bruto − NC atribuibles) |
+| **Casillero 522 (IVA del 502)** | `concepto1480` — **CONFIRMADO 05-nov-2026 por inspección DOM del usuario** | IVA de las compras SIN derecho. El SRI **no lo calcula solo**: si queda en `0.00`, el campo se pinta rojo y el portal no deja avanzar. El bot lo escribe con el sugerido positivo de la fila o con el IVA real de las facturas apartadas. |
 | **Casillero 540 (compras 5%)** | `concepto1261` — **CORREGIDO 10-sep-2026** (inspección DOM del usuario + 📐). El viejo `concepto1271` es el casillero 530. | Adquisiciones locales gravadas 5% con crédito · ver §9 |
 | **Casillero 508 (notas de venta)** | `concepto1735` — **CONFIRMADO 07-sep-2026** | Valor de las notas de venta recibidas |
 | **Casillero 117 (cantidad NV)** | `concepto258` — **CONFIRMADO 07-sep-2026** | Cantidad de notas de venta |
@@ -1445,18 +1480,33 @@ Los PDFs se convierten con `node _extraer_pdf.js <archivo.pdf> capturas/`.
 > ciegas. Corregido en `fieldMap`, `frenarSiFaltaDecreto203` (leía
 > `concepto1281`), la Biblia y los bancos `iva5` / `radiografia203`.
 >
-> **Sigue pendiente**: el 📐 da `502→concepto1470` (coincide con la Biblia),
-> pero `512→concepto1550` y `522→concepto1480` chocan con la Biblia
-> (`concepto1480` / `concepto1818`). Esa zona necesita la misma inspección DOM
-> antes de cablearse. El bot no escribe ahí hoy, así que no corre prisa.
+> **✅ RESUELTO 05-nov-2026 — la fila 502/512/522 quedó cableada y probada.**
+>
+> El usuario inspeccionó el formulario real mientras el bot llenaba
+> PEREZ LOPEZ FELIX MANUEL (RUC `0701694226001`, octubre 2026). La fila es:
+>
+> | Casillero | ID | Qué es |
+> | :-- | :-- | :-- |
+> | **502** | `concepto1470` | base bruta sin derecho a crédito |
+> | **512** | `concepto1550` | base neta (bruto − NC) |
+> | **522** | `concepto1480` | IVA de esa misma fila |
+>
+> El error que frenó el envío fue el **522**: el bot escribía 502/512 y dejaba
+> el IVA en `0.00`; el SRI pinta ese input de rojo y no deja pasar. El sugerido
+> oficial de la fila (`concepto1276.sugerido`) vino en `0.00`, así que no sirve
+> de rescate cuando la base es distinta de cero. Ahora `ivaDelBloqueSinCredito()`
+> calcula el IVA real de las facturas apartadas (15% del ejemplo: `$1.76` sobre
+> `$11.73`) y, si no puede, anota el caso y el cierre mágico frena en vez de
+> inventar un impuesto. Ver `fieldMap` de `05_llenado_formulario.js`.
 
 ---
 
-## 7. La base de proveedores — la pieza que falta
+## 7. La base de proveedores — ahora con perfil por cliente
 
-> **Estado (06-sep-2026)**: el cimiento está construido y probado. Falta el
-> mapa CIIU → deducible, que es criterio contable, y el casillero donde va lo
-> no deducible (§9a).
+> **Estado (05-nov-2026)**: el cimiento está construido y probado, el 502/512/522
+> está cableado (§9a) y el historial por cliente ya se guarda, se ve en el HUD y
+> viaja a la web. Lo que sigue siendo criterio contable —no código— es el mapa
+> CIIU → deducible: el bot sugiere, el contador decide.
 
 ### Lo que ya funciona
 
@@ -1475,11 +1525,45 @@ proveedor.
 
 | Método | Qué hace |
 | :--- | :--- |
-| `registrarLote(lista, clienteRuc)` | anota o actualiza, una sola escritura |
+| `registrarLote(lista, clienteRuc, periodo)` | anota o actualiza, una sola escritura |
 | `saber(ruc)` | lo que se sabe, o `null` |
-| `clasificar(ruc, {actividad, deducible, origen})` | ver la regla de abajo |
+| `clasificar(ruc, {actividad, deducible, origen, clienteRuc})` | ver la regla de abajo |
 | `pendientes(tope)` | los que faltan, **los más frecuentes primero** |
+| `deCliente(rucCliente, periodo)` | todos los proveedores de ESE cliente, con montos y períodos |
+| `perfilDeCliente(rucCliente, periodo)` | «nivel de perfil»: cuántos hay, cuántos clasificados, cuántos con actividad |
+| `sugerencias(p, rucCliente, actividadCliente)` | pistas para clasificar (nombre, tarifa, recurrencia) — **no deciden** |
 | `resumen()` · `exportar()` | conteos · TSV para revisar afuera |
+
+### Agregado por cliente (05-nov-2026)
+
+`registrarLote()` ya no sólo suma `veces`: guarda, por proveedor y por cliente,
+una **foto del período** en `p.clientes[rucCliente].periodos[YYYY-MM]`, con
+base, IVA, total, tarifas y cantidad de comprobantes. La foto se **reemplaza**
+en cada corrida, no se acumula. Eso resuelve dos cosas de una vez:
+
+1. El perfil del cliente muestra **cuánto** le compra a cada proveedor, no sólo
+   que alguna vez le facturó (`vistoEn`).
+2. Correr la extracción dos veces —tabla primero, TXT después— ya **no duplica**
+   montos ni «comprobantes». Antes el perfil mostraba el doble de lo real.
+
+`deCliente()` incluye también los proveedores que sólo están en `vistoEn`
+(datos anteriores al agregado): se muestran sin montos, marcados `sinMontos`,
+para que sigan siendo clasificables. El período se normaliza a `YYYY-MM` con
+`periodoDeTrabajo()` / `periodoDeFechaEmision()`; si no se puede saber, queda
+`''` — nunca se inventa un mes.
+
+El HUD 🏷️ ahora pinta **todos** los proveedores del cliente (histórico incluido),
+con una banda de **nivel de perfil** y una línea `💡` por fila. Las pistas salen
+del nombre (ferretería, farmacia, CNEL…), la tarifa (0% / 5%), la recurrencia
+(3+ períodos = gasto fijo) y la compatibilidad con la actividad del cliente.
+Son sugerencias: no escriben nada ni mandan una compra al 502.
+
+Para que el perfil de la web vea esto, `bridge_content.js` responde a
+`SRI_REQUEST_CLIENT_PROVIDERS` (postMessage desde el dashboard) con
+`sc_proveedores_cliente_<ruc>` en `localStorage`, y lo refresca cuando cambia
+`sc_proveedores`. `SupplierCatalogService.getClientProviders()` lo lee y
+`ProfileTab` lo pinta; si falta, pide y espera el mensaje
+`SRI_CLIENT_PROVIDERS_SYNC`.
 
 El orden de `pendientes()` no es cosmético: clasificar el proveedor que aparece
 en 200 facturas rinde doscientas veces más que el que aparece en una. Con 500
@@ -1788,7 +1872,7 @@ a quién le pisa una clave que ya funcionaba, y aplicar solo lo confirmado.
 | **500 / 510** | Compras 15% con derecho a crédito · menos NC | ✅ |
 | **507 / 517** | Compras 0% · menos NC | ✅ |
 | **540 / 550** | Adquisiciones locales (excluye activos fijos) gravadas con **tarifa 5%**, con derecho a crédito · menos NC | ✅ desde 05-sep-2026 |
-| **502 / 512** | Otras adquisiciones y pagos gravados **tarifa distinta de cero, SIN derecho a crédito tributario** · menos NC | ❌ |
+| **502 / 512** | Otras adquisiciones y pagos gravados **tarifa distinta de cero, SIN derecho a crédito tributario** · menos NC | ✅ desde 04-nov-2026 — **sólo** lo que el contador marcó (§0b.1) |
 
 **El 502 es el casillero que faltaba** para separar deducible de no deducible.
 Es el destino de las compras que la base de proveedores marque como sin
@@ -2203,16 +2287,20 @@ quizá le corresponde.
 
 #### El criterio del contador — las 4 razones que quitan el crédito (10-sep-2026)
 
-> Dicho por el usuario. Es el mapa que faltaba. **Todavía no está cableado**:
-> primero hay que confirmar con el 📐 el casillero de «sin derecho» (el texto
-> externo dice 503/513/523; la Biblia del 2011 dice 502/512/522 — §12, §8a).
+> Dicho por el usuario el 10-sep-2026. Las razones #2, #3 y #4 ya están
+> resueltas —la #4 es `CreditoCliente.soloCero`— y desde el 04-nov-2026 el bot
+> **escribe** el 502/512 con lo que el contador marcó (§0b.1). El casillero se
+> busca por su NÚMERO en la tabla, no por un `id` supuesto, así que no depende
+> de resolver el choque 503/513/523 vs 502/512/522 de la §8a. La #1 (¿es
+> compatible esta compra con la actividad?) sigue siendo criterio del contador:
+> marca proveedor por proveedor, y lo no marcado no se mueve.
 
 | # | Razón | Qué dato necesita el bot | Estado |
 | :-: | :--- | :--- | :--- |
 | 1 | **Gasto personal o del hogar**, no relacionado con la actividad del RUC (víveres de la casa, luz del domicilio, ropa diaria, cenas de ocio). | actividad del proveedor **vs** actividad del cliente | difícil, caso por caso — es la misma pregunta del Anexo de Gastos Personales |
 | 2 | **Comprobante inválido o a nombre de un tercero** (recibos informales, notas de remisión, factura a nombre del cónyuge). | que la factura sea electrónica y al RUC del cliente | **ya resuelto de hecho**: el bot sólo baja «comprobantes electrónicos recibidos», que por definición van al RUC del cliente. Los físicos van al 508/518. |
 | 3 | **Compra con tarifa 0%** — no hay IVA que acreditar. | la tarifa | **ya resuelto**: van al 507/517 |
-| 4 | **El cliente vende EXCLUSIVAMENTE tarifa 0%** (declara semestral). Entonces **ninguna** de sus compras al 15%/5% da crédito: ese IVA es costo. Ej.: un centro médico (salud, 0%) que compra computadoras al 15%. | un flag por cliente: «¿vende sólo 0%?» | **fácil y de alto impacto** — sale del CIIU del catastro (salud, educación, transporte…) + confirmación del contador. Un flag y se resuelven todas sus facturas de una. |
+| 4 | **El cliente vende EXCLUSIVAMENTE tarifa 0%** (declara semestral). Entonces **ninguna** de sus compras al 15%/5% da crédito: ese IVA es costo. Ej.: un centro médico (salud, 0%) que compra computadoras al 15%. | un flag por cliente: «¿vende sólo 0%?» | **✅ cableado el 04-nov-2026** — `CreditoCliente.soloCero`, interruptor por cliente en el panel 🏷️. Con `true`, todas sus compras gravadas van al 502 de una: no depende del CIIU ni de clasificar proveedor por proveedor. |
 
 **El orden de trabajo que propone Claude (10-sep-2026):** primero la #4 —un
 flag por cliente cubre muchísimo con una sola línea de criterio—, después la #1

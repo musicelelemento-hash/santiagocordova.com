@@ -44,8 +44,8 @@ function porQueFalloElFetch(e, url) {
   });
 
   if (!cubierto) {
-    return `no llegué a ${host}: ese host NO está en host_permissions del manifest. ` +
-           'No es la red ni las credenciales — Chrome bloqueó la petición.';
+    return `no llegué a ${host}: ese host NO está en host_permissions del manifest ` +
+           '(falta el permiso). No es la red ni las credenciales — Chrome bloqueó la petición.';
   }
   return `no llegué a ${host}: el permiso está, así que es la red, el servidor caído, ` +
          'o un proxy que rompe el TLS (Burp hace justo eso).';
