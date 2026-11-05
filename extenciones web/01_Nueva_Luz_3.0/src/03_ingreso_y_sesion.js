@@ -2329,6 +2329,19 @@ async function autoLlenarBusqueda(data) {
 async function renderLoginCockpit(items) {
     if (!isSRILoginPage()) return;
 
+    // 💤 El mismo gate que ya protege la barra y el panel (§9c de AGENTS.md):
+    // sin esto, CUALQUIER visita al login con la extensión dormida precargaba
+    // RUC y CLAVE REAL de un cliente pendiente, sin que nadie lo pidiera. El
+    // comentario de más arriba ya describía este riesgo como resuelto —no lo
+    // estaba, faltaba justo este chequeo.
+    const despierta = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
+    if (!despierta) {
+        document.getElementById('sri-login-cockpit')?.remove();
+        document.getElementById('sri-dynamic-island')?.remove();
+        document.getElementById('sri-island-minibar')?.remove();
+        return;
+    }
+
     const oldCockpit = document.getElementById('sri-login-cockpit');
     if (oldCockpit) oldCockpit.remove();
     const existingIsland = document.getElementById('sri-dynamic-island');
@@ -2639,7 +2652,11 @@ async function renderLoginCockpit(items) {
             const rucToSkip = currentClient.ruc;
             const nameToSkip = currentClient.name || rucToSkip;
 
-            if (confirm(`¿Omitir a ${nameToSkip} (${rucToSkip})?\nSe marcará para no procesarlo en este lote.`)) {
+            {
+                // Sin confirm(): un diálogo modal frena cualquier corrida
+                // desatendida hasta que alguien lo conteste a mano — la misma
+                // lección que ya sacó el 🏁 del HUD principal (AGENTS.md
+                // §9c). Se omite directo; el toast de abajo avisa qué pasó.
                 const resErr = await SafeStorage.get(['flagged_errors']);
                 const errs = resErr.flagged_errors || {};
                 errs[rucToSkip] = 'omitido_manual';

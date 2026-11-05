@@ -3365,7 +3365,7 @@ const SriLoopHUD = {
                     </div>
                 </div>
 
-                <button id="slh-ext-btn-iniciar" ${enCurso ? 'disabled' : ''} style="border:none;border-radius:8px;padding:9px 12px;font-weight:800;font-size:12px;cursor:${enCurso ? 'default' : 'pointer'};background:linear-gradient(135deg, #f59e0b 0%, #d97706 100%);color:#fff;box-shadow:0 4px 15px rgba(217,119,6,0.35);display:flex;align-items:center;justify-content:center;gap:6px;opacity:${enCurso ? 0.6 : 1}">
+                <button id="slh-ext-btn-iniciar" ${enCurso ? 'disabled' : ''} style="border:none;border-radius:8px;padding:9px 12px;font-weight:800;font-size:12px;cursor:${enCurso ? 'default' : 'pointer'};background:rgba(56,189,248,0.22);color:#7dd3fc;display:flex;align-items:center;justify-content:center;gap:6px;opacity:${enCurso ? 0.6 : 1}">
                     <span>${enCurso ? '⏳ Hay un lote en curso' : '🚀 EXTRAER DOCUMENTOS AHORA'}</span>
                 </button>
 

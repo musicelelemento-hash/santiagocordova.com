@@ -3518,6 +3518,16 @@ const MONTH_NAMES = [
 async function renderAnticipationWidget(items) {
   if (!isSRILoginPage()) return;
 
+  // 💤 El mismo gate que ya protege la barra, el panel y el cockpit del login
+  // (§9c de AGENTS.md): sin esto, el sidebar se monta solo por tener la web
+  // sincronizando de fondo (chrome.storage.onChanged se dispara cada ~2.5 s),
+  // sin que nadie haya despertado la extensión.
+  const despiertaAnticipacion = (typeof extensionDespierta === 'function') ? await extensionDespierta() : true;
+  if (!despiertaAnticipacion) {
+    document.getElementById('sri-anticipacion-sidebar')?.remove();
+    return;
+  }
+
   let sidebar = document.getElementById("sri-anticipacion-sidebar");
   if (!sidebar) {
     sidebar = document.createElement("div");
