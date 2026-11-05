@@ -2875,7 +2875,14 @@ function initLoginCockpitWatcher() {
                     if (isSRILoginPage()) {
                         SafeStorage.get(null).then(items => {
                             renderLoginCockpit(items);
-                            if (typeof renderAnticipationWidget === 'function') {
+                            // Sólo refresca el panel de pendientes si el usuario YA lo
+                            // abrió con el ▾ de la isla — nunca lo crea de la nada acá.
+                            // Antes esto montaba una segunda superficie sola, con cada
+                            // sincronización de la web (cada ~2.5 s), sin que nadie la
+                            // pidiera: la misma sobrecarga que el cajón 🧰 ya resolvió
+                            // para el resto del HUD.
+                            if (typeof renderAnticipationWidget === 'function' &&
+                                document.getElementById('sri-anticipacion-sidebar')) {
                                 renderAnticipationWidget(items);
                             }
                         });

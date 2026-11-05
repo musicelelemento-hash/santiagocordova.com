@@ -3533,8 +3533,11 @@ async function renderAnticipationWidget(items) {
     sidebar = document.createElement("div");
     sidebar.id = "sri-anticipacion-sidebar";
     if (isSRILoginPage()) sidebar.classList.add("collapsed");
+    // Anclado DEBAJO de la isla del cockpit (misma superficie, un clic más),
+    // no como un panel aparte en la esquina — era lo que hacía que el login
+    // mostrara dos interfaces separadas haciendo casi lo mismo.
     sidebar.style.cssText =
-      "position: fixed; top: 16px; left: 16px; width: 440px; height: calc(100vh - 32px); z-index: 999999; background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
+      "position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 440px; max-height: calc(100vh - 100px); z-index: 999999; background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
 
     sidebar.innerHTML = `
             <div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; flex-direction: column; gap: 16px;">
