@@ -1072,6 +1072,13 @@ function createClientCard(client, statusType) {
                 ▶ Ingresar
             </button>
         `;
+    } else if (isBaja) {
+        // Sin botones de acción: un dado de baja no tiene ningún lote ni
+        // sesión que iniciar. Sin esta rama caía en el default de arriba
+        // («▶ Ingresar» + «⚠️ Omitir»), totalmente funcional — un clic
+        // arrancaba una sesión real del SRI para declarar a alguien que ya
+        // no es cliente.
+        actionBtnHtml = '';
     }
 
     card.innerHTML = `
@@ -1098,7 +1105,7 @@ function createClientCard(client, statusType) {
                 ${actionBtnHtml}
             </div>
         </div>
-        ${isDone || isError ? '' : buildOrdenMesesBlock(client)}
+        ${isDone || isError || isBaja ? '' : buildOrdenMesesBlock(client)}
     `;
     return card;
 }
@@ -1317,7 +1324,11 @@ function togglePasswordVisibility(ruc) {
 }
 
 async function editarClave(ruc) {
-    const client = allClients.find(c => c.ruc === ruc);
+    // `allClients` sólo trae a los mensuales. El botón ✏️ se pinta en TODAS
+    // las tarjetas (incluidas "Otros" y "Bajas", que viven en otros arrays),
+    // así que buscar sólo ahí hacía que el botón no hiciera nada —sin aviso—
+    // en esas dos pestañas. `allRawClients` tiene a todos.
+    const client = allRawClients.find(c => c.ruc === ruc) || allClients.find(c => c.ruc === ruc);
     if (!client) return;
 
     const newPass = prompt(`Ingresa la nueva clave del SRI para ${client.name}`, client.password || '');
