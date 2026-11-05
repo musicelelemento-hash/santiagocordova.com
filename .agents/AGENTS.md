@@ -242,7 +242,7 @@ IP/rate-limit).
 **Estado**: propuesta — desaconsejada para la declaración; el disparo remoto
 (web/Telegram → extensión) ya existe y alcanza para lo que el pedido busca.
 
-### Propuesta · Auditar los comprobantes archivados con el período equivocado — HECHA el 11-sep-2026, sin corrida real todavía
+### Propuesta · Auditar los comprobantes archivados con el período equivocado — HECHA el 11-sep-2026, corrida real el 05-nov-2026
 
 **Quién la propone**: Claude · 07-sep-2026
 **Qué se vio**: el bug del período (§2c) archivó la declaración de agosto de
@@ -251,6 +251,9 @@ IP/rate-limit).
 se archivó mal sigue archivado mal**.
 **Cuánta gente**: en el lote de 15 del 07-sep, 1 RUC de 15 contenía un `202X`.
 Sobre 500 contribuyentes son del orden de **30 o 40** — no es un caso raro.
+La corrida real del 05-nov-2026 (ver más abajo) fue contra una base de
+**139** clientes, no 500: la estimación de «30-40» no aplica tal cual a la
+cartera actual.
 
 **Cómo quedó implementado**: botón 🕵️ «Períodos» en el cajón 🧰. La función
 `auditarPeriodosSospechosos()` (`01_utilidades_y_pdf.js`) trae TODOS los
@@ -281,7 +284,33 @@ viejo podría aparecer como falso positivo si además su RUC contiene ese año
 por coincidencia — revisar los primeros resultados a mano antes de confiar
 en la lista). **Listar sí, mover no**: re-archivar sigue siendo decisión del
 usuario, caso por caso.
-**Estado**: implementada · sin corrida real todavía.
+
+**Corrida real — 05-nov-2026 (Claude, vía un script Node que reproduce la
+función leyendo Supabase directo, sin abrir el portal)**: 139 clientes,
+1185 declaraciones con `period`, **3 candidatos** de la heurística.
+
+- **1 confirmado**: CHAVEZ CORDOVA GUIDO ERMEL (`0706482023001`) — es
+  justo el caso que destapó el bug. Sigue con el registro fantasma
+  `period: 2023-08` (guardado el 07-sep-2026, con PDF real archivado en esa
+  ruta) **además** del registro correcto `period: 2026-08` (guardado el
+  mismo día, ~2 h después). El fantasma nunca se limpió.
+- **2 descartados a mano**: MURILLO FRANCISCO EFRAIN (`2026071315102`) y
+  MERCHAN HERAS JACINTO EULOGIO (`2026062921293`) disparan la heurística
+  porque su RUC empieza con `2026` — pero es la coincidencia de dígitos que
+  esta misma entrada ya advertía como riesgo, no el bug: el RUC es
+  estructuralmente válido (provincia 20, tercer dígito válido), no un dato
+  corrupto. Sí tienen un registro `2026-S1` con `type` y `updated_at`
+  vacíos — un problema de calidad de dato aparte, no del año-en-el-RUC.
+  **Ningún cliente de los 139 tiene un RUC con formato inválido.**
+
+**Conclusión**: la heurística funciona como se diseñó — encontró el caso
+real y no arrastró falsos positivos a la lista final sin que se notara
+(los 2 descartes necesitaron mirar el `declaration_history` completo a
+mano, tal como esta entrada ya anticipaba). **No se tocó la base**: el
+usuario decidió documentar el hallazgo y decidir después si borra el
+registro fantasma de CHAVEZ CORDOVA.
+**Estado**: implementada · corrida real 05-nov-2026 (1 confirmado, 2
+descartados) · pendiente que el usuario decida si limpia el fantasma.
 
 ### Propuesta · Un solo lector de texto del portal, y prohibir `document.body.innerText`
 
@@ -452,7 +481,7 @@ sospecha puntual). Banco: `tests/lote.html`, secciones E2-E3.
 | 3 | **jsPDF nunca carga** (CSP `unsafe-eval`) | el PDF de respaldo sale simple, siempre | §0b.3 |
 | 4 | **9 declararon sin comprobante guardado** | esos 9 contribuyentes | §0b.4 |
 | 5 | **La clave de R2 sigue en el repositorio** | seguridad, ya | §10a |
-| 6 | **Comprobantes ya archivados con el año del RUC** | ~30-40 de 500 · el bug está arreglado, lo archivado no | §2c · propuesta en §0c |
+| 6 | ~~Comprobantes ya archivados con el año del RUC~~ **AUDITADO 05-nov-2026** — 1 caso real (CHAVEZ CORDOVA, fantasma sin limpiar) de 139 clientes, no 30-40 de 500 | §2c · corrida real en §0c |
 | 7 | ~~El bot no reconocía una caída del portal~~ **RESUELTO 10-sep-2026** — y el SRI ha estado devolviendo 500 | — | §2d |
 
 ### Lo que falta construir, por tamaño
