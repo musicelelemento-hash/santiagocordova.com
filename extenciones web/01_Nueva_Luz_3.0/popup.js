@@ -169,7 +169,7 @@ function bindEvents() {
             }
 
             chrome.storage.local.set({ last_sync_time: now });
-            const btn = document.getElementById('btnSyncCloud') || document.getElementById('syncBtn');
+            const btn = document.getElementById('btnSyncCloud');
             if (btn) {
                 const orig = btn.innerText;
                 btn.innerText = "⏳ Sincronizando...";
@@ -181,7 +181,6 @@ function bindEvents() {
     };
 
     document.getElementById('btnSyncCloud')?.addEventListener('click', syncHandler);
-    document.getElementById('syncBtn')?.addEventListener('click', syncHandler);
 
     // 📥 Importador masivo de contraseñas desde CSV (Chrome o formato RUC,Clave)
     document.getElementById('btnImportarCsv')?.addEventListener('click', () => {
@@ -210,6 +209,7 @@ function bindEvents() {
         const hayLote = Array.isArray(loop.cola) && loop.cola.length > 0;
         // Con un lote vivo manda el semáforo; sin lote, la preferencia guardada.
         chk.checked = hayLote ? loop.estado === 'CORRIENDO' : !!res.auto_batch_enabled;
+        pintarPanelModoAuto();
     });
 
     document.getElementById('chkAutoBatch')?.addEventListener('change', (e) => {
@@ -229,7 +229,11 @@ function bindEvents() {
             }
 
             chrome.storage.local.set(cambios);
-            if (!hayLote && isChecked) pintarPanelModoAuto();
+            // Antes solo se repintaba en "sin lote y se activó" — pausar o
+            // reanudar un lote YA corriendo (los dos casos donde más importa
+            // que el cartel de abajo refleje la realidad) dejaban el panel
+            // con el texto de un estado anterior.
+            pintarPanelModoAuto();
             showToast(
                 !hayLote ? (isChecked ? '⚡ Bucle ACTIVADO para el próximo lote' : '⏸️ Bucle DESACTIVADO')
                 : isChecked ? '▶️ Bucle REANUDADO'
@@ -1372,11 +1376,6 @@ function reintentarCliente(ruc) {
             showToast(`🔄 Cliente ${ruc} devuelto a "Pendientes"`);
         });
     });
-}
-
-function togglePasswordVisibility(ruc) {
-    visiblePasswords[ruc] = !visiblePasswords[ruc];
-    renderClients();
 }
 
 async function editarClave(ruc) {
