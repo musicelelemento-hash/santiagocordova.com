@@ -114,6 +114,32 @@ top-level en `window.<mismo nombre>`). Corregido quitando esa línea; ambos
 nombres ya son globales por ser top-level en el bundle concatenado.
 Commit `5046ab6`.
 
+### Tanda 2: el ruido de la consola, los `catch` mudos y el piso de legibilidad
+
+- **Los 611 `console.log` del bundle pasaron por el logger**: 495 quedaron en
+  `log.debug` (sólo con 🐞 Diagnóstico), 99 en `log.info` (hitos), y los
+  `console.warn`/`console.error` existentes se enrutaron a `log.warn`/
+  `log.error` para que también queden en el buffer de 300 líneas. El único
+  `console.log` que queda es el banner de arranque, que corre antes de que
+  exista `log` (usarlo ahí sería un `ReferenceError` por TDZ).
+- **Los 30 `catch` vacíos de `src/` dejaron de ser mudos sin cambiar de
+  comportamiento**: cada uno lleva un comentario que dice por qué se ignora
+  (p. ej. «sin parche XHR: se pierde la captura, no el flujo»). No se agregó
+  ruido a la consola ni se alteró ningún camino.
+- **Piso de legibilidad en `instalarEstilosSC()`**: dentro de la interfaz de la
+  extensión (isla, HUD, panel, saludo, pastillas), cualquier texto inline de
+  9/9.5px sube a 11px y el de 10/10.5px a 11.5px; `.sc-rotulo` pasa de 9.5 a
+  10.5px. Sólo se toca lo que está por debajo del piso y sólo dentro de lo
+  propio: el formulario del SRI queda intacto. Se sumaron foco visible con
+  teclado (`:focus-visible`), `prefers-reduced-motion` y antialiasing en los
+  contenedores propios.
+- **Runner más tolerante**: si el estado ya es final pero
+  `window.__testResultado` todavía no está, reintenta hasta 5 s en vez de
+  declarar falso negativo; con `DEBUG_RUNNER=1` imprime las transiciones de
+  estado y, si falla, adjunta navegaciones y excepciones de la página.
+- **Verificación**: `npm run check` (sintaxis de los 7 módulos + suite) y
+  **891 comprobaciones, todas verdes**. Build **`3.1.0+20261106.1745`**.
+
 ### Auditoría de períodos mal archivados — corrida real contra Supabase
 
 `auditarPeriodosSospechosos()` corrida con un script Node que lee Supabase

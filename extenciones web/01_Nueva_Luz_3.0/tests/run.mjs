@@ -174,6 +174,7 @@ async function main() {
 
   const proc = spawn(chrome, args, { stdio: 'ignore' });
   let cdp = null;
+  const eventos = [];
 
   try {
     // Esperar a que DevTools conteste.
@@ -191,7 +192,15 @@ async function main() {
     const pagina = lista.find((t) => t.type === 'page');
     if (!pagina) throw new Error('Chrome no tiene ninguna pestaña');
 
-    cdp = conectarCDP(pagina.webSocketDebuggerUrl);
+    cdp = conectarCDP(pagina.webSocketDebuggerUrl, (msg) => {
+      if (msg.method === 'Page.frameNavigated' && !msg.params.frame.parentId) {
+        eventos.push('nav: ' + msg.params.frame.url);
+      }
+      if (msg.method === 'Runtime.exceptionThrown') {
+        eventos.push('exc: ' + (msg.params.exceptionDetails.text || '') +
+          ' ' + ((msg.params.exceptionDetails.exception || {}).description || ''));
+      }
+    });
     await cdp.abierto;
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
@@ -200,21 +209,34 @@ async function main() {
     // Esperar el veredicto. `?auto=1` lo deja en body.dataset.
     const arranque = Date.now();
     let estado = '';
+    let estadoPrevio = null;
     while (Date.now() - arranque < TIMEOUT_MS) {
       try {
         estado = await evaluar(cdp, "document.body ? (document.body.dataset.testEstado || '') : ''");
       } catch (e) { estado = ''; }
+      if (estado !== estadoPrevio) {
+        if (process.env.DEBUG_RUNNER) console.log(`   · ${((Date.now() - arranque) / 1000).toFixed(1)}s estado=${estado || '(vacío)'}`);
+        estadoPrevio = estado;
+      }
       if (estado === 'ok' || estado === 'mal' || estado === 'error') break;
       await dormir(1000);
     }
 
     if (!estado) throw new Error(`Los bancos no terminaron en ${Math.round(TIMEOUT_MS / 1000)} s`);
 
-    const crudo = await evaluar(cdp, "JSON.stringify(window.__testResultado || null)");
+    // El estado y el objeto se escriben casi juntos, pero no exactamente:
+    // reintentar unos segundos evita un falso negativo si el runner llega en
+    // el hueco entre uno y otro (o si la página se está re-renderizando).
+    let crudo = null;
+    for (let i = 0; i < 20 && !crudo; i++) {
+      crudo = await evaluar(cdp, "JSON.stringify(window.__testResultado || null)");
+      if (!crudo) await dormir(250);
+    }
     const res = crudo ? JSON.parse(crudo) : null;
     if (!res) {
       const diag = await evaluar(cdp, "JSON.stringify({estado:document.body&&document.body.dataset.testEstado,resumen:document.body&&document.body.dataset.testResumen,titulo:document.title,tipo:typeof window.__testResultado})");
-      throw new Error('La página no dejó el resultado en window.__testResultado · ' + diag);
+      throw new Error('La página no dejó el resultado en window.__testResultado · ' + diag +
+        (eventos.length ? '\n   eventos:\n   ' + eventos.join('\n   ') : ''));
     }
 
     if (res.error) {
