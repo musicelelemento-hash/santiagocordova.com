@@ -816,7 +816,12 @@ const SriLoopHUD = {
                 // Brillo que recorre la barra: dice "esto sigue vivo" aunque el
                 // porcentaje no se mueva en varios minutos.
                 '@keyframes slh-brillo{from{transform:translateX(-100%)}to{transform:translateX(320%)}}',
-                '.slh-brillo::after{content:"";position:absolute;inset:0;width:30%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:slh-brillo 2.2s ease-in-out infinite}'
+                '.slh-brillo::after{content:"";position:absolute;inset:0;width:30%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:slh-brillo 2.2s ease-in-out infinite}',
+                // La barra se toca todo el día y no "respondía" al clic — el
+                // mismo gesto que ya usa .sc-btn en 01_utilidades_y_pdf.js.
+                '#sri-loop-hud button{transition:filter .15s,transform .15s}',
+                '#sri-loop-hud button:hover{filter:brightness(1.25)}',
+                '#sri-loop-hud button:active{transform:scale(.93)}'
             ].join('');
             document.head.appendChild(st);
         }
@@ -2799,8 +2804,8 @@ const SriLoopHUD = {
                 `    <b>${esc(nombre)}</b>${bandera}${cat}${chapaDecision}${plata}${chapaPeriodos}<span style="opacity:0.55"> · ${comp} comp.</span>${chapaTarifa}${enPeriodo}${act}` +
                 '  </div>' + lineaPista +
                 '</div>' +
-                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer">deducible</button>` +
-                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer">no</button>` +
+                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="si" title="Con derecho a crédito tributario (casillero 500/510)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(74,222,128,0.16);color:#86efac;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap">✓ Da crédito</button>` +
+                `<button data-sc-prov="${esc(p.ruc)}" data-sc-ded="no" title="Sin derecho a crédito tributario (casillero 502)" style="border:none;border-radius:7px;padding:5px 9px;min-height:30px;background:rgba(251,191,36,0.16);color:#fcd34d;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap">✕ Sin crédito</button>` +
                 '</div>';
         }).join('');
 

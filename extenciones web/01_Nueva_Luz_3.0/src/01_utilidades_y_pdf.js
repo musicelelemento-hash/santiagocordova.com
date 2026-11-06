@@ -189,10 +189,21 @@ function instalarEstilosSC() {
 
     /* ── Piso de legibilidad ────────────────────────────────────────────────
        El portal se usa a 100% y con la mitad de la pantalla ocupada por el
-       formulario. 9–10px ahí no se lee: se adivina. Estos selectores suben
+       formulario. 8–10px ahí no se lee: se adivina. Estos selectores suben
        SÓLO lo que está por debajo del piso, y sólo dentro de la interfaz de
        la extensión — nunca tocan el HTML del SRI. 11px es el mínimo; 11.5px
        para los textos de 10px, que suelen ser datos y no adorno. */
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size:8px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card)[style*="font-size: 8px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size:8px"],
+    :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
+        .sri-elite-pill, .sri-elite-context-card) [style*="font-size: 8px"]{
+      font-size:11px !important;
+    }
+
     :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,
         .sri-elite-pill, .sri-elite-context-card)[style*="font-size:9px"],
     :is([id^="sri-"], [id^="slh-"], .sc-panel, #sc-saludo,

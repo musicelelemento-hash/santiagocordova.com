@@ -2136,6 +2136,7 @@ class SriAssistantPanel {
                     box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.5);
                     z-index: 2147483647;
                     animation: slideInElite 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+                    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
                 @keyframes slideInElite {
                     from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
@@ -2175,6 +2176,18 @@ class SriAssistantPanel {
                 .elite-btn-primary:hover {
                     transform: translateY(-1px);
                     box-shadow: 0 6px 15px rgba(79, 70, 229, 0.4);
+                }
+                .elite-btn-primary:active {
+                    transform: scale(0.97);
+                }
+                .elite-btn-iniciar, [id^="btn-elite-sec-"] {
+                    transition: filter 0.15s, transform 0.15s;
+                }
+                .elite-btn-iniciar:hover, [id^="btn-elite-sec-"]:hover {
+                    filter: brightness(1.15);
+                }
+                .elite-btn-iniciar:active, [id^="btn-elite-sec-"]:active {
+                    transform: scale(0.97);
                 }
                 .elite-text-muted { color: #64748b; font-size: 12px; }
                 .elite-text-title { color: #1e293b; font-weight: 700; font-size: 15px; margin-bottom: 4px; }
