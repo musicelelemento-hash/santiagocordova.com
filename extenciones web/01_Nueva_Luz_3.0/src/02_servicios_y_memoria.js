@@ -542,10 +542,6 @@ const SriLoop = {
         return e.estado !== 'CORRIENDO';
     },
 
-    async avanzarA(indice) {
-        await this._set({ indice, latido: Date.now() });
-    },
-
     /**
      * Normaliza el estado la primera vez que corre la versión con semáforo.
      *
@@ -1122,8 +1118,17 @@ const SriLoop = {
     /**
      * ▶ TODA LA PELÍCULA: arma la cola, enciende el semáforo, deja preparado
      * al primer cliente y devuelve qué hacer con la pestaña.
+     *
+     * @param {string} [primeroPreferido] RUC que debe arrancar primero, si
+     *   está en la cola resultante — lo usa el cockpit del login, que deja
+     *   elegir CUÁL pendiente declarar primero. Sin esto, el cockpit armaba
+     *   su propia cola a mano por fuera de armarCola()/arrancarLote(): el
+     *   mismo botón "iniciar el bucle" daba una cola distinta según si se
+     *   apretaba desde acá o desde el HUD (no aplicaba el registro local de
+     *   declaraciones, el barrido histórico, ni los mismos filtros de
+     *   seguridad). Ver AGENTS.md / STATE.md 06-nov-2026.
      */
-    async arrancarLote(periodo) {
+    async arrancarLote(periodo, primeroPreferido) {
         const p = periodo || this.periodoPorDefecto();
         const { cola, yaHechos, sinClave, sinPdf, total } = await this.armarCola(p);
         // Los que solo necesitan recuperar el comprobante van primero y marcados:
@@ -1135,7 +1140,7 @@ const SriLoop = {
         // siguientes van directo a declarar. El 🧾 manual sigue sirviendo
         // para forzar un repaso cuando haga falta.
         const histBarrido = (await SafeStorage.get(['sc_barrido_historico'])).sc_barrido_historico || {};
-        const colaFinal = [
+        let colaFinal = [
             ...(sinPdf || []).map((c) => ({ ...c, soloRecuperar: true })),
             ...cola.map((c) => (histBarrido[c.ruc] || (Array.isArray(c.declarations) && c.declarations.length > 0)) ? { ...c } : { ...c, barrerAntes: true })
         ];
@@ -1145,6 +1150,13 @@ const SriLoop = {
         }
         if (colaFinal.length === 0) {
             return { ok: false, motivo: `Nada pendiente: ${yaHechos} ya declarados${sinClave ? `, ${sinClave} sin clave` : ''}.` };
+        }
+
+        if (primeroPreferido) {
+            const idx = colaFinal.findIndex((c) => c.ruc === primeroPreferido);
+            if (idx > 0) {
+                colaFinal = [colaFinal[idx], ...colaFinal.slice(0, idx), ...colaFinal.slice(idx + 1)];
+            }
         }
 
         // Conecta el semáforo con el motor de avance N→N+1.

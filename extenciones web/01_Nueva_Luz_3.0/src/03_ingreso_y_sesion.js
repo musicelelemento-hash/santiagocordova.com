@@ -2703,73 +2703,40 @@ async function renderLoginCockpit(items) {
                 alert('¡🎉 No hay clientes pendientes por declarar en este periodo!');
                 return;
             }
+            if (typeof SriLoop === 'undefined' || typeof SriLoop.arrancarLote !== 'function') {
+                alert('⚠️ No se pudo iniciar el bucle: el motor no está disponible. Recargá la página.');
+                return;
+            }
 
+            // Mismo camino que usa el ▶ del HUD (armarCola + arrancarLote), en
+            // vez de que este botón armara su propia cola a mano por fuera de
+            // esas dos funciones. Antes "iniciar el bucle" podía dar una cola
+            // distinta según si se apretaba desde acá o desde el HUD — no
+            // aplicaba el registro local de declaraciones, el barrido
+            // histórico de años, ni `prepararCliente()` para el primero.
+            // `arrancarLote` ya filtra por clave, cuentas bloqueadas y la
+            // Lista Bendita, y deja el semáforo encendido con todo armado.
             const selectedRuc = clientSel?.value || (currentClient ? currentClient.ruc : '');
-            let queue = pendientes.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
-
-            // 🕯️ La Lista Bendita decide quién entra al lote desde el HUD también.
-            // Sin lista (null) esto no cambia nada. El botón ▶ de un cliente suelto
-            // no pasa por acá: es una decisión explícita de una persona.
-            queue = await filtrarColaPorBendita(queue);
-            if (queue.length === 0 && pendientes.length > 0) {
-                alert('🤍 Ninguno de los pendientes está en la Lista Bendita.\n\nAbrí el popup de la extensión, marcá con 🙏 a los que corren y volvé a intentar.');
+            const resultado = await SriLoop.arrancarLote(
+                { year: targetYear, monthIndex: targetMonth }, selectedRuc);
+            if (!resultado.ok) {
+                alert(`⚠️ ${resultado.motivo}`);
                 return;
             }
 
-            const selIdx = queue.findIndex(c => c.ruc === selectedRuc);
-            if (selIdx > 0) {
-                queue = [queue[selIdx], ...queue.slice(0, selIdx), ...queue.slice(selIdx + 1)];
-            }
-
-            // 🛡️ Filtro de seguridad: excluir cuentas bloqueadas o con credenciales fallidas sin actualizar
-            if (typeof SriCredentialVault !== 'undefined') {
-                const safeQueue = [];
-                for (const q of queue) {
-                    const check = await SriCredentialVault.canAttemptLogin(q.ruc, q.password);
-                    if (check.allowed) safeQueue.push(q);
-                    else log.debug(`🛡️ [COCKPIT] Excluyendo ${q.ruc} (${q.name}) del bucle: ${check.reason}`);
-                }
-                queue = safeQueue;
-            }
-
-            if (queue.length === 0) {
-                alert('⚠️ Todos los clientes pendientes tienen problemas de credenciales o cuentas bloqueadas en el SRI. Corrige sus claves antes de iniciar.');
+            // arrancarLote() ya dejó pending_sri_autofill listo para el primero
+            // de la cola (vía prepararCliente), pero el formulario de ESTA
+            // página sigue con las credenciales del cliente que se veía antes
+            // de apretar el botón — hay que igualarlo al que realmente va
+            // primero, que puede ser otro (uno con `soloRecuperar`, por
+            // ejemplo, si ya declaró pero le falta el comprobante).
+            const colaReal = (await SafeStorage.get(['auto_batch_queue'])).auto_batch_queue || [];
+            const first = colaReal[0];
+            if (!first || !first.password) {
+                alert(`⚠️ El primer cliente (${resultado.primero}) no tiene clave SRI guardada. Ingrésala usando el icono ✏️ antes de iniciar el bucle.`);
                 return;
             }
-
-            const first = queue[0];
-            if (!first.password) {
-                alert(`⚠️ El cliente ${first.name} (${first.ruc}) no tiene clave SRI guardada. Ingrésala usando el icono ✏️ antes de iniciar el bucle.`);
-                return;
-            }
-
             updateCredentialsInForm(first.ruc);
-
-            // Encendemos el semáforo y configuramos la cola
-            if (typeof SriLoop !== 'undefined' && typeof SriLoop.iniciar === 'function') {
-                await SriLoop.iniciar(queue, { year: targetYear, monthIndex: targetMonth });
-            }
-
-            await SafeStorage.set({
-                sri_master_switch_on: true,
-                auto_batch_enabled: true,
-                sri_auto_mode: true,
-                autoDeclaration: true,
-                auto_batch_queue: queue,
-                auto_batch_index: 0,
-                workflowPeriod: { year: targetYear, monthIndex: targetMonth },
-                pending_sri_autofill: {
-                    ruc: first.ruc,
-                    password: first.password,
-                    name: first.name,
-                    timestamp: Date.now(),
-                    manual: true,
-                    isBatch: true,
-                    loginAttempted: true
-                },
-                pendingAction: 'turbo_step1_facturas',
-                actionTimestamp: Date.now()
-            });
 
             setTimeout(() => {
                 if (loginBtn) loginBtn.click();

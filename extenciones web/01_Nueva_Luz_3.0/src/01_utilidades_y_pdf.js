@@ -3027,10 +3027,7 @@ async function handleBatchNextClient() {
         actionTimestamp: Date.now(),
         ghost_manual_mode: false,
       });
-      if (typeof SriLoop !== 'undefined') {
-        await SriLoop.avanzarIndice(nextIndex);
-        await SriLoop.avanzarA(nextIndex);
-      }
+      if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
       await GhostMemory.clearCurrent();
       await sleep(1000);
       await cerrarSesionSRI();
@@ -3055,10 +3052,7 @@ async function handleBatchNextClient() {
         actionTimestamp: Date.now(),
         ghost_manual_mode: false,
       });
-      if (typeof SriLoop !== 'undefined') {
-        await SriLoop.avanzarIndice(nextIndex);
-        await SriLoop.avanzarA(nextIndex);
-      }
+      if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
       await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
       await GhostMemory.clearCurrent();
       await sleep(1000);
@@ -3091,10 +3085,7 @@ async function handleBatchNextClient() {
         actionTimestamp: Date.now(),
         ghost_manual_mode: false,
       });
-      if (typeof SriLoop !== 'undefined') {
-        await SriLoop.avanzarIndice(nextIndex);
-        await SriLoop.avanzarA(nextIndex);
-      }
+      if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
       await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
       await GhostMemory.clearCurrent();
       await sleep(1000);
@@ -3124,9 +3115,13 @@ async function handleBatchNextClient() {
     });
 
     // 🚦 Que el contador del HUD (cliente N/M) siga la realidad del lote.
+    // Solo avanzarIndice(): respeta la guarda de CORRIENDO. Había una segunda
+    // llamada a avanzarA() acá —y en los otros 3 caminos de arriba— que no
+    // tenía ninguna guarda y sobreescribía el índice igual, anulando en la
+    // práctica la protección que avanzarIndice() dice ofrecer: si el usuario
+    // pausaba justo en la transición entre clientes, el contador "cliente
+    // N/M" seguía moviéndose de todos modos.
     if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
-
-    if (typeof SriLoop !== 'undefined') await SriLoop.avanzarA(nextIndex);
 
     // Resetear flag para que el Cierre Mágico se ejecute en el nuevo cliente
     await SafeStorage.remove(['declaration_synced_flag', 'iva_sin_ubicar']);
