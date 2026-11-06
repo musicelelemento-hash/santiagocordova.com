@@ -136,6 +136,31 @@ dejá dicho qué agregaste.
 > Formato en la §0a. Lo que está acá **no está hecho**: es lo que una IA vio y
 > dejó anotado para que lo decida el usuario, u otra IA con más contexto.
 
+### Propuesta · `pintarProveedores()` reimplementa a mano lo que `porQueDecidir()` y `pendientes()` ya resuelven
+
+**Quién la propone**: Claude · 06-nov-2026, en una auditoría del panel 🏷️
+(`src/07_navegacion_sri.js`, no `06_panel_interfaz.js` — ver la corrección del
+módulo 7 más arriba).
+**Qué se vio**: `Proveedores.porQueDecidir(rucProveedor, rucCliente)` está
+construido, documentado y probado (`tests/proveedores.html`, líneas 216-252),
+pero `pintarProveedores()` nunca lo llama — reimplementa a mano la misma
+lógica de avisos (la banda de actividad del cliente, la alerta del 5%, la
+alerta de estado SRI). Lo mismo con `Proveedores.pendientes(tope,
+clienteRuc)`: no se usa en ningún lugar de la extensión (confirmado con grep
+en todo `src/`, `popup.js`, `options.js`, `background.js`) salvo en su propio
+banco — el panel arma su lista `faltan` con un filtro/orden inline propio que
+hace básicamente lo mismo.
+**Qué se propone**: hacer que `pintarProveedores()` llame a esas dos
+funciones en vez de reimplementarlas. Dos caminos para la misma regla
+pueden desincronizarse con el tiempo — uno se corrige y el otro no.
+**Qué cuesta / qué rompe**: no se tocó nada todavía porque es un refactor de
+lógica ya en producción, sin forma de probarlo contra el portal real en esta
+sesión. Bajo riesgo en teoría (las dos funciones ya están probadas por
+separado), pero el panel es justo donde se decide a qué casillero va cada
+compra — cualquier cambio acá necesita su propia pasada de pruebas antes de
+darlo por bueno.
+**Estado**: propuesta.
+
 ### Propuesta · Botón «probar claves» — HECHA el 11-sep-2026, sin corrida real todavía
 
 **Quién la propone**: el usuario · 10-sep-2026
@@ -971,8 +996,8 @@ La extensión dejó de ser un solo archivo monolítico (`content.js`). Ahora uti
 3. `03_ingreso_y_sesion.js`: Navegación hacia `inicio/NAT` y auto-login (Keycloak).
 4. `04_extraccion_datos.js`: Lógica profunda para raspar tablas del SRI (Facturas, Retenciones, Notas de crédito).
 5. `05_llenado_formulario.js`: Cálculos matemáticos Elite y escritura del DOM en el formulario del SRI.
-6. `06_panel_interfaz.js`: Todo lo relacionado al HUD visual flotante (`SriAssistantPanel`).
-7. `07_navegacion_sri.js`: Secuenciadores "Wizards", `autoDismissSriWarnings` (saltador de modales) y el `SafeStorage.get()` inicial.
+6. `06_panel_interfaz.js`: El panel grande/modal (`SriAssistantPanel`, tarjetas de contexto, el modo manual "ELITE").
+7. `07_navegacion_sri.js`: Secuenciadores "Wizards", `autoDismissSriWarnings` (saltador de modales), el `SafeStorage.get()` inicial, **y la barra chica siempre visible (`const SriLoopHUD = {...}`, línea ~676)** — el cajón 🧰, el panel 🏷️ de proveedores (`pintarProveedores()`) y todos los paneles que cuelgan de él viven ACÁ, no en `06_panel_interfaz.js`. Confundir los dos cuesta tiempo real: lo verificó una auditoría el 06-nov-2026.
 
 ---
 
