@@ -59,13 +59,25 @@ Tres pedidos concretos, en el orden en que los dijo:
    El cimiento y el 502/512/522 ya están cableados; lo que falta es criterio
    contable (el mapa CIIU × actividad del cliente → crédito), no código. Es
    el punto de partida natural de la próxima sesión.
-2. **"Mucha incoherencia en el proceso en bucle"** — el usuario siente que el
-   flujo del lote (`SriLoop`, `armarCola`, el cockpit de login, el bucle
-   automático) no es coherente. **Esto no se auditó todavía** en esta
-   sesión: todo el trabajo de hoy fue seguridad (gates, bugs del popup,
-   consolidación visual del login) — nadie miró el flujo del BUCLE en sí con
-   ojo crítico de principio a fin. Es la auditoría que falta antes de tocar
-   más botones.
+2. **"Mucha incoherencia en el proceso en bucle"** — ✅ **auditado y
+   atacado el mismo 06-nov-2026**, después de dejar escrito este pedido. Se
+   encontraron 5 hallazgos reales (fork dedicado, no solo lectura rápida) y
+   se arreglaron los 3 de impacto alto/crítico: (1) el contador "cliente
+   N/M" avanzaba aunque el usuario hubiera pedido pausar justo en la
+   transición entre clientes (`avanzarA()` sin guarda, pisando siempre a
+   `avanzarIndice()` que sí la tenía); (2) el botón "⚡ INICIAR BUCLE" del
+   cockpit de login armaba su propia cola a mano, distinta a la que arma el
+   botón ▶ del HUD — el mismo botón conceptual podía declarar con criterios
+   distintos según desde dónde se apretara (ahora los dos usan
+   `armarCola()`/`arrancarLote()`); (3) una de las 4 ramas de
+   `handleBatchNextClient()` no sincronizaba el índice del semáforo.
+   De los otros 2: el `confirm()` del botón ▶ se dejó a propósito (es el
+   único gate explícito antes de un lote de decenas de declaraciones
+   reales, a diferencia de los `confirm()` ya sacados que bloqueaban pasos
+   automáticos); el "botón ▶ con 3 significados" resultó ser un falso
+   positivo — ya cambia de ícono/color/tooltip según el estado.
+   Commits `3b74d88` y `ab42531`. Todo verificado en vivo (no solo lectura
+   de código) y con un segundo revisor independiente.
 3. **Diseño: "nada sigue igual que el mes pasado"** — se le mostró un mockup
    (Artifact) del login consolidado y dijo que le encantaba, pero lo que se
    implementó en código real fue más conservador que el mockup (se mantuvo
