@@ -20,6 +20,8 @@ let listaBendita = null;   // null = Bendita inactiva · array de RUC = activa
 let syncBajasBloqueado = false; // true si Supabase rechazó leer is_deleted (falta el GRANT)
 let syncUltimoTs = null;   // timestamp de la última sincronización exitosa
 let ordenMeses = {};       // 🗓️ RUC → Set de 'AAAA-MM' que se declaran en orden (popup)
+let ordenMesesAbierto = {}; // 🗓️ RUC → true si el acordeón de "Orden de meses" está expandido.
+                             // Solo de la sesión del popup: no necesita persistir en storage.
 document.addEventListener('DOMContentLoaded', () => {
     initSelectors();
     bindEvents();
@@ -93,6 +95,34 @@ function bindEvents() {
         currentYear = parseInt(e.target.value);
         persistirMesSeleccionado();
         renderClients();
+    });
+
+    // Menú "⋮" de la Lista Bendita (Quitar todos / Modo clásico). Se cierra
+    // con el overlay (ver popup.html): el menú se superpone a la fila de
+    // pestañas de abajo, y un cierre "al clic afuera" sin overlay dejaba que
+    // ESE mismo clic le llegara a lo que tapaba — disparando "Quitar todos"
+    // en vez de cambiar de pestaña. El overlay absorbe ese primer clic.
+    const cerrarBenditaMenu = () => {
+        document.getElementById('benditaMenu').style.display = 'none';
+        document.getElementById('benditaMenuOverlay').style.display = 'none';
+    };
+    document.getElementById('btnBenditaMenu')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById('benditaMenu');
+        const abrir = menu.style.display !== 'block';
+        menu.style.display = abrir ? 'block' : 'none';
+        document.getElementById('benditaMenuOverlay').style.display = abrir ? 'block' : 'none';
+    });
+    document.getElementById('benditaMenu')?.addEventListener('click', cerrarBenditaMenu);
+    document.getElementById('benditaMenuOverlay')?.addEventListener('click', cerrarBenditaMenu);
+
+    // El formulario nace oculto (ver popup.html): un clic lo muestra y pone
+    // el foco en el RUC, sin tener que buscar la tarjeta del cliente primero.
+    document.getElementById('btnToggleClaveManual')?.addEventListener('click', () => {
+        const form = document.getElementById('formClaveManual');
+        const abierto = form.style.display === 'flex';
+        form.style.display = abierto ? 'none' : 'flex';
+        if (!abierto) document.getElementById('rucClaveInput')?.focus();
     });
 
     // 🔑 Clave SRI de un solo cliente, escrita a mano (el hermano chico de la
@@ -1157,6 +1187,27 @@ function buildOrdenMesesBlock(client) {
     const pendientes = mesesPendientesDeCliente(client);
     const sel = ordenMeses[ruc] || new Set();
     if (pendientes.length === 0) return '';
+    const count = sel.size;
+    const abierto = !!ordenMesesAbierto[ruc];
+
+    // Cerrado por defecto: es una función avanzada (declarar varios meses en
+    // secuencia) que competía visualmente con la acción principal de la
+    // tarjeta (▶ Ingresar), abierta en cada tarjeta pendiente con atraso.
+    // El resumen ya dice si hay algo elegido, sin necesitar abrirlo.
+    const resumen = count > 0
+        ? `${count} de ${pendientes.length} mes(es) elegidos`
+        : `${pendientes.length} mes(es) pendientes`;
+
+    if (!abierto) {
+        return `
+            <div class="orden-meses" data-action="toggle-orden-meses" data-ruc="${ruc}"
+                 style="width:100%; margin-top:4px; padding:5px 10px; border:1px solid rgba(99,102,241,0.2); border-radius:9px; background:rgba(99,102,241,0.04); cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:6px;"
+                 title="Ver los meses pendientes y elegir en cuáles declarar en secuencia">
+                <span style="font-size:10px; font-weight:800; color:#a5b4fc;">🗓️ ${resumen}</span>
+                <span style="font-size:10px; color:#a5b4fc;">▾</span>
+            </div>`;
+    }
+
     const chips = pendientes.map(p => {
         const on = sel.has(p.periodo);
         return `
@@ -1165,11 +1216,13 @@ function buildOrdenMesesBlock(client) {
                 <span style="font-size:11px;">${on ? '☑️' : '⬜'}</span> ${p.label}
             </label>`;
     }).join('');
-    const count = sel.size;
     return `
         <div class="orden-meses" style="width:100%; margin-top:4px; padding:7px 10px; border:1px solid rgba(99,102,241,0.25); border-radius:9px; background:rgba(99,102,241,0.06);">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
-                <span style="font-size:10px; font-weight:800; color:#a5b4fc; letter-spacing:0.4px;">🗓️ ORDEN DE MESES (2025 - 2026)</span>
+            <div data-action="toggle-orden-meses" data-ruc="${ruc}" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
+                <span style="font-size:10px; font-weight:800; color:#a5b4fc; letter-spacing:0.4px;">🗓️ ${resumen}</span>
+                <span style="font-size:10px; color:#a5b4fc;">▴</span>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:4px;">
                 <span data-action="marcar-todos-pendientes" data-ruc="${ruc}" style="cursor:pointer; font-size:10px; font-weight:800; color:#4edea3; background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.35); padding:2px 8px; border-radius:6px;" title="Marcar todos los meses pendientes de este cliente">🎯 Todos los pendientes</span>
             </div>
             <div style="display:flex; flex-wrap:wrap; gap:3px;">${chips}</div>
@@ -1192,6 +1245,9 @@ document.addEventListener('click', async (e) => {
         iniciarCliente(ruc);
     } else if (action === 'toggle-mes-orden') {
         toggleMesOrden(ruc, el.dataset.periodo);
+    } else if (action === 'toggle-orden-meses') {
+        ordenMesesAbierto[ruc] = !ordenMesesAbierto[ruc];
+        renderClients();
     } else if (action === 'marcar-todos-pendientes') {
         marcarTodosPendientes(ruc);
     } else if (action === 'toggle-bendito') {

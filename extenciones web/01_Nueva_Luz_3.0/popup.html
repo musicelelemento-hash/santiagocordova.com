@@ -416,8 +416,14 @@
     </div>
     <input type="file" id="inputCsvClaves" accept=".csv,.txt" style="display:none">
 
-    <!-- Clave SRI por cliente, a mano: sin pasar por CSV. Solo queda en el navegador. -->
-    <div id="formClaveManual" style="padding:8px 18px; background:rgba(99,102,241,0.06); border-bottom:1px solid var(--border); display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+    <!-- Clave SRI por cliente, a mano: sin pasar por CSV. Solo queda en el navegador.
+         Colapsado por defecto: cada tarjeta ya tiene su propio punto de entrada (✏️)
+         para esta misma acción; esta fila completa siempre visible era un segundo
+         camino para lo mismo, ocupando espacio en cada apertura del popup. -->
+    <button id="btnToggleClaveManual" style="width:100%; text-align:left; padding:7px 18px; background:rgba(99,102,241,0.04); border:none; border-bottom:1px solid var(--border); color:#a5b4fc; font-size:10.5px; font-weight:700; cursor:pointer;">
+        + Clave manual (sin CSV)
+    </button>
+    <div id="formClaveManual" style="display:none; padding:8px 18px; background:rgba(99,102,241,0.06); border-bottom:1px solid var(--border); gap:6px; align-items:center; flex-wrap:wrap;">
         <input id="rucClaveInput" placeholder="RUC (13 dígitos)" maxlength="13" style="flex:1; min-width:110px; font-family:'JetBrains Mono',monospace;">
         <input id="claveInput" type="password" placeholder="Clave SRI del cliente" style="flex:1.2; min-width:130px;">
         <button id="btnGuardarClave" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.5); color:#c7d2fe; padding:7px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap;" title="Guarda la clave del cliente en la caché local y lo desbloquea (sin subirla a la nube)">
@@ -469,18 +475,34 @@
 
     <div id="syncAviso" style="display:none; margin:0 18px 8px; padding:8px 12px; border-radius:8px; font-size:10.5px; line-height:1.5; background:rgba(255,185,95,0.08); border:1px solid rgba(255,185,95,0.3); color:#fcd34d; align-items:flex-start; gap:8px;"></div>
 
-    <div id="benditaBar" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 18px 10px; flex-wrap:wrap;">
+    <div id="benditaBar" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 18px 10px; flex-wrap:wrap; position:relative;">
         <div id="benditaResumen" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px;"></div>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; align-items:center;">
             <button id="btnBendecirPendientes" data-action="bendecir-pendientes" style="background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.4); color:#4edea3; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:800; cursor:pointer;" title="Agrega a la Lista Bendita a todos los que faltan declarar este período">
                 🙏 Bendecir pendientes
             </button>
-            <button id="btnQuitarBenditos" data-action="quitar-benditos" style="background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:800; cursor:pointer;" title="Deja la lista vacía: no correrá nadie hasta volver a bendecir">
-                💔 Quitar todos
+            <!-- "Quitar todos" y "Modo clásico" son acciones menos frecuentes
+                 (vaciar o apagar la Lista Bendita) — quedan detrás de este menú
+                 en vez de ocupar el mismo espacio que la acción principal. -->
+            <button id="btnBenditaMenu" title="Más acciones de la Lista Bendita" style="background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; padding:4px 8px; border-radius:7px; font-size:11px; font-weight:800; cursor:pointer; line-height:1;">
+                ⋮
             </button>
-            <button id="btnDesactivarBendita" data-action="desactivar-bendita" style="background:transparent; border:1px dashed rgba(148,163,184,0.3); color:#64748b; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:700; cursor:pointer;" title="Desactiva la Lista Bendita: vuelve el modo de siempre (corre todo pendiente)">
-                ⏻ Modo clásico
-            </button>
+            <!-- El menú se superpone a la fila de pestañas de abajo (poco
+                 espacio entre benditaBar y .tabs). Sin este overlay, un clic
+                 en "Completados" con el menú abierto le llegaba al botón del
+                 menú que queda encima en ese punto, no a la pestaña —
+                 disparando "Quitar todos" en vez de cambiar de vista. El
+                 overlay cierra el menú con CUALQUIER clic de afuera, sin
+                 dejarlo pasar a lo que esté debajo. -->
+            <div id="benditaMenuOverlay" style="display:none; position:fixed; inset:0; z-index:25;"></div>
+            <div id="benditaMenu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; z-index:30; background:#0b1c2e; border:1px solid var(--border-highlight); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden; min-width:150px;">
+                <button id="btnQuitarBenditos" data-action="quitar-benditos" style="display:block; width:100%; text-align:left; background:transparent; border:none; color:#94a3b8; padding:8px 12px; font-size:10.5px; font-weight:700; cursor:pointer;" title="Deja la lista vacía: no correrá nadie hasta volver a bendecir">
+                    💔 Quitar todos
+                </button>
+                <button id="btnDesactivarBendita" data-action="desactivar-bendita" style="display:block; width:100%; text-align:left; background:transparent; border:none; border-top:1px solid var(--border); color:#64748b; padding:8px 12px; font-size:10.5px; font-weight:700; cursor:pointer;" title="Desactiva la Lista Bendita: vuelve el modo de siempre (corre todo pendiente)">
+                    ⏻ Modo clásico
+                </button>
+            </div>
         </div>
     </div>
 
