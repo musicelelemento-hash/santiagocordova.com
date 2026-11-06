@@ -3008,6 +3008,11 @@ async function handleBatchNextClient() {
         actionTimestamp: Date.now(),
         ghost_manual_mode: false,
       });
+      // A diferencia de sus 3 ramas hermanas (soloProbarClave, soloRecuperar,
+      // barrerAntes), esta nunca llamaba a avanzarIndice() — dejaba
+      // sc_loop.indice un paso atrasado respecto a auto_batch_index (la copia
+      // que sí se actualizaba) cada vez que se tomaba este camino.
+      if (typeof SriLoop !== 'undefined') await SriLoop.avanzarIndice(nextIndex);
       await GhostMemory.clearCurrent();
       await sleep(1000);
       await cerrarSesionSRI();
