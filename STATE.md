@@ -1,5 +1,5 @@
 # ESTADO DEL PROYECTO — COLABORACIÓN ANTIGRAVITY & CLAUDE CODE
-> **Fecha de actualización:** 05-nov-2026  
+> **Fecha de actualización:** 06-nov-2026  
 > **Entorno de trabajo:** Multi-agente (Antigravity IDE + Claude Code en paralelo)  
 > **Rama activa en repositorio raíz:** `extension/nueva-luz-control-bucle`  
 > **Sub-repositorio web (`santiagocordova-main`):** `main`
@@ -38,6 +38,151 @@
    - **NUNCA presentar sustitutivas**: el bot se frena y redirige a *Consulta de declaraciones* para descargar el comprobante oficial existente.
    - **NUNCA purgar cookies de sesión en el formulario de Keycloak**: el `AUTH_SESSION_ID` está ligado al formulario; purgarlo produce `HTTP 400 Bad Request`.
    - **NUNCA inventar un casillero o suponer datos tributarios**: cuando falta un dato contable/legal, el bot reúne la evidencia, la muestra y pide confirmación o marca al cliente en Omitidos.
+
+---
+
+## 📌 PEDIDO DEL USUARIO PARA LA PRÓXIMA SESIÓN (06-nov-2026, antes de cerrar)
+
+> El usuario cierra la sesión acá. Dicho con sus propias palabras, sin
+> reinterpretar (mismo criterio que `santiagocordova-main/.agents/AGENTS.md`
+> §6): *«ya toca declarar estos últimos meses, a trabajado perfecto, ahora
+> mejoramos la categorización aún más de las facturas de compras, eso nada
+> más ahora, veo mucha incoherencia en lo más de hacer un proceso en bucle,
+> eso quería mejorar el flujo, la interacción con los botones, y tal vez
+> nuevas y buenas funcionalidades, o sea pulir, y qué decir del diseño, me
+> mostraste buenos gráficos pero nada sigue igual que el mes pasado»*.
+
+Tres pedidos concretos, en el orden en que los dijo:
+
+1. **Mejorar la categorización de las facturas de compras** — el laboratorio
+   de proveedores / crédito tributario (§7 · §0b.1 de `.agents/AGENTS.md`).
+   El cimiento y el 502/512/522 ya están cableados; lo que falta es criterio
+   contable (el mapa CIIU × actividad del cliente → crédito), no código. Es
+   el punto de partida natural de la próxima sesión.
+2. **"Mucha incoherencia en el proceso en bucle"** — el usuario siente que el
+   flujo del lote (`SriLoop`, `armarCola`, el cockpit de login, el bucle
+   automático) no es coherente. **Esto no se auditó todavía** en esta
+   sesión: todo el trabajo de hoy fue seguridad (gates, bugs del popup,
+   consolidación visual del login) — nadie miró el flujo del BUCLE en sí con
+   ojo crítico de principio a fin. Es la auditoría que falta antes de tocar
+   más botones.
+3. **Diseño: "nada sigue igual que el mes pasado"** — se le mostró un mockup
+   (Artifact) del login consolidado y dijo que le encantaba, pero lo que se
+   implementó en código real fue más conservador que el mockup (se mantuvo
+   toda la lógica existente del panel de anticipación, solo se le cambió la
+   posición y se agregó un conector visual — nunca se reconstruyó visualmente
+   al estilo del mockup). Ver la sesión completa de hoy más abajo para el
+   detalle de qué cambió de verdad y qué quedó solo como propuesta visual.
+
+**Para la próxima sesión**: no asumir que "ya se mejoró la interfaz" porque
+se tocó el popup — el usuario la sigue viendo "igual que el mes pasado" en
+su uso real. Hay una desconexión entre lo que se verificó con capturas
+puntuales (login, popup) y lo que el usuario percibe al usar la herramienta
+de punta a punta para declarar. Antes de seguir "puliendo" sin rumbo,
+conviene pedirle que muestre en vivo (captura o pantalla compartida) el
+flujo del bucle completo, paso a paso, para ver dónde está la incoherencia
+que él ve y que esta sesión no encontró por su cuenta.
+
+---
+
+## 🏆 2₈ · HITOS DE HOY (05/06-NOV-2026) — sesión continua, cruzó medianoche
+
+> Todo lo de abajo es la MISMA sesión de trabajo (arrancó el 05-nov
+> verificando el período de octubre antes de una corrida real, siguió el
+> 06-nov con el popup). 9 commits en `extension/nueva-luz-control-bucle`,
+> todos con `node --check` + build + suite completa (891 comprobaciones)
+> verificados en verde antes de cada uno. Ningún push — el usuario sube a
+> GitHub a mano desde GitHub Desktop.
+
+### Lo que se verificó antes de la corrida real de octubre
+
+- `SriLoop.periodoPorDefecto()` (la función real que usa el lote) calculado
+  contra la fecha real del sistema: resuelve a octubre 2026 sin ambigüedad.
+- Build sincronizado con `src/`, suite completa en verde.
+- Se recomendó una prueba piloto con 2-3 clientes antes de los 47 — no hay
+  evidencia en esta sesión de si el usuario la hizo.
+
+### Bug crítico encontrado y corregido: `scLog` pisado por el objeto `log`
+
+La Tanda 0/1 de seguridad (claves R2 fuera del repo, `host_permissions`
+acotados, bridge con validación, logging con niveles, tests headless) venía
+de una sesión anterior sin commitear. Al compilarla y correrla, **colgaba
+los bancos `iva5` y `catastro`**: `window.scLog = log` pisaba la función
+`scLog` con el objeto logger bajo el mismo nombre — la misma trampa que ya
+documenta el §9d de `.agents/AGENTS.md` (nunca envolver una función
+top-level en `window.<mismo nombre>`). Corregido quitando esa línea; ambos
+nombres ya son globales por ser top-level en el bundle concatenado.
+Commit `5046ab6`.
+
+### Auditoría de períodos mal archivados — corrida real contra Supabase
+
+`auditarPeriodosSospechosos()` corrida con un script Node que lee Supabase
+directo (sin abrir el portal): 139 clientes, 1185 declaraciones, 3
+candidatos. **1 confirmado**: CHAVEZ CORDOVA GUIDO ERMEL tiene un registro
+fantasma `2023-08` (con PDF real) además del correcto `2026-08` — nunca se
+limpió. **2 descartados** a mano: RUC que empieza casualmente con "2026",
+coincidencia de dígitos, no el bug. No se tocó la base — queda pendiente que
+el usuario decida si borra el fantasma. Commit `217bd63`.
+
+### El login del SRI: de dos superficies compitiendo a una consolidada
+
+Una auditoría de diseño (agente `hud-design-reviewer`) encontró que el login
+mostraba DOS superficies flotantes completas haciendo casi lo mismo: el
+cockpit "Dynamic Island" (`renderLoginCockpit`, `03_ingreso_y_sesion.js`) y
+el panel de anticipación (`renderAnticipationWidget`, `01_utilidades_y_pdf.js`).
+Además, el cockpit **ignoraba `extensionDespierta()`** y precargaba RUC y
+clave real de un cliente aunque la extensión estuviera dormida — el mismo
+riesgo de seguridad que el modo 💤 (§9c) ya había resuelto para la barra y
+el panel, reintroducido acá. Y usaba un `confirm()` bloqueante en "omitir
+cliente" (prohibido por el proyecto: congela una corrida desatendida).
+
+Se evaluó reconstruir visualmente el panel de anticipación al estilo de un
+mockup aprobado por el usuario (isla + panel expandido con conector), pero
+se descubrió que ese panel es un centro de gestión real de ~500 líneas (3
+pestañas, selector de período, ver/copiar/editar clave por cliente,
+declarar 1-clic) — reescribirlo hubiera significado recrear lógica ya
+probada sin necesidad. Se optó por un cambio más conservador: el panel ya
+no se monta solo (antes se creaba cada ~2.5s con la web sincronizando, sin
+que nadie lo pidiera), queda anclado debajo de la isla en vez de en otra
+esquina, y se le agregó un conector visual (triángulo) para que se lea como
+una sola superficie. **Esto es más modesto que lo que mostraba el mockup**
+— ver el pedido del usuario arriba. Commits `5656046`, `0addb14`, `570298c`.
+
+### El popup: la interfaz que el usuario realmente mira
+
+Confusión larga en esta sesión: el usuario pensaba que el "cockpit de
+login" y el popup de la barra de Chrome eran la misma interfaz. Son
+archivos completamente separados (`popup.html`/`popup.js` vs. lo inyectado
+en `srienlinea.sri.gob.ec`). Causa raíz de "recargo y no veo nada distinto":
+el pie del popup tenía **"v3.2.0" escrito a mano en el HTML**, congelado
+desde hace tiempo, sin ninguna conexión al código real ni al manifest.
+Commit `04cf815`.
+
+Auditoría completa del popup (mismo agente), con 2 bugs reales de alto
+impacto:
+- Un cliente **dado de baja** conservaba el botón "▶ Ingresar" totalmente
+  funcional — un clic armaba una sesión real y un lote para alguien que ya
+  no es cliente.
+- "✏️ Editar/Agregar clave" no hacía nada en las pestañas "Otros" y "Bajas"
+  (buscaba el cliente en la lista equivocada), sin aviso ni error.
+Commit `d42961f`.
+
+Reducción de sobrecarga de controles (el mismo tratamiento que ya se le
+dio al HUD del portal con el cajón 🧰, nunca aplicado al popup): la clave
+manual colapsada detrás de un enlace, "Quitar todos"/"Modo clásico" detrás
+de un menú "⋮", y el bloque de "Orden de meses" cerrado por defecto. Una
+segunda pasada del revisor encontró que ese menú `⋮` se superponía
+físicamente a la fila de pestañas — un clic en "Completados" con el menú
+abierto podía disparar "Quitar todos" por accidente. Arreglado con un
+overlay que absorbe ese clic. Commits `3936951`.
+
+Panel de "Modo Auto" que no se actualizaba al pausar/reanudar un lote ya
+corriendo (solo se repintaba en 1 de 4 casos posibles), más limpieza de
+2 restos de código muerto. Commit `56e9b77`.
+
+**Todo lo de esta sección se verificó en vivo** (navegador real con mocks
+de `chrome.runtime`/`chrome.storage`, no solo lectura de código) antes de
+cada commit — screenshots y pruebas programáticas en la conversación.
 
 ---
 
