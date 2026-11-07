@@ -1347,3 +1347,23 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 │       ├── supabase.ts
 │       └── fileService.ts
 ```
+
+## 2026-11-06 — Supabase en orden
+
+- Se aplicó `PENDIENTE_SUPABASE_RLS.sql` al proyecto principal `afssvsxlxiwqgtcgvqxp`.
+  Verificado por REST con la llave anon: `GET/PATCH` en `sri_declaraciones` y
+  `clients` responden 200 (antes 401).
+- Se aplicó `santiagocordova-main/database/orden_supabase_2026-11.sql`:
+  RLS en `sri_padron_el_oro`, `search_path` fijo en `get_next_sri_secuencial`,
+  política SELECT duplicada de `clients` eliminada, índice duplicado
+  `idx_clients_ruc` eliminado e índice `tasks(client_id)` creado.
+- Advisors de seguridad: quedaron solo `pg_trgm` en `public` y la protección
+  de contraseñas filtradas de Auth (ambos WARN, sin impacto en el lote).
+- Datos auditados: 139 clientes (131 activos, 3 borrados, 6 sin clave SRI),
+  1196 declaraciones, 0 duplicados por `(client_id,type,period)`, 0 huérfanas.
+- Se borraron 4 declaraciones de prueba (`2099-12 TestRLS` y `2027-01/02/03`).
+- Se eliminó el bucket huérfano «Escudo de particulas…» (3 WebP, 38 MB,
+  nunca accedidos; los originales siguen en el workspace).
+- Se eliminó el proyecto `uvrpvramkocndrbeugls` («musicelelemento-hash's
+  Project»): 1 tabla demo, 9 filas, 0 usuarios y 0 buckets.
+- Queda un solo proyecto: `afssvsxlxiwqgtcgvqxp` (SantiagoCordova.com).
