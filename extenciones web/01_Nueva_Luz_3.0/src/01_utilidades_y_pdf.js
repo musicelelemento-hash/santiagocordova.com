@@ -1358,31 +1358,33 @@ async function cerrarSesionSRI(force = false) {
   ].reduce((hallado, sel) =>
     hallado || soloDelPortal(document.querySelectorAll(sel))[0] || null, null);
   if (logoutIcon) {
-    try {
-      // El icono del SRI lleva `href="javascript:..."`, y una navegación
-      // `javascript:` la bloquea la CSP de la extensión: el clic no hace nada
-      // y deja dos violaciones en la consola por cliente. Con 25 clientes son
-      // 50 líneas de ruido tapando lo que importa. Enseguida se cae al
-      // endpoint canónico, que es el que de verdad cierra la sesión, así que
-      // ni siquiera hay que intentarlo.
-      const enlaceDelIcono = logoutIcon.closest('a, button, li');
-      const hrefDelIcono = (enlaceDelIcono && enlaceDelIcono.getAttribute('href')) || '';
-      if (hrefDelIcono.toLowerCase().startsWith('javascript:')) {
-        log.debug('🚪 [LOGOUT] El icono del portal usa una URL «javascript:», que la CSP bloquea. ' +
-                    'Se va directo al endpoint de cierre.');
-        throw new Error('icono con javascript: — se usa el endpoint canónico');
-      }
-      log.info("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
-      clickElement(logoutIcon, "Icono Cerrar Sesión SRI");
-      const parentLink = logoutIcon.closest("a, button, li");
-      if (parentLink) {
-        const href = parentLink.getAttribute("href") || "";
-        if (!href.toLowerCase().startsWith("javascript:")) {
-          clickElement(parentLink, "Enlace Padre Cerrar Sesión");
+    // El icono del SRI lleva `href="javascript:..."`, y una navegación
+    // `javascript:` la bloquea la CSP de la extensión: el clic no hace nada
+    // y deja dos violaciones en la consola por cliente. Con 25 clientes son
+    // 50 líneas de ruido tapando lo que importa. Enseguida se cae al
+    // endpoint canónico, que es el que de verdad cierra la sesión, así que
+    // ni siquiera hay que intentarlo.
+    const enlaceDelIcono = logoutIcon.closest('a, button, li');
+    const hrefDelIcono = (enlaceDelIcono && enlaceDelIcono.getAttribute('href')) || '';
+    const iconoInservible = hrefDelIcono.toLowerCase().startsWith('javascript:');
+
+    if (iconoInservible) {
+      log.debug('🚪 [LOGOUT] Icono con «javascript:» (bloqueado por CSP). ' +
+                  'Se va directo al endpoint de cierre.');
+    } else {
+      try {
+        log.info("✅ Haciendo clic en icono de cerrar sesión...", logoutIcon);
+        clickElement(logoutIcon, "Icono Cerrar Sesión SRI");
+        const parentLink = logoutIcon.closest("a, button, li");
+        if (parentLink) {
+          const href = parentLink.getAttribute("href") || "";
+          if (!href.toLowerCase().startsWith("javascript:")) {
+            clickElement(parentLink, "Enlace Padre Cerrar Sesión");
+          }
         }
+      } catch (e) {
+        log.debug("Icono de logout no utilizable; se usa el endpoint canónico:", e.message);
       }
-    } catch (e) {
-      log.warn("Error al hacer clic en logoutIcon:", e);
     }
   }
   await sleep(600);
@@ -1752,8 +1754,13 @@ async function tryCaptureRealPdfFromDOM(shouldClickPrint = true) {
               return true;
             }
           } else {
-            log.warn(
-              "⚠️ [PDF MASTER] La respuesta no fue un PDF:",
+            // Un POST al formulario JSF devuelve la página HTML (respuesta
+            // parcial de PrimeFaces), no el PDF: el comprobante baja por una
+            // descarga aparte que capturan los interceptores. No es un error;
+            // el fallback de abajo hace el clic nativo que sí lo dispara.
+            log.debug(
+              "📄 [PDF MASTER] El POST devolvió HTML (respuesta AJAX), no el PDF; " +
+              "se usa la captura nativa.",
               blob.type,
               blob.size,
             );
@@ -2198,6 +2205,14 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
   }
 }
 
+// ── ANTI-DUPLICADO DE SINCRONIZACIÓN ────────────────────────────────────────
+// El cierre automático y el vigía de pantalla de éxito pueden llamar a esta
+// función para el mismo RUC/período con segundos de diferencia. Sin este
+// cerrojo se subía el PDF dos veces, se hacían dos POST (uno 401 y su INSERT)
+// y se clickeaba dos veces «Descargar comprobante». Caduca a los 2 minutos.
+const __sriSyncReciente = new Map();
+const __SRI_SYNC_VENTANA_MS = 120000;
+
 async function syncDeclarationToSupabase(
   ruc,
   periodStr,
@@ -2224,6 +2239,19 @@ async function syncDeclarationToSupabase(
   // 🛡️ Blindaje: solo aceptamos base64 como string. Si un llamador pasa un boolean
   // u otro tipo, lo ignoramos en vez de romper .includes()/.split() más abajo.
   if (typeof pdfContentBase64 !== "string" || !pdfContentBase64) pdfContentBase64 = null;
+
+  // 🚦 Anti-duplicado: si este mismo RUC/período ya se sincronizó hace menos de
+  // dos minutos y no hay un PDF nuevo que subir, no se repite el trabajo.
+  const syncKey = `${ruc}|${canonicalPeriod}`;
+  const syncPrevio = __sriSyncReciente.get(syncKey);
+  const hayPdfNuevo = !!capturedPdfBase64;
+  if (syncPrevio && syncPrevio.ok &&
+      Date.now() - syncPrevio.at < __SRI_SYNC_VENTANA_MS &&
+      (syncPrevio.conPdf || !hayPdfNuevo)) {
+    log.debug(`⏭️ [SUPABASE] ${ruc} (${canonicalPeriod}) ya sincronizado hace ` +
+              `${Math.round((Date.now() - syncPrevio.at) / 1000)} s; no se repite.`);
+    return;
+  }
 
   // 🛡️ BLINDAJE CONTRA CONTAMINACIÓN CRUZADA DE COMPROBANTES:
   // Si la declaración tiene saldo a pagar o inconsistencias, NO SE ENVIÓ AL SRI.
@@ -2288,6 +2316,12 @@ async function syncDeclarationToSupabase(
   } else if (!noEsDeclaracionEnviada && !realPdf) {
     log.warn(`⚠️ [COMPROBANTE PENDIENTE] No se capturó PDF oficial del SRI para ${ruc} (${canonicalPeriod}). Se registrará sin PDF para su posterior recuperación limpia y auténtica desde Consulta de declaraciones.`);
   }
+
+  // Marca en memoria para que el vigía de pantalla de éxito sepa que el cierre
+  // automático ya está sincronizando y no dispare un segundo cierre.
+  try { window.__sriSyncEnCurso = syncKey; } catch (e) { /* sin window */ }
+  let syncOk = false;
+  let syncConPdf = false;
 
   try {
     let pdfUrl = "";
@@ -2547,6 +2581,8 @@ async function syncDeclarationToSupabase(
 
       if (res1.ok || res1.status === 201 || res1.status === 204) {
         log.info(`✅ [SUPABASE] sri_declaraciones guardado (upsert): ${ruc} (${canonicalPeriod}).`);
+        syncOk = true;
+        syncConPdf = !!pdfUrl;
       } else {
         const errText = await res1.text().catch(() => "");
         // Si falló con 401/42501 (falta de política UPDATE en RLS para anon), intentar INSERT directo
@@ -2564,8 +2600,12 @@ async function syncDeclarationToSupabase(
 
           if (resDirect.ok || resDirect.status === 201) {
             log.info(`✅ [SUPABASE] sri_declaraciones guardado (INSERT directo): ${ruc} (${canonicalPeriod}).`);
+            syncOk = true;
+            syncConPdf = !!pdfUrl;
           } else if (resDirect.status === 409) {
             log.debug(`ℹ️ [SUPABASE] sri_declaraciones ya existía para ${ruc} (${canonicalPeriod}).`);
+            syncOk = true;
+            syncConPdf = !!pdfUrl;
           } else {
             log.warn(`⚠️ [SUPABASE] sri_declaraciones INSERT falló: HTTP ${resDirect.status}`);
           }
@@ -2675,6 +2715,14 @@ async function syncDeclarationToSupabase(
   } catch (e) {
     log.warn("⚠️ Supabase sync error:", e);
   } finally {
+    if (syncOk) {
+      const marca = { at: Date.now(), ok: true, conPdf: syncConPdf };
+      __sriSyncReciente.set(syncKey, marca);
+      try { window.__sriSyncOk = { key: syncKey, at: marca.at }; } catch (e) { /* sin window */ }
+    }
+    try {
+      if (window.__sriSyncEnCurso === syncKey) window.__sriSyncEnCurso = null;
+    } catch (e) { /* sin window */ }
     clearCapturedPdf('post_sync_complete');
   }
 }

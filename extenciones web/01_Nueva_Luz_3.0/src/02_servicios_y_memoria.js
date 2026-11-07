@@ -1778,7 +1778,10 @@ const SriApi = {
 
     async _get(ruta) {
         const token = this._token();
-        if (!token) { log.warn('🔌 [API SRI] No hay token de sesión todavía.'); return null; }
+        // La SPA del SRI guarda el token fuera del alcance del content script
+        // (memoria de Angular / cookies HttpOnly). No encontrarlo es lo normal
+        // en cada navegación, no un error: se cae al chequeo por pantalla.
+        if (!token) { log.debug('🔌 [API SRI] Sin token visible; se usa la pantalla como respaldo.'); return null; }
         try {
             const r = await fetch(this.BASE + ruta, {
                 credentials: 'include',
@@ -5071,6 +5074,22 @@ function initDeclarationSuccessWatcher() {
         ));
 
         if (isSuccessPage) {
+            // 🛡️ Si el cierre automático ya está en curso o ya sincronizó esta
+            // declaración, el vigía NO debe repetir descarga, sync ni logout.
+            // Antes se duplicaba todo: dos «Descargar comprobante», dos POST y
+            // un segundo cierre de sesión sobre la misma declaración.
+            const cierreAuto = window.__sriCierreAutomaticoEnCurso;
+            const syncEnCurso = window.__sriSyncEnCurso;
+            const haceNada = (marca) => typeof marca === 'number' && Date.now() - marca < 90000;
+
+            if (haceNada(cierreAuto) || syncEnCurso) {
+                if (!window.__sriWatcherDuplicadoAvisado) {
+                    window.__sriWatcherDuplicadoAvisado = true;
+                    log.debug('⏭️ [SRI WATCHER] El cierre automático ya tomó esta declaración; no se duplica.');
+                }
+                return;
+            }
+
             const state = await SafeStorage.get(['declaration_synced_flag']);
             if (!state.declaration_synced_flag) {
                 await SafeStorage.set({ declaration_synced_flag: true });

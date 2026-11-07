@@ -1623,6 +1623,13 @@ class SriAssistantPanel {
             if (puedeEnviar) {
                 this.log('💎 TODO PERFECTO. Saldo $0.00 y Sin Inconsistencias.');
                 this.setStatus('💎 Misión Cumplida - Enviando...');
+
+                // 🛡️ Reservar el cierre ANTES de enviar: el vigía de pantalla de
+                // éxito (poll de 2 s) puede ver la confirmación antes de que este
+                // flujo termine de sincronizar y cerraría por duplicado.
+                if (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar()) {
+                    window.__sriCierreAutomaticoEnCurso = Date.now();
+                }
                 
                 const btnAceptarFinal = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : Array.from(document.querySelectorAll('button span')).find(el => el.textContent.trim() === 'Aceptar');
                 if (btnAceptarFinal) {
@@ -1733,6 +1740,7 @@ class SriAssistantPanel {
                                 ]);
                                 await cerrarSesionSRI();
                             }
+                            try { window.__sriCierreAutomaticoEnCurso = null; } catch (e) { /* sin window */ }
                         }, 3500);
                         return;
                     }
