@@ -1359,6 +1359,10 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
   `idx_clients_ruc` eliminado e índice `tasks(client_id)` creado.
 - Advisors de seguridad: quedaron solo `pg_trgm` en `public` y la protección
   de contraseñas filtradas de Auth (ambos WARN, sin impacto en el lote).
+  La protección HIBP es exclusiva de planes Pro; quedó documentada, no aplicada.
+- Auth: `site_url` estaba en `http://localhost:3000`. Se corrigió a
+  `https://santiagocordova.com` y se agregaron los redirects de `www`,
+  `portal` y `talonarioamigo` en `uri_allow_list`.
 - Datos auditados: 139 clientes (131 activos, 3 borrados, 6 sin clave SRI),
   1196 declaraciones, 0 duplicados por `(client_id,type,period)`, 0 huérfanas.
 - Se borraron 4 declaraciones de prueba (`2099-12 TestRLS` y `2027-01/02/03`).
