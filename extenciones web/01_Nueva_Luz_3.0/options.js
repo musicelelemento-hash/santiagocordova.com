@@ -196,6 +196,134 @@ async function probarSubida() {
     }
 }
 
+/**
+ * Chequeo previo al lote de clientes.
+ *
+ * No declara nada: solo lee el almacén local y hace dos PATCH contra un UUID
+ * imposible para comprobar los permisos de Supabase sin tocar ninguna fila.
+ * Así los 401 se descubren antes de arrancar, no después del cliente 30.
+ */
+async function chequeoPrevio() {
+    const salida = $('resultadoChequeo');
+    const boton = $('btnChequeoPrevio');
+    if (!salida || !boton) return;
+    salida.style.display = 'block';
+    salida.textContent = 'Revisando…';
+    boton.disabled = true;
+
+    const lineas = [];
+    const ok = (t) => lineas.push('✅ ' + t);
+    const atencion = (t) => lineas.push('⚠️ ' + t);
+    const bloqueo = (t) => lineas.push('⛔ ' + t);
+
+    try {
+        const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
+        const g = await chrome.storage.local.get([
+            CLAVE_WEB, CLAVE_R2, 'sc_clients_cache', 'flagged_errors',
+            'workflowPeriod', 'sc_declaraciones_locales'
+        ]);
+        const web = g[CLAVE_WEB] || {};
+        const url = String(web.SUPABASE_URL || cfg.SUPABASE_URL || '').replace(/\/+$/, '');
+        const key = web.SUPABASE_ANON_KEY || cfg.SUPABASE_ANON_KEY || '';
+
+        if (key && key.split('.').length === 3 && key.length > 100) {
+            ok('Llave de Supabase con forma válida.');
+        } else {
+            bloqueo('Falta la llave de Supabase o no tiene forma de JWT.');
+        }
+
+        const r2 = g[CLAVE_R2] || {};
+        if (r2.R2_ACCESS_KEY_ID && r2.R2_SECRET_ACCESS_KEY) {
+            ok('Access Key y Secret de R2 cargados en Ajustes.');
+        } else {
+            atencion('R2 sin Access Key/Secret: la subida por Worker puede andar igual. ' +
+                     'Usá «Probar ahora» para confirmar los tres caminos.');
+        }
+
+        const lista = Array.isArray(g.sc_clients_cache) ? g.sc_clients_cache : [];
+        if (!lista.length) {
+            bloqueo('No hay clientes en caché. Abrí la web, sincronizá Declaraciones o importá el CSV.');
+        } else {
+            const conClave = lista.filter(c => !!(c.password || c.sri_password || c.sriPassword));
+            ok(`${lista.length} clientes en caché; ${conClave.length} con contraseña.`);
+            const sinClave = lista.filter(c => !(c.password || c.sri_password || c.sriPassword));
+            if (sinClave.length) {
+                const muestra = sinClave.slice(0, 8).map(c => c.ruc || c.name || '?').join(', ');
+                atencion(`${sinClave.length} sin contraseña: ${muestra}${sinClave.length > 8 ? '…' : ''}`);
+            }
+        }
+
+        const flagged = Object.keys(g.flagged_errors || {});
+        if (flagged.length) {
+            atencion(`${flagged.length} cliente(s) marcados por el SRI y omitidos: ` +
+                     flagged.slice(0, 8).join(', ') + (flagged.length > 8 ? '…' : ''));
+        } else {
+            ok('Ningún cliente marcado por credencial rechazada.');
+        }
+
+        const wp = g.workflowPeriod;
+        if (wp && typeof wp.monthIndex === 'number' && wp.year) {
+            ok(`Período elegido: ${String(wp.monthIndex + 1).padStart(2, '0')}/${wp.year}.`);
+        } else {
+            atencion('No hay período elegido; se usará el mes anterior por defecto.');
+        }
+
+        if (url && key) {
+            const cab = {
+                apikey: key,
+                Authorization: 'Bearer ' + key,
+                'Content-Type': 'application/json',
+                Prefer: 'return=minimal'
+            };
+            const imposible = '00000000-0000-0000-0000-000000000000';
+
+            try {
+                const r = await fetch(`${url}/rest/v1/clients?select=id&limit=1`, {
+                    headers: { apikey: key, Authorization: 'Bearer ' + key }
+                });
+                if (r.ok) ok('Supabase responde y deja leer clients.');
+                else bloqueo(`Supabase no deja leer clients: HTTP ${r.status}.`);
+            } catch (e) {
+                bloqueo('No se pudo llegar a Supabase: ' + e.message);
+            }
+
+            const probarPatch = async (tabla, cuerpo, etiqueta) => {
+                try {
+                    const r = await fetch(`${url}/rest/v1/${tabla}?id=eq.${imposible}`, {
+                        method: 'PATCH', headers: cab, body: JSON.stringify(cuerpo)
+                    });
+                    if (r.status === 204 || r.status === 200) ok(etiqueta);
+                    else if (r.status === 401 || r.status === 403) {
+                        bloqueo(`${etiqueta}: HTTP ${r.status} (falta política o permiso).`);
+                    } else {
+                        atencion(`${etiqueta}: HTTP ${r.status}.`);
+                    }
+                } catch (e) {
+                    atencion(`${etiqueta}: no se pudo probar (${e.message}).`);
+                }
+            };
+
+            await probarPatch('sri_declaraciones', { updated_at: new Date().toISOString() },
+                'sri_declaraciones acepta UPDATE (upsert).');
+            await probarPatch('clients', { tax_profile: {} },
+                'clients acepta actualizar tax_profile.');
+        }
+
+        const locales = g.sc_declaraciones_locales || {};
+        const nLocales = Object.keys(locales).length;
+        if (nLocales) ok(`${nLocales} declaración(es) en el respaldo local.`);
+    } catch (e) {
+        bloqueo('El chequeo se cortó: ' + e.message);
+    } finally {
+        const bloqueantes = lineas.filter(l => l.startsWith('⛔')).length;
+        lineas.unshift(bloqueantes
+            ? `RESULTADO: ${bloqueantes} bloqueo(s). No arranques el lote hasta resolverlos.`
+            : 'RESULTADO: sin bloqueos. Podés arrancar el lote.');
+        salida.textContent = lineas.join('\n');
+        boton.disabled = false;
+    }
+}
+
 async function pintarEstadoBovedaClientes() {
     const el = $('estadoBovedaClientes');
     if (!el) return;
@@ -367,6 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
         b.addEventListener('click', () => borrarUna(b.getAttribute('data-borra')));
     });
     $('btnProbarSubida').addEventListener('click', probarSubida);
+    $('btnChequeoPrevio')?.addEventListener('click', chequeoPrevio);
 
     // El modo depuración se guarda al instante: es un interruptor, no una
     // credencial, y quien lo prende suele estar mirando la consola del SRI.

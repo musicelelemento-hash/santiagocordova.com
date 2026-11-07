@@ -302,6 +302,14 @@ footer {
         <label for="chkDebug" style="margin:0;cursor:pointer">Registrar todo en la consola (modo depuración)</label>
     </div>
     <div class="estado" id="estadoDebug">—</div>
+    <div class="botones" style="margin-top: 14px;">
+        <button class="b-neutro" id="btnChequeoPrevio">🧪 Chequear antes del lote</button>
+    </div>
+    <pre id="resultadoChequeo" class="estado" style="display:none; white-space:pre-wrap; text-align:left; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.45; margin-top:10px;"></pre>
+    <p class="bajada" style="margin: 8px 0 0;">
+        Revisa claves, clientes sin contraseña, clientes marcados por el SRI y
+        los dos permisos de Supabase que fallaban con 401. No declara nada.
+    </p>
     <p class="bajada" style="margin: 12px 0 0;">
         Desde la consola del SRI también se puede copiar el contexto de una
         corrida con <code>scLogBuffer()</code>, aunque no hayas tenido la consola
