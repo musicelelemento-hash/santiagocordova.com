@@ -145,6 +145,30 @@ async function borrarUna(cual) {
 }
 
 async function borrar() {
+    // Dos pasos, en el mismo botón. Antes «Borrar TODAS» estaba al lado de
+    // «Guardar», con el mismo tamaño, y borraba las cuatro credenciales sin
+    // preguntar. La clave secreta de R2 no se puede recuperar: Cloudflare la
+    // muestra una sola vez.
+    const btn = $('btnBorrarClaves');
+    if (btn && btn.dataset.confirmando !== '1') {
+        btn.dataset.confirmando = '1';
+        btn.classList.add('confirmando');
+        btn.textContent = '¿Seguro? Se borran las 4';
+        clearTimeout(borrar._reloj);
+        borrar._reloj = setTimeout(() => {
+            btn.dataset.confirmando = '';
+            btn.classList.remove('confirmando');
+            btn.textContent = 'Borrar todas…';
+        }, 6000);
+        btn.focus();
+        return;
+    }
+    if (btn) {
+        clearTimeout(borrar._reloj);
+        btn.dataset.confirmando = '';
+        btn.classList.remove('confirmando');
+        btn.textContent = 'Borrar todas…';
+    }
     await chrome.storage.local.remove([CLAVE_IA, CLAVE_R2, CLAVE_WEB]);
     $('claveIa').value = '';
     $('claveR2').value = '';

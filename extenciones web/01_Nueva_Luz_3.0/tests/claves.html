@@ -151,7 +151,16 @@
   push('sin nada de R2, no queda cáscara', 'sc_r2_credenciales' in store, false);
   push('y lo ajeno nunca se tocó',         store.sc_web_placeholder, 1);
 
-  sec('F · borrar TODAS sigue borrando todas');
+  sec('F · borrar TODAS pide confirmación, y después borra todas');
+  // El 07-sep-2026 el botón se llevaba las cuatro credenciales de un clic, al
+  // lado de «Guardar» y sin preguntar. La clave secreta de R2 no se puede
+  // recuperar —Cloudflare la muestra una sola vez—, así que ahora el primer
+  // clic arma y el segundo borra; a los 6 s se desarma solo.
+  document.getElementById('btnBorrarClaves').click();
+  await new Promise(r => setTimeout(r, 60));
+  push('el primer clic no borra nada', 'sc_ia_credenciales' in store, true);
+  push('y el botón avisa qué va a hacer',
+       /Seguro/.test(document.getElementById('btnBorrarClaves').textContent), true);
   document.getElementById('btnBorrarClaves').click();
   await new Promise(r => setTimeout(r, 60));
   push('no queda la de IA',  'sc_ia_credenciales' in store, false);

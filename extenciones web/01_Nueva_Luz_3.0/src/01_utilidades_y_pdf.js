@@ -173,12 +173,20 @@ function instalarEstilosSC() {
     }
     .sc-btn{
       border:none; border-radius:var(--sc-radio-btn); cursor:pointer;
-      padding:7px 12px; font-size:12px; font-weight:800;
+      padding:7px 12px; min-height:30px; font-size:12px; font-weight:800;
       font-family:var(--sc-fuente); background:var(--sc-fondo-2);
       color:var(--sc-txt); transition:filter .15s, transform .15s;
+      display:inline-flex; align-items:center; justify-content:center; gap:5px;
     }
-    .sc-btn:hover{ filter:brightness(1.25) }
-    .sc-btn:active{ transform:scale(.97) }
+    .sc-btn:hover:not([disabled]){ filter:brightness(1.25) }
+    .sc-btn:active:not([disabled]){ transform:scale(.97) }
+    /* Tres tamaños y nada más. Antes cada botón elegía su padding y el panel
+       tenía objetivos de 20 px que en remoto o con touchpad se erraban. */
+    .sc-btn--sm{ min-height:26px; padding:5px 9px; font-size:11px }
+    .sc-btn--lg{ min-height:42px; padding:10px 16px; font-size:13px }
+    .sc-btn[disabled]{ opacity:.45; cursor:progress; filter:grayscale(.3) }
+    .sc-btn[aria-busy="true"]{ cursor:progress }
+    .sc-icono{ width:1.05em; height:1.05em; flex:none; display:block }
     .sc-btn--primario{ background:linear-gradient(135deg,#10b981,#059669); color:#fff }
     .sc-btn--peligro{ background:rgba(239,68,68,.16); color:var(--sc-mal) }
     .sc-btn--fantasma{ background:transparent; border:1px solid var(--sc-borde); color:var(--sc-suave) }
@@ -275,6 +283,34 @@ function instalarEstilosSC() {
         scroll-behavior:auto !important;
       }
     }
+    /* ── Panel: riel lateral y pestaña plegada ──────────────────────────────
+       El panel vivía centrado sobre el formulario IVA, que es justo lo que hay
+       que mirar. Ahora es un riel a la derecha y, plegado, una pestaña de 44 px
+       que no tapa nada. */
+    .sc-riel{ width:330px }
+    .sc-pestana{
+      width:44px; height:116px; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:8px; cursor:pointer;
+      border:1px solid var(--sc-borde); border-radius:14px 0 0 14px;
+      background:var(--sc-fondo); color:var(--sc-txt);
+      box-shadow:var(--sc-sombra); font-family:var(--sc-fuente);
+    }
+    .sc-pestana:hover{ filter:brightness(1.2) }
+    .sc-pestana-txt{
+      writing-mode:vertical-rl; transform:rotate(180deg);
+      font-size:9.5px; letter-spacing:.14em; font-weight:800;
+      color:var(--sc-suave); text-transform:uppercase;
+    }
+    /* El cajón: scroll y 4 columnas. Con 16 celdas sueltas crecía hasta tapar
+       media pantalla justo cuando hay que mirar el portal. */
+    #slh-cajon{ max-height:min(52vh,360px); overflow-y:auto; overflow-x:hidden }
+    #slh-cajon::-webkit-scrollbar{ width:6px }
+    #slh-cajon::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.18); border-radius:8px }
+    .sc-grupo{ flex-basis:100%; display:flex; flex-wrap:wrap; gap:6px 4px }
+    .sc-grupo-titulo{
+      flex-basis:100%; font-size:9px; letter-spacing:.12em; text-transform:uppercase;
+      color:var(--sc-tenue); font-weight:800; padding:6px 2px 0;
+    }
   `;
   (document.head || document.documentElement).appendChild(st);
 }
@@ -292,6 +328,36 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+// ── La marca ────────────────────────────────────────────────────────────────
+// El mismo dibujo del icono de Chrome, en línea. No sirve <img
+// src="icon48.png"> adentro del portal: un content script no puede cargar
+// recursos de la extensión sin declararlos en web_accessible_resources, y esto
+// no necesita permiso. En popup y Ajustes (que sí son páginas propias) se usa
+// el PNG directamente.
+let _scMarcaSeq = 0;
+function scMarcaHtml(px = 20, titulo = '') {
+  const id = 'scm' + (++_scMarcaSeq);
+  const etiqueta = titulo
+    ? `role="img" aria-label="${escapeHtml(titulo)}"`
+    : 'aria-hidden="true"';
+  return `<svg ${etiqueta} focusable="false" viewBox="0 0 128 128"`
+    + ` style="width:${px}px;height:${px}px;flex:none;display:block">`
+    + `<defs>`
+    + `<linearGradient id="${id}bg" x1="0" y1="0" x2="1" y2="1">`
+    + `<stop offset="0" stop-color="#0F2438"/><stop offset="1" stop-color="#061320"/>`
+    + `</linearGradient>`
+    + `<linearGradient id="${id}ck" x1="0" y1="1" x2="1" y2="0">`
+    + `<stop offset="0" stop-color="#10B981"/><stop offset="1" stop-color="#5EEAD4"/>`
+    + `</linearGradient>`
+    + `</defs>`
+    + `<rect width="128" height="128" rx="28" fill="url(#${id}bg)"/>`
+    + `<rect x="0.75" y="0.75" width="126.5" height="126.5" rx="27.25"`
+    + ` fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="1.5"/>`
+    + `<path d="M34 67 L54 87 L95 43" fill="none" stroke="url(#${id}ck)"`
+    + ` stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `</svg>`;
 }
 
 // ============================================================

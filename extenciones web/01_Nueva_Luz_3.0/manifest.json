@@ -1,98 +1,100 @@
 {
-    "manifest_version": 3,
-    "name": "⚡ SC TaxPilot PRO — Declaración IVA & Robot SRI",
-    "version": "3.1.0",
-    "description": "Automatización inteligente de declaración de IVA, cálculo matemático Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
-    "permissions": [
-        "storage",
-        "activeTab",
-        "cookies"
-    ],
-    "host_permissions": [
-        "https://*.sri.gob.ec/*",
-        "https://srienlinea.sri.gob.ec/*",
-        "https://afssvsxlxiwqgtcgvqxp.supabase.co/*",
-        "https://santiagocordova-r2-vault.workers.dev/*",
-        "https://5daf9742bb674b34c0a69fb60557c90b.r2.cloudflarestorage.com/*",
-        "https://pub-0f0bf9175c8a41f1bb854a22ca33390d.r2.dev/*",
+  "manifest_version": 3,
+  "name": "⚡ SC TaxPilot PRO — Declaración IVA & Robot SRI",
+  "version": "3.1.0",
+  "description": "Automatización inteligente de declaración de IVA, cálculo matemático Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://*.sri.gob.ec/*",
+    "https://srienlinea.sri.gob.ec/*",
+    "https://afssvsxlxiwqgtcgvqxp.supabase.co/*",
+    "https://santiagocordova-r2-vault.workers.dev/*",
+    "https://5daf9742bb674b34c0a69fb60557c90b.r2.cloudflarestorage.com/*",
+    "https://pub-0f0bf9175c8a41f1bb854a22ca33390d.r2.dev/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://santiagocordova.com/*",
+    "https://*.santiagocordova.com/*",
+    "https://santiago-cordova.com/*",
+    "https://*.santiago-cordova.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://zifact.com/*",
+    "https://*.zifact.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "vendor/jspdf.umd.min.js",
+        "vendor/catastro_eloro.txt",
+        "vendor/ciiu.json"
+      ],
+      "matches": [
+        "https://srienlinea.sri.gob.ec/*"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://srienlinea.sri.gob.ec/*"
+      ],
+      "js": [
+        "shared_config.js",
+        "build/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
         "http://localhost/*",
         "http://127.0.0.1/*",
         "https://santiagocordova.com/*",
         "https://*.santiagocordova.com/*",
         "https://santiago-cordova.com/*",
-        "https://*.santiago-cordova.com/*",
-        "https://generativelanguage.googleapis.com/*",
+        "https://*.santiago-cordova.com/*"
+      ],
+      "js": [
+        "shared_config.js",
+        "bridge_content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "https://zifact.com/*",
         "https://*.zifact.com/*"
-    ],
-    "action": {
-        "default_popup": "popup.html",
-        "default_icon": {
-            "16": "icon16.png",
-            "48": "icon48.png",
-            "128": "icon128.png"
-        }
-    },
-    "options_ui": {
-        "page": "options.html",
-        "open_in_tab": true
-    },
-    "background": {
-        "service_worker": "background.js"
-    },
-    "web_accessible_resources": [
-        {
-            "resources": [
-                "vendor/jspdf.umd.min.js",
-                "vendor/catastro_eloro.txt",
-                "vendor/ciiu.json"
-            ],
-            "matches": [
-                "https://srienlinea.sri.gob.ec/*"
-            ]
-        }
-    ],
-    "content_scripts": [
-        {
-            "matches": [
-                "https://srienlinea.sri.gob.ec/*"
-            ],
-            "js": [
-                "shared_config.js",
-                "build/content.js"
-            ],
-            "run_at": "document_idle",
-            "all_frames": false
-        },
-        {
-            "matches": [
-                "http://localhost/*",
-                "http://127.0.0.1/*",
-                "https://santiagocordova.com/*",
-                "https://*.santiagocordova.com/*",
-                "https://santiago-cordova.com/*",
-                "https://*.santiago-cordova.com/*"
-            ],
-            "js": [
-                "shared_config.js",
-                "bridge_content.js"
-            ],
-            "run_at": "document_idle"
-        },
-        {
-            "matches": [
-                "https://zifact.com/*",
-                "https://*.zifact.com/*"
-            ],
-            "js": [
-                "zifact_autologin.js"
-            ],
-            "run_at": "document_idle"
-        }
-    ],
-    "icons": {
-        "16": "icon16.png",
-        "48": "icon48.png",
-        "128": "icon128.png"
+      ],
+      "js": [
+        "zifact_autologin.js"
+      ],
+      "run_at": "document_idle"
     }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
 }

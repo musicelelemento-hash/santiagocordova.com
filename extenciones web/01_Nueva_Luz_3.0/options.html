@@ -86,6 +86,21 @@ header p { margin: 0; color: var(--text-dim); font-size: 13px; }
 }
 .estado[data-hay="si"] { color: var(--primary); }
 
+/* Estado y borrado en la misma fila: el botón de borrar vive junto a lo que
+   borra y ya no es un cuarto botón rojo de texto antes de cada campo. */
+.fila-estado { display: flex; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+.fila-estado .estado { flex: 1; margin-bottom: 0; }
+.b-borrar-uno {
+    flex: none; width: 34px; min-height: 30px; padding: 0;
+    border: 1px solid rgba(255, 133, 133, 0.25);
+    background: rgba(255, 133, 133, 0.12); color: var(--rose);
+    border-radius: 8px; font-size: 13px; line-height: 1; cursor: pointer;
+}
+.b-borrar-uno:hover { background: rgba(255, 133, 133, 0.24); }
+.b-borrar.confirmando {
+    background: var(--rose); color: #2a0b0b; outline: 2px solid rgba(255,133,133,0.45);
+}
+
 input[type="password"], input[type="text"] {
     width: 100%;
     background: rgba(0, 0, 0, 0.4);
@@ -201,8 +216,10 @@ footer {
     <div class="campo">
         <label for="claveIa">Clave de IA</label>
         <span class="para-que">Para clasificar proveedores por lo que facturan. Opcional.</span>
-        <div class="estado" id="estadoIa">—</div>
-        <button class="b-borrar-uno" data-borra="ia" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
+        <div class="fila-estado">
+            <div class="estado" id="estadoIa">—</div>
+            <button class="b-borrar-uno" data-borra="ia" aria-label="Borrar sólo la clave de IA" title="Borrar sólo la clave de IA">✕</button>
+        </div>
         <input type="password" id="claveIa" autocomplete="off" spellcheck="false"
                placeholder="pegá la clave acá">
     </div>
@@ -210,8 +227,10 @@ footer {
     <div class="campo">
         <label for="idR2">Access Key ID de R2</label>
         <span class="para-que">Al rotar el token de Cloudflare cambian los dos: el ID y la clave.</span>
-        <div class="estado" id="estadoIdR2">—</div>
-        <button class="b-borrar-uno" data-borra="idR2" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
+        <div class="fila-estado">
+            <div class="estado" id="estadoIdR2">—</div>
+            <button class="b-borrar-uno" data-borra="idR2" aria-label="Borrar sólo el Access Key ID de R2" title="Borrar sólo el Access Key ID de R2 (la clave secreta queda)">✕</button>
+        </div>
         <input type="text" id="idR2" autocomplete="off" spellcheck="false"
                placeholder="pegá el Access Key ID acá">
     </div>
@@ -219,8 +238,10 @@ footer {
     <div class="campo">
         <label for="claveR2">Clave secreta de R2</label>
         <span class="para-que">Se muestra una sola vez en Cloudflare. Si la perdés, hay que crear otro token.</span>
-        <div class="estado" id="estadoR2">—</div>
-        <button class="b-borrar-uno" data-borra="r2" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
+        <div class="fila-estado">
+            <div class="estado" id="estadoR2">—</div>
+            <button class="b-borrar-uno" data-borra="r2" aria-label="Borrar sólo la clave secreta de R2" title="Borrar sólo la clave secreta de R2 (el Access Key ID queda)">✕</button>
+        </div>
         <input type="password" id="claveR2" autocomplete="off" spellcheck="false"
                placeholder="pegá la clave acá">
     </div>
@@ -232,15 +253,17 @@ footer {
             Si el log dice <b>HTTP 401</b>, es ésta: copiala del panel de Supabase
             (Project Settings → API) y pegala acá.
         </span>
-        <div class="estado" id="estadoWeb">—</div>
-        <button class="b-borrar-uno" data-borra="web" style="border:none;background:rgba(239,68,68,0.14);color:#fca5a5;border-radius:7px;padding:4px 9px;font-size:10px;font-weight:800;cursor:pointer;margin-left:8px">Borrar sólo ésta</button>
+        <div class="fila-estado">
+            <div class="estado" id="estadoWeb">—</div>
+            <button class="b-borrar-uno" data-borra="web" aria-label="Borrar sólo la llave anon de Supabase" title="Borrar sólo la llave anon de Supabase">✕</button>
+        </div>
         <input type="password" id="claveWeb" autocomplete="off" spellcheck="false"
                placeholder="pegá la llave anon acá">
     </div>
 
     <div class="botones">
-        <button class="b-guardar" id="btnGuardarClaves">Guardar</button>
-        <button class="b-borrar" id="btnBorrarClaves">Borrar TODAS</button>
+        <button class="b-guardar" id="btnGuardarClaves">Guardar claves</button>
+        <button class="b-borrar" id="btnBorrarClaves" title="Borra las cuatro credenciales guardadas. Pide confirmación.">Borrar todas…</button>
     </div>
 
     <p class="bajada" style="margin: 16px 0 0;">

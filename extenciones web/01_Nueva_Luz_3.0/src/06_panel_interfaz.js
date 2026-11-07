@@ -6,7 +6,7 @@ class SriAssistantPanel {
         this.manualMode = false; // ELITE v12.7: Modo Manual para interacción
         this.proactiveObligation = null;
         this.contextCard = null; // ELITE: Nueva Tarjeta de Contexto
-        this.isExpanded = true; // Default, will be overwritten by storage
+        this.isExpanded = false; // Nace plegado: el panel no tapa el formulario
         this.state = {
             isProcessing: false,
             isProcessingFinal: false,
@@ -46,8 +46,13 @@ class SriAssistantPanel {
     }
 
     // Persistencia de Estado (Minimized/Expanded)
+    //
+    // La clave cambió de `assistantExpanded` a `assistantAbierto`: con la
+    // anterior, quien ya tenía `true` guardado seguía viendo el panel abierto
+    // encima del formulario. Ahora el panel nace plegado y se abre desde el
+    // HUD (🗔) o desde su pestaña.
     async saveState() {
-        await SafeStorage.set({ assistantExpanded: this.isExpanded });
+        await SafeStorage.set({ assistantAbierto: this.isExpanded });
     }
 
     async init() {
@@ -80,15 +85,15 @@ class SriAssistantPanel {
             this.container.style.cssText = `
                 position: fixed;
                 bottom: 25px;
-                left: 25px;
+                right: 18px;
                 width: 320px;
                 background: rgba(15, 23, 42, 0.7);
                 backdrop-filter: blur(25px) saturate(200%);
                 -webkit-backdrop-filter: blur(25px) saturate(200%);
                 box-shadow: 0 20px 50px rgba(0,0,0,0.3), 0 0 1px rgba(255,255,255,0.3);
-                border-radius: 20px;
+                border-radius: 18px;
                 z-index: 999999;
-                font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+                font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
                 transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
                 border: 1px solid rgba(255, 255, 255, 0.15);
                 overflow: hidden;
@@ -100,8 +105,8 @@ class SriAssistantPanel {
             document.body.appendChild(this.container);
 
             // Recuperar Estado de Persistencia de forma no bloqueante
-            SafeStorage.get(['assistantExpanded', 'ghost_manual_mode', 'auto_batch_enabled', 'pendingAction']).then(stored => {
-                const isExp = stored.assistantExpanded !== undefined ? stored.assistantExpanded : true;
+            SafeStorage.get(['assistantAbierto', 'ghost_manual_mode', 'auto_batch_enabled', 'pendingAction']).then(stored => {
+                const isExp = stored.assistantAbierto === true;
                 if (this.isExpanded !== isExp) {
                     this.isExpanded = isExp;
                     this.render(); // Re-render with right state if changed
@@ -447,7 +452,8 @@ class SriAssistantPanel {
 
         if (this.isOnForm && !wasOnForm) {
             log.debug('✨ [Detection] ¡Formulario IVA Detectado! Mostrando HUD Elite.');
-            this.toggleMinimize(false); // Expandir si aterrizamos en el form
+            // Ya NO se abre el panel solo: tapaba el formulario. El HUD ya
+            // muestra el estado y el panel queda a un clic (🗔 o la pestaña).
             this.render();
 
             if (!this.suggestionShownOnThisPage) {
@@ -959,7 +965,7 @@ class SriAssistantPanel {
             z-index: 2000000;
             color: white;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            font-family: 'Inter', sans-serif;
+            font-family: 'Manrope', system-ui, sans-serif;
             animation: sri-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         `;
 
@@ -2047,45 +2053,49 @@ class SriAssistantPanel {
 
     updateContainerStyles() {
         if (!this.container) return;
-        const url = window.location.href.toLowerCase();
-        const isLoginPage = url.includes('auth/realms/') || url.includes('login');
-        
-        const baseStyle = `
+        // Riel a la derecha, nunca encima del formulario. Antes estaba
+        // `left:50%` + `translateX(-50%)` y se abría solo al detectar el IVA:
+        // tapaba justo los casilleros que hay que revisar.
+        const base = `
             position: fixed;
-            bottom: 25px;
-            background: rgba(15, 23, 42, 0.7);
-            backdrop-filter: blur(25px) saturate(200%);
-            -webkit-backdrop-filter: blur(25px) saturate(200%);
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3), 0 0 1px rgba(255,255,255,0.3);
-            border-radius: 20px;
+            right: 18px;
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(25px) saturate(180%);
+            -webkit-backdrop-filter: blur(25px) saturate(180%);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 1px rgba(255,255,255,0.25);
+            border-radius: 18px;
             z-index: 999999;
-            font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
-            transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            overflow: hidden;
-            color: white;
+            font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            color: #f8fafc;
+            transition: width .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1);
         `;
 
-        if (isLoginPage) {
-            this.container.style.cssText = baseStyle + `
-                left: 20px;
-                right: 420px;
-                width: auto;
-                height: 90vh;
-                top: 5vh;
-                bottom: auto;
+        if (this.isExpanded) {
+            // 88 px arriba y abajo: deja libre la cabecera del portal (donde se
+            // lee de quién es la sesión) y el HUD, que vive al pie.
+            this.container.style.cssText = base + `
+                top: 88px;
+                bottom: 88px;
+                width: 330px;
+                max-width: calc(100vw - 36px);
+                transform: none;
+                overflow-y: auto;
+                overflow-x: hidden;
             `;
         } else {
-            // 88px deja libre la cabecera del portal, que es donde se lee de
-            // quién es la sesión abierta. Antes con top:5vh la tapábamos.
-            this.container.style.cssText = baseStyle + `
-                left: 50%;
-                transform: translateX(-50%);
-                width: 320px;
-                max-width: calc(100vw - 32px);
-                max-height: 80vh;
-                top: 88px;
+            this.container.style.cssText = base + `
+                top: 50%;
                 bottom: auto;
+                width: 44px;
+                max-width: none;
+                transform: translateY(-50%);
+                background: transparent;
+                border: none;
+                box-shadow: none;
+                backdrop-filter: none;
+                -webkit-backdrop-filter: none;
+                overflow: visible;
             `;
         }
     }
@@ -2099,7 +2109,10 @@ class SriAssistantPanel {
             const style = document.createElement('style');
             style.id = 'sri-elite-styles';
             style.textContent = `
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+                /* Sin @import de Google Fonts: era una request externa
+                   bloqueante en cada formulario del SRI y, si fallaba, el
+                   panel cambiaba de tipografía a mitad de vuelo. Manrope ya
+                   viene con system-ui de respaldo. */
                 
                 /* Scrollbar Premium */
                 #elite-clients-list::-webkit-scrollbar { width: 6px; }
@@ -2119,7 +2132,7 @@ class SriAssistantPanel {
                     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
                     color: white;
-                    font-family: 'Inter', sans-serif;
+                    font-family: 'Manrope', system-ui, sans-serif;
                     user-select: none;
                     z-index: 1000000;
                 }
@@ -2247,21 +2260,27 @@ class SriAssistantPanel {
     }
 
     /**
-     * El panel plegado ya no dibuja nada.
+     * El panel plegado es una pestaña, no nada.
      *
      * Antes acá vivía una segunda barra flotante —la píldora— con sus propios
-     * botones. Eran dos superficies de control para la misma máquina, en dos
-     * estilos distintos, con acciones repartidas sin criterio; de ahí salió el
-     * lío de los dos 🛑 que no hacían lo mismo.
-     *
-     * Ahora la única barra es el HUD del bucle, y este panel se abre desde su
-     * botón 🗔. Sus tres acciones propias (omitir, escanear, cerrar) se
-     * mudaron al HUD.
+     * botones: dos superficies de control para la misma máquina, en dos estilos
+     * distintos, con acciones repartidas sin criterio; de ahí salió el lío de
+     * los dos 🛑 que no hacían lo mismo. Después se pasó al extremo opuesto:
+     * plegado no dibujaba nada y el panel solo se abría desde el HUD. Si el HUD
+     * no estaba montado (página del portal fuera del bucle), no había forma de
+     * llegar. Una pestaña de 44 px resuelve las dos cosas.
      */
     renderPill() {
         if (!this.container) return;
-        this.container.innerHTML = '';
-        this.container.style.cssText = 'display:none';
+        this.container.innerHTML = `
+            <button id="btn-panel-tab" class="sc-pestana" aria-label="Abrir el panel de control"
+                    title="Abrir el panel: clientes, progreso y registro de la corrida">
+                ${typeof scMarcaHtml === 'function' ? scMarcaHtml(22) : ''}
+                <span class="sc-pestana-txt">Panel</span>
+            </button>
+        `;
+        const tab = this.container.querySelector('#btn-panel-tab');
+        if (tab) tab.onclick = () => this.toggleMinimize(false);
     }
 
     renderPillLegacy() {
@@ -2353,7 +2372,7 @@ class SriAssistantPanel {
         const isForm = window.location.href.includes('declaracionImpuesto.jsf') || window.location.href.includes('recibirDeclaracion.jsf');
         const isRecibidos = window.location.href.includes('recibidos/comprobantesRecibidos.jsf');
 
-        this.container.style.width = '330px';
+        this.container.style.width = this.isExpanded ? '330px' : 'auto';
 
         if (isOutside) {
             // Ocultar el panel grande de la izquierda en el login para evitar ventanas flotantes duplicadas.
@@ -2362,23 +2381,21 @@ class SriAssistantPanel {
         }
 
         this.container.innerHTML = `
-            <div id="sri-elite-panel" style="background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 20px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.3); font-family: 'Inter', sans-serif; color: white; border: 1px solid rgba(255,255,255,0.08);">
+            <div id="sri-elite-panel" style="background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(20px); border-radius: 18px; padding: 18px; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.3); font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif); color: white; border: 1px solid rgba(255,255,255,0.08);">
                 
                 <!-- HEADER -->
-                <div id="sri-panel-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div id="sri-ghost-icon" class="${this.working ? 'is-working-ghost' : ''}" style="font-size: 24px;">👻</div>
-                        <div>
-                            <div style="font-size: 14px; font-weight: 800; letter-spacing: 0.02em;">GHOST ASISTENTE</div>
-                            <div id="sri-client-name" style="font-size: 10px; opacity: 0.7; font-weight: 500;">${escapeHtml(clientName)}</div>
-                            <div id="sri-client-ruc" style="font-size: 9px; opacity: 0.5; font-weight: 600; color: #818cf8;">RUC: ${escapeHtml(info.ruc || 'N/A')}</div>
+                <div id="sri-panel-header" style="display: flex; justify-content: space-between; align-items: center; gap:8px; margin-bottom: 16px;">
+                    <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+                        <div id="sri-ghost-icon" class="${this.working ? 'is-working-ghost' : ''}">${typeof scMarcaHtml === 'function' ? scMarcaHtml(26) : ''}</div>
+                        <div style="min-width: 0;">
+                            <div style="font-size: 12.5px; font-weight: 800; letter-spacing: 0.08em; white-space: nowrap;">SC TAXPILOT PRO</div>
+                            <div id="sri-client-name" style="font-size: 10.5px; opacity: 0.72; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(clientName)}</div>
+                            <div id="sri-client-ruc" style="font-size: 9.5px; opacity: 0.5; font-weight: 700; color: #a5b4fc;">RUC: ${escapeHtml(info.ruc || 'N/A')}</div>
                         </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <div id="btn-force-skip-panel" style="font-size: 10px; cursor: pointer; padding: 4px 8px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; font-weight: 800;" title="Omitir este cliente y avanzar al siguiente">⏭️ Omitir</div>
-                        <div id="btn-force-sync-panel" style="font-size: 10px; cursor: pointer; padding: 4px 8px; background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.4); border-radius: 6px; font-weight: 800;" title="Marcar como COMPLETADO en Supabase">✨ Sync</div>
-                        <div id="btn-minimize-pill" style="cursor: pointer; opacity: 0.5; font-size: 20px; padding: 5px; line-height: 20px;">×</div>
-                    </div>
+                    <button id="btn-minimize-pill" class="sc-btn sc-btn--sm sc-btn--fantasma" aria-label="Cerrar el panel"
+                            title="Cerrar el panel (pausa y parada siguen en el HUD, abajo a la derecha)"
+                            style="padding: 2px 9px; font-size: 17px; line-height: 1.1; flex: none;">×</button>
                 </div>
 
                 <!-- STATUS HUB -->
@@ -2386,9 +2403,9 @@ class SriAssistantPanel {
                     ${this.manualMode ? '🛠️ MODO MANUAL: Protección Pausada' : (isForm ? '📝 Estás en el Formulario IVA' : isRecibidos ? '📥 Analizando Comprobantes...' : '✨ Listo para operar')}
                     
                     ${this.manualMode ? `
-                        <button id="btn-exit-manual" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: #f59e0b; color: white; border: none; padding: 4px 8px; border-radius: 6px; font-size: 9px; cursor: pointer; font-weight: 800;">SALIR</button>
+                        <button id="btn-exit-manual" class="sc-btn sc-btn--sm" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: #f59e0b; color: #1c1206;">Salir</button>
                     ` : `
-                        <button id="btn-enter-manual" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.1); color: #94a3b8; border: none; padding: 4px 8px; border-radius: 6px; font-size: 9px; cursor: pointer;">MODO MANUAL</button>
+                        <button id="btn-enter-manual" class="sc-btn sc-btn--sm" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.1); color: #94a3b8;">Modo manual</button>
                     `}
                     <div id="sri-panel-phase" style="margin-top: 10px; display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: #94a3b8;">
                         <span style="width: 8px; height: 8px; border-radius: 50%; background: ${this.isPaused ? '#f59e0b' : (this.working ? '#10b981' : '#64748b')}; display: inline-block;"></span>
@@ -2404,11 +2421,9 @@ class SriAssistantPanel {
                     </div>
 
                     <!-- BOTÓN REPORTE MAESTRO (Visible solo si hay datos bulk) -->
-                    <div id="btn-reopen-report" style="display: none; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 8px; border-radius: 10px; margin-bottom: 12px; cursor: pointer; text-align: center; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); border: 1px solid rgba(255,255,255,0.2);">
-                        <div style="font-size: 11px; font-weight: 800; color: white; display: flex; align-items: center; justify-content: center; gap: 6px;">
-                            🏆 VER REPORTE MAESTRO
-                        </div>
-                    </div>
+                    <button id="btn-reopen-report" class="sc-btn" style="display: none; width: 100%; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-radius: 10px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 11px; font-weight: 800;">
+                        🏆 Ver reporte maestro
+                    </button>
                     
                     <!-- FACTURAS (COMPRAS RECIBIDAS) -->
                     <div style="background: rgba(16, 185, 129, 0.1); border-radius: 10px; padding: 10px; margin-bottom: 10px; border-left: 3px solid #10b981;">
@@ -2486,51 +2501,53 @@ class SriAssistantPanel {
 
                 <!-- MAIN ACTIONS -->
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                    ${!isForm ? '<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; margin: 4px 0 2px;">🚀 ACCIÓN PRINCIPAL</div>' : ''}
+                    ${!isForm ? '<div class="sc-rotulo" style="margin: 4px 0 2px;">Acción principal</div>' : ''}
                     ${!isForm ? `
-                        <button id="btn-panel-turbo" class="elite-btn-primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 12px; height: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">
-                            <div style="font-size: 12px; font-weight: 800; margin-bottom: 2px;">🔥 EJECUCIÓN MAESTRA (TURBO)</div>
-                            <div style="font-size: 9px; font-weight: normal; opacity: 0.9;">(Automatización Completa)</div>
-                            <div style="font-size: 8px; margin-top: 4px; font-weight: 700; color: #d1fae5;">EXTRACCIÓN → NAVEGACIÓN → LLENADO</div>
+                        <button id="btn-panel-turbo" class="sc-btn sc-btn--lg" style="flex-direction: column; gap: 2px; width: 100%; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);">
+                            <span style="font-size: 13px; font-weight: 800;">🔥 Ejecución maestra</span>
+                            <span style="font-size: 10px; font-weight: 600; opacity: 0.92;">Extracción → navegación → llenado</span>
                         </button>
-                        <button id="btn-panel-nav-iva" class="elite-btn-primary" style="margin-top: 8px;">🌍 IR A FORMULARIO IVA</button>
+                        <button id="btn-panel-nav-iva" class="sc-btn" style="width: 100%;">🌍 Ir al formulario IVA</button>
                     ` : ''}
                     
                     ${isRecibidos ? `
-                         <button id="btn-panel-extract" class="elite-btn-primary" style="background: #818cf8;">📥 EXTRAER DATOS AHORA</button>
+                         <button id="btn-panel-extract" class="sc-btn sc-btn--lg" style="width: 100%; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">📥 Extraer datos ahora</button>
                     ` : ''}
 
                     ${isForm ? `
-                        <div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                            <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; margin-bottom: 8px; font-weight: 700;">Acciones de Formulario</div>
+                        <div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+                            <div class="sc-rotulo" style="margin-bottom: 8px;">Acciones del formulario</div>
                             
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
-                                <button id="btn-hud-ventas" class="elite-btn-primary" style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.5); color: #60a5fa; font-size: 10px; padding: 8px 4px;">💰 VENTAS</button>
-                                <button id="btn-hud-compras" class="elite-btn-primary" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.5); color: #34d399; font-size: 10px; padding: 8px 4px;">🛒 COMPRAS</button>
-                                <button id="btn-hud-resumen" class="elite-btn-primary" style="background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.5); color: #a78bfa; font-size: 10px; padding: 8px 4px;">💎 RESUMEN IMP.</button>
+                                <button id="btn-hud-ventas" class="sc-btn sc-btn--sm" style="background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.5); color: #7dd3fc;">💰 Ventas</button>
+                                <button id="btn-hud-compras" class="sc-btn sc-btn--sm" style="background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.5); color: #4ade80;">🛒 Compras</button>
+                                <button id="btn-hud-resumen" class="sc-btn sc-btn--sm" style="background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.5); color: #c4b5fd;">💎 Resumen</button>
                             </div>
                             
-                            <button id="btn-panel-fill-all" class="elite-btn-primary" style="width: 100%; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); font-weight: 800; padding: 12px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);">
-                                ⚡ LLENAR TODO AUTOMÁTICO
+                            <button id="btn-panel-fill-all" class="sc-btn sc-btn--lg" style="width: 100%; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);">
+                                ⚡ Llenar todo
                             </button>
 
-                            <button id="btn-panel-magic-final" class="elite-btn-primary" style="width: 100%; margin-top: 8px; background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%); font-weight: 800; padding: 12px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4); position: relative; overflow: hidden;">
-                                <div style="position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); animation: elite-shine 3s infinite;"></div>
-                                ✨ EFECTUAR CIERRE MÁGICO
+                            <button id="btn-panel-magic-final" class="sc-btn sc-btn--lg" style="width: 100%; margin-top: 8px; background: linear-gradient(135deg, #10b981 0%, #047857 100%); border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);">
+                                🏁 Cerrar y enviar
                             </button>
+                            <div style="font-size: 10px; opacity: 0.62; margin-top: 6px; text-align: center; line-height: 1.4;">
+                                Valida el resumen y, si el saldo es $0, la <b>envía</b> al SRI.
+                            </div>
                         </div>
                     ` : ''}
 
-                    <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #64748b; font-weight: 800; margin: 14px 0 2px;">⛔ CONTROL</div>
+                    <div class="sc-rotulo" style="margin: 14px 0 2px;">Control</div>
                     <div style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-                        <!-- ⛔ Pausa y parada viven SOLO en el HUD flotante.
-                             Había tres botones de detener y dos de pausar repartidos
-                             en dos widgets, sin nada que indicara cuál mandaba. -->
-                        <div class="sc-rotulo" style="flex:1.5;align-self:center;text-align:center;opacity:.75">
-                            Pausa y parada: en el HUD ↘
-                        </div>
-                        <button id="btn-panel-force-next" class="sc-btn " style="flex: 0.8">⏭️ Next</button>
-                        <button id="btn-panel-refresh" class="sc-btn sc-btn--fantasma" style="flex: 0.8">🔄 Recargar</button>
+                        <!-- Pausa y parada viven SOLO en el HUD flotante: había tres
+                             botones de detener y dos de pausar repartidos en dos
+                             widgets, sin nada que indicara cuál mandaba. -->
+                        <button id="btn-panel-force-skip" class="sc-btn sc-btn--sm" style="flex: 1; background: rgba(245,158,11,0.18); border: 1px solid rgba(245,158,11,0.35); color: #fbbf24;" title="Omitir este cliente y pasar al siguiente">⏭️ Omitir</button>
+                        <button id="btn-panel-force-next" class="sc-btn sc-btn--sm sc-btn--fantasma" style="flex: 1;" title="Acepta el diálogo del SRI o fuerza el avance del formulario">⏩ Forzar paso</button>
+                        <button id="btn-panel-refresh" class="sc-btn sc-btn--sm sc-btn--fantasma" style="flex: 1;">🔄 Recargar</button>
+                    </div>
+                    <div style="font-size: 10px; opacity: 0.62; margin-top: 8px; text-align: center;">
+                        Pausa y parada de emergencia: en el HUD ↘
                     </div>
 
                     <!-- MICRO TERMINAL -->
@@ -2544,22 +2561,17 @@ class SriAssistantPanel {
             </div>
         `;
 
-        this.container.querySelector('#btn-minimize-pill').onclick = () => {
-            this.toggleMinimize(true);
-        };
-        const syncPanelBtn = this.container.querySelector('#btn-force-sync-panel');
-        if (syncPanelBtn) {
-            syncPanelBtn.onclick = () => {
-                log.debug('✨ [FORCE SYNC] Ejecutando cierre mágico manual desde panel grande...');
-                this.ejecutarCierreMagico();
+        const minimizar = this.container.querySelector('#btn-minimize-pill');
+        if (minimizar) {
+            minimizar.onclick = (ev) => {
+                ev.stopPropagation();
+                this.toggleMinimize(true);
             };
         }
-        const skipPanelBtn = this.container.querySelector('#btn-force-skip-panel');
-        if (skipPanelBtn) {
-            skipPanelBtn.onclick = () => {
-                this.omitirClienteActual();
-            };
-        }
+        // El ✨ Sync de la cabecera se retiró: decía «marcar como COMPLETADO en
+        // Supabase» y en realidad llamaba a ejecutarCierreMagico(), que ENVÍA la
+        // declaración al SRI. El único botón que envía ahora se llama «Cerrar y
+        // enviar» y vive con las acciones del formulario y en el HUD (🏁).
 
         this.bindEvents();
         this.updateSummary(); // Cargar datos inmediatamente
@@ -3434,7 +3446,10 @@ class SriAssistantPanel {
         const header = this.container.querySelector('#sri-panel-header');
         if (header) {
             header.onclick = (e) => {
-                if (e.target.closest('#sri-panel-pause')) return;
+                // Los botones de la cabecera no pliegan el panel: antes
+                // «Omitir» y «Sync» también lo cerraban al pasar por el
+                // manejador del encabezado.
+                if (e.target.closest('button, [role="button"], input')) return;
                 this.isExpanded = false;
                 this.render();
             };
@@ -3471,7 +3486,15 @@ class SriAssistantPanel {
 
         // Acciones de Utilidad
         this.bindBtn('#btn-panel-magic-final', async () => {
+            // Sin confirm(): el 05-sep un diálogo modal en este mismo flujo se
+            // repitió solo y frenó una corrida entera. La protección real son
+            // las comprobaciones del cierre. bindBtn ya deshabilita el botón
+            // mientras corre, que es lo que evita el doble envío.
             await this.ejecutarCierreMagico();
+        });
+
+        this.bindBtn('#btn-panel-force-skip', async () => {
+            await this.omitirClienteActual();
         });
 
         this.bindBtn('#btn-panel-borrar', async () => {
@@ -3548,11 +3571,20 @@ class SriAssistantPanel {
         const btn = this.container.querySelector(sel);
         if (btn) {
             btn.onclick = async () => {
+                if (btn.disabled) return;
+                // Se bloquea mientras corre y se libera SIEMPRE: antes, si la
+                // acción lanzaba una excepción, el botón quedaba muerto hasta
+                // recargar la página.
                 btn.disabled = true;
                 btn.style.opacity = '0.5';
-                await fn();
-                btn.disabled = false;
-                btn.style.opacity = '1';
+                try {
+                    await fn();
+                } catch (e) {
+                    log.error(`[PANEL] Falló ${sel}:`, e);
+                } finally {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }
             };
         }
     }
@@ -4387,7 +4419,7 @@ class SriAssistantPanel {
     }
 
     btnStyle(isPrimary = false, bg, color) {
-        const base = "padding: 10px; border-radius: 12px; cursor: pointer; font-weight: 700; width: 100%; border: none; font-family: 'Inter';";
+        const base = "padding: 10px; border-radius: 12px; cursor: pointer; font-weight: 700; width: 100%; border: none; font-family: 'Manrope', system-ui, sans-serif;";
         if (isPrimary) {
             return base + `background: ${bg || '#4f46e5'}; color: ${color || 'white'};`;
         }

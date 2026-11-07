@@ -2433,13 +2433,13 @@ async function renderLoginCockpit(items) {
 
     const island = document.createElement('div');
     island.id = 'sri-dynamic-island';
-    island.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: flex; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.12); border-top: 1px solid rgba(0, 168, 150, 0.65); border-radius: 40px; padding: 6px 14px; box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 168, 150, 0.15); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #f8fafc; white-space: nowrap; max-width: 98vw; overflow-x: auto; scrollbar-width: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);';
+    island.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: flex; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.12); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 6px 14px; box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; white-space: nowrap; max-width: 98vw; overflow-x: auto; scrollbar-width: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);';
 
     let minibar = document.getElementById('sri-island-minibar');
     if (!minibar) {
         minibar = document.createElement('div');
         minibar.id = 'sri-island-minibar';
-        minibar.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: none; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.14); border-top: 1px solid rgba(0, 168, 150, 0.65); border-radius: 40px; padding: 5px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 168, 150, 0.15); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #f8fafc; font-size: 11px; cursor: pointer; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); user-select: none;';
+        minibar.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: none; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.14); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 5px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; font-size: 11px; cursor: pointer; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); user-select: none;';
         document.body.appendChild(minibar);
     }
 
@@ -2464,17 +2464,17 @@ async function renderLoginCockpit(items) {
 
         minibar.innerHTML = `
             <div style="display: flex; align-items: center; gap: 7px;">
-                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">⚡</span>
-                <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em; background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
+                <span style="filter: drop-shadow(0 0 6px rgba(16,185,129,0.55));display:inline-flex">${typeof scMarcaHtml === 'function' ? scMarcaHtml(15) : '⚡'}</span>
+                <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em; background: linear-gradient(135deg, #34d399 0%, #10B981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
                 <span style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; font-size: 10px; font-family: monospace; font-weight: 800; padding: 2px 7px; border-radius: 10px;">${pendientes.length} pend.</span>
                 <span style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #ffffff; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; margin-left: 2px;">Mostrar ▾</span>
             </div>
         `;
 
         island.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 11px; letter-spacing: 0.06em; color: #00A896; padding: 2px 4px;">
-                <span style="font-size: 13px; filter: drop-shadow(0 0 6px rgba(0,168,150,0.6));">⚡</span>
-                <span style="background: linear-gradient(135deg, #34d399 0%, #00A896 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
+            <div style="display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 11px; letter-spacing: 0.06em; color: #10B981; padding: 2px 4px;">
+                <span style="filter: drop-shadow(0 0 6px rgba(16,185,129,0.55));display:inline-flex">${typeof scMarcaHtml === 'function' ? scMarcaHtml(15) : '⚡'}</span>
+                <span style="background: linear-gradient(135deg, #34d399 0%, #10B981 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">SC TAXPILOT PRO</span>
             </div>
 
             <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.12); margin: 0 1px;"></div>
@@ -2524,9 +2524,9 @@ async function renderLoginCockpit(items) {
             <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.12); margin: 0 1px;"></div>
 
             <!-- ⚡ UN SOLO BOTÓN PRINCIPAL PARA INICIAR EL BUCLE -->
-            <button id="sri-cockpit-btn-master-loop" style="background: linear-gradient(135deg, #00A896 0%, #059669 100%); color: #ffffff; border: none; border-radius: 22px; padding: 7px 18px; font-size: 11.5px; font-weight: 900; letter-spacing: 0.04em; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 18px rgba(0, 168, 150, 0.45); white-space: nowrap; transition: all 0.2s;" title="Iniciar el bucle de auto-declaración para todos los pendientes">
-                <span style="font-size: 13px;">⚡</span>
-                <span>INICIAR BUCLE</span>
+            <button id="sri-cockpit-btn-master-loop" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #ffffff; border: none; border-radius: 22px; padding: 7px 18px; font-size: 11.5px; font-weight: 900; letter-spacing: 0.04em; cursor: pointer; display: flex; align-items: center; gap: 7px; box-shadow: 0 4px 18px rgba(0, 168, 150, 0.45); white-space: nowrap; transition: all 0.2s;" title="Iniciar el bucle de auto-declaración para todos los pendientes">
+                <span style="display:inline-flex">${typeof scMarcaHtml === 'function' ? scMarcaHtml(16) : '⚡'}</span>
+                <span>Iniciar bucle</span>
                 <span style="background: rgba(255,255,255,0.25); color: #ffffff; font-size: 10px; font-family: monospace; font-weight: 900; padding: 1px 6px; border-radius: 10px;">${pendientes.length}</span>
             </button>
 
