@@ -345,6 +345,15 @@ function publicarProveedoresDeCliente(ruc, periodo) {
 // abierta y el arqueo se perdía en la siguiente visita.
 try {
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        // Acuse del último anexo subido: la web lo lee para el círculo mensual.
+        try {
+          chrome.storage.local.get(['sc_anexo_ultimo'], (ax) => {
+            if (ax && ax.sc_anexo_ultimo) {
+              try { localStorage.setItem('sc_anexo_ultimo', JSON.stringify(ax.sc_anexo_ultimo)); } catch (e) {}
+            }
+          });
+        } catch (e) {}
+
     chrome.storage.local.get(['sri_ultimo_arqueo_compras', 'pending_sri_autofill', 'workflowPeriod'], (st) => {
       const compras = st.sri_ultimo_arqueo_compras;
       if (compras && compras.ruc) {
