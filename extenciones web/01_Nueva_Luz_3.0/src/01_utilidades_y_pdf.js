@@ -2887,6 +2887,11 @@ const SUPABASE_URL = SC_SUPABASE_URL;
       log.warn("⚠️ clients declaration_history PATCH error:", patchErr);
     }
 
+    // 📌 Si es sociedad y el IVA mensual quedó presentado, el ATS queda pendiente de subir.
+    if (String(decType).toUpperCase() === 'IVA') {
+      try { await marcarAtsPendiente(ruc, canonicalPeriod); } catch (e) {}
+    }
+
     log.debug(
       "⚡ [SUPABASE WEBSYSTEM] Objeto proof_file con PDF real guardado en Supabase (sri_declaraciones + clients):",
       ruc,

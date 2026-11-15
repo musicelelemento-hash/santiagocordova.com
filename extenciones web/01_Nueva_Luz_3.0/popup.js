@@ -186,11 +186,85 @@ document.getElementById('inputAnexoZip')?.addEventListener('change', (ev) => {
                 if (chrome.runtime.lastError || !resp) { pintar("Sin respuesta del portal: " + (chrome.runtime.lastError?.message || ""), false); return; }
                 const r = resp.resultado || {};
                 pintar((r.ok ? "✅ " : "⚠️ ") + (r.mensaje || resp.error || "") + (r.acuse ? "\nAcuse: " + r.acuse : ""), !!r.ok);
+                // 📌 Si el ATS quedó subido, se cierra el pendiente de esa sociedad.
+                if (r.ok) limpiarPendienteTrasSubida(file.name);
             });
         } catch (e) { pintar('Error: ' + e.message, false); }
     };
     lector.readAsDataURL(file);
 });
+
+// ============================================================
+// 📌 ATS PENDIENTES — lo que falta subir de las sociedades
+// ============================================================
+function limpiarPendienteTrasSubida(nombreArchivo) {
+    try {
+        const esAnexo = /^(ATS|Anexo_IVA|APS|Anexo_APS|ADI|Anexo_ADI)/i.test(String(nombreArchivo || ''));
+        if (!esAnexo) return;
+        chrome.storage.local.get(['sc_ats_pendientes', 'pending_sri_autofill'], (st) => {
+            const mapa = st.sc_ats_pendientes || {};
+            const ruc = (st.pending_sri_autofill && st.pending_sri_autofill.ruc) ? String(st.pending_sri_autofill.ruc) : '';
+            const mm = String(nombreArchivo || '').match(/(20\d{2})[-_](0[1-9]|1[0-2])/);
+            const periodo = mm ? (mm[1] + '-' + mm[2]) : '';
+            let cambio = false;
+            for (const k of Object.keys(mapa)) {
+                const coincideRuc = ruc && k === ruc;
+                const coincidePeriodo = periodo && mapa[k] && String(mapa[k].periodo) === periodo;
+                if (coincideRuc || coincidePeriodo) { delete mapa[k]; cambio = true; }
+            }
+            if (cambio) chrome.storage.local.set({ sc_ats_pendientes: mapa }, () => renderAtsPendientes());
+        });
+    } catch (e) { /* limpiar es cosmético: no rompe la subida */ }
+}
+
+function renderAtsPendientes() {
+    const caja = document.getElementById('atsPendientes');
+    const lista = document.getElementById('atsPendLista');
+    const cuenta = document.getElementById('atsPendCount');
+    if (!caja || !lista || !cuenta) return;
+    chrome.storage.local.get(['sc_ats_pendientes', 'sc_clients_cache'], (st) => {
+        const mapa = st.sc_ats_pendientes || {};
+        const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+        const entradas = Object.values(mapa).filter((x) => x && x.ruc);
+        entradas.sort((a, b) => (b.cuando || 0) - (a.cuando || 0));
+        cuenta.textContent = String(entradas.length);
+        caja.style.display = entradas.length ? 'block' : 'none';
+        lista.innerHTML = entradas.map((e) => {
+            const c = cache.find((x) => x && String(x.ruc) === String(e.ruc));
+            const nombre = (c && (c.name || c.nombre)) || e.ruc;
+            const hace = Math.round((Date.now() - (e.cuando || Date.now())) / 86400000);
+            const dias = hace <= 0 ? 'hoy' : hace + 'd';
+            return '<div style="display:flex; align-items:center; gap:6px; font-size:11px;">'
+                + '<span style=\"min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;\">' + nombre + '</span>'
+                + '<span style=\"font-family:JetBrains Mono,monospace; font-size:9px; color:#94a3b8;\">' + (e.periodo || '') + (e.compras ? ' · compras ✓' : ' · faltan compras') + ' · ' + dias + '</span>'
+                + '<button data-ats-abrir="' + e.ruc + '" title="Abrir Anexos del SRI" style="margin-left:auto; border:none; background:rgba(201,169,110,.18); color:#e6d3ab; border-radius:6px; padding:2px 6px; font-size:10px; cursor:pointer;">Abrir</button>'
+                + '<button data-ats-listo="' + e.ruc + '" title="Marcar subido" style="border:none; background:rgba(52,211,153,.15); color:#34d399; border-radius:6px; padding:2px 6px; font-size:10px; cursor:pointer;">Listo</button>'
+                + '</div>';
+        }).join('');
+    });
+}
+
+document.addEventListener('click', (ev) => {
+    const abrir = ev.target.closest && ev.target.closest('[data-ats-abrir]');
+    if (abrir) {
+        ev.stopPropagation();
+        chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=IVA&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=&actualMPT=' + encodeURIComponent('Anexo Transaccional Simplificado') });
+        return;
+    }
+    const listo = ev.target.closest && ev.target.closest('[data-ats-listo]');
+    if (listo) {
+        ev.stopPropagation();
+        const ruc = listo.getAttribute('data-ats-listo');
+        chrome.storage.local.get(['sc_ats_pendientes'], (st) => {
+            const mapa = st.sc_ats_pendientes || {};
+            delete mapa[ruc];
+            chrome.storage.local.set({ sc_ats_pendientes: mapa }, () => renderAtsPendientes());
+        });
+    }
+});
+
+renderAtsPendientes();
+chrome.storage.onChanged.addListener((c) => { if (c.sc_ats_pendientes) renderAtsPendientes(); });
 
 document.getElementById('btnMostrarHud')?.addEventListener('click', async () => {
     try {

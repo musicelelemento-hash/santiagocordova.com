@@ -816,6 +816,15 @@ escal e todo el popup (UI/UX Pro Max §6). */
         </div>
     </header>
 
+<!-- 📌 ATS pendientes: lo que ya se declaró y todavía falta subir -->
+<div id="atsPendientes" style="display:none; margin:10px 12px 0; padding:8px 10px; border:1px solid rgba(201,169,110,.35); border-radius:12px; background:rgba(201,169,110,.08);">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+    <b style="font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:#e6d3ab;">📌 ATS pendientes</b>
+    <span id="atsPendCount" style="font-size:10px; color:#94a3b8; font-family:'JetBrains Mono',monospace;">0</span>
+  </div>
+  <div id="atsPendLista" style="margin-top:6px; display:flex; flex-direction:column; gap:6px;"></div>
+</div>
+
     <!-- La única acción que importa. El resto se elige solo. -->
     <div class="lote">
         <div class="lote-info">

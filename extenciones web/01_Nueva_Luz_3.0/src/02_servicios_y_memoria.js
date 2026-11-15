@@ -4552,6 +4552,58 @@ const waitForPortal = async (maxWait = 10000) => {
 // ============================================================
 // MENSAJES ESCUCHA (v3.2)
 // ============================================================
+// ============================================================
+// ATS PENDIENTES — el robot "parquea" lo que falta subir
+// ============================================================
+// Cuando una sociedad ya declaró su IVA mensual, en el SRI queda pendiente
+// subir el ATS de ese mismo período. La extensión lo anota para que no se
+// pierda entre corridas: popup → "ATS pendientes".
+const SC_ATS_KEY = 'sc_ats_pendientes';
+
+async function marcarAtsPendiente(ruc, periodo) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13 || limpio[2] !== '9') return; // solo sociedades
+        const st = await SafeStorage.get([SC_ATS_KEY, 'sri_ultimo_arqueo_compras']);
+        const mapa = st[SC_ATS_KEY] || {};
+        const compras = st.sri_ultimo_arqueo_compras || {};
+        const tieneCompras = compras.ruc === limpio && (!compras.periodo || String(compras.periodo) === String(periodo));
+        mapa[limpio] = {
+            ruc: limpio,
+            periodo: String(periodo || ''),
+            cuando: Date.now(),
+            compras: !!tieneCompras,
+        };
+        await SafeStorage.set({ [SC_ATS_KEY]: mapa });
+        log.info('📌 [ATS] pendiente: ' + limpio + ' ' + periodo + (tieneCompras ? ' · compras listas' : ' · faltan compras'));
+        try {
+            if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+                window.sriAssistant.showEliteToast({
+                    title: '📌 Queda el ATS',
+                    msg: 'IVA enviado. Falta subir el ATS de ' + periodo + '. Está en el popup → ATS pendientes.',
+                    duration: 10000,
+                });
+            }
+        } catch (e) {}
+    } catch (e) {
+        log.warn('📌 [ATS] no se pudo anotar el pendiente: ' + (e && e.message));
+    }
+}
+
+async function limpiarAtsPendiente(ruc, periodo) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        const st = await SafeStorage.get([SC_ATS_KEY]);
+        const mapa = st[SC_ATS_KEY] || {};
+        if (!mapa[limpio]) return;
+        if (!periodo || String(mapa[limpio].periodo) === String(periodo)) {
+            delete mapa[limpio];
+            await SafeStorage.set({ [SC_ATS_KEY]: mapa });
+            log.info('📌 [ATS] pendiente cerrado: ' + limpio + ' ' + (periodo || ''));
+        }
+    } catch (e) {}
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     log.debug('📨 Mensaje recibido en Content:', request.action);
 

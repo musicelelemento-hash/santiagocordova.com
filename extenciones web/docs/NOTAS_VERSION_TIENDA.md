@@ -29,6 +29,13 @@ Cada paquete incluye solo lo que carga la extensión en runtime:
 
 ## Novedades de esta versión
 
+### 01 · Nueva Luz `v3.3.5 → v3.3.6` (ATS pendientes)
+
+- Al terminar el **IVA mensual de una sociedad**, la extensión anota que queda pendiente **subir el ATS** de ese período.
+- El popup muestra la tira **📌 ATS pendientes**: cliente, período, si ya están las compras y hace cuántos días.
+- Botones por fila: **Abrir** (Anexos del SRI) y **Listo** (marca subido).
+- Al subir el ZIP con 📤, el pendiente de esa sociedad **se cierra solo**.
+
 ### 01 · Nueva Luz `v3.3.4 → v3.3.5`
 
 - **Subida de anexos**: acepta el ZIP generado (ATS/APS/ADI), lo adjunta en PrimeFaces, **espera el botón Cargar** y confirma con `btnAceptarConf`.
