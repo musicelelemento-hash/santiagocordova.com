@@ -3501,6 +3501,143 @@ async function handleBatchNextClient() {
   }
 }
 
+/**
+ * LOGIN AL SRI — versión robusta.
+ *
+ * Antes: llenaba los campos y hacía un click, sin verificar nada. Si el portal
+ * todavía no había pintado el formulario, o Keycloak rechazaba la clave, la
+ * corrida seguía como si hubiera entrado.
+ *
+ * Ahora: espera los campos, llena, envía, VERIFICA el resultado y distingue
+ * el motivo del fallo (clave incorrecta, bloqueo, cambio obligatorio, captcha).
+ */
+const SRI_LOGIN = {
+    usuario: ['#username', 'input[name="username"]', '#usuario', 'input[name="usuario"]'],
+    clave: ['#password', 'input[name="password"]', 'input[type="password"]'],
+    boton: ['#kc-login', 'input[name="login"]', 'input[type="submit"]', 'button[type="submit"]', '#login-form button'],
+    error: ['#input-error', '.kc-feedback-text', '.pf-c-form__helper-text.pf-m-error', '.alert-error', '#kc-error-message'],
+};
+
+function _sriPrimero(selectores) {
+    for (const s of selectores) {
+        const el = document.querySelector(s);
+        if (el) return el;
+    }
+    return null;
+}
+
+function _sriYaAdentro() {
+    return !!(document.querySelector('.sri-icon-cerrar-sesion') ||
+        document.getElementById('id_nombre_razon_social') ||
+        /sri-en-linea\/(inicio|contribuyente)/i.test(location.href));
+}
+
+function _sriEnLogin() {
+    return /auth\/realms|openid-connect/i.test(location.href) ||
+        !!document.querySelector('#kc-login, #username, input[name="username"]');
+}
+
+async function _sriEsperar(condicion, timeoutMs = 12000, pasoMs = 250) {
+    const limite = Date.now() + timeoutMs;
+    while (Date.now() < limite) {
+        try { if (condicion()) return true; } catch (e) { /* sigue */ }
+        await sleep(pasoMs);
+    }
+    return false;
+}
+
+function _sriTextoError() {
+    for (const s of SRI_LOGIN.error) {
+        const el = document.querySelector(s);
+        const txt = el && (el.textContent || '').trim();
+        if (txt) return txt;
+    }
+    return '';
+}
+
+function _sriClasificarError(txt) {
+    const t = String(txt || '').toLowerCase();
+    if (/captcha/.test(t)) return 'captcha';
+    if (/bloque|disabled|locked|suspendid/.test(t)) return 'bloqueada';
+    if (/contrase|password|credencial|invalid|incorrect/.test(t)) return 'clave_incorrecta';
+    if (/expir|vencid/.test(t)) return 'clave_vencida';
+    return 'desconocido';
+}
+
+async function loginSRI(ruc, password, opciones = {}) {
+    const intentos = opciones.intentos || 2;
+    const avisar = (titulo, msg, dur) => {
+        try {
+            if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+                window.sriAssistant.showEliteToast({ title: titulo, msg, duration: dur || 7000 });
+            }
+        } catch (e) { /* sin UI: no rompe el login */ }
+    };
+
+    if (_sriYaAdentro()) {
+        log.info('🔑 [LOGIN SRI] ya había sesión abierta.');
+        return { ok: true, yaAdentro: true };
+    }
+
+    if (!_sriEnLogin()) {
+        log.info('🔑 [LOGIN SRI] fuera del formulario: abriendo el SSO…');
+        await SafeStorage.set({
+            pending_sri_autofill: { ruc, password, manual: true, timestamp: Date.now() },
+        });
+        const enlace = document.querySelector('pre.sri-iniciar-sesion, .sri-iniciar-sesion, a[href*="openid-connect"], a[href*="auth"]') ||
+            (typeof findByText === 'function' ? findByText('Iniciar sesión') : null);
+        if (enlace) {
+            const accionable = enlace.closest('a, button') || enlace;
+            if (typeof clickElement === 'function') clickElement(accionable, 'Iniciar sesión'); else accionable.click();
+        } else {
+            location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT';
+        }
+        return { ok: false, motivo: 'redirigiendo' };
+    }
+
+    for (let intento = 1; intento <= intentos; intento++) {
+        const listo = await _sriEsperar(() => !!(_sriPrimero(SRI_LOGIN.usuario) && _sriPrimero(SRI_LOGIN.clave)), 10000);
+        if (!listo) {
+            log.warn('🔑 [LOGIN SRI] intento ' + intento + ': el formulario no aparece (' + location.pathname + ').');
+            await sleep(1200);
+            continue;
+        }
+        const u = _sriPrimero(SRI_LOGIN.usuario);
+        const c = _sriPrimero(SRI_LOGIN.clave);
+        const b = _sriPrimero(SRI_LOGIN.boton);
+        escribirCampo(u, ruc);
+        escribirCampo(c, password);
+        await sleep(250);
+        log.debug('🔑 [LOGIN SRI] intento ' + intento + ': enviando ' + ruc);
+        try {
+            if (b) { if (typeof clickElement === 'function') clickElement(b, 'Login SRI'); else b.click(); }
+            else if (u.form && typeof u.form.requestSubmit === 'function') u.form.requestSubmit();
+        } catch (e) { log.warn('🔑 [LOGIN SRI] no se pudo enviar el formulario: ' + e.message); }
+
+        const resultado = await _sriEsperar(() => {
+            if (_sriYaAdentro()) return true;
+            if (_sriTextoError()) return true;
+            if (typeof esPantallaCambioClave === 'function' && esPantallaCambioClave()) return true;
+            return false;
+        }, 15000);
+
+        if (_sriYaAdentro()) {
+            log.info('✅ [LOGIN SRI] sesión iniciada con ' + ruc);
+            avisar('✅ Sesión SRI', 'Entraste con ' + ruc, 5000);
+            return { ok: true };
+        }
+        const errorTxt = _sriTextoError();
+        if (errorTxt) {
+            const motivo = _sriClasificarError(errorTxt);
+            log.warn('🔑 [LOGIN SRI] rechazo (' + motivo + '): ' + errorTxt);
+            return { ok: false, motivo: motivo, mensaje: errorTxt };
+        }
+        if (!resultado) log.warn('🔑 [LOGIN SRI] sin respuesta del portal tras el envío.');
+    }
+
+    log.warn('🔑 [LOGIN SRI] no se pudo entrar con ' + ruc);
+    return { ok: false, motivo: 'timeout' };
+}
 async function executeLogin(ruc, password) {
   if (typeof SriCredentialVault !== 'undefined') {
     const check = await SriCredentialVault.canAttemptLogin(ruc, password);
@@ -3523,6 +3660,15 @@ async function executeLogin(ruc, password) {
   const btn = (campos && campos.btn) ||
     document.getElementById("kc-login") ||
     document.querySelector('input[type="submit"]');
+
+  // Delegado al login robusto (espera, verifica y clasifica el error).
+  if (rucInput && passInput) {
+    const r = await loginSRI(ruc, password);
+    if (!r.ok && r.motivo && r.motivo !== 'redirigiendo') {
+      log.warn('🔑 [LOGIN SRI] fallo: ' + r.motivo + (r.mensaje ? ' · ' + r.mensaje : ''));
+    }
+    return r.ok;
+  }
 
   if (rucInput && passInput && btn) {
     escribirCampo(rucInput, ruc);

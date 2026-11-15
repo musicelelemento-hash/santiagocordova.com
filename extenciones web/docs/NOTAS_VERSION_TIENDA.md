@@ -29,6 +29,15 @@ Cada paquete incluye solo lo que carga la extensión en runtime:
 
 ## Novedades de esta versión
 
+### 01 · Nueva Luz `v3.3.0 → v3.3.1` (login robusto)
+
+- **Espera** a que el formulario del SSO esté pintado (hasta 10 s) antes de escribir.
+- **Verifica** el resultado del envío: sesión iniciada, error visible o pantalla de cambio de clave.
+- **Clasifica el fallo**: `clave_incorrecta`, `bloqueada`, `clave_vencida`, `captcha` o `timeout`.
+- **Reintenta** una vez si el envío no tomó.
+- Avisa por toast y por consola: `✅ [LOGIN SRI] sesión iniciada con <RUC>`.
+- Si el portal pide **cambio de clave obligatorio**, se detiene y lo informa (no cambia claves).
+
 ### 01 · Nueva Luz `v3.2.0 → v3.3.0`
 
 **Sociedades (nuevo):**
