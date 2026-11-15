@@ -29,6 +29,13 @@ Cada paquete incluye solo lo que carga la extensión en runtime:
 
 ## Novedades de esta versión
 
+### 01 · Nueva Luz `v3.3.1 → v3.3.2` (barra flotante a pedido)
+
+- Botón **🎛** en el popup: **despierta** la extensión y **monta** la barra flotante en la pestaña del SRI.
+- Si la pestaña activa no es del SRI, abre el portal (sri-en-linea/inicio/NAT).
+- Si el content script no estaba cargado, **recarga la pestaña** y la barra aparece.
+- Si la barra ya existía pero estaba oculta, la vuelve visible y muestra un toast de confirmación.
+
 ### 01 · Nueva Luz `v3.3.0 → v3.3.1` (login robusto)
 
 - **Espera** a que el formulario del SSO esté pintado (hasta 10 s) antes de escribir.

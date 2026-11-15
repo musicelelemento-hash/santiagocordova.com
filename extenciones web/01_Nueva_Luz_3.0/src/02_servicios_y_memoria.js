@@ -4555,7 +4555,30 @@ const waitForPortal = async (maxWait = 10000) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     log.debug('📨 Mensaje recibido en Content:', request.action);
 
-    if (request.action === 'autoFillSearch') {
+    if (request.action === 'mostrarHud' || request.tipo === 'SC_MOSTRAR_HUD') {
+    (async () => {
+      try {
+        await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
+        if (typeof SriLoopHUD !== 'undefined' && typeof SriLoopHUD.montar === 'function') {
+          await SriLoopHUD.montar();
+        }
+        const existente = document.getElementById('sri-loop-hud');
+        if (existente) { existente.style.display = 'flex'; existente.style.visibility = 'visible'; existente.style.opacity = '1'; }
+        if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
+          window.sriAssistant.showEliteToast({
+            title: '🎛 Barra activada',
+            msg: 'La barra flotante está visible abajo a la derecha. Arrastrala desde ⠿.',
+            duration: 7000,
+          });
+        }
+        log.info('🎛 [HUD] barra flotante montada a pedido del popup.');
+      } catch (e) { log.warn('🎛 [HUD] no se pudo montar: ' + e.message); }
+      sendResponse({ ok: true });
+    })();
+    return true;
+  }
+
+  if (request.action === 'autoFillSearch') {
         autoLlenarBusqueda()
             .then(resultado => sendResponse({ success: true, data: resultado }))
             .catch(error => sendResponse({ success: false, error: error.message }));

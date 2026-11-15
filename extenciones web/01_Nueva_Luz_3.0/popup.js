@@ -144,7 +144,25 @@ function bindEvents() {
         document.getElementById('benditaMenu').style.display = 'none';
         document.getElementById('benditaMenuOverlay').style.display = 'none';
     };
-    document.getElementById('btnBenditaMenu')?.addEventListener('click', (e) => {
+    // 🎛 Mostrar la barra flotante en el SRI: la despierta y la monta en la pestaña activa.
+document.getElementById('btnMostrarHud')?.addEventListener('click', async () => {
+    try {
+        await chrome.storage.local.set({ sri_master_switch_on: true, sriAutomationPaused: false });
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const esSri = !!tab && /sri\.gob\.ec/.test(tab.url || '');
+        if (esSri && tab.id) {
+            chrome.tabs.sendMessage(tab.id, { action: 'mostrarHud' }, () => {
+                if (chrome.runtime.lastError) chrome.tabs.reload(tab.id);
+            });
+            window.close();
+        } else {
+            await chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT' });
+            window.close();
+        }
+    } catch (e) { console.warn('🎛 no se pudo mostrar la barra:', e); }
+});
+
+document.getElementById('btnBenditaMenu')?.addEventListener('click', (e) => {
         e.stopPropagation();
         const menu = document.getElementById('benditaMenu');
         const abrir = menu.style.display !== 'block';
