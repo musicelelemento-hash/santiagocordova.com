@@ -34,6 +34,13 @@ scratch/
 *.db-*
 respaldos_locales/
 
+# ── Suite de extensiones: artefacto generado ───────────────────────────
+# `extenciones web/suite/` se arma con tools/construir_suite.mjs copiando
+# las cuatro extensiones individuales (~11 MB duplicados). Versionar el
+# artefacto mete el mismo codigo dos veces y garantiza que un dia se
+# desincronice en silencio. Se versionan las fuentes; la suite se regenera.
+extenciones web/suite/
+
 # ── Evidencia de pantallas y tráfico del SRI ───────────────────────────
 # Capturas con RUC, nombre, email y teléfono de contribuyentes reales, y
 # exports de Burp Suite con cookies de sesión vivas (y a veces contraseñas
@@ -67,3 +74,18 @@ extenciones web/*recorrido*
 # El repo de la app web se versiona por separado (tiene su propio .git)
 santiagocordova-main/
 inicio
+# ── Recorridos reales dentro de cada extension ─────────────────────────
+# Copias de trabajo de _EVIDENCIA_SRI para pulir cada modulo contra el
+# portal real: traen cookies de sesion y, en varios casos, la contrasena
+# en el POST de login. Chrome ignora las carpetas que empiezan con _,
+# asi que tampoco se empaquetan; git tampoco las tiene que ver.
+extenciones web/*/recorridos/
+# Respaldos y legacy: viven en disco, no en git (ensuciaban `git status`).
+extenciones web/_RESPALDO_EXTENSIONES_SEGURA/
+extenciones web/_ARCHIVADAS_Y_LEGACY/
+extenciones web/_respaldo_04_anulador/
+extenciones web/_archivo/
+extenciones web/_respaldos/
+
+# Banco de prueba generado (se regenera con tools/bench/generar_bench.mjs)
+extenciones web/tools/bench/bench_2000.html

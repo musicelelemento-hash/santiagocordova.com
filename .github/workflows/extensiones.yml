@@ -1,0 +1,79 @@
+name: Extensiones SC PRO
+
+# Puerta de calidad de las extensiones. Corre lo mismo que
+# `tools/verificar.ps1` en Windows, pero en Linux y en cada push/PR.
+#
+# No toca datos de clientes: los bancos usan HTML de prueba y el bundle real.
+
+on:
+  push:
+    paths:
+      - 'extenciones web/**'
+      - '.github/workflows/extensiones.yml'
+  pull_request:
+    paths:
+      - 'extenciones web/**'
+  workflow_dispatch:
+
+concurrency:
+  group: extensiones-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  calidad:
+    name: Sintaxis · build · 909 bancos · suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: 'extenciones web/01_Nueva_Luz_3.0/package-lock.json'
+
+      - name: Dependencias de la 01
+        working-directory: 'extenciones web/01_Nueva_Luz_3.0'
+        run: npm ci
+
+      - name: Compilar el content script
+        working-directory: 'extenciones web/01_Nueva_Luz_3.0'
+        run: npm run build
+
+      - name: Sintaxis de todos los módulos
+        run: |
+          set -e
+          for f in \
+            "extenciones web/01_Nueva_Luz_3.0"/src/*.js \
+            "extenciones web/01_Nueva_Luz_3.0"/bridge_content.js \
+            "extenciones web/01_Nueva_Luz_3.0"/popup.js \
+            "extenciones web/01_Nueva_Luz_3.0"/options.js \
+            "extenciones web/01_Nueva_Luz_3.0"/background.js \
+            "extenciones web/02_Cambio_Claves_SRI"/*.js \
+            "extenciones web/03_Anexo_Gastos_Personales"/*.js \
+            "extenciones web/04_Anulador_Comprobantes_SRI"/content.js \
+            "extenciones web/04_Anulador_Comprobantes_SRI"/popup.js ; do
+            node --check "$f"
+          done
+
+      - name: Bancos de prueba (909)
+        working-directory: 'extenciones web/01_Nueva_Luz_3.0'
+        run: npm test
+        env:
+          TEST_TIMEOUT: '600000'
+          CHROME_PATH: /usr/bin/google-chrome
+
+      - name: Suite generada y validada
+        run: node "extenciones web/tools/construir_suite.mjs"
+
+      - name: Manifiestos válidos
+        run: |
+          set -e
+          for d in "01_Nueva_Luz_3.0" "02_Cambio_Claves_SRI" "03_Anexo_Gastos_Personales" "04_Anulador_Comprobantes_SRI" "suite"; do
+            node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "extenciones web/$d/manifest.json"
+            echo "ok $d"
+          done
