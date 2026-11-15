@@ -29,6 +29,12 @@ Cada paquete incluye solo lo que carga la extensión en runtime:
 
 ## Novedades de esta versión
 
+### 01 · Nueva Luz `v3.3.4 → v3.3.5`
+
+- **Subida de anexos**: acepta el ZIP generado (ATS/APS/ADI), lo adjunta en PrimeFaces, **espera el botón Cargar** y confirma con `btnAceptarConf`.
+- Guarda el resultado en `sc_anexo_ultimo` (nombre, mensaje, acuse, URL, fecha) y el bridge lo publica a la web para el **círculo mensual**.
+- Popup: 🧭 Mapear pantalla de Anexos y 📤 Subir ZIP del anexo (sin depender de la barra flotante).
+
 ### 01 · Nueva Luz `v3.3.1 → v3.3.2` (barra flotante a pedido)
 
 - Botón **🎛** en el popup: **despierta** la extensión y **monta** la barra flotante en la pestaña del SRI.
