@@ -158,6 +158,18 @@ for (const obj of OBJETIVOS) {
         console.log(`  ${obj.carpeta} → v${version} · ${nombre}`);
         continue;
     }
+    // Borrar paquetes viejos del mismo prefijo: la tienda debe ver UN zip por
+    // extensión, no la historia completa (evita subir la versión equivocada).
+    const limpiarViejos = () => {
+        const sufijo = "-v" + version + ".zip";
+        for (const f of fs.readdirSync(SALIDA)) {
+            if (f.startsWith(obj.prefijo + "-") && f.endsWith(".zip") && !f.endsWith(sufijo)) {
+                try { fs.unlinkSync(path.join(SALIDA, f)); } catch (e) {}
+            }
+        }
+    };
+    limpiarViejos();
+
     const archivos = recolectar(ruta, '');
     const zip = zipar(archivos);
     const nombreZip = `${obj.prefijo}-v${version}.zip`;
