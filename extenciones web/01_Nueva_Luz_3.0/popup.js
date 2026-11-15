@@ -145,6 +145,53 @@ function bindEvents() {
         document.getElementById('benditaMenuOverlay').style.display = 'none';
     };
     // 🎛 Mostrar la barra flotante en el SRI: la despierta y la monta en la pestaña activa.
+// 🧭 Mapear la pantalla de Anexos (sin depender de la barra flotante).
+document.getElementById('btnMapearAnexos')?.addEventListener('click', async () => {
+    const estado = document.getElementById('anexosEstado');
+    const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí primero una pestaña del SRI (Anexos).', false); return; }
+        chrome.tabs.sendMessage(tab.id, { action: "mapearAnexos" }, async (resp) => {
+            if (chrome.runtime.lastError || !resp || !resp.ok) {
+                pintar('No pude mapear: ' + (chrome.runtime.lastError?.message || resp?.error || 'sin respuesta'), false);
+                return;
+            }
+            const texto = JSON.stringify(resp.mapa, null, 2);
+            try { await navigator.clipboard.writeText(texto); pintar("🧭 Mapa copiado al portapapeles\n" + (resp.mapa.resumen || ""), true); }
+            catch (e) { pintar("Mapa listo (no se pudo copiar): " + (resp.mapa.resumen || ""), true); }
+            try { chrome.storage.local.set({ sc_mapa_anexos: resp.mapa }); } catch (e) {}
+        });
+    } catch (e) { pintar('Error: ' + e.message, false); }
+});
+
+// 📤 Subir un ZIP ya generado al anexo (adjunta + Cargar + Aceptar).
+document.getElementById('btnSubirAnexoZip')?.addEventListener('click', () => {
+    document.getElementById('inputAnexoZip')?.click();
+});
+document.getElementById('inputAnexoZip')?.addEventListener('change', (ev) => {
+    const estado = document.getElementById('anexosEstado');
+    const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    if (!/\.zip$/i.test(file.name)) { pintar("Elegí un archivo .zip", false); return; }
+    const lector = new FileReader();
+    lector.onload = async () => {
+        try {
+            const b64 = String(lector.result || "").replace(/^data:[^;]+;base64,/, "");
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí Anexos → Envío y consulta del anexo y volvé a intentar.', false); return; }
+            pintar("Subiendo " + file.name + "…", true);
+            chrome.tabs.sendMessage(tab.id, { action: "subirAnexoZip", data: { nombre: file.name, b64 } }, (resp) => {
+                if (chrome.runtime.lastError || !resp) { pintar("Sin respuesta del portal: " + (chrome.runtime.lastError?.message || ""), false); return; }
+                const r = resp.resultado || {};
+                pintar((r.ok ? "✅ " : "⚠️ ") + (r.mensaje || resp.error || "") + (r.acuse ? "\nAcuse: " + r.acuse : ""), !!r.ok);
+            });
+        } catch (e) { pintar('Error: ' + e.message, false); }
+    };
+    lector.readAsDataURL(file);
+});
+
 document.getElementById('btnMostrarHud')?.addEventListener('click', async () => {
     try {
         await chrome.storage.local.set({ sri_master_switch_on: true, sriAutomationPaused: false });

@@ -799,6 +799,17 @@ escal e todo el popup (UI/UX Pro Max §6). */
             </div>
 
             <div class="menu-sep"></div>
+        <div class="menu-sep"></div>
+        <div class="menu-label">Anexos SRI</div>
+        <button id="btnMapearAnexos" class="menu-item" role="menuitem" title="Copia el mapa de la pantalla de Anexos (input de archivo, botón Cargar, mensajes) sin depender de la barra flotante">
+          🧭 Mapear pantalla de Anexos
+        </button>
+        <button id="btnSubirAnexoZip" class="menu-item" role="menuitem" title="Adjunta un ZIP ya generado (ATS/APS/ADI) en la pantalla de Anexos del SRI y pulsa Cargar">
+          📤 Subir ZIP del anexo…
+        </button>
+        <input type="file" id="inputAnexoZip" accept=".zip" style="display:none">
+        <div id="anexosEstado" style="display:none; font-size:11px; color:#94a3b8; padding:6px 10px; white-space:pre-wrap; word-break:break-word; max-height:120px; overflow:auto;"></div>
+
             <button id="btnAjustes" class="menu-item" role="menuitem" title="Claves de IA, R2 y Supabase; diagnóstico del lote">
                 ⚙ Ajustes y claves
             </button>

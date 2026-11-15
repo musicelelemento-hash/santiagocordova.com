@@ -6047,6 +6047,96 @@ async function iniciarDeclaracionICE(anio, mes) {
     return { ok: true, mensaje: 'Obligación 3031 lista; seguí con el período y las preguntas.' };
 }
 
+/**
+ * SUBIDA GENÉRICA DE ANEXOS (ATS / APS / ADI / ATF…)
+ *
+ * La pantalla de Anexos del SRI usa SIEMPRE el mismo componente PrimeFaces:
+ *   input : input[type=file][id$="anexosSubir_input"]
+ *   cargar: [id$="frmRecepcion:btnCargar"]
+ *   aceptar: [id$="frmRecepcion:btnAceptarConf"]
+ * (confirmado con el inspector del botón «Seleccionar archivo» de ATF).
+ *
+ * Recibe el ZIP ya armado (base64) para no depender de datos en esta pestaña.
+ */
+async function subirAnexoDesdeZip(nombreArchivo, base64, opciones = {}) {
+    const aBytes = (b64) => {
+        const limpio = String(b64 || '').replace(/^data:[^;]+;base64,/, '');
+        const bin = atob(limpio);
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out;
+    };
+
+    const input = document.querySelector('input[type=file][id$="anexosSubir_input"]')
+        || document.querySelector('input[type=file]');
+    if (!input) return { ok: false, mensaje: 'No encontré el campo de archivo en esta pantalla. Abrí Anexos → Envío y consulta del anexo correspondiente.' };
+
+    try {
+        const bytes = aBytes(base64);
+        const archivo = new File([bytes], String(nombreArchivo || 'anexo.zip'), { type: 'application/zip' });
+        const dt = new DataTransfer();
+        dt.items.add(archivo);
+        input.files = dt.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        log.info('📤 [ANEXO] archivo cargado en el formulario: ' + archivo.name + ' (' + bytes.length + ' B)');
+    } catch (e) {
+        return { ok: false, mensaje: 'No pude adjuntar el archivo: ' + e.message };
+    }
+
+    // Esperar a que PrimeFaces termine la subida (barra o nombre visible).
+    const subido = await _iceEsperar(() => {
+        const enCurso = document.querySelector('[id$="frmRecepcion:anexosSubir"] .ui-fileupload-progress');
+        if (enCurso && enCurso.offsetParent !== null) return false;
+        const fila = document.querySelector('[id$="frmRecepcion:anexosSubir"] .ui-fileupload-files');
+        const nombre = document.querySelector('[id$="frmRecepcion:lblArchivoSeleccionado"]');
+        const texto = ((fila && fila.innerText) || '') + ' ' + ((nombre && nombre.innerText) || '');
+        return /\.zip/i.test(texto) || (fila && fila.children.length > 0);
+    }, 30000);
+    if (!subido) log.warn('📤 [ANEXO] no se confirmó la subida en 30 s; sigo con Cargar.');
+
+    // En el ATF/ATS el botón «Cargar» aparece DESPUÉS de que PrimeFaces sube el archivo.
+    const aparecioCargar = await _iceEsperar(() => !!document.querySelector('[id$="frmRecepcion:btnCargar"]'), 25000);
+    if (!aparecioCargar) log.warn('📤 [ANEXO] no apareció «Cargar» en 25 s (esperando el botón Cargar).');
+    const btnCargar = document.querySelector('[id$="frmRecepcion:btnCargar"]');
+    if (!btnCargar) return { ok: false, mensaje: 'Subí el archivo pero no aparece el botón "Cargar".' };
+    if (typeof clickElement === 'function') clickElement(btnCargar, 'Anexo · Cargar'); else btnCargar.click();
+    log.info('📤 [ANEXO] pulsado Cargar; esperando confirmación…');
+
+    const hayAceptar = await _iceEsperar(() => !!document.querySelector('[id$="frmRecepcion:btnAceptarConf"]'), 30000);
+    if (hayAceptar) {
+        const btnAceptar = document.querySelector('[id$="frmRecepcion:btnAceptarConf"]');
+        if (typeof clickElement === 'function') clickElement(btnAceptar, 'Anexo · Aceptar'); else btnAceptar.click();
+        log.info('📤 [ANEXO] confirmación aceptada.');
+    } else if (!opciones.sinAceptar) {
+        log.warn('📤 [ANEXO] no apareció el botón de confirmación; revisá la pantalla.');
+    }
+
+    // Leer el mensaje del portal (éxito o error).
+    const mensajes = Array.from(document.querySelectorAll('.ui-messages-info, .ui-messages-error, .ui-message-error, #mensajes .ui-message'))
+        .map((el) => (el.innerText || '').trim())
+        .filter(Boolean)
+        .slice(0, 6);
+    const texto = mensajes.join(' | ');
+
+    const exito = /recibido|correctamente|aceptado|procesado|satisfactorio|confirmaci[oó]n de recepci[oó]n/i.test(texto)
+        || (hayAceptar && !/error/i.test(texto));
+    const acuse = (texto.match(/\b(\d{10,})\b/) || [])[1] || '';
+
+    const resultado = {
+        ok: exito,
+        mensaje: texto || (exito ? 'Anexo cargado.' : 'Sin mensaje del portal.'),
+        acuse,
+        nombre: nombreArchivo,
+        cuando: Date.now(),
+        url: location.href,
+    };
+    try {
+        await SafeStorage.set({ sc_anexo_ultimo: resultado });
+        log.info('📤 [ANEXO] resultado guardado: ' + (exito ? 'OK' : 'con observaciones') + (acuse ? ' · acuse ' + acuse : ''));
+    } catch (e) { /* guardar es diagnóstico: no rompe */ }
+    return resultado;
+}
 if (typeof window !== 'undefined') {
     window.scIniciarDeclaracionICE = iniciarDeclaracionICE;
     window.scAbrirAnexoSRI = abrirAnexoSRI;

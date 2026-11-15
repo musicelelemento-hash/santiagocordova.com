@@ -4555,7 +4555,37 @@ const waitForPortal = async (maxWait = 10000) => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     log.debug('📨 Mensaje recibido en Content:', request.action);
 
-    if (request.action === 'mostrarHud' || request.tipo === 'SC_MOSTRAR_HUD') {
+    if (request.action === 'mapearAnexos') {
+    (async () => {
+      try {
+        const mapa = (typeof window !== "undefined" && typeof window.scMapearAnexos === "function")
+          ? window.scMapearAnexos()
+          : (typeof mapearAnexosSRI === "function" ? mapearAnexosSRI() : null);
+        if (!mapa) return sendResponse({ ok: false, error: 'mapper no disponible en esta página' });
+        log.info('🧭 [MAPA ANEXOS] ' + mapa.resumen);
+        sendResponse({ ok: true, mapa });
+      } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    })();
+    return true;
+  }
+
+  if (request.action === 'subirAnexoZip') {
+    (async () => {
+      try {
+        const d = request.data || {};
+        if (typeof window !== "undefined" && typeof window.scSubirAnexoZip === "function") {
+          const r = await window.scSubirAnexoZip(d.nombre, d.b64, {});
+          sendResponse({ ok: !!(r && r.ok), resultado: r });
+        } else {
+          const r = await subirAnexoDesdeZip(d.nombre, d.b64, {});
+          sendResponse({ ok: !!(r && r.ok), resultado: r });
+        }
+      } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    })();
+    return true;
+  }
+
+  if (request.action === 'mostrarHud' || request.tipo === 'SC_MOSTRAR_HUD') {
     (async () => {
       try {
         await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
