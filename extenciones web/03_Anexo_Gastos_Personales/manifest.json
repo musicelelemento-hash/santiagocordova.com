@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "📑 [SC PRO 03] - Llenador Anexo Gastos Personales",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Automatiza el llenado del anexo de gastos personales en el portal del SRI.",
     "permissions": [
         "activeTab",
@@ -25,5 +25,8 @@
             ],
             "all_frames": true
         }
+    ],
+    "host_permissions": [
+        "https://generativelanguage.googleapis.com/*"
     ]
 }

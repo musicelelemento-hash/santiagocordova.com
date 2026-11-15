@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     loadClientsFromCacheOrFetch();
     pintarVersionReal();
+    pintarEstadoNube();
 });
 
 // El pie del popup traía "v3.2.0" escrito a mano en el HTML, congelado desde
@@ -36,6 +37,43 @@ document.addEventListener('DOMContentLoaded', () => {
 // versión vieja (o viceversa) sin forma de saberlo. chrome.runtime.getManifest()
 // es la única fuente que SIEMPRE coincide con lo que Chrome tiene cargado en
 // este momento, sin pasar por el pipeline de build de content.js.
+/**
+ * Estado real de la nube en el pie. Si falta SC_CONFIG, la declaración corre
+ * igual pero NO se sube — y eso hay que verlo antes de arrancar el lote.
+ */
+async function pintarEstadoNube() {
+    const el = document.getElementById('nubeEstado');
+    if (!el) return;
+
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        el.textContent = '⚠ sin nube';
+        el.className = 'nube-chip off';
+        el.title = 'Falta la configuración de Supabase. Las declaraciones NO se van a subir.';
+        return;
+    }
+
+    el.textContent = '☁ …';
+    el.className = 'nube-chip';
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id&limit=1`, {
+            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+        });
+        if (res.ok) {
+            el.textContent = '☁ nube OK';
+            el.className = 'nube-chip ok';
+            el.title = 'Supabase responde: las declaraciones se guardan en la nube.';
+        } else {
+            el.textContent = `⚠ HTTP ${res.status}`;
+            el.className = 'nube-chip off';
+            el.title = (await res.text().catch(() => '')).slice(0, 160);
+        }
+    } catch (e) {
+        el.textContent = '⚠ sin red';
+        el.className = 'nube-chip off';
+        el.title = String((e && e.message) || e);
+    }
+}
+
 function pintarVersionReal() {
     const el = document.getElementById('popupFootVersion');
     if (!el) return;
@@ -153,18 +191,16 @@ function bindEvents() {
     });
 
     const syncHandler = () => {
-        chrome.storage.local.get(['last_sync_time'], (res) => {
+        chrome.storage.local.get(['last_sync_time'], async (res) => {
             const lastSync = res.last_sync_time || 0;
             const now = Date.now();
             const hoursSinceLastSync = (now - lastSync) / (1000 * 60 * 60);
 
             if (hoursSinceLastSync < 4) {
-                const proceed = window.confirm(
-                    "⚠️ AHORRO DE DATOS (EGRESS EXCEEDED)\n\n" +
+                const proceed = await pedirConfirmacion({ titulo: "Ahorro de datos", mensaje: "⚠️ AHORRO DE DATOS (EGRESS EXCEEDED)\n\n" +
                     "Sincronizaste hace menos de 4 horas.\n" +
                     "Hacer múltiples descargas al día agota la cuota mensual de Supabase.\n\n" +
-                    "¿Deseas forzar una sincronización nueva en este momento?"
-                );
+                    "¿Deseas forzar una sincronización nueva en este momento?", aceptar: "Sincronizar igual", cancelar: "No" });
                 if (!proceed) return;
             }
 
@@ -242,16 +278,173 @@ function bindEvents() {
         });
     });
 
-    // Pestañas
+    // â”€â”€ Parada de emergencia desde el popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // El ðŸ›‘ del HUD existe pero vive en la pestaña del SRI: si estás en otra
+    // pestaña no lo ves. Este botón escribe el semáforo (la única autoridad
+    // del bucle) y deja el lote listo para reanudar, sin perder la cola.
+    // Siguiente tanda: la cola que quedó guardada por el corte de 50.
+    function pintarSiguienteTanda() {
+        const btn = document.getElementById('btnSiguienteTanda');
+        if (!btn) return;
+        chrome.storage.local.get(['sc_lote_resto', 'sc_loop'], (r) => {
+            const resto = Array.isArray(r.sc_lote_resto) ? r.sc_lote_resto : [];
+            const loop = r.sc_loop || {};
+            const corriendo = loop.estado === 'CORRIENDO' || loop.estado === 'PAUSANDO';
+            const mostrar = resto.length > 0 && !corriendo;
+            btn.style.display = mostrar ? '' : 'none';
+            if (mostrar) btn.textContent = `▶ Siguiente tanda · ${resto.length} en cola`;
+        });
+    }
+
+    document.getElementById('btnSiguienteTanda')?.addEventListener('click', () => {
+        chrome.storage.local.get(['sc_lote_resto'], (r) => {
+            const resto = Array.isArray(r.sc_lote_resto) ? r.sc_lote_resto : [];
+            if (!resto.length) { showToast('No hay una tanda pendiente.'); return; }
+            ejecutarLoteCompleto(false, resto);
+        });
+    });
+
+    chrome.storage.onChanged.addListener((cambios, area) => {
+        if (area === 'local' && (cambios.sc_lote_resto || cambios.sc_loop)) pintarSiguienteTanda();
+    });
+
+    pintarSiguienteTanda();
+
+    // Una sola acción primaria por estado (§4): al correr, sólo Detener.
+    function ocultarCtasSecundarias(corriendo) {
+        // Al correr, sólo Detener. Al parar, cada botón decide su visibilidad
+        // (segunda vuelta y siguiente tanda dependen de que haya trabajo).
+        ["btnCorrerTodos", "btnSegundaVuelta", "btnSiguienteTanda"].forEach((id) => {
+            const b = document.getElementById(id);
+            if (b && corriendo) b.style.display = "none";
+        });
+        const run = document.getElementById("btnEjecutarLote");
+        if (run) run.style.display = corriendo ? "none" : "";
+    }
+
+    function pintarDetener() {
+        const btn = document.getElementById('btnDetener');
+        if (!btn) return;
+        chrome.storage.local.get(['sc_loop'], (r) => {
+            const loop = r.sc_loop || {};
+            const cola = Array.isArray(loop.cola) ? loop.cola : [];
+            const vivo = cola.length > 0 && (loop.estado === 'CORRIENDO' || loop.estado === 'PAUSANDO');
+            btn.style.display = vivo ? '' : 'none';
+            // Mientras corre, Detener es la única acción: el resto se esconde.
+            ocultarCtasSecundarias(vivo);
+            if (vivo) {
+                const idx = Math.min(Number(loop.indice || 0) + 1, cola.length);
+                btn.textContent = `🛑 Detener bucle · ${idx}/${cola.length}`;
+            }
+        });
+    }
+
+    // Vacíos con salida (§8): el estado vacío ofrece la siguiente acción.
+    document.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-accion]');
+        if (!b) return;
+        if (b.dataset.accion === 'periodo') {
+            const sel = document.getElementById('periodMonth');
+            if (sel) { sel.focus(); sel.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        }
+        if (b.dataset.accion === 'ajustes') {
+            chrome.runtime.openOptionsPage();
+        }
+    });
+
+    document.getElementById('btnDetener')?.addEventListener('click', () => {
+        chrome.storage.local.get(['sc_loop'], (r) => {
+            const loop = r.sc_loop || {};
+            const cambios = {
+                sc_loop: {
+                    ...loop,
+                    estado: 'DETENIDO',
+                    latido: Date.now(),
+                    motivo: 'Detenido desde el popup'
+                },
+                sriAutomationPaused: true,
+                auto_batch_enabled: false,
+                sri_master_switch_on: false,
+                ghost_manual_mode: true
+            };
+            chrome.storage.local.set(cambios, () => {
+                chrome.storage.local.remove(['pendingAction', 'actionTimestamp']);
+                showToast('🛑 Bucle detenido. El cliente en curso termina su paso.');
+                pintarDetener();
+                pintarPanelModoAuto();
+            });
+        });
+    });
+
+    chrome.storage.onChanged.addListener((cambios, area) => {
+        if (area === 'local' && cambios.sc_loop) pintarDetener();
+    });
+
+    pintarDetener();
+
+    // Pesta    // Pestañas. El clic puede caer en el número (un <span>) y no en el
+    // botón: con e.target la pestaña no se activaba.
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            e.target.classList.add('active');
-            const targetEl = document.getElementById(e.target.dataset.target);
+
+            e.currentTarget.classList.add('active');
+            const targetEl = document.getElementById(e.currentTarget.dataset.target);
             if (targetEl) targetEl.classList.add('active');
         });
+    });
+
+    // ── La acción principal y las dos superficies nuevas ────────────────
+    document.getElementById('btnEjecutarLote')?.addEventListener('click', async (evento) => {
+        const btn = evento.currentTarget;
+        if (btn.disabled) return;
+        const previo = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="mini-spin"></span> Preparando…';
+        try {
+            await ejecutarLoteCompleto();
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = previo;
+        }
+    });
+
+    document.getElementById('btnCorrerTodos')?.addEventListener('click', () => {
+        ejecutarLoteCompleto(true);
+    });
+
+    const menu = document.getElementById('menuPanel');
+    const btnMenu = document.getElementById('btnMenu');
+    const ponerMenu = (abrir) => {
+        if (!menu || !btnMenu) return;
+        menu.classList.toggle('open', abrir);
+        btnMenu.setAttribute('aria-expanded', String(abrir));
+    };
+    btnMenu?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        ponerMenu(!menu.classList.contains('open'));
+    });
+    // Cualquier clic fuera cierra. Los clics dentro no, para que el formulario
+    // de clave manual y el menú de selección puedan usarse.
+    document.addEventListener('click', (e) => {
+        if (!menu || !menu.classList.contains('open')) return;
+        if (menu.contains(e.target) || (btnMenu && btnMenu.contains(e.target))) return;
+        ponerMenu(false);
+    });
+    document.getElementById('btnMesQueFalta')?.addEventListener('click', () => ponerMenu(false));
+    document.getElementById('btnSyncCloud')?.addEventListener('click', () => ponerMenu(false));
+    document.getElementById('btnImportarCsv')?.addEventListener('click', () => ponerMenu(false));
+
+    const grid = document.getElementById('toolsGrid');
+    const btnTools = document.getElementById('btnTools');
+    btnTools?.addEventListener('click', () => {
+        if (!grid) return;
+        const abierto = grid.classList.toggle('open');
+        btnTools.setAttribute('aria-expanded', String(abierto));
+    });
+    document.querySelectorAll('[data-herramienta]').forEach(b => {
+        b.addEventListener('click', () => abrirHerramienta(b.dataset.herramienta));
     });
 }
 
@@ -259,6 +452,28 @@ function bindEvents() {
  * Evalúa el perfil tributario y régimen del cliente para saber si aplica IVA Mensual
  * y explica el motivo transparente si no aplica (Popular, Semestral, Inactivo, etc.).
  */
+/**
+ * Deduce mensual vs semestral por su HISTORIA de declaraciones (el último
+ * comprobante manda). Sólo se usa cuando la web no trae la frecuencia:
+ *  - periodos "2026-05"  → declaró un mes  → Mensual
+ *  - periodos "2026-S1"  → declaró semestre → Semestral
+ *  - 3 o más meses en el historial → Mensual (aunque el último sea raro)
+ */
+function frecuenciaPorHistorial(c) {
+    const h = Array.isArray(c && c.declaration_history) ? c.declaration_history : [];
+    const iva = h.filter((e) => String((e && e.type) || '').toUpperCase().includes('IVA'));
+    if (!iva.length) return null;
+    const periodos = iva.map((e) => String((e && e.period) || '').trim()).filter(Boolean);
+    const mensuales = periodos.filter((x) => /^\d{4}-\d{2}$/.test(x));
+    const semestres = periodos.filter((x) => /^\d{4}-S[12]$/.test(x));
+    const ultimo = periodos.slice().sort((a, b) => String(b).localeCompare(String(a)))[0] || '';
+    if (/^\d{4}-\d{2}$/.test(ultimo)) return { esMensual: true, label: 'IVA Mensual (por historial)', motivo: 'historial_mensual' };
+    if (/^\d{4}-S[12]$/.test(ultimo)) return { esMensual: false, label: 'IVA Semestral (por historial)', motivo: 'historial_semestral' };
+    if (mensuales.length >= 3) return { esMensual: true, label: 'IVA Mensual (por historial)', motivo: 'historial_mensual' };
+    if (semestres.length) return { esMensual: false, label: 'IVA Semestral (por historial)', motivo: 'historial_semestral' };
+    return null;
+}
+
 function evaluarRegimenCliente(c) {
     if (!c || !c.ruc) return { esMensual: false, label: 'Sin RUC', motivo: 'invalido' };
     if (c.force_mensual === true) return { esMensual: true, label: 'IVA Mensual (Forzado)', motivo: 'forzado' };
@@ -318,7 +533,10 @@ function evaluarRegimenCliente(c) {
     // función tal cual porque corre en un contexto de extensión aparte del
     // content script, pero la DECISIÓN tiene que ser la misma: un cliente de
     // verdad trae la frecuencia marcada desde la web.
-    return { esMensual: false, label: 'Sin frecuencia marcada', motivo: 'sin_frecuencia' };
+    // Sin frecuencia marcada: que decida su historia (último comprobante).
+const porHistorial = frecuenciaPorHistorial(c);
+if (porHistorial) return porHistorial;
+return { esMensual: false, label: 'Sin frecuencia marcada', motivo: 'sin_frecuencia' };
 }
 
 function isMensual(c) {
@@ -417,7 +635,7 @@ async function importarClavesDesdeCsv(texto) {
 }
 
 async function fetchClients(forceSync = false) {
-    const FIELDS = 'id,ruc,name,regime,tax_profile,declaration_history';
+    const FIELDS = 'id,ruc,name,regime,tax_profile,declaration_history,updated_at';
     try {
         // Intento 1: filtrar bajas en el servidor. Requiere que el rol `anon`
         // pueda leer `is_deleted` (GRANT SELECT (is_deleted) ON clients TO anon;
@@ -617,6 +835,16 @@ function loadClientsFromCacheOrFetch() {
             allRawClients = res.sc_clients_cache;
             separarPorRegimen();
             renderClients();
+            // Caché vieja: refrescar en segundo plano (30 min). El dato de la
+            // web manda; si falla, se sigue usando lo que hay en pantalla.
+            {
+                const edad = Date.now() - Number(res[SC_CACHE_TS_KEY] || 0);
+                const VENCIDA = 30 * 60 * 1000;
+                if (!res[SC_CACHE_TS_KEY] || edad > VENCIDA) {
+                    console.log('[Sync] Caché con', Math.round(edad / 60000), 'min: refrescando…');
+                    fetchClients();
+                }
+            }
         } else {
             fetchClients();
         }
@@ -773,13 +1001,33 @@ async function guardarClaveManual(ruc, clave) {
 /** Parte allRawClients en mensuales / otros / bajas según régimen y estado. */
 function separarPorRegimen() {
     allClients = allRawClients.filter(c => evaluarRegimenCliente(c).esMensual);
-    otrosClients = allRawClients.filter(c => !evaluarRegimenCliente(c).esMensual && !(c.isDeleted || c.is_deleted));
+    // «Otros» = clientes de verdad con otra frecuencia (semestral, emprendedor…).
+    // Los restos sin frecuencia (imprenta, consultas, claves sueltas) NO se
+    // muestran nunca: sólo quedan en allRawClients para buscar su clave al
+    // crear un cliente nuevo o consultar un RUC.
+    otrosClients = allRawClients.filter(c => {
+        if (c.isDeleted || c.is_deleted) return false;
+        const ev = evaluarRegimenCliente(c);
+        return !ev.esMensual && ev.motivo !== 'sin_frecuencia';
+    });
     clientesBaja = allRawClients.filter(c => c.isDeleted || c.is_deleted);
 }
 
 /** true si la Lista Bendita está activa (se creó alguna vez). null/ausente = corre todo. */
 function benditaActiva() {
     return Array.isArray(listaBendita);
+}
+
+/**
+ * Dado de baja en la web. La caché ya excluye a los borrados del último sync,
+ * pero si la baja es más nueva que la caché el cliente seguía entrando al
+ * lote. Esta lista (sc_clientes_baja) es la que manda para no declarar a
+ * alguien que ya no es cliente.
+ */
+function esBajaWeb(ruc) {
+    const r = String(ruc || '').trim();
+    if (!r) return false;
+    return Array.isArray(clientesBaja) && clientesBaja.some(b => String((b && b.ruc) || '').trim() === r);
 }
 
 function esBendito(ruc) {
@@ -811,14 +1059,14 @@ async function bendecirTodosPendientes() {
     pendientes.forEach(c => set.add(c.ruc));
     listaBendita = [...set];
     await guardarBendita();
-    showToast(`🙏 ${pendientes.length} cliente(s) bendecido(s). El lote correrá sólo a los benditos.`);
+    showToast(`✅ ${pendientes.length} cliente(s) sumado(s) al lote.`);
 }
 
 /** Deja la Bendita vacía pero activa: nadie corre hasta bendecir. */
 async function quitarTodosBenditos() {
     listaBendita = [];
     await guardarBendita();
-    showToast('💔 Lista Bendita vacía: no correrá nadie hasta bendecir.');
+    showToast('Selección vacía: no correrá nadie hasta sumar clientes.');
 }
 
 /** Desactiva la Bendita por completo: vuelve el comportamiento de siempre (corre todo). */
@@ -827,19 +1075,19 @@ async function desactivarBendita() {
     await chrome.storage.local.set({ [SC_BENDITA_KEY]: null });
     renderClients();
     actualizarCabeceraBendita();
-    showToast('⚡ Lista Bendita desactivada: vuelve a correr todo pendiente.');
+    showToast('Sin selección: vuelve a correr todo pendiente.');
 }
 
 /** Los clientes mensuales que faltan declarar el período elegido (sin errores). */
 function clientesPendientesDelPeriodo() {
     return allClients.filter(c =>
-        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth) && esBendito(c.ruc));
+        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth) && esBendito(c.ruc) && !esBajaWeb(c.ruc));
 }
 
 /** Ídem sin el filtro de la Bendita: para saber si hay pendientes aunque ninguno sea bendito. */
 function pendientesSinBenditaFilter() {
     return allClients.filter(c =>
-        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth));
+        !flaggedErrors[c.ruc] && !hasPdfForPeriod(c, currentYear, currentMonth) && !esBajaWeb(c.ruc));
 }
 
 /** Cantidad de benditos que además faltan declarar el período (los que va a correr el lote). */
@@ -860,13 +1108,13 @@ function actualizarCabeceraBendita() {
     const aCorrer = benditosPendientesCount();
     const html = [];
     if (benditaActiva()) {
-        html.push(`<span class="chip bendita-chip on">🙏 Benditos: <b>${listaBendita.length}</b></span>`);
-        html.push(`<span class="chip" title="Benditos que faltan declarar ${periodoLabel()}">🎯 Correrán: <b>${aCorrer}</b></span>`);
+        html.push(`<span class="chip bendita-chip on">En el lote: <b>${listaBendita.length}</b></span>`);
+        html.push(`<span class="chip" title="Clientes que faltan declarar ${periodoLabel()}">Correrán: <b>${aCorrer}</b></span>`);
         if (sinClave > 0) {
-            html.push(`<span class="chip chip-warn" title="Estos benditos no tienen clave SRI cargada">🔑 ${sinClave} sin clave</span>`);
+            html.push(`<span class="chip chip-warn" title="Estos clientes del lote no tienen clave SRI cargada">${sinClave} sin clave</span>`);
         }
     } else {
-        html.push(`<span class="chip chip-off">🙏 Lista Bendita: inactiva — corre todo pendiente</span>`);
+        html.push(`<span class="chip chip-off">Sin selección: corre todo pendiente</span>`);
     }
     el.innerHTML = html.join(' ');
 }
@@ -876,30 +1124,118 @@ function periodoLabel() {
     return `${meses[currentMonth]} ${currentYear}`;
 }
 
+/**
+ * El botón «Ejecutar lote» dice cuántos van a correr y con qué período.
+ * Es el único dato que hay que mirar antes de apretar: si el número no es el
+ * que esperabas, el período está mal elegido y conviene arreglarlo ahora, no
+ * a mitad de la cola.
+ */
+function pintarBotonLote() {
+    const cuenta = document.getElementById('loteCuenta');
+    const sub = document.getElementById('loteSub');
+    const btn = document.getElementById('btnEjecutarLote');
+    const enBoton = document.getElementById('loteBotonCuenta');
+    if (!cuenta) return;
+
+    const aCorrer = clientesPendientesDelPeriodo();
+    const todosP = pendientesSinBenditaFilter();
+    const conComprobante = allClients.filter(c => hasPdfForPeriod(c, currentYear, currentMonth)).length;
+    const sinClave = aCorrer.filter(c => !c.password).length;
+    const fueraDeLista = Math.max(0, todosP.length - aCorrer.length);
+
+    // Si La Bendita está activa, el lote corre sólo esa lista: hay que decirlo,
+    // si no el número no cierra con la pestaña "Pendientes".
+    cuenta.textContent = todosP.length === 0
+        ? 'Nada pendiente en este período'
+        : (fueraDeLista === 0
+            ? `${todosP.length} cliente${todosP.length === 1 ? '' : 's'} para declarar`
+            : `${aCorrer.length} de ${todosP.length} listos para declarar`);
+    if (sub) {
+        sub.textContent = `${periodoLabel()} · ${todosP.length} sin declarar · ${conComprobante} con comprobante`
+            + (benditaActiva() ? ` · ${aCorrer.length} en la selección` : '')
+            + (sinClave ? ` · ${sinClave} sin clave` : '')
+            + (Array.isArray(clientesBaja) && clientesBaja.length ? ` · ${clientesBaja.length} de baja` : '');
+    }
+
+    const statP = document.getElementById('statPendientes');
+    const statC = document.getElementById('statComprobante');
+    const statB = document.getElementById('statBendita');
+    if (statP) statP.textContent = String(todosP.length);
+    if (statC) statC.textContent = String(conComprobante);
+    if (statB) statB.textContent = benditaActiva() ? String(aCorrer.length) : '—';
+
+    // Salida rápida cuando la lista curada deja gente afuera.
+    const btnTodos = document.getElementById('btnCorrerTodos');
+    if (btnTodos) {
+        const mostrar = benditaActiva() && fueraDeLista > 0;
+        btnTodos.style.display = mostrar ? '' : 'none';
+        if (mostrar) {
+            btnTodos.textContent = `Correr los ${todosP.length} · ${fueraDeLista} fuera de la selección`;
+        }
+    }
+    // El botón dice QUÉ va a correr. Si hay selección y deja gente afuera,
+    // no puede decir «Ejecutar lote»: dice «Ejecutar selección» y el número.
+    const rotulo = document.getElementById('loteBotonTexto');
+    if (rotulo) {
+        rotulo.textContent = fueraDeLista > 0 ? 'Ejecutar selección' : 'Ejecutar lote';
+    }
+    if (btn) {
+        btn.disabled = false;
+        btn.classList.toggle('btn-vacio', aCorrer.length === 0);
+        btn.classList.toggle('btn-seleccion', fueraDeLista > 0);
+        btn.title = aCorrer.length
+            ? `Arma la cola con ${aCorrer.length} cliente(s) de ${periodoLabel()} y abre el SRI`
+            : `No hay clientes pendientes en ${periodoLabel()}. Hacé clic para más detalles o cambiá de mes.`;
+    }
+    if (enBoton) {
+        const n = aCorrer.length;
+        enBoton.textContent = todosP.length === 0
+            ? ''
+            : (fueraDeLista > 0 ? `${n}/${todosP.length}` : String(n));
+    }
+    const marca = document.getElementById('marcaPeriodo');
+    if (marca) marca.textContent = `SRI · ${periodoLabel()}`;
+}
+
 /** Panel del Modo Auto: cuántos van a correr y desde dónde. */
 function pintarPanelModoAuto() {
     const el = document.getElementById('modoAutoPanel');
     if (!el) return;
     const on = document.getElementById('chkAutoBatch')?.checked || false;
-    if (!on) { el.style.display = 'none'; return; }
 
-    const pendTotal = pendientesSinBenditaFilter().length;
-    const pendBenditos = clientesPendientesDelPeriodo().length;
-    const conClave = clientesPendientesDelPeriodo().filter(c => c.password).length;
-    const primera = clientesPendientesDelPeriodo().sort((a,b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc))[0];
+    const pendientes = clientesPendientesDelPeriodo();
+    const pendTotal = pendientes.length;
+    const pendBenditos = pendientesSinBenditaFilter().length;
+    const conClave = pendientes.filter((c) => c.password).length;
+    const primera = pendientes.slice().sort((a, b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc))[0];
+    const fuera = otrosClients.length;
 
     const frag = [];
-    if (!benditaActiva()) {
-        frag.push(`<div style="color:#94a3b8;">🙏 La Lista Bendita está <b>inactiva</b>: al arrancar se te va a ofrecer crearla.</div>`);
-    } else if (pendBenditos === 0) {
-        frag.push(`<div style="color:#ffb95f;">🤍 No hay benditos pendientes para ${periodoLabel()}. Marcá con 🙏 a quienes corren o pulsá «Bendecir pendientes».</div>`);
+    const estado = on ? '<b style="color:#4edea3">ACTIVO</b>' : '<b style="color:#94a3b8">INACTIVO</b>';
+    frag.push(`<div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">
+        <span style="color:#e6d3ab;font-weight:800">🔁 Bucle mensual</span>
+        <span style="font-size:9px;letter-spacing:.08em">${estado}</span>
+        <span style="color:#64748b;font-size:10px">${periodoLabel()}</span>
+    </div>`);
+
+    if (pendTotal === 0) {
+        frag.push('<div style="color:#64748b;">No hay mensuales pendientes en este período: el bucle no tiene a quién entrar.</div>');
     } else {
-        frag.push(`<div>🎯 <b>${pendBenditos}</b> bendito(s) van a correr en ${periodoLabel()}${conClave < pendBenditos ? ` · 🔑 ${pendBenditos - conClave} sin clave (frenarán pidiendo clave)` : ''}.</div>`);
+        frag.push(`<div><b>${pendTotal}</b> mensual(es) entrarán al bucle${conClave < pendTotal ? ` · <span style="color:#ffb95f">${pendTotal - conClave} sin clave</span>` : ''}.</div>`);
         if (primera) frag.push(`<div style="color:#94a3b8;font-size:10px;">▶ Empieza por ${primera.name} (día ${getSriDueDateDay(getNinthDigit(primera.ruc))}).</div>`);
     }
-    if (pendTotal > pendBenditos) {
-        frag.push(`<div style="color:#64748b;font-size:10px;">Hay ${pendTotal} pendiente(s) en total; ${pendTotal - pendBenditos} no bendito(s) NO correrán.</div>`);
+    if (fuera > 0) frag.push(`<div style="color:#64748b;font-size:10px;">${fuera} fuera del bucle: semestrales, RIMPE popular y claves de consulta.</div>`);
+
+    if (benditaActiva()) {
+        if (pendBenditos === 0) {
+            frag.push('<div style="color:#ffb95f;margin-top:4px;">La selección no tiene pendientes este período: sumá los pendientes o vaciala.</div>');
+        } else {
+            frag.push(`<div style="margin-top:4px;">En la selección: <b>${pendBenditos}</b>.</div>`);
+        }
+    } else if (on) {
+        frag.push('<div style="color:#94a3b8;font-size:10px;">Sin selección: corre todo lo pendiente del período.</div>');
     }
+
     el.style.display = 'block';
     el.innerHTML = frag.join('');
 }
@@ -916,10 +1252,45 @@ function pintarAvisoSync() {
     }
 }
 
+// ── Render por tandas: con 2000 clientes no se pueden pintar todos ────────
+const TANDA = 60;
+let limitePorLista = { pending: TANDA, done: TANDA, error: TANDA, otro: TANDA, baja: TANDA };
+let ultimaBusqueda = '';
+let ultimoPeriodo = '';
+
+function reiniciarPaginas() {
+    limitePorLista = { pending: TANDA, done: TANDA, error: TANDA, otro: TANDA, baja: TANDA };
+}
+
+/** Pinta la lista por tandas y deja un botón para traer la siguiente. */
+function pintarLista(contenedor, clientes, tipo) {
+    if (!contenedor) return;
+    const limite = limitePorLista[tipo] || TANDA;
+    const visibles = clientes.slice(0, limite);
+    visibles.forEach(c => contenedor.appendChild(createClientCard(c, tipo)));
+
+    const resto = clientes.length - visibles.length;
+    if (resto > 0) {
+        const btn = document.createElement('button');
+        btn.className = 'ver-mas';
+        btn.textContent = `Mostrar ${Math.min(TANDA, resto)} más · quedan ${resto} de ${clientes.length}`;
+        btn.addEventListener('click', () => {
+            limitePorLista[tipo] = (limitePorLista[tipo] || TANDA) + TANDA;
+            renderClients();
+        });
+        contenedor.appendChild(btn);
+    }
+}
+
 function renderClients() {
     const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+    // Cambiar la búsqueda o el período vuelve a la primera tanda.
+    if (searchVal !== ultimaBusqueda) { ultimaBusqueda = searchVal; reiniciarPaginas(); }
+    const clavePeriodo = `${currentYear}-${currentMonth}`;
+    if (clavePeriodo !== ultimoPeriodo) { ultimoPeriodo = clavePeriodo; reiniciarPaginas(); }
     
     const filteredMensuales = allClients.filter(c => {
+        if (esBajaWeb(c.ruc)) return false;
         const matchesName = (c.name || '').toLowerCase().includes(searchVal);
         const matchesRuc = (c.ruc || '').includes(searchVal);
         return matchesName || matchesRuc;
@@ -980,28 +1351,33 @@ function renderClients() {
     if (bajaList) bajaList.innerHTML = '';
 
     if (pendientes.length === 0) {
-        pendientesList.innerHTML = `<div class="empty-state">🎉 ¡Todos los clientes al día! No hay pendientes.</div>`;
+        pendientesList.innerHTML = `<div class="empty-state">🎉 ¡Todos los clientes al día! No hay pendientes.
+            <div style="display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap">
+                <button type="button" class="btn-todos" data-accion="periodo" style="margin:0">Cambiar de mes</button>
+                <button type="button" class="btn-todos" data-accion="ajustes" style="margin:0">Ver Ajustes</button>
+            </div>
+        </div>`;
     } else {
-        pendientes.forEach(client => pendientesList.appendChild(createClientCard(client, 'pending')));
+        pintarLista(pendientesList, pendientes, 'pending');
     }
 
     if (completados.length === 0) {
         completadosList.innerHTML = `<div class="empty-state">No hay clientes completados para este mes aún.</div>`;
     } else {
-        completados.forEach(client => completadosList.appendChild(createClientCard(client, 'done')));
+        pintarLista(completadosList, completados, 'done');
     }
 
     if (errores.length === 0) {
         erroresList.innerHTML = `<div class="empty-state">No hay clientes marcados con error.</div>`;
     } else {
-        errores.forEach(client => erroresList.appendChild(createClientCard(client, 'error')));
+        pintarLista(erroresList, errores, 'error');
     }
 
     if (otrosList) {
         if (filteredOtros.length === 0) {
             otrosList.innerHTML = `<div class="empty-state">No hay clientes en otros regímenes.</div>`;
         } else {
-            filteredOtros.forEach(client => otrosList.appendChild(createClientCard(client, 'otro')));
+            pintarLista(otrosList, filteredOtros, 'otro');
         }
     }
 
@@ -1009,13 +1385,15 @@ function renderClients() {
         if (filteredBaja.length === 0) {
             bajaList.innerHTML = `<div class="empty-state">No hay clientes dados de baja.</div>`;
         } else {
-            filteredBaja.forEach(client => bajaList.appendChild(createClientCard(client, 'baja')));
+            pintarLista(bajaList, filteredBaja, 'baja');
         }
     }
 
     actualizarCabeceraBendita();
     pintarAvisoSync();
     pintarPanelModoAuto();
+    pintarBotonLote();
+    pintarSegundaVuelta();
 }
 
 function getSriDueDateDay(digit) {
@@ -1052,27 +1430,26 @@ function createClientCard(client, statusType) {
     const isBaja = statusType === 'baja';
     const esBend = esBendito(client.ruc);
 
-    let badgeHtml = '<div class="status-badge status-pending" style="margin-top:4px; font-size:10px; font-weight:700; color:#ffb95f; background:rgba(255,185,95,0.1); border:1px solid rgba(255,185,95,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟡 PENDIENTE</div>';
-    if (isDone) badgeHtml = '<div class="status-badge status-done" style="margin-top:4px; font-size:10px; font-weight:700; color:#4edea3; background:rgba(78,222,163,0.1); border:1px solid rgba(78,222,163,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🟢 COMPLETADO</div>';
-    if (isBaja) badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; color:#94a3b8; background:rgba(100,116,139,0.12); border:1px solid rgba(100,116,139,0.3); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🚫 DADO DE BAJA</div>';
-    if (isError) {
-        const errType = flaggedErrors[client.ruc];
-        if (errType === 'clave_incorrecta' || errType === 'error_credenciales') {
-            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(239,68,68,0.18); color:#fca5a5; border:1px solid rgba(239,68,68,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔴 CLAVE RECHAZADA (SRI)</div>';
-        } else if (errType === 'clave_caducada') {
-            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(245,158,11,0.18); color:#fcd34d; border:1px solid rgba(245,158,11,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔑 CLAVE CADUCADA (SRI)</div>';
-        } else if (errType === 'cuenta_bloqueada') {
-            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(220,38,38,0.25); color:#f87171; border:1px solid rgba(220,38,38,0.45); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🚨 CUENTA BLOQUEADA</div>';
-        } else if (errType === 'sesion_caida') {
-            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(147,51,234,0.18); color:#d8b4fe; border:1px solid rgba(147,51,234,0.35); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔌 SESIÓN CAÍDA (SRI)</div>';
-        } else {
-            badgeHtml = '<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(239,68,68,0.12); color:#ff8585; border:1px solid rgba(239,68,68,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">🔴 ERROR / OMITIDO</div>';
+    // Estado en un solo lugar: clase + etiqueta (el HTML lo pinta la tarjeta).
+    const badge = (() => {
+        if (isError) {
+            const errType = flaggedErrors[client.ruc];
+            if (errType === 'clave_incorrecta' || errType === 'error_credenciales') return { kind: 'err', label: 'Clave rechazada' };
+            if (errType === 'clave_caducada') return { kind: 'warn', label: 'Clave caducada' };
+            if (errType === 'cuenta_bloqueada') return { kind: 'err', label: 'Cuenta bloqueada' };
+            if (errType === 'sesion_caida') return { kind: 'warn', label: 'Sesión caída' };
+            return { kind: 'err', label: 'Error / omitido' };
         }
-    } else if (isOtro) {
-        const infoR = evaluarRegimenCliente(client);
-        badgeHtml = `<div class="status-badge" style="margin-top:4px; font-size:10px; font-weight:700; background:rgba(148,163,184,0.15); color:#94a3b8; border:1px solid rgba(148,163,184,0.25); border-radius:5px; padding:2px 6px; display:inline-flex; align-items:center; gap:4px;">📋 ${infoR.label}</div>`;
-    }
+        if (isDone) return { kind: 'ok', label: 'Completado' };
+        if (isBaja) return { kind: 'baja', label: 'Dado de baja' };
+        if (isOtro) return { kind: 'otro', label: evaluarRegimenCliente(client).label };
+        return { kind: 'pend', label: 'Pendiente' };
+    })();
 
+    // Semáforo del 9.º dígito: qué tan cerca está el vencimiento.
+    const hoyDia = new Date().getDate();
+    const restan = dueDay - hoyDia;
+    const semaforo = restan < 0 ? 'vencido' : restan <= 3 ? 'pronto' : 'ok';
     let actionBtnHtml = `
         <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="white-space:nowrap;">
             ▶ Ingresar
@@ -1115,29 +1492,28 @@ function createClientCard(client, statusType) {
         actionBtnHtml = '';
     }
 
+    const periodo = periodoLabel();
+    const sello = isDone
+        ? `<span class="cc-seal" title="Comprobante del período ${periodo}">✓ comprobante ${periodo}</span>`
+        : '';
+
     card.innerHTML = `
-        <div class="client-card-main">
-            <div class="client-info">
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:4px;">
-                    <div class="client-name" title="${client.name}">${client.name}</div>
-                    <span class="due-badge" title="Vence el día ${dueDay} del mes">Día ${dueDay}</span>
-                </div>
-                <div class="client-meta" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">
-                    <span class="client-ruc-badge" data-action="copiar-ruc" data-ruc="${client.ruc}" style="cursor:pointer; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); padding:2px 7px; border-radius:5px; font-weight:700; font-size:11px; color:#cbd5e1; font-family:'JetBrains Mono',monospace; transition:0.2s;" title="Copiar RUC">
-                        📋 ${client.ruc}
-                    </span>
-                    ${passUi}
-                    <span data-action="toggle-bendito" data-ruc="${client.ruc}"
-                          style="cursor:pointer; font-size:13px; line-height:1; padding:3px 6px; border-radius:6px; border:1px solid ${esBend ? 'rgba(78,222,163,0.45)' : 'rgba(255,255,255,0.12)'}; background:${esBend ? 'rgba(78,222,163,0.15)' : 'rgba(255,255,255,0.03)'}; transition:0.2s;"
-                          title="${esBend ? 'En lista bendita para el lote' : 'Agregar al lote'}">
-                        ${esBend ? '🙏' : '🤍'}
-                    </span>
-                    ${badgeHtml}
-                </div>
-            </div>
-            <div class="client-actions" style="display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0;">
-                ${actionBtnHtml}
-            </div>
+        <div class="cc-head">
+            <div class="cc-name" title="${client.name}">${client.name}</div>
+            <span class="cc-badge ${badge.kind}"><i></i>${badge.label}</span>
+        </div>
+        <div class="cc-meta">
+            <span class="cc-ruc" data-action="copiar-ruc" data-ruc="${client.ruc}" title="Copiar RUC">${client.ruc}</span>
+            <span class="cc-d9 ${semaforo}" title="9.º dígito ${ninth} · vence el día ${dueDay}">
+                <i class="cc-d9-dot"></i>D9 ${ninth} · vence ${dueDay}
+            </span>
+            <span class="cc-bend ${esBend ? 'on' : ''}" data-action="toggle-bendito" data-ruc="${client.ruc}"
+                  title="${esBend ? 'Quitar del lote' : 'Sumar al lote'}">${esBend ? '✓ en lote' : '+ al lote'}</span>
+        </div>
+        <div class="cc-row">
+            ${passUi}
+            ${sello}
+            <div class="cc-actions">${actionBtnHtml}</div>
         </div>
         ${isDone || isError || isBaja ? '' : buildOrdenMesesBlock(client)}
     `;
@@ -1500,10 +1876,7 @@ async function iniciarCliente(ruc) {
         // lote sólo corre benditos. Ofrecer bendecirlo, no arrancar a medias.
         if (!esBendito(ruc)) {
             const cliente = allRawClients.find(c => c.ruc === ruc);
-            const agregar = window.confirm(
-                `🤍 ${cliente ? cliente.name : ruc} NO está en la Lista Bendita.\n\n` +
-                'El lote corre sólo a los benditos. ¿Bendecirlo y arrancar el lote desde él?'
-            );
+    const agregar = await pedirConfirmacion({ titulo: "Selección", mensaje: `🤍 ${cliente ? cliente.name : ruc} NO está en la Lista Bendita.\n\n` +                 'El lote corre sólo a los benditos. ¿Bendecirlo y arrancar el lote desde él?', aceptar: "Sumar y arrancar", cancelar: "No" });
             if (!agregar) {
                 showToast('💔 No se bendijo: el lote sigue sin incluirlo.');
                 return;
@@ -1518,10 +1891,7 @@ async function iniciarCliente(ruc) {
                 return;
             }
             // Hay pendientes, pero ninguno bendito: no arrancar a ciegas.
-            const bendecir = window.confirm(
-                '🤍 Ninguno de los pendientes del período está en la Lista Bendita.\n\n' +
-                '¿Bendecir a todos los pendientes ahora?'
-            );
+    const bendecir = await pedirConfirmacion({ titulo: "Selección vacía", mensaje: '🤍 Ninguno de los pendientes del período está en la Lista Bendita.\n\n' +                 '¿Bendecir a todos los pendientes ahora?', aceptar: "Sumar todos", cancelar: "No" });
             if (!bendecir) {
                 showToast('💔 Sin benditos no corre nadie. Marcá con 🙏 a los que corren.');
                 return;
@@ -1536,47 +1906,63 @@ async function iniciarCliente(ruc) {
     const pendBase = isBatchActive
         ? clientesPendientesDelPeriodo()
         : allClients.filter(c => !hasPdfForPeriod(c, currentYear, currentMonth) && !flaggedErrors[c.ruc]);
-    const pendingClients = pendBase.sort(sortBy9th);
+    let pendingClients = pendBase.sort(sortBy9th);
 
     // Si el cliente seleccionado está en la lista de pendientes, reordenar la cola comenzando por él
     let queue = pendingClients.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
     const startIndex = queue.findIndex(q => q.ruc === ruc);
     if (startIndex > 0) {
         queue = queue.slice(startIndex).concat(queue.slice(0, startIndex));
+    } else if (startIndex === -1 && !isBatchActive) {
+        queue = [{ ruc: client.ruc, password: client.password, name: client.name }];
+    } else if (startIndex === -1 && isBatchActive) {
+        // En modo lote pero clickeó un cliente puntual (ej. en Completados u Otros):
+        // entra con él primero
+        queue = [{ ruc: client.ruc, password: client.password, name: client.name }, ...queue];
     }
 
     if (isBatchActive && queue.length === 0) {
-        showToast('🎉 No quedan benditos pendientes para este período.');
+        showToast('No quedan clientes seleccionados pendientes para este período.');
         return;
     }
 
-    const targetPeriodStr = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}`;
+    arrancarMotor(client, queue, isBatchActive);
+};
 
+/** La URL de login del SRI. Una sola copia: estaba repetida en tres lugares. */
+const SRI_LOGIN_URL = 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&state=956332a7-6de0-48d7-8f53-a635625c30a5&nonce=4c3d7ddb-c8f7-4227-8186-babb562e36b3&response_mode=fragment&response_type=code&scope=openid';
+
+/**
+ * Deja el motor armado y abre el SRI. Es el único lugar que escribe el
+ * contrato con el content script: si mañana cambia una bandera, se cambia
+ * acá y no en dos caminos que se desincronizan.
+ */
+function arrancarMotor(primerCliente, queue, isBatch) {
+    const periodo = { year: currentYear, monthIndex: currentMonth };
     chrome.storage.local.remove(['declaration_synced_flag'], () => {
         chrome.storage.local.set({
             pending_sri_autofill: {
-                ruc: client.ruc,
-                password: client.password,
-                name: client.name,
+                ruc: primerCliente.ruc,
+                password: primerCliente.password,
+                name: primerCliente.name,
                 timestamp: Date.now(),
                 manual: true,
-                isBatch: isBatchActive
+                isBatch: isBatch
             },
-            auto_batch_enabled: isBatchActive,
-            auto_batch_queue: isBatchActive ? queue : [],
+            auto_batch_enabled: isBatch,
+            auto_batch_queue: isBatch ? queue : [],
             auto_batch_index: 0,
-            auto_batch_period: { year: currentYear, monthIndex: currentMonth },
-            sri_target_period: { year: currentYear, monthIndex: currentMonth },
+            auto_batch_period: periodo,
+            sri_target_period: periodo,
             sri_period_order: null,
             // 🚦 El semáforo es la autoridad del bucle. Sin esto el content
             // script descarta el lote apenas carga la pantalla de login.
-            sc_loop: isBatchActive
+            sc_loop: isBatch
                 ? { estado: 'CORRIENDO', cola: queue, indice: 0,
-                    periodo: { year: currentYear, monthIndex: currentMonth },
-                    latido: Date.now(), motivo: '' }
+                    periodo, latido: Date.now(), motivo: '' }
                 : { estado: 'DETENIDO', cola: [], indice: 0, motivo: 'Cliente suelto desde el popup' },
             pendingAction: 'verifyProfile',
-            workflowPeriod: { year: currentYear, monthIndex: currentMonth },
+            workflowPeriod: periodo,
             actionTimestamp: Date.now(),
             sri_master_switch_on: true,
             sriAutomationPaused: false,
@@ -1584,9 +1970,129 @@ async function iniciarCliente(ruc) {
             autoDeclaration: true,
             sri_auto_mode: true
         }, () => {
-            chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/auth/realms/Internet/protocol/openid-connect/auth?client_id=app-sri-claves-angular&redirect_uri=https%3A%2F%2Fsrienlinea.sri.gob.ec%2Fsri-en-linea%2F%2Fcontribuyente%2Fperfil&state=956332a7-6de0-48d7-8f53-a635625c30a5&nonce=4c3d7ddb-c8f7-4227-8186-babb562e36b3&response_mode=fragment&response_type=code&scope=openid' });
+            chrome.tabs.create({ url: SRI_LOGIN_URL });
         });
     });
+}
+
+/**
+ * ▶ Ejecutar lote: arranca la cola completa del período sin elegir un cliente.
+ *
+ * Reusa el mismo motor que el ▶ de cada tarjeta. La diferencia es de dónde
+ * sale la cola: acá son todos los pendientes ordenados por día de vencimiento
+ * (9.º dígito del RUC) y no hay «empezar por éste».
+ *
+ * Salta el bloque de «Orden de meses» a propósito: ese bloque es una decisión
+ * sobre UN cliente (declarar tres meses suyos seguidos) y acá lo que se pide
+ * es el lote del período, no una excepción.
+ */
+async function ejecutarLoteCompleto(todos = false, colaForzada = null) {
+    const enCurso = await new Promise(resolve => {
+        chrome.storage.local.get(['sc_loop'], (r) => {
+            const l = r.sc_loop || {};
+            resolve(l.estado === 'CORRIENDO' && Array.isArray(l.cola) && l.cola.length > 0);
+        });
+    });
+    if (enCurso) {
+    const reiniciar = await pedirConfirmacion({ titulo: "Lote en curso", mensaje: '⚠️ Hay un lote registrado como «en curso» en el sistema.\n\n' +             '¿Deseas cancelarlo y arrancar un nuevo lote limpio para ' + periodoLabel() + '?', aceptar: "Reiniciar lote", cancelar: "Conservar", peligro: true });
+        if (!reiniciar) {
+            showToast('Lote actual conservado. Enfocando pestaña del SRI...');
+            try {
+                const [tab] = await chrome.tabs.query({ url: 'https://srienlinea.sri.gob.ec/*' });
+                if (tab) { await chrome.tabs.update(tab.id, { active: true }); window.close(); }
+            } catch (e) { /* sin pestaña no hay nada que enfocar */ }
+            return;
+        }
+        // Limpiar estado colgado de corrida previa
+        await new Promise(resolve => {
+            chrome.storage.local.set({
+                sc_loop: { estado: 'DETENIDO', cola: [], indice: 0, motivo: 'Reiniciado por el usuario desde el popup' },
+                auto_batch_enabled: false,
+                sriAutomationPaused: false
+            }, resolve);
+        });
+    }
+
+    // Si hay una selección activa que deja gente afuera, que lo decida el usuario:
+    // correr 1 de 37 sin avisar es exactamente cómo parece que "no corre".
+    if (!todos && !colaForzada && benditaActiva()) {
+        const enLista = clientesPendientesDelPeriodo().length;
+        const todosP = pendientesSinBenditaFilter().length;
+        if (todosP > enLista) {
+    const correrTodos = await pedirConfirmacion({ titulo: "Hay una selección activa", mensaje: 'Hay una selección activa: solo correrían ' + enLista + ' de ' + todosP + ' pendientes.\n\n' +                 'Aceptar → correr TODOS los ' + todosP + '.\n' +                 'Cancelar → correr solo la selección (' + enLista + ').', aceptar: "Correr todos", cancelar: "Solo la selección" });
+            if (correrTodos) todos = true;
+        }
+    }
+    const base = colaForzada ? colaForzada : (todos ? pendientesSinBenditaFilter() : clientesPendientesDelPeriodo());
+    const pendientes = Array.isArray(base) ? base.slice() : [];
+    if (!colaForzada) pendientes.sort((a, b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc));
+    if (!pendientes.length) {
+        showToast(`No hay clientes pendientes en ${periodoLabel()}. Podés cambiar de mes con el selector superior.`);
+        return;
+    }
+
+    // Tandas de 50: con 2000 clientes una sola cola no se puede sostener.
+    const TANDA_LOTE = 50;
+    const tanda = pendientes.slice(0, TANDA_LOTE);
+    const resto = pendientes.slice(TANDA_LOTE);
+    await new Promise(r => chrome.storage.local.set({
+        sc_lote_resto: resto.map(c => ({ ruc: c.ruc, password: c.password, name: c.name })),
+        sc_lote_total: pendientes.length
+    }, r));
+
+    const sinClave = tanda.filter(c => !c.password).length;
+    const primero = tanda.find(c => c.password);
+    if (!primero) {
+        showToast('Ningún pendiente tiene clave SRI. Cargá las claves antes de arrancar.');
+        return;
+    }
+
+    // Misma purga preventiva que el arranque por cliente: Keycloak entra limpio.
+    try {
+        await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ tipo: 'SC_LIMPIAR_SESION_SRI' }, () => resolve());
+            setTimeout(resolve, 500);
+        });
+    } catch (e) { /* si el background no contesta, el login igual limpia */ }
+
+    const queue = tanda.map(c => ({ ruc: c.ruc, password: c.password, name: c.name }));
+    const chk = document.getElementById('chkAutoBatch');
+    if (chk) chk.checked = true;
+    await new Promise(r => chrome.storage.local.set({ auto_batch_enabled: true }, r));
+
+    arrancarMotor(primero, queue, true);
+    showToast(`▶ Lote de ${queue.length} · ${periodoLabel()}`
+        + (resto.length ? ` · tanda ${queue.length}/${pendientes.length} (siguen ${resto.length})` : '')
+        + (sinClave ? ` · ${sinClave} sin clave` : ''));
+}
+
+/**
+ * Abre una herramienta del cajón 🧰 en la pestaña del SRI.
+ *
+ * El popup no puede ejecutar nada del portal por su cuenta: las herramientas
+ * viven en el content script, que es el que ve el DOM del SRI. Así que se le
+ * pide al content script que pulse el botón real. Si la pestaña o el panel no
+ * están, se dice — nunca se finge que funcionó.
+ */
+async function abrirHerramienta(id) {
+    try {
+        const tabs = await chrome.tabs.query({ url: 'https://srienlinea.sri.gob.ec/*' });
+        const tab = tabs.find(t => t.active) || tabs[0];
+        if (!tab) {
+            showToast('Abrí el SRI primero: las herramientas trabajan sobre esa pestaña.');
+            return;
+        }
+        chrome.tabs.sendMessage(tab.id, { action: 'SC_ABRIR_HERRAMIENTA', id }, (res) => {
+            if (chrome.runtime.lastError || !res || !res.ok) {
+                showToast('Esa pestaña no tiene el panel listo. Recargala (F5) y probá de nuevo.');
+                return;
+            }
+            chrome.tabs.update(tab.id, { active: true });
+            window.close();
+        });
+    } catch (e) {
+        showToast('No se pudo hablar con la pestaña del SRI.');
+    }
 };
 
 function showToast(msg) {
@@ -1612,10 +2118,307 @@ function showToast(msg) {
 // extensión (clic derecho en el ícono → Opciones).
 
 document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('btnAjustes');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
+    const abrirAjustes = () => {
         if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
         else chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+    };
+    ['btnAjustes', 'btnAjustesPie'].forEach(id => {
+        document.getElementById(id)?.addEventListener('click', abrirAjustes);
     });
 });
+
+// ── Buzón de sugerencias ────────────────────────────────────────────────────
+// Mismo buzón que la web, para lo que ves MIENTRAS declarás. Nivel + texto.
+(function () {
+    const panel = document.getElementById('buzonPanel');
+    const btn = document.getElementById('btnBuzon');
+    const cerrar = document.getElementById('buzonCerrar');
+    const niveles = document.getElementById('buzonNiveles');
+    const texto = document.getElementById('buzonTexto');
+    const enviar = document.getElementById('buzonEnviar');
+    if (!panel || !btn) return;
+
+    let nivel = 'sugerencia';
+    const abrir = (v) => { panel.style.display = v ? 'block' : 'none'; };
+    btn.addEventListener('click', () => abrir(panel.style.display !== 'block'));
+    if (cerrar) cerrar.addEventListener('click', () => abrir(false));
+    if (niveles) niveles.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-nivel]');
+        if (!b) return;
+        nivel = b.dataset.nivel;
+        niveles.querySelectorAll('[data-nivel]').forEach((x) => x.classList.toggle('on', x === b));
+    });
+
+    if (enviar) enviar.addEventListener('click', async () => {
+        const t = String(texto.value || '').trim();
+        if (t.length < 5) { showToast('Escribí al menos una frase.'); return; }
+        if (!SUPABASE_URL || !SUPABASE_KEY) { showToast('Sin nube configurada: no se puede enviar.'); return; }
+        enviar.disabled = true;
+        try {
+            const res = await fetch(SUPABASE_URL + '/rest/v1/suggestions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey: SUPABASE_KEY,
+                    Authorization: 'Bearer ' + SUPABASE_KEY,
+                    Prefer: 'return=minimal'
+                },
+                body: JSON.stringify([{ level: nivel, area: 'extension', texto: t, source: 'extension-01' }])
+            });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            texto.value = '';
+            abrir(false);
+            showToast('💡 Sugerencia enviada. La próxima versión la lee.');
+        } catch (e) {
+            showToast('No se pudo enviar: ' + (e && e.message));
+        } finally {
+            enviar.disabled = false;
+        }
+    });
+})();
+
+// ── Último lote: que el final tenga cierre visible ─────────────────────────
+function pintarUltimoLote() {
+    const el = document.getElementById('ultimoLote');
+    if (!el) return;
+    chrome.storage.local.get(['sc_ultimo_lote'], (r) => {
+        const l = r.sc_ultimo_lote;
+        if (!l || !l.cuando) { el.style.display = 'none'; return; }
+        const d = new Date(l.cuando);
+        const dos = (n) => String(n).padStart(2, '0');
+        const cuando = dos(d.getDate()) + '/' + dos(d.getMonth() + 1) + ' ' + dos(d.getHours()) + ':' + dos(d.getMinutes());
+        el.textContent = '🎉 ' + (l.conPdf || 0) + '/' + (l.total || 0) + ' · ' + cuando;
+        el.title = 'Último lote terminado: ' + (l.conPdf || 0) + ' de ' + (l.total || 0) + ' con comprobante' + (l.sinPdf ? ' · ' + l.sinPdf + ' sin PDF' : '');
+        el.style.display = '';
+    });
+}
+pintarUltimoLote();
+chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && c.sc_ultimo_lote) pintarUltimoLote();
+});
+
+        // El filtro es opcional: si está apagado, la tarjeta no tiene nada que decir.
+        const cajaLista = document.getElementById('statListaCaja');
+        if (cajaLista) cajaLista.style.display = benditaActiva() ? '' : 'none';
+
+// ── Segunda vuelta: los que declararon pero quedaron sin comprobante ───────
+// El motor ya sabe entrar en modo "solo recuperar" (soloRecuperar). Acá se
+// arma esa cola y se muestran sólo si hay algo que recuperar.
+// ── Segunda vuelta: recuperar comprobantes ────────────────────────────────
+// Sólo entra a los que YA declararon y les falta el PDF. Lleva intentos por
+// cliente (no reintenta en bucle), ordena por 9.º dígito y muestra el
+// resultado cuando termina: cuántos recuperó de cuántos.
+const RECUP_KEY = 'sc_recuperaciones';
+const RECUP_LOTE_KEY = 'sc_recuperacion_lote';
+const RECUP_MAX_INTENTOS = 3;
+
+function periodoActualStr() {
+    return `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+}
+
+/** Declarados en el período a los que les falta el PDF. */
+function clientesSinComprobante(intentos = {}) {
+    const sufijo = '|' + periodoActualStr();
+    const pendientes = [];
+    const agotados = [];
+    let sinClave = 0;
+    Object.entries(declaracionesLocales || {}).forEach(([clave, valor]) => {
+        if (!String(clave).endsWith(sufijo)) return;
+        if (valor && valor.pdfSubido) return;
+        const ruc = String(clave).split('|')[0];
+        const cli = (allRawClients || []).find((c) => String(c.ruc) === ruc);
+        if (!cli) return;
+        const intentosPrevios = Number((intentos[ruc] || {}).intentos || 0);
+        if (intentosPrevios >= RECUP_MAX_INTENTOS) { agotados.push(ruc); return; }
+        if (!cli.password) sinClave += 1;
+        pendientes.push({ ruc, password: cli.password || '', name: cli.name, soloRecuperar: true });
+    });
+    pendientes.sort((a, b) => getNinthDigit(a.ruc) - getNinthDigit(b.ruc));
+    return { lista: pendientes, agotados, sinClave };
+}
+
+function pintarSegundaVuelta() {
+    const btn = document.getElementById('btnSegundaVuelta');
+    if (!btn) return;
+    chrome.storage.local.get(['sc_loop', RECUP_KEY, RECUP_LOTE_KEY, 'sc_declaraciones_locales'], (r) => {
+        const loop = r.sc_loop || {};
+        const corriendo = loop.estado === 'CORRIENDO' || loop.estado === 'PAUSANDO';
+        if (corriendo) {
+            const esRecuperacion = String(loop.motivo || '').toLowerCase().includes('segunda vuelta');
+            if (esRecuperacion) {
+                const n = Number(loop.indice || 0) + 1;
+                const tot = (loop.cola || []).length;
+                btn.style.display = '';
+                btn.classList.add('btn-recuperar');
+                btn.dataset.modo = 'progreso';
+                btn.textContent = `⏳ Recuperando comprobantes · ${n}/${tot}`;
+                btn.title = 'La segunda vuelta está corriendo. Abrí la pestaña del SRI para verla.';
+            } else {
+                btn.style.display = 'none';
+            }
+            return;
+        }
+        const intentos = r[RECUP_KEY] || {};
+        const lote = r[RECUP_LOTE_KEY] || null;
+        const reg = r.sc_declaraciones_locales || {};
+        const { lista, sinClave } = clientesSinComprobante(intentos);
+
+        // Resultado del último intento: cuántos de los que se pidieron ya tienen PDF.
+        let recuperados = 0;
+        if (lote && Array.isArray(lote.rucs)) {
+            recuperados = lote.rucs.filter((ruc) => Boolean((reg[ruc + '|' + lote.periodo] || {}).pdfSubido)).length;
+        }
+        const totalLote = lote && Array.isArray(lote.rucs) ? lote.rucs.length : 0;
+
+        if (totalLote > 0 && recuperados === totalLote) {
+            btn.style.display = '';
+            btn.textContent = `✅ ${recuperados}/${totalLote} recuperados`;
+            btn.title = 'Todos los comprobantes de la última vuelta están guardados. Clic para limpiar el registro.';
+            btn.dataset.modo = 'limpiar';
+            return;
+        }
+        if (!lista.length) { btn.style.display = 'none'; btn.classList.remove('btn-recuperar'); return; }
+        btn.classList.add('btn-recuperar');
+
+        btn.style.display = '';
+        btn.dataset.modo = 'correr';
+        if (totalLote > 0) {
+            btn.textContent = `🔁 Reintentar · ${lista.length} sin comprobante · ${recuperados}/${totalLote} recuperados`;
+        } else {
+            btn.textContent = `🔁 Recuperar ${lista.length} comprobante${lista.length === 1 ? '' : 's'}`;
+        }
+        btn.title = sinonimo(sinClave ? ` · ${sinClave} sin clave` : '');
+    });
+}
+
+/** Título del botón (función aparte para no anidar plantillas). */
+function sinonimo(extra) {
+    return 'Entra SÓLO a los que ya declararon y les falta el PDF. No vuelve a declarar.' + extra;
+}
+
+function arrancarSegundaVuelta() {
+    const btn = document.getElementById('btnSegundaVuelta');
+    if (btn && btn.dataset.modo === 'limpiar') {
+        chrome.storage.local.remove([RECUP_LOTE_KEY, RECUP_KEY], () => showToast('Registro de recuperación limpiado.'));
+        pintarSegundaVuelta();
+        return;
+    }
+    // Si quedó un lote "CORRIENDO" colgado (por un corte), la segunda vuelta
+    // no puede arrancar: se limpia antes, con confirmación.
+    const limpiarLoteColgado = () => new Promise((resolve) => {
+        chrome.storage.local.get(['sc_loop'], async (r) => {
+            const loop = r.sc_loop || {};
+            const corriendo = loop.estado === 'CORRIENDO' || loop.estado === 'PAUSANDO';
+            if (!corriendo) { resolve(true); return; }
+            const seguir = await pedirConfirmacion({
+                titulo: 'Lote anterior colgado',
+                mensaje: `El semáforo quedó en ${loop.estado} (${Number(loop.indice || 0) + 1}/${(loop.cola || []).length}).\n\n¿Cancelarlo y arrancar la recuperación?`,
+                aceptar: 'Cancelarlo y seguir',
+                cancelar: 'Dejarlo',
+                peligro: true
+            });
+            if (!seguir) { resolve(false); return; }
+            chrome.storage.local.set({ sc_loop: { estado: 'DETENIDO', cola: [], indice: 0, motivo: 'Reiniciado para recuperar comprobantes' }, auto_batch_enabled: false, sriAutomationPaused: false, pendingAction: null }, () => resolve(true));
+        });
+    });
+
+    chrome.storage.local.get([RECUP_KEY], async (r) => {
+        if (!(await limpiarLoteColgado())) return;
+        const intentos = r[RECUP_KEY] || {};
+        const { lista, sinClave, agotados } = clientesSinComprobante(intentos);
+        if (!lista.length) { showToast('No hay comprobantes pendientes de recuperar.'); return; }
+        const conClave = lista.filter((c) => c.password);
+        if (!conClave.length) { showToast('Ninguno de los pendientes tiene clave SRI cargada.'); return; }
+
+        const minutos = Math.max(1, Math.ceil((conClave.length * 40) / 60));
+        const detalle = [
+            `Se van a recuperar ${conClave.length} comprobante(s) del período ${periodoLabel()}.`
+                + (sinClave ? `\n\n${sinClave} no tienen clave SRI: quedan afuera.` : '')
+                + (agotados.length ? `\n${agotados.length} ya fallaron ${RECUP_MAX_INTENTOS} veces: quedan afuera.` : '')
+                + `\n\nDuración estimada: ~${minutos} min.`
+        ].join('');
+        const seguir = await pedirConfirmacion({
+            titulo: 'Segunda vuelta',
+            mensaje: detalle,
+            aceptar: `Recuperar ${conClave.length}`,
+            cancelar: 'Cancelar'
+        });
+        if (!seguir) return;
+
+        const periodo = { year: currentYear, monthIndex: currentMonth };
+        const per = periodoActualStr();
+        const ahora = Date.now();
+        const nuevosIntentos = { ...intentos };
+        conClave.forEach((c) => {
+            const prev = nuevosIntentos[c.ruc] || {};
+            nuevosIntentos[c.ruc] = { intentos: Number(prev.intentos || 0) + 1, ultimo: ahora };
+        });
+        const primero = conClave[0];
+        chrome.storage.local.set({
+            pending_sri_autofill: {
+                ruc: primero.ruc, password: primero.password, name: primero.name,
+                timestamp: Date.now(), manual: true, isBatch: true, loginAttempted: false
+            },
+            pendingAction: 'recuperar_comprobante',
+            recuperarComprobante: { ruc: primero.ruc, nombre: primero.name, periodo, per, intentos: 0 },
+            auto_batch_enabled: true,
+            auto_batch_queue: conClave,
+            auto_batch_index: 0,
+            auto_batch_period: periodo,
+            sri_target_period: periodo,
+            workflowPeriod: periodo,
+            sc_loop: { estado: 'CORRIENDO', cola: conClave, indice: 0, periodo, latido: Date.now(), motivo: 'Segunda vuelta: comprobantes' },
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            ghost_manual_mode: false,
+            autoDeclaration: false,
+            sri_auto_mode: true,
+            actionTimestamp: Date.now(),
+            [RECUP_KEY]: nuevosIntentos,
+            [RECUP_LOTE_KEY]: { cuando: ahora, periodo: per, rucs: conClave.map((c) => c.ruc) }
+        }, () => {
+            showToast(`🔁 Recuperando ${conClave.length} comprobante(s) · ~${minutos} min`);
+            chrome.tabs.create({ url: SRI_LOGIN_URL });
+        });
+    });
+}
+
+document.getElementById('btnSegundaVuelta')?.addEventListener('click', arrancarSegundaVuelta);
+chrome.storage.onChanged.addListener((c, area) => {
+    if (area === 'local' && (c.sc_declaraciones_locales || c.sc_loop || c[RECUP_LOTE_KEY])) pintarSegundaVuelta();
+});
+pintarSegundaVuelta();
+
+// ── Diálogo de confirmación interno ────────────────────────────────────
+// Reemplaza window.confirm: se puede estilar, no queda detrás del popup
+// y el botón dice la consecuencia (UI/UX Pro Max §8 y §1).
+function pedirConfirmacion({ titulo = "Confirmar", mensaje = "", aceptar = "Aceptar", cancelar = "Cancelar", peligro = false } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "confirm-overlay";
+        overlay.innerHTML = `
+            <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="confirmTitulo">
+                <p class="confirm-title" id="confirmTitulo"></p>
+                <p class="confirm-msg"></p>
+                <div class="confirm-btns">
+                    <button type="button" class="cancelar"></button>
+                    <button type="button" class="aceptar"></button>
+                </div>
+            </div>`;
+        overlay.querySelector(".confirm-title").textContent = titulo;
+        overlay.querySelector(".confirm-msg").textContent = mensaje;
+        const btnNo = overlay.querySelector(".cancelar");
+        const btnSi = overlay.querySelector(".aceptar");
+        btnNo.textContent = cancelar;
+        btnSi.textContent = aceptar;
+        if (peligro) { btnSi.classList.remove("aceptar"); btnSi.classList.add("peligro"); }
+        const cerrar = (valor) => { overlay.remove(); document.removeEventListener("keydown", tecla); resolve(valor); };
+        const tecla = (ev) => { if (ev.key === "Escape") cerrar(false); };
+        btnNo.addEventListener("click", () => cerrar(false));
+        btnSi.addEventListener("click", () => cerrar(true));
+        overlay.addEventListener("click", (ev) => { if (ev.target === overlay) cerrar(false); });
+        document.addEventListener("keydown", tecla);
+        document.body.appendChild(overlay);
+        btnSi.focus();
+    });
+}

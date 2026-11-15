@@ -14,440 +14,871 @@
             --amber: #ffb95f;
             --amber-glow: rgba(255, 185, 95, 0.2);
             --rose: #ff8585;
-            --border: rgba(255, 255, 255, 0.08);
-            --border-highlight: rgba(255, 255, 255, 0.15);
+            --border: rgba(255, 255, 255, 0.09);
+            --border-highlight: rgba(255, 255, 255, 0.16);
             --text-main: #f8fafc;
             --text-dim: #94a3b8;
+            --tenue: #64748b;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        /* dynamic-type: la raíz en % deja que el tamaño de letra del sistema
+escal e todo el popup (UI/UX Pro Max §6). */
+        html { font-size: 100%; }
 
         body {
             width: 520px;
-            font-family: 'Manrope', sans-serif;
+            height: 600px;
+            font-family: 'Manrope', system-ui, sans-serif;
             background: var(--bg-deep);
             color: var(--text-main);
-            overflow-x: hidden;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
-            height: 640px;
         }
 
-        .header {
-            padding: 14px 18px;
-            background: rgba(5, 20, 36, 0.95);
-            backdrop-filter: blur(16px);
+        button { font-family: 'Manrope', system-ui, sans-serif; }
+        button:focus-visible, select:focus-visible, input:focus-visible,
+        [role="menuitem"]:focus-visible {
+            /* Dorado sobre cualquier fondo: el esmeralda sobre botón verde no llega a 3:1. */
+            outline: 2px solid #C9A96E;
+            outline-offset: 2px;
+        }
+
+        /* ── Cabecera: marca y un solo menú ─────────────────────────────── */
+        .top {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
             border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            z-index: 20;
+            position: relative;
+            z-index: 40;
+            background: var(--bg-deep);
         }
-
-        .header-title {
-            font-size: 15px;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--primary);
-            letter-spacing: -0.01em;
+        .brand { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+        .brand img { width: 26px; height: 26px; border-radius: 7px; display: block; flex: none; }
+        .brand b { display: block; font-size: 0.8125rem; font-weight: 800; letter-spacing: -0.01em; }
+        .brand small {
+            display: block; margin-top: 1px; font-size: 0.625rem; color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
+        .icon-btn {
+            width: 30px; height: 30px; flex: none; border-radius: 8px;
+            border: 1px solid var(--border); background: transparent;
+            color: var(--text-dim); font-size: 1.0625rem; line-height: 1;
+            cursor: pointer; transition: background .15s, color .15s;
+        }
+        .icon-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-main); }
 
-        .header-subtitle {
-            font-size: 10px;
+        .menu {
+            position: absolute; top: 52px; right: 14px; width: 274px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-highlight);
+            border-radius: 12px;
+            box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+            padding: 6px;
+            display: none;
+            z-index: 60;
+            max-height: 520px;
+            overflow-y: auto;
+        }
+        .menu.open { display: block; }
+        .menu-label {
+            padding: 8px 10px 3px; font-size: 0.625rem; font-weight: 800;
+            letter-spacing: 0.13em; text-transform: uppercase; color: var(--tenue);
+        }
+        .menu-item {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            padding: 8px 10px; border: none; border-radius: 7px;
+            background: transparent; color: var(--text-main);
+            font-size: 0.7188rem; font-weight: 600; text-align: left; cursor: pointer;
+        }
+        .menu-item:hover { background: rgba(255, 255, 255, 0.06); }
+        .menu-item .k { margin-left: auto; font-size: 0.625rem; color: var(--tenue); font-weight: 700; }
+        .menu-sep { height: 1px; background: var(--border); margin: 5px 4px; }
+        .menu-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+        .menu-fila .titulo { font-size: 0.7188rem; font-weight: 700; }
+        .menu-fila .pista { display: block; font-size: 0.625rem; color: var(--text-dim); font-weight: 500; margin-top: 1px; }
+        #formClaveManual { display: none; padding: 2px 10px 10px; gap: 6px; align-items: center; flex-wrap: wrap; }
+        #modoAutoPanel { display: none; margin: 0 8px 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.6563rem; line-height: 1.55; background: rgba(78, 222, 163, 0.06); border: 1px solid rgba(78, 222, 163, 0.22); }
+        #benditaResumen { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 0.6563rem; padding: 2px 10px 8px; position: relative; }
+
+        /* ── La acción principal ────────────────────────────────────────── */
+        .lote { padding: 12px 16px 11px; display: flex; flex-direction: column; gap: 8px; }
+        .lote-info { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+        .lote-info b { font-size: 0.8125rem; font-weight: 800; }
+        .lote-info span { font-size: 0.625rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+        .btn-run {
+            min-height: 44px; width: 100%; border: none; border-radius: 11px;
+            background: linear-gradient(135deg, #4edea3 0%, #10b981 100%);
+            color: #003824; font-size: 0.8125rem; font-weight: 800; letter-spacing: 0.02em;
+            cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px;
+            box-shadow: 0 6px 18px rgba(16, 185, 129, 0.22);
+            transition: filter .15s, transform .15s;
+        }
+        .btn-run:hover:not([disabled]) { filter: brightness(1.06); }
+        .btn-run:active:not([disabled]) { transform: scale(0.995); }
+        .btn-run[disabled] { opacity: 0.45; cursor: default; box-shadow: none; filter: grayscale(0.4); }
+        .btn-run.btn-vacio {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
             color: var(--text-dim);
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-top: 2px;
-        }
-
-        .btn-sync {
-            background: rgba(78, 222, 163, 0.1);
-            border: 1px solid rgba(78, 222, 163, 0.3);
-            color: var(--primary);
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 700;
+            box-shadow: none;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.25s;
         }
+        .btn-run.btn-vacio:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-main); }
+        .btn-run small { font-size: 0.625rem; font-weight: 700; opacity: 0.72; }
 
-        .btn-sync:hover {
-            background: rgba(78, 222, 163, 0.2);
-            box-shadow: 0 0 12px var(--primary-glow);
-            transform: translateY(-1px);
+        /* ── Herramientas: las mismas del cajón 🧰, plegadas ───────────── */
+        .tools { border-bottom: 1px solid var(--border); }
+        .tools-head {
+            width: 100%; display: flex; align-items: center; gap: 7px;
+            padding: 8px 16px; border: none; background: transparent;
+            color: var(--text-dim); font-size: 0.6563rem; font-weight: 700;
+            cursor: pointer; text-align: left;
         }
-
-        .auto-bar {
-            padding: 8px 18px;
-            background: rgba(78, 222, 163, 0.05);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .tools-head:hover { color: var(--text-main); }
+        .tools-head .chev { margin-left: auto; transition: transform .18s; }
+        .tools-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+        .tools-head .cuenta { font-family: 'JetBrains Mono', monospace; font-size: 0.625rem; color: var(--tenue); }
+        .tools-grid { display: none; padding: 0 16px 12px; }
+        .tools-grid.open { display: block; }
+        .tool-group b {
+            display: block; margin: 7px 0 4px; font-size: 0.625rem; font-weight: 800;
+            letter-spacing: 0.13em; text-transform: uppercase; color: var(--tenue);
         }
-
-        .controls {
-            padding: 12px 18px 8px;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
+        .tool-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+        .tool {
+            border: 1px solid var(--border); border-radius: 7px;
+            background: rgba(255, 255, 255, 0.03); color: var(--text-dim);
+            padding: 5px 9px; font-size: 0.6563rem; font-weight: 700; cursor: pointer;
+            transition: color .15s, border-color .15s, background .15s;
         }
+        .tool:hover { color: var(--text-main); border-color: rgba(78, 222, 163, 0.35); background: rgba(78, 222, 163, 0.08); }
+        .tools-pie { margin-top: 7px; font-size: 0.625rem; color: var(--tenue); line-height: 1.4; }
 
+        /* ── Período y búsqueda ────────────────────────────────────────── */
+        .barra {
+            display: flex; align-items: center; gap: 6px;
+            padding: 10px 16px; border-bottom: 1px solid var(--border);
+        }
         select, input {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--border-highlight);
-            color: white;
-            padding: 7px 10px;
-            border-radius: 8px;
-            font-size: 11px;
-            outline: none;
-            font-weight: 700;
+            color: white; padding: 7px 9px; border-radius: 8px;
+            font-size: 0.6875rem; outline: none; font-weight: 700;
             font-family: 'JetBrains Mono', monospace;
-            transition: all 0.2s;
+        }
+        select { cursor: pointer; }
+        select option { background: var(--bg-deep); color: white; }
+        select:focus, input:focus { border-color: var(--primary); box-shadow: 0 0 10px var(--primary-glow); }
+        .search-container { flex: 1; position: relative; min-width: 90px; }
+        .search-input { width: 100%; padding-left: 26px; font-family: 'Manrope', sans-serif; font-size: 0.6875rem; }
+        .search-icon { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); font-size: 0.6875rem; opacity: 0.5; }
+
+        #syncAviso {
+            margin: 8px 16px 0; padding: 8px 11px; border-radius: 8px;
+            font-size: 0.6563rem; line-height: 1.5;
+            background: rgba(255, 185, 95, 0.08);
+            border: 1px solid rgba(255, 185, 95, 0.3);
+            color: #fcd34d; align-items: flex-start; gap: 8px;
         }
 
-        select:focus, input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 10px var(--primary-glow);
-        }
-
-        select option {
-            background: #051424;
-            color: white;
-        }
-
-        .search-container {
-            flex: 1;
-            position: relative;
-        }
-
-        .search-input {
-            width: 100%;
-            padding-left: 28px;
-            font-family: 'Manrope', sans-serif;
-            font-size: 11px;
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 12px;
-            opacity: 0.6;
-        }
-
+        /* ── Pestañas ──────────────────────────────────────────────────── */
         .tabs {
-            display: flex;
-            background: rgba(0, 0, 0, 0.3);
+            display: flex; gap: 2px; padding: 8px 12px 0;
             border-bottom: 1px solid var(--border);
+            overflow-x: auto; scrollbar-width: none;
         }
-
+        .tabs::-webkit-scrollbar { display: none; }
         .tab-btn {
-            flex: 1;
-            padding: 10px;
-            text-align: center;
-            font-size: 11px;
-            font-weight: 700;
-            color: var(--text-dim);
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            transition: all 0.2s;
-            border-bottom: 2px solid transparent;
+            flex: 0 0 auto; padding: 6px 9px 8px;
+            border: none; border-bottom: 2px solid transparent;
+            background: transparent; color: var(--text-dim);
+            font-size: 0.6563rem; font-weight: 700; cursor: pointer; white-space: nowrap;
         }
-
-        .tab-btn.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-            background: rgba(78, 222, 163, 0.08);
-            font-weight: 800;
-        }
+        .tab-btn:hover { color: var(--text-main); }
+        .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 800; }
 
         .tab-content {
-            display: none;
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px 18px 18px;
-            flex-direction: column;
-            gap: 10px;
+            display: none; flex: 1; overflow-y: auto;
+            padding: 2px 16px 16px; flex-direction: column;
         }
+        .tab-content.active { display: flex; }
+        .tab-content::-webkit-scrollbar { width: 5px; }
+        .tab-content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
 
-        .tab-content.active {
-            display: flex;
-        }
-
-        .tab-content::-webkit-scrollbar {
-            width: 5px;
-        }
-        .tab-content::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-        }
-
+        /* Sin cajas: una fila por cliente, separada por una línea fina. Las
+           tarjetas con borde y sombra ocupaban el alto de dos clientes cada
+           una y hacían que 47 se sintieran como una pared. */
         .client-card {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 12px 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            transition: all 0.25s;
-            backdrop-filter: blur(10px);
-            width: 100%;
+            background: transparent; border: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 0; padding: 10px 2px;
+            display: flex; flex-direction: column; gap: 6px;
+            width: 100%; transition: background .15s;
         }
-
-        .client-card:hover {
-            background: rgba(78, 222, 163, 0.04);
-            border-color: rgba(78, 222, 163, 0.35);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        }
-
-        .client-card-main {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            width: 100%;
-        }
-
-        .client-info {
-            flex: 1;
-            min-width: 0;
-            padding-right: 10px;
-        }
-
-        .client-name {
-            font-size: 13px;
-            font-weight: 700;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 4px;
-            color: #f8fafc;
-        }
-
-        .client-meta {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 11px;
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--text-dim);
-            margin-bottom: 4px;
-        }
-
-        .due-badge {
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            background: rgba(255, 185, 95, 0.12);
-            border: 1px solid rgba(255, 185, 95, 0.3);
-            color: var(--amber);
-            font-weight: 700;
-        }
-
-        .client-password {
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(0, 0, 0, 0.4);
-            padding: 2px 6px;
-            border-radius: 4px;
-            cursor: pointer;
-            border: 1px solid var(--border);
-        }
-
-        .client-password:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
+        .client-card:hover { background: rgba(255, 255, 255, 0.025); }
+        .client-card-main { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+        .client-info { flex: 1; min-width: 0; padding-right: 6px; }
+        .client-name { font-size: 0.7813rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f8fafc; }
+        .client-meta { display: flex; align-items: center; gap: 6px; font-size: 0.6875rem; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); flex-wrap: wrap; }
+        .due-badge { font-size: 0.625rem; padding: 1px 6px; border-radius: 4px; background: rgba(255, 185, 95, 0.1); border: 1px solid rgba(255, 185, 95, 0.28); color: var(--amber); font-weight: 700; }
+        .client-password { font-family: 'JetBrains Mono', monospace; background: rgba(0, 0, 0, 0.4); padding: 2px 6px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); }
+        .client-password:hover { border-color: var(--primary); color: var(--primary); }
 
         .btn-start {
-            background: linear-gradient(135deg, #4edea3 0%, #10b981 100%);
-            border: none;
-            color: #003824;
-            padding: 7px 12px;
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 800;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: all 0.2s;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            box-shadow: 0 2px 8px var(--primary-glow);
+            background: rgba(78, 222, 163, 0.14); border: 1px solid rgba(78, 222, 163, 0.3);
+            color: var(--primary); padding: 6px 11px; border-radius: 7px;
+            font-size: 0.6563rem; font-weight: 800; cursor: pointer;
+            display: flex; align-items: center; gap: 5px;
+            transition: background .15s, border-color .15s;
         }
+        .btn-start:hover { background: rgba(78, 222, 163, 0.24); border-color: rgba(78, 222, 163, 0.5); }
 
-        .btn-start:hover {
-            transform: translateY(-1px) scale(1.02);
-            box-shadow: 0 4px 14px var(--primary-glow);
-        }
-
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 36px;
-            height: 18px;
-        }
+        .toggle-switch { position: relative; display: inline-block; width: 36px; height: 18px; flex: none; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
         .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #1e293b;
-            transition: .3s;
-            border-radius: 20px;
-            border: 1px solid var(--border);
+            position: absolute; cursor: pointer; inset: 0;
+            background-color: #1e293b; transition: .3s;
+            border-radius: 20px; border: 1px solid var(--border);
         }
         .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 12px;
-            width: 12px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: .3s;
-            border-radius: 50%;
+            position: absolute; content: ""; height: 12px; width: 12px;
+            left: 2px; bottom: 2px; background-color: white;
+            transition: .3s; border-radius: 50%;
         }
-        .toggle-switch input:checked + .toggle-slider {
-            background-color: var(--primary);
-        }
-        .toggle-switch input:checked + .toggle-slider:before {
-            transform: translateX(18px);
-            background-color: #003824;
-        }
+        .toggle-switch input:checked + .toggle-slider { background-color: var(--primary); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); background-color: #003824; }
 
         .loading-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--text-dim);
-            font-size: 12px;
-            font-family: 'JetBrains Mono', monospace;
-            gap: 12px;
-            margin-top: 40px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; color: var(--text-dim); font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace; gap: 12px; margin-top: 40px;
         }
         .spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top-color: var(--primary);
-            border-radius: 50%;
+            width: 24px; height: 24px; border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary); border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: var(--text-dim);
-            font-size: 12px;
-            font-family: 'JetBrains Mono', monospace;
-        }
+        .empty-state { text-align: center; padding: 40px 20px; color: var(--text-dim); font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; }
 
         .chip {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 3px 9px;
-            border-radius: 20px;
-            font-size: 10.5px;
-            font-weight: 700;
-            color: var(--text-dim);
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border);
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 3px 8px; border-radius: 20px;
+            font-size: 0.625rem; font-weight: 700; color: var(--text-dim);
+            background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border);
         }
         .chip b { color: #f8fafc; }
-        .chip.bendita-chip.on {
-            color: #4edea3;
-            background: rgba(78,222,163,0.1);
-            border-color: rgba(78,222,163,0.35);
-        }
+        .chip.bendita-chip.on { color: #4edea3; background: rgba(78, 222, 163, 0.1); border-color: rgba(78, 222, 163, 0.35); }
         .chip.bendita-chip.on b { color: #4edea3; }
-        .chip.chip-warn {
-            color: #ffb95f;
-            background: rgba(255,185,95,0.1);
-            border-color: rgba(255,185,95,0.35);
-        }
+        .chip.chip-warn { color: #ffb95f; background: rgba(255, 185, 95, 0.1); border-color: rgba(255, 185, 95, 0.35); }
         .chip.chip-warn b { color: #ffb95f; }
-        .chip.chip-off {
-            color: #64748b;
-            border-style: dashed;
+        .chip.chip-off { color: #64748b; border-style: dashed; }
+
+        /* ── Pie ───────────────────────────────────────────────────────── */
+        .pie {
+            display: flex; align-items: center; justify-content: space-between; gap: 8px;
+            padding: 8px 16px; border-top: 1px solid var(--border);
+            background: rgba(0, 0, 0, 0.18);
         }
+        .pie-btn {
+            border: none; background: transparent; color: var(--text-dim);
+            font-size: 0.625rem; font-weight: 700; cursor: pointer; padding: 4px 2px;
+        }
+        .pie-btn:hover { color: var(--text-main); }
+        .pie span { font-size: 0.625rem; color: #475569; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+
+        /* El menú anidado de la selección del lote (heredado del popup viejo). */
+        #benditaMenuOverlay { display: none; position: fixed; inset: 0; z-index: 65; }
+        #benditaMenu {
+            display: none; position: absolute; top: 100%; right: 0; margin-top: 4px;
+            z-index: 70; background: var(--bg-surface); border: 1px solid var(--border-highlight);
+            border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            overflow: hidden; min-width: 170px;
+        }
+        #benditaMenu button {
+            display: block; width: 100%; text-align: left; background: transparent;
+            border: none; color: var(--text-dim); padding: 8px 12px;
+            font-size: 0.6563rem; font-weight: 700; cursor: pointer;
+        }
+        #benditaMenu button:hover { background: rgba(255, 255, 255, 0.05); color: var(--text-main); }
+
+        /* ── DESIGN SYSTEM · Obsidian & Liquid Gold ─────────────────────── */
+        /* Capa de refinamiento: tokens, bisel dorado, vidrio y micro-motion. */
+        :root {
+            --gold: #C9A96E;
+            --gold-cream: #e6d3ab;
+            --quantum: #2B6AFF;
+            --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', monospace;
+        }
+
+        header.top {
+            border-bottom: 1px solid rgba(201, 169, 110, 0.18);
+        }
+
+        .brand b {
+            letter-spacing: -0.03em;
+            text-wrap: balance;
+        }
+
+        .brand small {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--gold);
+            opacity: 0.85;
+        }
+
+        .brand img {
+            border-radius: 8px;
+            box-shadow: 0 0 0 1px rgba(201, 169, 110, 0.35), 0 6px 18px rgba(0, 0, 0, 0.45);
+        }
+
+        /* La acción principal: esmeralda con bisel y respuesta física */
+        .btn-run {
+            background: linear-gradient(180deg, #00c3ab 0%, #00A896 55%, #068a7b 100%);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 10px 30px rgba(0, 168, 150, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+        }
+
+        .btn-run:hover {
+            filter: brightness(1.05);
+            transform: translateY(-1px);
+            box-shadow: 0 14px 36px rgba(0, 168, 150, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-run:active {
+            transform: translateY(1px) scale(0.99);
+        }
+
+        /* Pestañas: subrayado esmeralda, contadores en mono */
+        .tabs {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .tab-btn {
+            transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .tab-btn:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            box-shadow: inset 0 -2px 0 #4edea3;
+        }
+
+        .tab-btn span {
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Buscador con foco dorado */
+        .search-input {
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .search-input:focus {
+            border-color: rgba(201, 169, 110, 0.45);
+            box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.12);
+        }
+
+        /* Menú: vidrio esmerilado y entrada en desplazamiento */
+        .menu {
+            backdrop-filter: blur(26px) saturate(180%);
+            -webkit-backdrop-filter: blur(26px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-top-color: rgba(201, 169, 110, 0.35);
+        }
+
+        .menu-item {
+            transition: background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .menu-item:hover {
+            transform: translateX(1px);
+        }
+
+        .menu-label {
+            font-family: var(--font-mono);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--gold);
+            opacity: 0.8;
+        }
+
+        /* Pie: telemetría en mono */
+        .footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .footer, .footer * {
+            font-family: var(--font-mono);
+            font-size: 0.625rem;
+            letter-spacing: 0.08em;
+        }
+
+        /* Cifras: siempre tabulares */
+        #loteCuenta, #countPendientes, .lote-info b {
+            font-variant-numeric: tabular-nums;
+        }
+        .btn-todos {
+            margin-top: 8px;
+            width: 100%;
+            padding: 9px 12px;
+            border-radius: 12px;
+            border: 1px dashed rgba(201, 169, 110, 0.45);
+            background: rgba(201, 169, 110, 0.08);
+            color: var(--gold-cream, #e6d3ab);
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-todos:hover {
+            background: rgba(201, 169, 110, 0.16);
+        }
+
+        .btn-todos:active {
+            transform: translateY(1px) scale(0.99);
+        }
+        /* ── HERO DEL LOTE: los tres números del período ─────────────────── */
+        .lote {
+            background: linear-gradient(180deg, rgba(201, 169, 110, 0.10), rgba(5, 20, 36, 0.6) 55%);
+            border-top-color: rgba(201, 169, 110, 0.45);
+        }
+
+        .lote-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+            width: 100%;
+        }
+
+        .lote-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            padding: 8px 6px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .lote-stat b {
+            font-family: var(--font-mono, monospace);
+            font-size: 1.5rem;
+            font-weight: 800;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.03em;
+        }
+
+        .lote-stat span {
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-dim, #94a3b8);
+            text-align: center;
+        }
+
+        .lote-stat.pend b { color: #4edea3; }
+        .lote-stat.ok b { color: #e6d3ab; }
+        .lote-stat.gold b { color: #C9A96E; }
+        .lote-stat.pend { border-top-color: rgba(78, 222, 163, 0.35); }
+        .lote-stat.ok { border-top-color: rgba(230, 211, 171, 0.35); }
+        .lote-stat.gold { border-top-color: rgba(201, 169, 110, 0.45); }
+        /* Pestañas como control segmentado, no como barra con subrayado */
+        .tabs {
+            padding: 4px;
+            gap: 2px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+        }
+
+        .tab-btn {
+            border-radius: 10px;
+            border: none;
+            background: transparent;
+        }
+
+        .tab-btn.active {
+            background: rgba(0, 168, 150, 0.16);
+            color: var(--emerald-neon, #4edea3);
+            box-shadow: inset 0 0 0 1px rgba(0, 168, 150, 0.35);
+        }
+
+        /* ── TARJETAS DE CLIENTE (rediseño) ─────────────────────────────── */
+        .client-card {
+            background: rgba(5, 20, 36, 0.55);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-top-color: rgba(201, 169, 110, 0.22);
+            border-radius: 16px;
+            padding: 10px 12px;
+            margin: 0 0 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            width: auto;
+            backdrop-filter: blur(18px) saturate(160%);
+            -webkit-backdrop-filter: blur(18px) saturate(160%);
+            transition: border-color 0.2s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease;
+        }
+
+        .client-card:hover {
+            background: rgba(12, 32, 50, 0.65);
+            border-top-color: rgba(201, 169, 110, 0.45);
+            transform: translateY(-1px);
+        }
+
+        .cc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+        .cc-name {
+            font-family: var(--font-display, 'Manrope', system-ui);
+            font-size: 0.7813rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #f8fafc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .cc-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid;
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .cc-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+        .cc-badge.pend { color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.08); }
+        .cc-badge.ok { color: #4edea3; border-color: rgba(78, 222, 163, 0.3); background: rgba(78, 222, 163, 0.08); }
+        .cc-badge.err { color: #f87171; border-color: rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.08); }
+        .cc-badge.warn { color: #e6d3ab; border-color: rgba(201, 169, 110, 0.35); background: rgba(201, 169, 110, 0.1); }
+        .cc-badge.baja { color: #94a3b8; border-color: rgba(148, 163, 184, 0.28); background: rgba(148, 163, 184, 0.08); }
+        .cc-badge.otro { color: #a5b4fc; border-color: rgba(165, 180, 252, 0.28); background: rgba(165, 180, 252, 0.08); }
+
+        .cc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+        .cc-ruc {
+            font-family: var(--font-mono, monospace);
+            font-size: 0.6563rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            color: #cbd5e1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 2px 7px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.18s;
+        }
+
+        .cc-ruc:hover { background: rgba(255, 255, 255, 0.1); }
+        .cc-d9 { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono, monospace); font-size: 0.625rem; letter-spacing: 0.04em; color: #94a3b8; border: 1px solid rgba(255, 255, 255, 0.08); padding: 2px 7px; border-radius: 6px; }
+        .cc-d9-dot { width: 6px; height: 6px; border-radius: 50%; background: #64748b; }
+        .cc-d9.ok .cc-d9-dot { background: #4edea3; box-shadow: 0 0 6px rgba(78, 222, 163, 0.55); }
+        .cc-d9.pronto .cc-d9-dot { background: #fbbf24; box-shadow: 0 0 6px rgba(251, 191, 36, 0.55); }
+        .cc-d9.vencido .cc-d9-dot { background: #f87171; box-shadow: 0 0 6px rgba(248, 113, 113, 0.55); }
+
+        .cc-bend { font-family: var(--font-mono, monospace); font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.12); color: #94a3b8; cursor: pointer; transition: all 0.18s; }
+        .cc-bend.on { color: #4edea3; border-color: rgba(78, 222, 163, 0.4); background: rgba(78, 222, 163, 0.12); }
+
+        .cc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        .cc-seal { font-family: var(--font-mono, monospace); font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; color: #e6d3ab; border: 1px solid rgba(201, 169, 110, 0.35); background: rgba(201, 169, 110, 0.1); padding: 2px 7px; border-radius: 6px; }
+        .cc-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+        .cc-actions .btn-start { padding: 4px 10px; font-size: 0.625rem; }
+
+        /* ── CAJÓN DE HERRAMIENTAS ──────────────────────────────────────── */
+        .tools-head { color: var(--gold-cream, #e6d3ab); }
+        .tools-head .cuenta { color: var(--gold-primary, #C9A96E); border: 1px solid rgba(201, 169, 110, 0.3); border-radius: 999px; padding: 0 6px; }
+        .tool-group b { color: var(--gold-primary, #C9A96E); }
+        .tool { border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.03); padding: 5px 9px; font-family: var(--font-mono, monospace); font-size: 0.625rem; letter-spacing: 0.04em; color: #cbd5e1; cursor: pointer; transition: background 0.18s, border-color 0.18s, transform 0.18s; }
+        .tool:hover { background: rgba(255, 255, 255, 0.07); border-color: rgba(201, 169, 110, 0.35); }
+        .tool:active { transform: translateY(1px) scale(0.99); }
+        .tool-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        /* Estado de la nube: si no hay SC_CONFIG, las declaraciones no suben. */
+        .nube-chip {
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #94a3b8;
+            margin-right: 6px;
+        }
+
+        .nube-chip.ok { color: #4edea3; border-color: rgba(78, 222, 163, 0.35); background: rgba(78, 222, 163, 0.08); }
+        .nube-chip.off { color: #fbbf24; border-color: rgba(251, 191, 36, 0.35); background: rgba(251, 191, 36, 0.08); }
+        /* Parada de emergencia siempre visible mientras corre el bucle. */
+        .btn-stop {
+            margin-top: 8px;
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(248, 113, 113, 0.45);
+            background: rgba(248, 113, 113, 0.12);
+            color: #fca5a5;
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.18s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-stop:hover { background: rgba(248, 113, 113, 0.22); }
+        .btn-stop:active { transform: translateY(1px) scale(0.99); }
+        /* Render por tandas: 2000 clientes sin arrastrar el popup */
+        .ver-mas {
+            width: 100%;
+            margin: 4px 0 10px;
+            padding: 9px;
+            border-radius: 12px;
+            border: 1px dashed rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.03);
+            color: #cbd5e1;
+            font-family: var(--font-mono, monospace);
+            font-size: 0.625rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.18s ease, border-color 0.18s ease;
+        }
+
+        .ver-mas:hover { background: rgba(255, 255, 255, 0.07); border-color: rgba(201, 169, 110, 0.4); }
+        /* Buzón de sugerencias */
+        .buzon-panel {
+            position: fixed; left: 12px; right: 12px; bottom: 52px; z-index: 50;
+            background: rgba(9,26,42,0.98); border: 1px solid rgba(201,169,110,0.35);
+            border-radius: 14px; padding: 10px; box-shadow: 0 18px 40px rgba(0,0,0,0.6);
+        }
+        .buzon-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.6875rem; color: #e6d3ab; margin-bottom: 8px; }
+        .buzon-head span { cursor: pointer; color: #94a3b8; font-size: 0.9375rem; }
+        .buzon-niveles { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+        .buzon-niveles button { border: 1px solid rgba(255,255,255,0.12); background: transparent; color: #94a3b8; border-radius: 7px; padding: 2px 7px; font-size: 0.625rem; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+        .buzon-niveles button.on { border-color: rgba(201,169,110,0.5); background: rgba(201,169,110,0.14); color: #e6d3ab; }
+        #buzonTexto { width: 100%; box-sizing: border-box; resize: none; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; color: #f8fafc; font-size: 0.6875rem; padding: 8px; font-family: inherit; }
+        .buzon-enviar { margin-top: 8px; width: 100%; border: none; border-radius: 10px; padding: 8px; background: #00A896; color: #04231f; font-weight: 800; font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
+        /* Último lote terminado */
+        .ultimo-lote {
+            font-family: ui-monospace, monospace; font-size: 0.625rem; letter-spacing: 0.04em;
+            color: #4edea3; border: 1px solid rgba(78, 222, 163, 0.30);
+            background: rgba(78, 222, 163, 0.10); border-radius: 999px; padding: 2px 7px;
+        }
+
+        /* El lote va a correr sólo la selección: el botón lo dice */
+        .btn-run.btn-seleccion { background: linear-gradient(180deg, #b8860b, #8a6508); color: #1a1206; }
+    
+        /* UI/UX Pro Max §7: respetar la preferencia de menos movimiento. */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+        }
+            /* Diálogo interno: reemplaza window.confirm (§8 y §1 del skill) */
+        .confirm-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(2, 6, 23, 0.72); backdrop-filter: blur(6px); }
+        .confirm-card { width: 100%; max-width: 360px; border-radius: 16px; border: 1px solid rgba(201, 169, 110, 0.35); background: linear-gradient(180deg, #0b1c2e, #051424); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6); padding: 16px; }
+        .confirm-title { margin: 0 0 6px; font-size: 0.6875rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #e6d3ab; }
+        .confirm-msg { margin: 0 0 14px; font-size: 0.75rem; line-height: 1.5; color: #cbd5e1; white-space: pre-line; }
+        .confirm-btns { display: flex; gap: 8px; justify-content: flex-end; }
+        .confirm-btns button { border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); padding: 9px 14px; font-size: 0.6563rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+        .confirm-btns .cancelar { background: transparent; color: #94a3b8; }
+        .confirm-btns .aceptar { background: #00A896; color: #04231f; border-color: transparent; }
+        .confirm-btns .peligro { background: #ef4444; color: #fff; border-color: transparent; }
+
+        /* Chips que no desbordan (§5 del skill) */
+        .cc-badge, .nube-chip, .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* CTA con estado de carga (§2 del skill) */
+        .mini-spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(4, 35, 31, 0.35); border-top-color: #04231f; display: inline-block; animation: miniSpin 0.7s linear infinite; vertical-align: -2px; }
+        @keyframes miniSpin { to { transform: rotate(360deg); } }
+            /* Segunda vuelta: franja full-width dorada, imposible de no ver */
+        .btn-recuperar { display: block !important; width: 100%; margin-top: 8px; border: 1px solid rgba(201, 169, 110, 0.45); background: rgba(201, 169, 110, 0.10); color: #e6d3ab; border-radius: 12px; padding: 9px 12px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; cursor: pointer; }
+        .btn-recuperar:hover { background: rgba(201, 169, 110, 0.18); }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <div>
-            <div class="header-title"><img src="icon32.png" width="22" height="22" alt="" style="vertical-align:-5px;margin-right:7px;border-radius:6px">SC TaxPilot PRO</div>
-            <div class="header-subtitle">SRI ENGINE • COCKPIT</div>
+    <header class="top">
+        <div class="brand">
+            <img src="icon32.png" width="26" height="26" alt="">
+            <div style="min-width:0">
+                <b>SC TaxPilot</b>
+                <small id="marcaPeriodo">SRI · declaración de IVA</small>
+            </div>
         </div>
-        <div style="display:flex; gap:6px; align-items:center;">
-            <button id="btnImportarCsv" class="btn-sync" style="background:rgba(99,102,241,0.15); border-color:rgba(99,102,241,0.3); color:#a5b4fc;" title="Cargar contraseñas masivamente desde CSV de Chrome o formato RUC,Clave">
-                📥 Claves CSV
-            </button>
-            <button id="btnSyncCloud" class="btn-sync" title="Sincronizar datos con la nube de Supabase">
-                🔄 Nube
-            </button>
-        </div>
-    </div>
-    <input type="file" id="inputCsvClaves" accept=".csv,.txt" style="display:none">
+        <button id="btnMenu" class="icon-btn" aria-label="Más acciones" aria-expanded="false" title="Más acciones: nube, claves, lote continuo, ajustes">⋯</button>
 
-    <!-- Clave SRI por cliente, a mano: sin pasar por CSV. Solo queda en el navegador.
-         Colapsado por defecto: cada tarjeta ya tiene su propio punto de entrada (✏️)
-         para esta misma acción; esta fila completa siempre visible era un segundo
-         camino para lo mismo, ocupando espacio en cada apertura del popup. -->
-    <button id="btnToggleClaveManual" style="width:100%; text-align:left; padding:7px 18px; background:rgba(99,102,241,0.04); border:none; border-bottom:1px solid var(--border); color:#a5b4fc; font-size:10.5px; font-weight:700; cursor:pointer;">
-        + Clave manual (sin CSV)
-    </button>
-    <div id="formClaveManual" style="display:none; padding:8px 18px; background:rgba(99,102,241,0.06); border-bottom:1px solid var(--border); gap:6px; align-items:center; flex-wrap:wrap;">
-        <input id="rucClaveInput" placeholder="RUC (13 dígitos)" maxlength="13" style="flex:1; min-width:110px; font-family:'JetBrains Mono',monospace;">
-        <input id="claveInput" type="password" placeholder="Clave SRI del cliente" style="flex:1.2; min-width:130px;">
-        <button id="btnGuardarClave" style="background:rgba(99,102,241,0.2); border:1px solid rgba(99,102,241,0.5); color:#c7d2fe; padding:7px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap;" title="Guarda la clave del cliente en la caché local y lo desbloquea (sin subirla a la nube)">
-            💾 Guardar clave
+        <div id="menuPanel" class="menu" role="menu" aria-label="Más acciones">
+            <div class="menu-label">Período</div>
+            <button id="btnMesQueFalta" class="menu-item" role="menuitem" title="Detecta el primer período con clientes sin declarar y lo deja seleccionado para el lote">
+                🎯 Mes que falta
+            </button>
+
+            <div class="menu-sep"></div>
+            <div class="menu-label">Datos y claves</div>
+            <button id="btnSyncCloud" class="menu-item" role="menuitem" title="Sincronizar datos con la nube de Supabase">
+                🔄 Sincronizar nube
+            </button>
+            <button id="btnImportarCsv" class="menu-item" role="menuitem" title="Cargar contraseñas masivamente desde CSV de Chrome o formato RUC,Clave">
+                📥 Claves desde CSV
+            </button>
+            <button id="btnToggleClaveManual" class="menu-item" role="menuitem" title="Guardar la clave SRI de un cliente sin pasar por CSV">
+                ＋ Clave manual
+            </button>
+            <div id="formClaveManual">
+                <input id="rucClaveInput" placeholder="RUC (13 dígitos)" maxlength="13" style="flex:1; min-width:104px;">
+                <input id="claveInput" type="password" placeholder="Clave SRI del cliente" style="flex:1.2; min-width:120px;">
+                <button id="btnGuardarClave" class="tool" style="width:100%" title="Guarda la clave del cliente en la caché local y lo desbloquea (sin subirla a la nube)">
+                    💾 Guardar clave
+                </button>
+            </div>
+            <input type="file" id="inputCsvClaves" accept=".csv,.txt" style="display:none">
+
+            <div class="menu-sep"></div>
+            <div class="menu-label">Bucle mensual</div>
+            <div class="menu-fila">
+                <div>
+                    <span class="titulo">Encadenar clientes</span>
+                    <span class="pista">Los mensuales, uno por uno, hasta el final</span>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="chkAutoBatch">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div id="modoAutoPanel"></div>
+
+            <!-- Selección del lote. Antes era la «Lista Bendita» con 🙏: misma
+                 mecánica, sin el vocabulario. Si no hay selección, corre todo. -->
+            <div class="menu-label" style="display:flex;align-items:center;gap:6px;">Selección</div>
+            <div id="benditaResumen"></div>
+            <div style="display:flex; gap:5px; align-items:center; padding:0 10px 6px; flex-wrap:wrap; position:relative;">
+                <button data-action="bendecir-pendientes" class="tool" title="Marca para el lote a todos los que faltan declarar este período">
+                    Sumar pendientes
+                </button>
+                <button id="btnBenditaMenu" class="tool" style="padding:5px 8px" title="Más acciones de la selección" aria-label="Más acciones de la selección">⋮</button>
+                <div id="benditaMenuOverlay"></div>
+                <div id="benditaMenu">
+                    <button data-action="quitar-benditos" title="Vacía la selección: no correrá nadie hasta volver a sumar">
+                        Vaciar la selección
+                    </button>
+                    <button data-action="desactivar-bendita" style="border-top:1px solid var(--border); color:#64748b" title="Sin selección: vuelve a correr todo pendiente">
+                        Correr todo, sin selección
+                    </button>
+                </div>
+            </div>
+
+            <div class="menu-sep"></div>
+            <button id="btnAjustes" class="menu-item" role="menuitem" title="Claves de IA, R2 y Supabase; diagnóstico del lote">
+                ⚙ Ajustes y claves
+            </button>
+        </div>
+    </header>
+
+    <!-- La única acción que importa. El resto se elige solo. -->
+    <div class="lote">
+        <div class="lote-info">
+            <b id="loteCuenta">Cargando clientes…</b>
+            <span id="loteSub"></span>
+        </div>
+        <!-- Tres números que antes había que buscar en las pestañas -->
+        <div class="lote-stats" aria-label="Resumen del período">
+            <div class="lote-stat pend">
+                <b id="statPendientes">0</b>
+                <span>sin declarar</span>
+            </div>
+            <div class="lote-stat ok">
+                <b id="statComprobante">0</b>
+                <span>con comprobante</span>
+            </div>
+            <div class="lote-stat gold" id="statListaCaja" title="Filtro de selección">
+                <b id="statBendita">0</b>
+                <span title="Filtro opcional: si está activo, sólo corren los clientes marcados. Si está apagado, corren todos los pendientes.">en la lista</span>
+            </div>
+        </div>
+        <button id="btnEjecutarLote" class="btn-run" title="Arma la cola con todos los pendientes del período y abre el SRI">
+            <span>▶</span> <span id="loteBotonTexto">Ejecutar lote</span> <small id="loteBotonCuenta"></small>
         </button>
+        <button id="btnCorrerTodos" class="btn-todos" style="display: none;" title="Corre también los pendientes que no están en la lista"></button>
+        <button id="btnDetener" class="btn-stop" style="display: none;" title="Parada de emergencia: el cliente actual termina y el bucle no avanza al siguiente"></button>
+        <button id="btnSegundaVuelta" class="btn-todos" style="display: none; border-color: rgba(201,169,110,.45); color: #e6d3ab;" title="Vuelve a entrar SÓLO a los clientes que ya declararon pero quedaron sin comprobante, para capturarlo"></button>
+        <button id="btnSiguienteTanda" class="btn-todos" style="display: none;" title="Arranca la próxima tanda de 50 con la cola guardada"></button>
     </div>
 
-    <div class="auto-bar">
-        <div style="display: flex; flex-direction: column;">
-            <span style="font-size: 11px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 4px;">
-                ⚡ Modo Auto (Bucle Continuo)
-            </span>
-            <span style="font-size: 10px; color: var(--text-dim);">Declara y avanza al siguiente cliente</span>
+    <!-- Las herramientas del cajón 🧰, acá. La flotante aparece sólo cuando
+         hay una pestaña del SRI con el panel montado; el popup siempre está. -->
+    <section class="tools">
+        <button id="btnTools" class="tools-head" aria-expanded="false" aria-controls="toolsGrid">
+            🧰 Herramientas
+            <span class="cuenta">16</span>
+            <span class="chev">▾</span>
+        </button>
+        <div id="toolsGrid" class="tools-grid">
+            <div class="tool-group">
+                <b>Datos</b>
+                <div class="tool-chips">
+                    <button class="tool" data-herramienta="slh-pdfs">Comprobantes</button>
+                    <button class="tool" data-herramienta="slh-registro">Registro</button>
+                    <button class="tool" data-herramienta="slh-cola">La cola</button>
+                    <button class="tool" data-herramienta="slh-bitacora">Bitácora</button>
+                    <button class="tool" data-herramienta="slh-proveedores">Proveedores</button>
+                    <button class="tool" data-herramienta="slh-notas">Notas de venta</button>
+                </div>
+            </div>
+            <div class="tool-group">
+                <b>Portal</b>
+                <div class="tool-chips">
+                    <button class="tool" data-herramienta="slh-casilleros">Casilleros</button>
+                    <button class="tool" data-herramienta="slh-ir">Ir a…</button>
+                    <button class="tool" data-herramienta="slh-extractor">Extractor</button>
+                    <button class="tool" data-herramienta="slh-auditoria">Períodos</button>
+                </div>
+            </div>
+            <div class="tool-group">
+                <b>Sistema</b>
+                <div class="tool-chips">
+                    <button class="tool" data-herramienta="slh-chequeo">Chequeo</button>
+                    <button class="tool" data-herramienta="slh-sincronizar">Sincronizar claves</button>
+                    <button class="tool" data-herramienta="slh-probarclaves">Probar claves</button>
+                    <button class="tool" data-herramienta="slh-subida">Probar subida</button>
+                    <button class="tool" data-herramienta="slh-migrar">Migrar a la nube</button>
+                    <button class="tool" data-herramienta="slh-panel">Panel</button>
+                </div>
+            </div>
+            <div class="tools-pie">Se abren en la pestaña del SRI que ya está abierta. Si no hay ninguna, la herramienta no tiene dónde trabajar.</div>
         </div>
-        <label class="toggle-switch">
-            <input type="checkbox" id="chkAutoBatch">
-            <span class="toggle-slider"></span>
-        </label>
-    </div>
+    </section>
 
-    <div id="modoAutoPanel" style="display:none; margin:0 18px 10px; padding:9px 12px; border-radius:9px; font-size:11px; line-height:1.6; background:rgba(78,222,163,0.06); border:1px solid rgba(78,222,163,0.25);"></div>
-
-    <div class="controls">
-        <select id="periodMonth">
+    <div class="barra">
+        <select id="periodMonth" title="Mes a declarar">
             <option value="0">Enero</option>
             <option value="1">Febrero</option>
             <option value="2">Marzo</option>
@@ -461,63 +892,27 @@
             <option value="10">Noviembre</option>
             <option value="11">Diciembre</option>
         </select>
-        <select id="periodYear"></select>
-
-        <button id="btnMesQueFalta" style="background:rgba(245,158,11,0.15); border:1px solid rgba(245,158,11,0.35); color:#fbbf24; padding:7px 10px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; white-space:nowrap; transition:all 0.2s;" title="Detecta el primer período con clientes sin declarar y lo deja seleccionado para el lote">
-            🎯 Mes que falta
-        </button>
-
+        <select id="periodYear" title="Año a declarar"></select>
         <div class="search-container">
             <span class="search-icon">🔍</span>
-            <input type="text" id="searchInput" class="search-input" placeholder="Buscar RUC o Nombre...">
+            <input type="text" id="searchInput" class="search-input" placeholder="Buscar RUC o nombre…">
         </div>
     </div>
 
-    <div id="syncAviso" style="display:none; margin:0 18px 8px; padding:8px 12px; border-radius:8px; font-size:10.5px; line-height:1.5; background:rgba(255,185,95,0.08); border:1px solid rgba(255,185,95,0.3); color:#fcd34d; align-items:flex-start; gap:8px;"></div>
-
-    <div id="benditaBar" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 18px 10px; flex-wrap:wrap; position:relative;">
-        <div id="benditaResumen" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:11px;"></div>
-        <div style="display:flex; gap:6px; align-items:center;">
-            <button id="btnBendecirPendientes" data-action="bendecir-pendientes" style="background:rgba(78,222,163,0.12); border:1px solid rgba(78,222,163,0.4); color:#4edea3; padding:4px 9px; border-radius:7px; font-size:10px; font-weight:800; cursor:pointer;" title="Agrega a la Lista Bendita a todos los que faltan declarar este período">
-                🙏 Bendecir pendientes
-            </button>
-            <!-- "Quitar todos" y "Modo clásico" son acciones menos frecuentes
-                 (vaciar o apagar la Lista Bendita) — quedan detrás de este menú
-                 en vez de ocupar el mismo espacio que la acción principal. -->
-            <button id="btnBenditaMenu" title="Más acciones de la Lista Bendita" style="background:rgba(148,163,184,0.08); border:1px solid rgba(148,163,184,0.3); color:#94a3b8; padding:4px 8px; border-radius:7px; font-size:11px; font-weight:800; cursor:pointer; line-height:1;">
-                ⋮
-            </button>
-            <!-- El menú se superpone a la fila de pestañas de abajo (poco
-                 espacio entre benditaBar y .tabs). Sin este overlay, un clic
-                 en "Completados" con el menú abierto le llegaba al botón del
-                 menú que queda encima en ese punto, no a la pestaña —
-                 disparando "Quitar todos" en vez de cambiar de vista. El
-                 overlay cierra el menú con CUALQUIER clic de afuera, sin
-                 dejarlo pasar a lo que esté debajo. -->
-            <div id="benditaMenuOverlay" style="display:none; position:fixed; inset:0; z-index:25;"></div>
-            <div id="benditaMenu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; z-index:30; background:#0b1c2e; border:1px solid var(--border-highlight); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.4); overflow:hidden; min-width:150px;">
-                <button id="btnQuitarBenditos" data-action="quitar-benditos" style="display:block; width:100%; text-align:left; background:transparent; border:none; color:#94a3b8; padding:8px 12px; font-size:10.5px; font-weight:700; cursor:pointer;" title="Deja la lista vacía: no correrá nadie hasta volver a bendecir">
-                    💔 Quitar todos
-                </button>
-                <button id="btnDesactivarBendita" data-action="desactivar-bendita" style="display:block; width:100%; text-align:left; background:transparent; border:none; border-top:1px solid var(--border); color:#64748b; padding:8px 12px; font-size:10.5px; font-weight:700; cursor:pointer;" title="Desactiva la Lista Bendita: vuelve el modo de siempre (corre todo pendiente)">
-                    ⏻ Modo clásico
-                </button>
-            </div>
-        </div>
-    </div>
+    <div id="syncAviso" style="display:none"></div>
 
     <div class="tabs">
-        <button class="tab-btn active" data-target="pendientesList">Pendientes (<span id="countPendientes">0</span>)</button>
-        <button class="tab-btn" data-target="completadosList">Completados (<span id="countCompletados">0</span>)</button>
-        <button class="tab-btn" data-target="erroresList">⚠️ Error (<span id="countErrores">0</span>)</button>
-        <button class="tab-btn" data-target="otrosList">📋 Otros (<span id="countOtros">0</span>)</button>
-        <button class="tab-btn" data-target="bajaList">🚫 Bajas (<span id="countBaja">0</span>)</button>
+        <button class="tab-btn active" data-target="pendientesList">Pendientes <span id="countPendientes">0</span></button>
+        <button class="tab-btn" data-target="completadosList">Completados <span id="countCompletados">0</span></button>
+        <button class="tab-btn" data-target="erroresList">⚠ Error <span id="countErrores">0</span></button>
+        <button class="tab-btn" data-target="otrosList">Otros <span id="countOtros">0</span></button>
+        <button class="tab-btn" data-target="bajaList">Bajas <span id="countBaja">0</span></button>
     </div>
 
     <div id="pendientesList" class="tab-content active">
         <div class="loading-state" id="loadingState">
             <div class="spinner"></div>
-            <div>Cargando clientes...</div>
+            <div>Cargando clientes…</div>
         </div>
     </div>
 
@@ -526,18 +921,28 @@
     <div id="otrosList" class="tab-content"></div>
     <div id="bajaList" class="tab-content"></div>
 
-    <div style="padding: 8px 18px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-        <span style="font-size: 9px; color: var(--text-dim); line-height: 1.4;">🕯️ Marcá con <b>🙏</b> a los que corren en el lote. Sin lista, corre todo como siempre.</span>
-        <span id="popupFootVersion" style="font-size: 9px; color: #475569; font-family: 'JetBrains Mono', monospace; white-space: nowrap;">v3.1.0</span>
+    <!-- Buzón de sugerencias: llega a la próxima versión -->
+    <div id="buzonPanel" class="buzon-panel" style="display:none">
+        <div class="buzon-head"><b>💡 Sugerencia</b><span id="buzonCerrar">×</span></div>
+        <div class="buzon-niveles" id="buzonNiveles">
+            <button data-nivel="idea">Idea</button>
+            <button data-nivel="sugerencia" class="on">Sugerencia</button>
+            <button data-nivel="mejora">Mejorar</button>
+            <button data-nivel="aplicar">Aplicar</button>
+            <button data-nivel="solucionar">Solucionar</button>
+            <button data-nivel="revisar">Revisar</button>
+        </div>
+        <textarea id="buzonTexto" rows="3" placeholder="¿Qué te molesta o qué falta?"></textarea>
+        <button id="buzonEnviar" class="buzon-enviar">Enviar</button>
     </div>
 
-    <!-- Las claves viven en la página de Ajustes, no acá: es una pantalla
-         entera, se abre en su propia pestaña y es donde cualquiera las busca. -->
-    <div style="padding: 0 18px 12px;">
-        <button id="btnAjustes" style="width:100%; background:rgba(148,163,184,0.12); border:1px solid var(--border); color:var(--text-dim); padding:7px; border-radius:8px; font-size:10px; font-weight:700; cursor:pointer;">
-            ⚙️ Ajustes y claves
-        </button>
-    </div>
+    <footer class="pie">
+        <button id="btnAjustesPie" class="pie-btn" title="Claves de IA, R2 y Supabase; diagnóstico del lote">⚙ Ajustes y claves</button>
+        <span id="ultimoLote" class="ultimo-lote" style="display:none"></span>
+        <button id="btnBuzon" aria-label="Buzón de sugerencias" class="pie-btn buzon-btn" title="Sugerencias: lo que pedís llega a la próxima versión">💡</button>
+        <span id="nubeEstado" class="nube-chip" title="Estado de la conexión con Supabase">☁ …</span>
+        <span id="popupFootVersion">v3.1.0</span>
+    </footer>
 
     <script src="shared_config.js"></script>
     <script src="popup.js"></script>

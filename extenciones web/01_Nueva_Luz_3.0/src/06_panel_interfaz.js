@@ -1,3 +1,57 @@
+// ── Un aviso por hecho, no uno por consulta ─────────────────────────────────
+// `extractClientInfo()` y `checkRucChange()` corren en CADA cambio de storage y
+// el portal dispara varios por página. Sin este filtro la consola escupe
+// decenas de «Cliente detectado via…», y —peor— el mismo cambio de RUC puede
+// limpiar GhostMemory varias veces, borrando las facturas ya extraídas del
+// cliente que está en curso. El estado vive en el ámbito del módulo (el bundle
+// se concatena), así que sirve para todas las instancias del panel de la página.
+let scDeteccionAvisada = '';   // `${via}|${ruc}` ya registrada en esta carga
+let scSinRucAvisado = false;   // ya se dijo que la cabecera no trae RUC
+let scTransicionRuc = { clave: '', t: 0 };
+
+/** Cantidad de tiempo dentro de la cual dos avisos del MISMO cambio de RUC
+ *  cuentan como uno solo. Cubre el doble disparo storage → listener → storage. */
+const SC_VENTANA_TRANSICION_MS = 5000;
+
+/** Registra la detección del cliente una sola vez por página y por origen. */
+function scAvisarDeteccion(via, res) {
+    const clave = `${via}|${res.ruc}`;
+    if (scDeteccionAvisada === clave) return;
+    scDeteccionAvisada = clave;
+    scSinRucAvisado = false;
+    log.debug(`💎 [ELITE] Cliente detectado via ${via}:`, res);
+}
+
+/**
+ * ¿Toca limpiar GhostMemory por este cambio de RUC?
+ *
+ * `GhostMemory.clearCurrent()` es destructiva: borra las facturas y retenciones
+ * ya extraídas del cliente. Se llama desde el listener de storage, que el
+ * portal dispara varias veces para el MISMO cambio (y el propio método
+ * escribe `lastRuc`, lo que lo realimenta). Resultado: la memoria se limpiaba
+ * en medio de la extracción y el lote declaraba con datos vacíos.
+ *
+ * Devuelve `true` una sola vez por transición dentro de la ventana. Recibe el
+ * reloj como parámetro, así que su decisión es reproducible en una prueba sin
+ * DOM, sin storage y sin esperar cinco segundos.
+ */
+function scDebeLimpiarMemoria(previo, actual, ahora = Date.now()) {
+    if (!previo || !actual || previo === actual) return false;
+    const clave = `${previo}->${actual}`;
+    const repetido = scTransicionRuc.clave === clave &&
+        (ahora - scTransicionRuc.t) < SC_VENTANA_TRANSICION_MS;
+    if (repetido) return false;
+    scTransicionRuc = { clave, t: ahora };
+    return true;
+}
+
+// El banco `tests/reentrada.html` llama a esta función tal como viaja en el
+// bundle (Vite minifica el nombre, así que la prueba no puede buscarla por
+// nombre dentro del archivo generado).
+try {
+    if (typeof window !== 'undefined') window.scDebeLimpiarMemoria = scDebeLimpiarMemoria;
+} catch (e) { /* sin window no hay nada que exponer */ }
+
 class SriAssistantPanel {
     constructor() {
         this.container = null;
@@ -670,8 +724,13 @@ class SriAssistantPanel {
             // y ahora esto). Si no hay cabecera, no hay período que leer: se
             // contesta `null` y decide `workflowPeriod`, que es lo que el bot
             // efectivamente navegó.
-            const zona = document.querySelector('.contenido-cabecera') ||
-                         document.querySelector('#j_idt15_content');
+            // El único ancla es la clase semántica. Antes había un respaldo por
+            // `#j_idt15_content`, y el recorrido manual de Burp (INFORME_BURP,
+            // §3.2 y §6) dejó claro que los `j_idt*` los autogenera JSF y
+            // cambian entre renders: el mismo id puede apuntar mañana a otro
+            // panel. Si eso pasa, no falla con error — devuelve OTRO período,
+            // que es el peor final posible para un comprobante.
+            const zona = document.querySelector('.contenido-cabecera');
             if (!zona) return null;
             const limpio = zona.cloneNode(true);
             limpio.querySelectorAll('[id^="sri-"], [id^="slh-"], [class*="sri-assistant"], [class*="ghost-"]')
@@ -727,33 +786,63 @@ class SriAssistantPanel {
     }
 
     async checkRucChange() {
-        const info = this.extractClientInfo();
-        // Solo actuar si tenemos un RUC de ALTA CONFIANZA (extraído del header)
-        if (!info.ruc || !info.highConfidence) {
-            log.debug('🔎 RUC Detection: No hay RUC de alta confianza en el header.');
-            return;
+        // Re-entrada: este método escribe `lastRuc`, y esa escritura despierta
+        // al listener de storage que lo vuelve a llamar. Sin esta guarda, un
+        // solo cambio real se procesa dos y tres veces.
+        if (this._chequeoRucEnCurso) return;
+        this._chequeoRucEnCurso = true;
+        try {
+            const info = this.extractClientInfo();
+            // Solo actuar si tenemos un RUC de ALTA CONFIANZA (del header).
+            if (!info.ruc || !info.highConfidence) {
+                // Antes esto se repetía en cada cambio de storage: una por
+                // factura, una por retención. Un aviso por página alcanza.
+                if (!scSinRucAvisado) {
+                    scSinRucAvisado = true;
+                    log.debug('🔎 RUC Detection: No hay RUC de alta confianza en el header.');
+                }
+                return;
+            }
+
+            const stored = await SafeStorage.get(['lastRuc', 'lastClientName']);
+            const cambioDeCliente = !!stored.lastRuc && stored.lastRuc !== info.ruc;
+
+            // CAMBIO DE CONTEXTO ELITE (SMART CONFLICT RESOLUTION)
+            if (cambioDeCliente) {
+                const ahora = Date.now();
+                // La limpieza de GhostMemory es destructiva (borra las facturas
+                // ya extraídas). Se hace UNA vez por transición: si el portal
+                // repite el cambio en la misma página, el segundo aviso solo
+                // refresca el RUC y la píldora.
+                if (scDebeLimpiarMemoria(stored.lastRuc, info.ruc, ahora)) {
+                    log.debug(`👤 Cambio de contexto de cliente detectado: ${stored.lastRuc} -> ${info.ruc}. Limpiando memoria previa...`);
+                    await GhostMemory.clearCurrent();
+                    this.updateSummary();
+                    this.showEliteToast({
+                        title: "👤 CLIENTE ACTIVADO",
+                        msg: `<b>${info.name || info.ruc}</b>`,
+                        duration: 3500
+                    });
+                }
+            }
+
+            // Un solo write con todo lo que cambió. Escribir siempre el mismo
+            // `lastRuc` era lo que realimentaba el listener sin necesidad.
+            const cambios = {};
+            if (stored.lastRuc !== info.ruc) {
+                cambios.lastRuc = info.ruc;
+                if (cambioDeCliente) cambios.sriAutomationPaused = false;
+            }
+            if (info.name && info.name !== stored.lastClientName) {
+                cambios.lastClientName = info.name;
+            }
+            if (Object.keys(cambios).length > 0) await SafeStorage.set(cambios);
+
+            // Refrescar UI Pill con el nombre
+            if (info.name) this.renderPill();
+        } finally {
+            this._chequeoRucEnCurso = false;
         }
-
-        const stored = await SafeStorage.get(['lastRuc']);
-
-        // CAMBIO DE CONTEXTO ELITE (SMART CONFLICT RESOLUTION)
-        if (stored.lastRuc && stored.lastRuc !== info.ruc) {
-            log.debug(`👤 Cambio de contexto de cliente detectado: ${stored.lastRuc} -> ${info.ruc}. Limpiando memoria previa...`);
-            await GhostMemory.clearCurrent();
-            await SafeStorage.set({ lastRuc: info.ruc, sriAutomationPaused: false });
-            this.updateSummary();
-            this.showEliteToast({
-                title: "👤 CLIENTE ACTIVADO",
-                msg: `<b>${info.name || info.ruc}</b>`,
-                duration: 3500
-            });
-        }
-
-        // Actualizar siempre el RUC actual como el "activo"
-        await SafeStorage.set({ lastRuc: info.ruc, lastClientName: info.name });
-
-        // Refrescar UI Pill con el nombre
-        if (info.name) this.renderPill();
     }
 
     extractClientInfo() {
@@ -770,7 +859,7 @@ class SriAssistantPanel {
                     const cleanLines = text.split('\n').map(l => l.trim()).filter(l => l && !l.includes(res.ruc));
                     res.name = cleanLines.join(' ') || 'Cliente SRI';
                     res.highConfidence = true;
-                    log.debug('💎 [ELITE] Cliente detectado via NAT Header Div:', res);
+                    scAvisarDeteccion('NAT Header Div', res);
                     return res;
                 }
             }
@@ -782,11 +871,15 @@ class SriAssistantPanel {
             if (angNameEl && angRucEl) {
                 const rText = angRucEl.innerText.trim();
                 const nText = angNameEl.innerText.trim();
-                if (rText.length >= 13) {
-                    res.ruc = rText.match(/\d{13}/)[0];
+                // `match()` puede devolver null: un RUC que llega sin sus 13
+                // dígitos (etiqueta con otro texto) rompía acá y mataba la
+                // detección completa, no solo este camino.
+                const rucMatch = rText.match(/\d{13}/);
+                if (rucMatch) {
+                    res.ruc = rucMatch[0];
                     res.name = nText;
                     res.highConfidence = true;
-                    log.debug('💎 [ELITE] Cliente detectado via Angular Profile:', res);
+                    scAvisarDeteccion('Angular Profile', res);
                     return res;
                 }
             }
@@ -802,7 +895,7 @@ class SriAssistantPanel {
                         res.ruc = rMatch[0];
                         res.name = nuevoNameEl.innerText.trim();
                         res.highConfidence = true;
-                        log.debug('💎 [ELITE] Cliente detectado via Topbar ID:', res);
+                        scAvisarDeteccion('Topbar ID', res);
                         return res;
                     }
                 }
@@ -1001,6 +1094,19 @@ class SriAssistantPanel {
      * Sugiere saltar al Paso 2 tras éxito en extracción usando Smart Card
      */
     async scanObligacionesSRI() {
+        // 👁️ Modo "solo mirar" (Perfil SRI desde la web): no se escanean
+        // obligaciones ni se sugiere el mes siguiente. Entrar no es declarar.
+        try {
+            const st = await SafeStorage.get(['pending_sri_autofill', 'pendingAction']);
+            const soloMirar = st && (
+                st.pendingAction === 'solo_perfil' ||
+                (st.pending_sri_autofill && st.pending_sri_autofill.soloEstarAdentro === true)
+            );
+            if (soloMirar) {
+                log.debug('👁️ [SCANNER] Solo mirar: no se escanea ni se sugiere. Se cancela.');
+                return;
+            }
+        } catch (e) { /* si no se puede leer, se sigue normal */ }
         const st = await SafeStorage.get(['sri_master_switch_on', 'ghost_manual_mode', 'auto_batch_enabled']);
         if (st.ghost_manual_mode === true || this.manualMode) return;
 

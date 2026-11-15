@@ -132,9 +132,9 @@
   push('la baja va a su propia pestaña',         texto('countBaja'), '1');
   push('el semestral va a Otros',                texto('countOtros'), '1');
 
-  sec('B · Bendita inactiva = modo clásico (corre todo)');
+  sec('B · sin selección = modo clásico (corre todo)');
   push('sin lista creada, la barra lo dice',
-       /inactiva/.test(texto('benditaResumen')), true);
+       /sin selección/i.test(texto('benditaResumen')), true);
 
   // Sin Bendita, iniciar lote encadena a los DOS pendientes (y empieza por el pulsado).
   MARCA('B: clásico — arrancando lote sin bendita');
@@ -160,7 +160,7 @@
   if (chipUno) chipUno.click();
   await new Promise(r => setTimeout(r, 60));
   push('se guardó la lista con ese RUC',        store.sc_lista_bendita, ['0102030405001']);
-  push('la barra ya dice que está activa',      /Benditos:/.test(texto('benditaResumen')), true);
+  push('la barra ya dice que está activa',      /En el lote:/.test(texto('benditaResumen')), true);
 
   sec('D · el lote con Bendita activa corre SOLO los benditos');
   MARCA('D: lote bendito');

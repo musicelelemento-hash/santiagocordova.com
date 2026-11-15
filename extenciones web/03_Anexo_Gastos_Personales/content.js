@@ -19,13 +19,54 @@ let CATEGORY_LIMITS = {
     vestimenta: 0,
     turismo: 0
 }; let lastTargetCategory = null;
-const GEMINI_API_KEY = "AIzaSyCNgO9PD33xySEAekuQLaz_RhdxuwSkxdE";
+// ── IA: la clave NO vive en el código ──────────────────────────────────
+// Este archivo viaja dentro de la extensión, se versiona y ahora también se
+// empaqueta dentro de la suite: una clave acá es una clave publicada para
+// siempre. Se lee de chrome.storage.local, en la MISMA entrada que usa la 01
+// (`sc_ia_credenciales.apiKey`), así hay un solo lugar donde rotarla.
+let GEMINI_API_KEY = '';
+let GEMINI_MODELO = 'gemini-2.5-flash';
+let _iaClaveAvisada = false;
+
+/** Trae la clave del almacén. Devuelve vacío si no hay. Nunca lanza. */
+async function cargarCredencialesIA() {
+    try {
+        const r = await new Promise((ok) => chrome.storage.local.get(['sc_ia_credenciales'], ok));
+        const c = r.sc_ia_credenciales || {};
+        GEMINI_API_KEY = typeof c.apiKey === 'string' ? c.apiKey.trim() : '';
+        if (typeof c.modelo === 'string' && c.modelo.trim()) GEMINI_MODELO = c.modelo.trim();
+    } catch (e) {
+        GEMINI_API_KEY = '';
+    }
+    return GEMINI_API_KEY;
+}
+
+// Si la clave se carga mientras la página está abierta (popup o Ajustes),
+// entra en vigencia sin recargar el SRI.
+try {
+    chrome.storage.onChanged.addListener((cambios, area) => {
+        if (area !== 'local' || !cambios || !cambios.sc_ia_credenciales) return;
+        const nv = cambios.sc_ia_credenciales.newValue || {};
+        GEMINI_API_KEY = typeof nv.apiKey === 'string' ? nv.apiKey.trim() : '';
+        if (typeof nv.modelo === 'string' && nv.modelo.trim()) GEMINI_MODELO = nv.modelo.trim();
+        _iaClaveAvisada = false;
+    });
+} catch (e) { /* sin storage: se clasifica sin IA */ }
+
+cargarCredencialesIA();
 
 // --- MOTOR DE IA (Gemini Pro) ---
 const GeminiAI = {
     async classify(providerName, items) {
-        if (!GEMINI_API_KEY || GEMINI_API_KEY.includes("AIzaSy")) {
-            // Validating key existence (AIzaSy is prefix, if only prefix it means placeholder but here we have the full key)
+        // Sin clave no se inventa nada: se devuelve null y la clasificación
+        // sigue por el camino local (catastro + mapeos aprendidos).
+        if (!GEMINI_API_KEY) await cargarCredencialesIA();
+        if (!GEMINI_API_KEY) {
+            if (!_iaClaveAvisada) {
+                _iaClaveAvisada = true;
+                console.warn('[GeminiAI] Sin clave de IA guardada: se clasifica sin IA. Cargala en el popup de la 03 (IA · Gemini) o en Ajustes de la 01/suite: es la misma clave.');
+            }
+            return null;
         }
 
         const itemsList = items.map(i => i.name).join(', ');
@@ -44,16 +85,19 @@ const GeminiAI = {
         Responde exclusivamente en formato JSON: {"category": "rubro_detectado", "reason": "explicación breve"}`;
 
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODELO)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: { response_mime_type: "application/json" }
+                    generationConfig: { responseMimeType: "application/json" }
                 })
             });
             const data = await response.json();
+            if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+                throw new Error('La IA respondió sin candidatos (clave inválida, cuota o bloqueo).');
+            }
             const resultText = data.candidates[0].content.parts[0].text;
             return JSON.parse(resultText);
         } catch (e) {

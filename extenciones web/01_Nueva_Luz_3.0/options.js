@@ -541,3 +541,296 @@ document.addEventListener('DOMContentLoaded', () => {
     pintarEstado();
     pintarEstadoBovedaClientes();
 });
+
+// ── Copia por correo: URL, token, chat y firma ─────────────────────────────
+(function () {
+    const CLAVE = 'sc_email_config';
+    const $ = (id) => document.getElementById(id);
+
+    async function pintar() {
+        const cfg = (await chrome.storage.local.get([CLAVE]))[CLAVE] || {};
+        if ($('emailUrl')) $('emailUrl').value = cfg.url || '';
+        if ($('emailToken')) $('emailToken').value = cfg.token || '';
+        if ($('emailChatId')) $('emailChatId').value = cfg.chatId || '';
+        if ($('emailFirma')) $('emailFirma').value = cfg.firma || '';
+        if ($('emailTo')) $('emailTo').value = cfg.to || '';
+        if ($('emailResendKey')) $('emailResendKey').value = cfg.resendKey || '';
+        if ($('emailResendFrom')) $('emailResendFrom').value = cfg.resendFrom || '';
+        const est = $('estadoEmail');
+        if (est) {
+            est.textContent = cfg.url
+                ? 'Configurado: ' + cfg.url
+                : 'Sin configurar. El correo no se envía.';
+            est.dataset.hay = cfg.url ? 'si' : 'no';
+        }
+    }
+
+    function init() {
+        pintar();
+        $('btnGuardarEmail')?.addEventListener('click', async () => {
+            const cfg = {
+                url: String($('emailUrl')?.value || '').trim(),
+                token: String($('emailToken')?.value || '').trim(),
+                chatId: String($('emailChatId')?.value || '').trim(),
+                firma: String($('emailFirma')?.value || '').trim(),
+                to: String($('emailTo')?.value || '').trim(),
+                resendKey: String($('emailResendKey')?.value || '').trim(),
+                resendFrom: String($('emailResendFrom')?.value || '').trim(),
+            };
+            await chrome.storage.local.set({ [CLAVE]: cfg });
+            const est = $('estadoEmail');
+            if (est) {
+                est.textContent = cfg.url ? 'Guardado. Se enviará a cada cliente con correo.' : 'Guardado sin URL: no se envía.';
+                est.dataset.hay = cfg.url ? 'si' : 'no';
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
+
+// ── Descargar la última bitácora (sobrevive a que se cierre la pestaña) ─────
+(function () {
+    const btn = document.getElementById('btnDescargarLog');
+    const est = document.getElementById('estadoLog');
+    if (!btn) return;
+
+    const dos = (n) => String(n).padStart(2, '0');
+    btn.addEventListener('click', async () => {
+        const r = await chrome.storage.local.get(['sc_log_ultimo']);
+        const data = r.sc_log_ultimo;
+        if (!data || !Array.isArray(data.lineas) || !data.lineas.length) {
+            if (est) est.textContent = 'Todavía no hay bitácora guardada.';
+            return;
+        }
+        const cuerpo = data.lineas.map((l) => {
+            const d = new Date(l.t);
+            return dos(d.getHours()) + ':' + dos(d.getMinutes()) + ':' + dos(d.getSeconds()) + ' [' + l.nivel + '] ' + l.texto;
+        }).join('\n');
+        const cabecera = 'Bitácora SC TaxPilot\nGuardada: ' + new Date(data.t).toLocaleString() + '\nURL: ' + (data.url || '-') + '\n' + '─'.repeat(60) + '\n';
+        const blob = new Blob([cabecera + cuerpo], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        const d = new Date(data.t);
+        a.href = URL.createObjectURL(blob);
+        a.download = 'bitacora_' + d.getFullYear() + '-' + dos(d.getMonth() + 1) + '-' + dos(d.getDate()) + '_' + dos(d.getHours()) + dos(d.getMinutes()) + '.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        if (est) est.textContent = 'Descargada: ' + data.lineas.length + ' líneas.';
+    });
+})();
+
+// ── Auditoría rápida (caja negra) ──────────────────────────────────────────
+// Junta hechos del almacén y da veredictos ✅/⚠. No llama a la red.
+(function () {
+    const CLAVES = [
+        'sc_loop', 'sc_ultimo_lote', 'sc_clients_cache', 'sc_clientes_baja',
+        'sc_declaraciones_locales', 'flagged_errors', 'sc_omitidos',
+        'sc_declaraciones_por_pagar_aviso', 'sc_email_config',
+        'sc_supabase_credenciales', 'sc_lista_bendita', 'sri_target_period',
+        'sc_log_ultimo', 'pendingAction', 'pending_sri_autofill', 'sc_buzon'
+    ];
+
+    const dinero = (v) => '$' + Number(v || 0).toFixed(2);
+    const fecha = (ts) => ts ? new Date(ts).toLocaleString() : '—';
+
+    async function construir() {
+        const d = await chrome.storage.local.get(CLAVES);
+        const l = [];
+        let avisos = 0;
+        const add = (txt) => l.push(txt);
+        const veredicto = (ok, txt) => { if (!ok) avisos += 1; add((ok ? '✅ ' : '⚠️ ') + txt); };
+
+        const manifest = chrome.runtime.getManifest();
+        add('AUDITORÍA · v' + manifest.version + ' · ' + new Date().toLocaleString());
+        add('─'.repeat(52));
+
+        // Lote
+        const loop = d.sc_loop || {};
+        const ultimo = d.sc_ultimo_lote;
+        add('LOTE');
+        add('  semáforo: ' + (loop.estado || 'sin datos') +
+            ' · cola: ' + (Array.isArray(loop.cola) ? loop.cola.length : 0) +
+            ' · índice: ' + (loop.indice != null ? loop.indice : '—'));
+        if (ultimo) {
+            add('  último: ' + fecha(ultimo.cuando) + ' · ' + (ultimo.periodo || '—') +
+                ' · ' + (ultimo.conPdf || 0) + '/' + (ultimo.total || 0) + ' con comprobante' +
+                (ultimo.sinPdf ? ' · ' + ultimo.sinPdf + ' sin PDF' : ''));
+            veredicto((ultimo.total || 0) === 0 || (ultimo.sinPdf || 0) === 0,
+                (ultimo.sinPdf ? ultimo.sinPdf + ' sin comprobante en el último lote' : 'todas con comprobante'));
+        } else {
+            add('  último: sin registro');
+        }
+
+        // Clientes
+        const cache = Array.isArray(d.sc_clients_cache) ? d.sc_clients_cache : [];
+        const bajas = Array.isArray(d.sc_clientes_baja) ? d.sc_clientes_baja : [];
+        add('');
+        add('CARTERA');
+        // Mensual = frecuencia marcada, o (si no está) la historia manda:
+        // "2026-05" → mensual · "2026-S1" → semestral · 3+ meses → mensual.
+        const esMensualPorDatos = (c) => {
+            const tp = (c && c.tax_profile) || {};
+            const freq = String(tp.ivaFrequency || c.iva_frequency || c.ivaFrequency || '').toLowerCase();
+            const tipo = String(tp.clientType || (c && c.client_type) || '').toLowerCase();
+            if (tipo === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) return false;
+            if (freq === 'mensual') return true;
+            if (freq === 'semestral' || freq === 'ninguno' || freq === 'anual') return false;
+            if (String((c && c.regime) || '').toLowerCase().includes('popular')) return false;
+            const h = Array.isArray(c && c.declaration_history) ? c.declaration_history : [];
+            const iva = h.filter((e) => String((e && e.type) || '').toUpperCase().includes('IVA'));
+            if (!iva.length) return false;
+            const per = iva.map((e) => String((e && e.period) || '').trim()).filter(Boolean);
+            const ult = per.slice().sort((a, b) => String(b).localeCompare(String(a)))[0] || '';
+            if (/^\d{4}-\d{2}$/.test(ult)) return true;
+            if (/^\d{4}-S[12]$/.test(ult)) return false;
+            return per.filter((x) => /^\d{4}-\d{2}$/.test(x)).length >= 3;
+        };
+        const mensuales = cache.filter(esMensualPorDatos).length;
+        add('  clientes mensuales (los que declaran): ' + mensuales);
+        add('  el resto de la caché son claves/contactos: no se muestran ni entran.');
+        veredicto(true, mensuales + ' cliente(s) mensual(es) reales');
+
+        add('');
+        add('CLIENTES');
+        add('  bajas: ' + bajas.length);
+        const rucs = new Set(cache.map((c) => c.ruc));
+        veredicto(cache.length > 0, cache.length > 0 ? 'caché cargada' : 'caché vacía (no hay con qué armar el lote)');
+        veredicto(rucs.size === cache.length, 'RUC duplicados en caché: ' + (cache.length - rucs.size));
+        const pendienteAction = d.pendingAction;
+        veredicto(!pendienteAction, pendienteAction ? 'hay una acción colgada: ' + pendienteAction : 'sin acciones colgadas');
+
+        // Declaraciones del período
+        const reg = d.sc_declaraciones_locales || {};
+        const tp = d.sri_target_period || {};
+        const periodo = (tp.year && typeof tp.monthIndex === 'number')
+            ? tp.year + '-' + String(tp.monthIndex + 1).padStart(2, '0') : '';
+        if (periodo) {
+            let total = 0, conPdf = 0;
+            Object.entries(reg).forEach(([k, v]) => {
+                if (!String(k).endsWith('|' + periodo)) return;
+                total += 1;
+                if (v && v.pdfSubido) conPdf += 1;
+            });
+            add('');
+            add('PERÍODO ' + periodo);
+            add('  declaradas: ' + total + ' · con comprobante: ' + conPdf + ' · sin PDF: ' + (total - conPdf));
+            veredicto(total === conPdf, total > conPdf ? (total - conPdf) + ' sin comprobante' : 'todas con comprobante');
+        }
+
+        // Errores y avisos
+        const flag = d.flagged_errors || {};
+        const omit = d.sc_omitidos || {};
+        const porPagar = d.sc_declaraciones_por_pagar_aviso || {};
+        // Por qué quedaron afuera (para actuar sin abrir el popup).
+        add('');
+        add('OMITIDOS POR MOTIVO');
+        const motivos = {};
+        Object.values(omit).forEach((o) => {
+            const m = String((o && o.motivo) || 'sin motivo').trim();
+            motivos[m] = (motivos[m] || 0) + 1;
+        });
+        const topMotivos = Object.entries(motivos).sort((a, b) => b[1] - a[1]).slice(0, 6);
+        if (!topMotivos.length) add('  (ninguno)');
+        topMotivos.forEach(([m, n]) => add('  ' + n + ' × ' + m));
+        add('');
+        add('ERRORES Y AVISOS');
+        add('  con error: ' + Object.keys(flag).length +
+            ' · omitidos: ' + Object.keys(omit).length +
+            ' · por pagar: ' + Object.keys(porPagar).length);
+        if (Object.keys(flag).length) {
+            add('  errores: ' + Object.keys(flag).slice(0, 5).join(', '));
+        }
+
+        // Servicios
+        add('');
+        add('SERVICIOS');
+        const cred = d.sc_supabase_credenciales || {};
+        veredicto(!!(typeof cred === 'string' ? cred : (cred && (cred.SUPABASE_ANON_KEY || cred.key || cred.anonKey || cred.clave))), 'llave de Supabase en Ajustes');
+        const email = d.sc_email_config || {};
+        veredicto(!!(email.url || email.resendKey), (email.resendKey ? 'correo por Resend' : (email.url ? 'correo por el bot' : 'correo sin configurar (no se envía copia)')));
+
+        // Bitácora: sólo lo que importa
+        const logUlt = d.sc_log_ultimo;
+        const avisosLog = Array.isArray(d.sc_log_avisos) ? d.sc_log_avisos : [];
+        if (logUlt && Array.isArray(logUlt.lineas)) {
+            const graves = (avisosLog.length ? avisosLog : logUlt.lineas.filter((x) => x.nivel === 'warn' || x.nivel === 'error')).slice(-8);
+            add('');
+            add(graves.length ? 'BITÁCORA: últimas advertencias (' + graves.length + ')' : 'BITÁCORA: sin avisos registrados (arranca de nuevo al recargar)');
+            graves.forEach((x) => {
+                const h = new Date(x.t);
+                add('  ' + String(h.getHours()).padStart(2, '0') + ':' + String(h.getMinutes()).padStart(2, '0') +
+                    ' [' + x.nivel + '] ' + String(x.texto).slice(0, 90));
+            });
+        }
+
+        add('');
+        add('─'.repeat(52));
+        add(avisos === 0 ? 'VEREDICTO: todo en orden.' : 'VEREDICTO: ' + avisos + ' punto(s) a revisar.');
+        return l.join('\n');
+    }
+
+    const btn = document.getElementById('btnAuditoria');
+    const salida = document.getElementById('auditoriaSalida');
+    if (!btn || !salida) return;
+
+    btn.addEventListener('click', async () => {
+        salida.textContent = 'Auditando…';
+        try {
+            salida.textContent = await construir();
+        } catch (e) {
+            salida.textContent = 'No se pudo auditar: ' + (e && e.message);
+        }
+    });
+
+    document.getElementById('btnAuditoriaGuardar')?.addEventListener('click', () => {
+        const txt = salida.textContent || '';
+        if (!txt || txt === '—') return;
+        const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const d = new Date();
+        a.download = 'auditoria_' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+})();
+
+// ── Probar Resend: manda un correo de prueba y dice qué respondió ─────────
+(function () {
+    const btn = document.getElementById('btnProbarResend');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+        const est = document.getElementById('estadoResend');
+        const clave = String(document.getElementById('emailResendKey')?.value || '').trim();
+        const desde = String(document.getElementById('emailResendFrom')?.value || '').trim()
+            || 'Soluciones Contables Pro <onboarding@resend.dev>';
+        const destino = String(document.getElementById('emailTo')?.value || '').trim();
+        if (!clave) { if (est) { est.textContent = 'Falta la clave de Resend.'; est.dataset.hay = 'no'; } return; }
+        if (!destino) { if (est) { est.textContent = 'Poné un destinatario fijo para la prueba.'; est.dataset.hay = 'no'; } return; }
+        btn.disabled = true;
+        if (est) { est.textContent = 'Enviando…'; est.dataset.hay = ''; }
+        try {
+            const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { Authorization: 'Bearer ' + clave, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    from: desde,
+                    to: [destino],
+                    subject: 'Prueba de Resend · SC TaxPilot',
+                    text: 'Si ves este correo, la clave de Resend está funcionando.\n\n— Nueva Luz',
+                }),
+            });
+            const cuerpo = await res.text();
+            if (res.ok) {
+                if (est) { est.textContent = 'Enviado a ' + destino; est.dataset.hay = 'si'; }
+            } else {
+                if (est) { est.textContent = 'HTTP ' + res.status + ': ' + cuerpo.slice(0, 140); est.dataset.hay = 'no'; }
+            }
+        } catch (e) {
+            if (est) { est.textContent = 'Error: ' + (e && e.message); est.dataset.hay = 'no'; }
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();

@@ -156,6 +156,11 @@ function syncFullClientsMatrix() {
           periodToUse = { year: cYear, monthIndex: cMonth };
         }
 
+        // La web puede pedir SOLO ENTRAR A MIRAR (perfil / probar clave).
+        // Antes este bridge ignoraba el pedido y arrancaba una declaración.
+        const accionWeb = String(activeData.pendingAction || '').trim();
+        const esSoloMirar = accionWeb === 'solo_perfil' || accionWeb === 'probar_clave' || activeData.soloEstarAdentro === true;
+
         chrome.storage.local.get(['sc_rebotes', 'sri_tried_credentials', 'flagged_errors', 'sc_omitidos'], (rbRes) => {
           const rb = rbRes?.sc_rebotes || {};
           delete rb[activeData.ruc];
@@ -176,14 +181,17 @@ function syncFullClientsMatrix() {
             sc_omitidos: omitidos,
             pending_sri_autofill: {
               ruc: activeData.ruc,
+              soloEstarAdentro: esSoloMirar || undefined,
               password: activeData.password || activeData.sriPassword || '',
               name: activeData.name || 'Cliente SRI',
               timestamp: Date.now(),
               manual: true,
+              isBatch: false,
               loginAttempted: false
             },
             accionDeQuien: activeData.ruc,
-            pendingAction: 'verifyProfile',
+            pendingAction: esSoloMirar ? (accionWeb || 'solo_perfil') : 'verifyProfile',
+            pending_sri_autofill_solo: esSoloMirar || undefined,
             workflowPeriod: periodToUse,
             selected_period_month: periodToUse.monthIndex,
             selected_period_year: periodToUse.year,
@@ -191,19 +199,21 @@ function syncFullClientsMatrix() {
             selected_period_updated_at: Date.now(),
             actionTimestamp: Date.now(),
             sri_master_switch_on: true,
-            sri_auto_mode: true,
-            autoDeclaration: true,
+            sri_auto_mode: !esSoloMirar,
+            autoDeclaration: !esSoloMirar,
             sriAutomationPaused: false,
-            sc_loop: {
-              estado: 'CORRIENDO',
-              cola: [{ ruc: activeData.ruc, name: activeData.name || 'Cliente SRI', password: activeData.password || activeData.sriPassword || '' }],
-              indice: 0,
-              periodo: periodToUse,
-              latido: Date.now(),
-              motivo: 'Iniciado vía activeData en Web',
-              paso: false,
-              ultimaFase: ''
-            }
+            sc_loop: esSoloMirar
+              ? { estado: 'DETENIDO', cola: [], indice: 0, periodo: periodToUse, latido: Date.now(), motivo: 'Solo mirar desde la web', paso: false, ultimaFase: '' }
+              : {
+                  estado: 'CORRIENDO',
+                  cola: [{ ruc: activeData.ruc, name: activeData.name || 'Cliente SRI', password: activeData.password || activeData.sriPassword || '' }],
+                  indice: 0,
+                  periodo: periodToUse,
+                  latido: Date.now(),
+                  motivo: 'Iniciado vía activeData en Web',
+                  paso: false,
+                  ultimaFase: ''
+              }
           });
         });
         
@@ -663,6 +673,69 @@ window.addEventListener("message", (event) => {
         chrome.storage.local.set(patch, () => {
           console.log(`✅ [SC PRO Bridge] Lote reanudado en cliente ${idx + 1}/${queue.length}: ${cliente.name || cliente.ruc}`);
           window.open('https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT', '_blank');
+        });
+      });
+    }
+
+    if (data.type === 'SRI_LOOP_CONTROL' && data.data) {
+      const accion = String(data.data.accion || '').toLowerCase();
+      const motivo = String(data.data.motivo || 'Pedido desde la web').slice(0, 120);
+
+      // 🛡️ Sólo tres verbos. Cualquier otra cosa se ignora en vez de escribir
+      // un estado raro en el semáforo, que es la única autoridad del bucle.
+      if (accion !== 'pausar' && accion !== 'detener') {
+        console.warn('🛡️ [Bridge] SRI_LOOP_CONTROL ignorado: acción no soportada.', accion);
+        return;
+      }
+
+      chrome.storage.local.get(['sc_loop'], (st) => {
+        const loop = st.sc_loop || {};
+        const estado = String(loop.estado || 'DETENIDO');
+
+        if (accion === 'pausar') {
+          if (estado !== 'CORRIENDO') {
+            console.log(`⏸️ [Bridge] Pausa pedida desde la web, pero el bucle está ${estado}. Se ignora.`);
+            return;
+          }
+          // PAUSANDO (no PAUSADO): deja terminar el cliente en curso y ahí para.
+          // No se tocan las banderas viejas a propósito: puedeAvanzar() manda.
+          chrome.storage.local.set({
+            sc_loop: Object.assign({}, loop, {
+              estado: 'PAUSANDO',
+              motivo: 'Pausa pedida desde la web'
+            })
+          }, () => {
+            console.log('⏸️ [Bridge] Pausa pedida desde la web: se termina el cliente actual y para.');
+          });
+          return;
+        }
+
+        // Detener: mismo efecto que 🛑 del HUD — semáforo apagado, cola vacía y
+        // la acción a medias descartada (si queda, la página se recarga sola).
+        const detenido = {
+          estado: 'DETENIDO',
+          cola: [],
+          indice: 0,
+          periodo: loop.periodo || null,
+          latido: 0,
+          motivo: `Detenido desde la web (${motivo})`,
+          paso: false,
+          ultimaFase: ''
+        };
+        chrome.storage.local.set({
+          sc_loop: detenido,
+          sri_master_switch_on: false,
+          sriAutomationPaused: true,
+          auto_batch_enabled: false,
+          sri_auto_mode: false,
+          autoDeclaration: false
+        }, () => {
+          chrome.storage.local.remove([
+            'pendingAction', 'actionTimestamp', 'recuperarComprobante',
+            'bajarTodos', 'accionEnCurso', 'accionVueltas', 'accionDeQuien'
+          ], () => {
+            console.log('🛑 [Bridge] Bucle detenido desde la web; acción a medias descartada.');
+          });
         });
       });
     }

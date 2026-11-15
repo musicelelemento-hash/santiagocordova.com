@@ -1,269 +1,794 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8">
-  <title>Anulador de Comprobantes SRI</title>
+  <title>Anulador SRI Pro — Suite Obsidian & Gold</title>
   <style>
     :root {
-      --primary: #2563eb;
-      --primary-dark: #1e40af;
-      --bg-gradient: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-      --text-main: #1e293b;
-      --text-sec: #64748b;
+      /* Sistema Obsidian & Liquid Gold */
+      --font-display: 'Manrope', 'SF Pro Display', 'Inter', system-ui, sans-serif;
+      --font-body: 'Inter', 'SF Pro Text', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', monospace;
+      --quantum: #2B6AFF;
+      --emerald-neon: #4edea3;
+      --bg-main: #020617;
+      --bg-card: rgba(5, 20, 36, 0.75);
+      --bg-card-hover: rgba(12, 32, 50, 0.85);
+      --gold-primary: #C9A96E;
+      --gold-gradient: linear-gradient(135deg, #e6d3ab 0%, #a8874f 100%);
+      --gold-glow: rgba(201, 169, 110, 0.25);
+      --emerald: #00A896;
+      --emerald-glow: rgba(0, 168, 150, 0.25);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-gold: rgba(201, 169, 110, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: var(--font-body);
     }
 
     body {
-      width: 360px;
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      margin: 0;
-      padding: 0;
-      background: var(--bg-gradient);
+      width: 380px;
+      background: var(--bg-main);
       color: var(--text-main);
+      padding: 0;
+      margin: 0;
+      overflow-x: hidden;
+      border: 1px solid var(--border-subtle);
     }
 
+    /* HEADER OBSIDIAN & LIQUID GOLD */
     .header {
-      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-      padding: 24px 20px;
-      color: white;
+      background: linear-gradient(180deg, rgba(12, 32, 50, 0.6) 0%, rgba(5, 20, 36, 0.95) 100%);
+      padding: 22px 20px 18px;
       text-align: center;
-      border-radius: 0 0 20px 20px;
-      box-shadow: 0 4px 15px rgba(37, 99, 235, 0.2);
+      border-bottom: 1px solid var(--border-gold);
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      background: rgba(201, 169, 110, 0.12);
+      border: 1px solid rgba(201, 169, 110, 0.3);
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #e6d3ab;
+      margin-bottom: 10px;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background: #00A896;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #00A896;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
     }
 
     .header h1 {
-      margin: 0;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #e6d3ab 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
     }
 
     .header p {
-      margin: 5px 0 0;
-      opacity: 0.8;
-      font-size: 12px;
-    }
-
-    .status-badge {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 4px 12px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
       font-size: 11px;
-      font-weight: 600;
-      backdrop-filter: blur(4px);
+      color: var(--text-muted);
+      font-weight: 500;
     }
 
-    .dashboard {
-      padding: 20px;
+    /* CONTENEDOR PRINCIPAL */
+    .content-body {
+      padding: 16px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* BANNER DE REANUDACIÓN ELEGANTE (SIN CONFIRM NATIVO) */
+    .resume-banner {
+      display: none;
+      background: rgba(201, 169, 110, 0.08);
+      border: 1px solid rgba(201, 169, 110, 0.35);
+      border-radius: 12px;
+      padding: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .resume-banner-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #e6d3ab;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .resume-banner-text {
+      font-size: 11px;
+      color: #cbd5e1;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+
+    .resume-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 8px;
     }
 
-    .card {
-      background: white;
+    .btn-resume {
+      background: var(--gold-gradient);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-resume:hover {
+      box-shadow: 0 4px 15px var(--gold-glow);
+      transform: translateY(-1px);
+    }
+
+    .btn-discard {
+      background: rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-discard:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    /* MODO ZERO-CLICK TOGGLE */
+    .mode-switch-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
-      padding: 16px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mode-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mode-label-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .mode-label-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 20px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .3s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background: #C9A96E;
+      box-shadow: 0 0 10px rgba(201, 169, 110, 0.5);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(18px);
+    }
+
+    /* DROP ZONE OBSIDIAN GLASS */
+    .drop-zone {
+      background: rgba(5, 20, 36, 0.5);
+      border: 2px dashed rgba(201, 169, 110, 0.35);
+      border-radius: 14px;
+      padding: 22px 16px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-      text-decoration: none;
-      color: inherit;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 8px;
     }
 
-    .card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.15);
-      border-color: var(--primary);
+    .drop-zone:hover, .drop-zone.dragover {
+      background: rgba(201, 169, 110, 0.08);
+      border-color: #e6d3ab;
+      box-shadow: 0 8px 25px var(--gold-glow);
+      transform: translateY(-2px);
     }
 
-    .card-icon {
-      font-size: 24px;
-      background: #eff6ff;
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--primary);
+    .drop-icon {
+      font-size: 32px;
+      filter: drop-shadow(0 4px 10px rgba(201, 169, 110, 0.3));
     }
 
-    .card-title {
+    .drop-text-primary {
       font-size: 13px;
-      font-weight: 600;
-      color: var(--text-main);
+      font-weight: 700;
+      color: #ffffff;
     }
 
-    .card.primary {
-      grid-column: span 2;
-      background: linear-gradient(to right, #ffffff, #f8fafc);
-      padding: 20px;
-      border-left: 4px solid var(--primary);
+    .drop-text-secondary {
+      font-size: 10px;
+      color: var(--text-muted);
     }
 
-    .card.primary .card-icon {
-      background: #dbeafe;
-      color: #1d4ed8;
-      font-size: 28px;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 15px;
-      font-size: 11px;
-      color: var(--text-sec);
-      border-top: 1px solid rgba(0, 0, 0, 0.05);
-      margin-top: 10px;
-    }
-
-    /* Tweak input file */
     input[type=file] {
       display: none;
     }
-    
-    .drop-zone {
-      margin-top: 10px;
-      padding: 20px;
-      border: 2px dashed rgba(37,99,235,0.4);
-      border-radius: 12px;
-      text-align: center;
-      cursor: pointer;
-      background: rgba(255,255,255,0.8);
-      transition: all 0.3s;
-    }
-    .drop-zone:hover {
-      background: rgba(239,246,255,0.9);
-      border-color: var(--primary);
-    }
-    .drop-text {
-      font-size: 13px;
-      color: var(--text-main);
-      font-weight: 600;
-      margin-top: 8px;
-    }
-    .badge-icon {
-      font-size: 28px;
-    }
-    #status {
+
+    /* LISTA DE COLA */
+    #queue-container {
       display: none;
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 8px;
-      font-size: 12px;
-      width: 100%;
-      text-align: center;
-      font-weight: bold;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px;
     }
+
+    .queue-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .queue-badge {
+      background: rgba(201, 169, 110, 0.2);
+      color: #e6d3ab;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-family: monospace;
+    }
+
+    #queue-list {
+      max-height: 120px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding-right: 4px;
+    }
+
+    #queue-list::-webkit-scrollbar { width: 4px; }
+    #queue-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
     .file-item {
       display: flex;
       justify-content: space-between;
-      padding: 4px 6px;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
-      border-radius: 4px;
-    }
-    .file-item:last-child {
-      border-bottom: none;
-    }
-    .file-remove {
-      color: #ef4444; cursor: pointer; font-weight: bold;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 11px;
     }
 
-    #status.success { background: #dcfce7; color: #166534; display: block; }
-    #status.error { background: #fee2e2; color: #991b1b; display: block; }
-    #status.processing { background: #dbeafe; color: #1e40af; display: block; }
-    /* RECORDING / OPERATING BADGE */
-    .recording-badge-anulador {
+    .file-item-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 250px;
+      color: #e2e8f0;
+    }
+
+    .file-remove {
+      color: #ef4444;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+
+    .file-remove:hover {
+      opacity: 1;
+    }
+
+    /* BOTONES PRINCIPALES */
+    .btn-primary {
+      width: 100%;
+      background: var(--gold-gradient);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      padding: 13px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      box-shadow: 0 4px 20px var(--gold-glow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       align-items: center;
-      gap: 10px;
-      background: rgba(255, 255, 255, 0.15);
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(201, 169, 110, 0.4);
+    }
+
+    .btn-secondary {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      color: #cbd5e1;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-danger-outline {
+      background: transparent;
+      color: #f87171;
+      border: 1px dashed rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+      margin-top: 6px;
+    }
+
+    .btn-danger-outline:hover {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: #ef4444;
+    }
+
+    /* STATUS TOAST */
+    #status {
+      display: none;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      animation: fadeIn 0.3s;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    #status.success { background: rgba(0, 168, 150, 0.15); color: #34d399; border: 1px solid rgba(0, 168, 150, 0.3); }
+    #status.error { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    #status.processing { background: rgba(201, 169, 110, 0.15); color: #e6d3ab; border: 1px solid rgba(201, 169, 110, 0.3); }
+
+    /* FOOTER */
+    .footer {
+      padding: 14px 20px;
+      text-align: center;
+      border-top: 1px solid var(--border-subtle);
+      background: rgba(10, 15, 29, 0.8);
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .footer strong {
+      color: #f8fafc;
+      font-size: 11px;
+    }
+
+    .footer a {
+      color: #e6d3ab;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .cobro-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+
+    .cobro-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .cobro-title {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold-primary);
+    }
+
+    .cobro-total {
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--text-main);
+    }
+
+    .cobro-resumen {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+
+    .cobro-fila {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    .cobro-precio {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cobro-precio input {
+      width: 62px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(0, 0, 0, 0.35);
+      color: var(--text-main);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .cobro-mini {
+      border: 1px solid var(--border-gold);
+      background: rgba(201, 169, 110, 0.12);
+      color: var(--gold-primary);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .cobro-mini:hover {
+      background: rgba(201, 169, 110, 0.22);
+    }
+
+    .cobro-nota {
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.75;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* DESIGN SYSTEM · Obsidian & Liquid Gold (skill apple-tier-uiux-director) */
+    .header h1, .cobro-title, .mode-label-title, .queue-header span:first-child, .resume-banner-title {
+      font-family: var(--font-display);
+      letter-spacing: -0.03em;
+    }
+
+    .header h1 {
+      text-wrap: balance;
+    }
+
+    .cobro-total, .queue-badge, .cobro-precio input, #sc-ver-popup {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+    }
+
+    .cobro-total {
+      color: #e6d3ab;
+      letter-spacing: 0.01em;
+      text-shadow: 0 0 18px rgba(201, 169, 110, 0.35);
+    }
+
+    .mode-switch-card, .cobro-card, .resume-banner {
+      backdrop-filter: blur(26px) saturate(180%);
+      -webkit-backdrop-filter: blur(26px) saturate(180%);
+      border-top-color: rgba(201, 169, 110, 0.28);
+      transition: border-color 0.35s cubic-bezier(0.16, 1, 0.3, 1), background 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .mode-switch-card:hover, .cobro-card:hover {
+      border-top-color: rgba(201, 169, 110, 0.5);
+    }
+
+    .btn-primary, .btn-resume, .cobro-mini, .btn-danger-outline, .btn-discard {
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease;
+    }
+
+    .btn-primary:hover, .btn-resume:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(201, 169, 110, 0.22);
+    }
+
+    .btn-primary:active, .btn-resume:active, .cobro-mini:active, .btn-discard:active, .btn-danger-outline:active {
+      transform: translateY(1px) scale(0.985);
+    }
+
+    .pulse-dot {
+      background: #4edea3;
+      box-shadow: 0 0 10px #4edea3;
+    }
+
+    .drop-zone {
+      transition: border-color 0.3s ease, background 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .drop-zone:hover {
+      transform: translateY(-1px);
+    }
+    .emisor-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
       border-radius: 14px;
-      padding: 8px 12px;
-      margin-top: 10px;
-      backdrop-filter: blur(4px);
+      border: 1px solid rgba(201, 169, 110, 0.35);
+      border-top-color: rgba(201, 169, 110, 0.6);
+      background: linear-gradient(180deg, rgba(201, 169, 110, 0.12), rgba(201, 169, 110, 0.04));
+      backdrop-filter: blur(26px) saturate(180%);
+      -webkit-backdrop-filter: blur(26px) saturate(180%);
     }
 
-    .pulse-red-dot-anulador {
-      width: 10px;
-      height: 10px;
-      background-color: #ef4444;
-      border-radius: 50%;
-      animation: pulse-red-dot-anulador 1.2s infinite ease-in-out;
+    .emisor-info { display: flex; flex-direction: column; min-width: 0; }
+
+    .emisor-eyebrow {
+      font-family: var(--font-mono, monospace);
+      font-size: 8.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold-primary, #C9A96E);
+      opacity: 0.85;
+    }
+
+    .emisor-name {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: #e6d3ab;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .emisor-ruc {
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--text-muted, #94a3b8);
+    }
+
+    .emisor-btn {
       flex-shrink: 0;
+      padding: 8px 12px;
+      border-radius: 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: linear-gradient(180deg, #00c3ab, #00A896 60%, #068a7b);
+      color: #04231f;
+      font-family: var(--font-mono, monospace);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 22px rgba(0, 168, 150, 0.22);
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
     }
 
-    @keyframes pulse-red-dot-anulador {
-      0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-      70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-      100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-    }
+    .emisor-btn:hover { filter: brightness(1.05); }
+    .emisor-btn:active { transform: translateY(1px) scale(0.99); }
+    .emisor-btn-off { background: rgba(255, 255, 255, 0.06); color: var(--text-muted, #94a3b8); box-shadow: none; cursor: not-allowed; }
   </style>
 </head>
 
 <body>
-
   <div class="header">
-    <h1>Anulador de Comprobantes SRI</h1>
-    <p>Llena la solicitud de anulación automáticamente</p>
-    <div id="recordingBadge" class="recording-badge-anulador">
-      <div class="pulse-red-dot-anulador"></div>
-      <div style="text-align: left;">
-        <div id="recordingTitle" style="font-size: 11px; font-weight: 800; text-transform: uppercase;">LISTO PARA USAR</div>
-        <div id="recordingSubtext" style="font-size: 10px; opacity: 0.9;">Arrastra tus PDFs y pulsa Iniciar</div>
-      </div>
+    <div class="header-badge">
+      <span class="pulse-dot"></span>
+      <span>Elite Engine · <span id="sc-ver-popup">v—</span></span>
     </div>
+    <h1>⚡ ANULADOR SRI PRO</h1>
+    <p>Soluciones Tributarias Estratégicas · Santiago Córdova</p>
   </div>
 
-  <div class="dashboard" style="display:flex; flex-direction:column;">
-    <!-- Drop & Go Zone -->
-        <label class="drop-zone" id="drop-zone" for="file-upload">
-           <div class="badge-icon">📂</div>
-           <div class="drop-text" id="drop-text-label">Suelta aquí tus PDFs (Lote)</div>
-           <div style="font-size: 11px; color:#64748b; margin-top:4px;">Arrastra y acumula facturas</div>
-        </label>
-        <input type="file" id="file-upload" accept="application/pdf" multiple />
+  <div class="content-body">
+    <!-- BANNER DE REANUDACIÓN DE SESIÓN (REEMPLAZA EL CONFIRM NATIVO) -->
+    <div id="resume-banner" class="resume-banner">
+      <div class="resume-banner-title">
+        <span>⚠️ Lote Previo Detectado</span>
+      </div>
+      <div id="resume-text" class="resume-banner-text">
+        Tienes documentos en cola de una sesión anterior.
+      </div>
+      <div class="resume-actions">
+        <button id="btn-resume-continue" class="btn-resume">▶️ Continuar Lote</button>
+        <button id="btn-resume-discard" class="btn-discard">🗑️ Empezar Limpio</button>
+      </div>
+    </div>
 
-        <div id="queue-container" style="display:none; width:100%; margin-top:15px;">
-            <div style="font-size: 12px; font-weight: 600; color: var(--primary); display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <span>Lista de Lote</span>
-                <span id="queue-count" style="background:#dbeafe; color:#1d4ed8; padding: 2px 6px; border-radius: 12px; font-size:10px;">0</span>
-            </div>
-            <div id="queue-list" style="max-height: 120px; overflow-y: auto; text-align: left; font-size: 11px; background: rgba(0,0,0,0.02); border-radius: 6px; padding: 5px; border: 1px solid rgba(0,0,0,0.05);"></div>
-            <button id="btn-process-batch" style="margin-top: 10px; width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 13px; transition: transform 0.1s, opacity 0.2s;">
-              🚀 Iniciar Automatización
-            </button>
-            <button id="btn-clear-queue" style="margin-top: 5px; width: 100%; padding: 8px; background: transparent; color: #ef4444; border: 1px dashed #fca5a5; border-radius: 8px; cursor: pointer; font-weight: 600; font-family: inherit; font-size: 11px; transition: all 0.2s;">
-              🗑️ Vaciar Cola
-            </button>
+    <!-- SELECTOR DE PILOTO AUTOMÁTICO (ZERO-CLICK) -->
+    <div class="mode-switch-card">
+      <div class="mode-label">
+        <span class="mode-label-title">⚡ Piloto Automático</span>
+        <span class="mode-label-desc">Zero-Click: llena, auto-confirma y avanza solo</span>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="toggle-autopilot" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- ZONA DROP & GO -->
+    <label class="drop-zone" id="drop-zone" for="file-upload">
+      <div class="drop-icon">📑</div>
+      <div class="drop-text-primary" id="drop-text-label">Suelta aquí tus PDFs (Lote)</div>
+      <div class="drop-text-secondary">Arrastra 1 o varias facturas para anular</div>
+    </label>
+    <input type="file" id="file-upload" accept="application/pdf" multiple />
+
+    <!-- CONTENEDOR DE COLA -->
+    <!-- Emisor detectado: el PDF ya dice quién es tu cliente -->
+    <div id="emisor-card" class="emisor-card" style="display: none;"></div>
+    <div id="queue-container">
+      <div class="queue-header">
+        <span>Facturas en Lote</span>
+        <span id="queue-count" class="queue-badge">0</span>
+      </div>
+      <div id="queue-list"></div>
+      
+      <button id="btn-process-batch" class="btn-primary" style="margin-top: 10px;">
+        🚀 Iniciar Automatización
+      </button>
+      <button id="btn-clear-queue" class="btn-danger-outline">
+        🗑️ Vaciar Lista
+      </button>
+    </div>
+
+    <div id="status"></div>
+
+    <!-- COBRO DE ANULACIONES: numeración y precio por comprobante -->
+    <div class="cobro-card">
+      <div class="cobro-top">
+        <span class="cobro-title">Cobro de anulaciones</span>
+        <span class="cobro-total" id="sc-cobro-total">$0.00</span>
+      </div>
+      <div class="cobro-resumen" id="sc-cobro-resumen">Sin anulaciones registradas todavía.</div>
+      <div class="cobro-fila">
+        <label for="sc-cobro-precio">Precio por anulación</label>
+        <div class="cobro-precio">
+          <span>$</span>
+          <input id="sc-cobro-precio" type="number" min="0" step="0.5" value="2">
+          <button id="sc-cobro-guardar" class="cobro-mini">Guardar</button>
         </div>
+      </div>
+      <div class="cobro-fila" style="margin-top: 10px;">
+        <span id="sc-nube-estado" style="font-size: 10px; color: var(--text-muted);">☁ sin subidas todavía</span>
+        <button id="sc-nube-probar" class="cobro-mini">Probar nube</button>
+      </div>
 
-        <div id="status" class="alert-success"></div>
+      <div class="cobro-nota">Se registra una vez por comprobante (la clave de acceso es la identidad). Se factura al cerrar el mes o el semestre.</div>
+    </div>
 
-    <!-- Main Action: Navegar a Anulación -->
+    <!-- HERRAMIENTAS ADICIONALES: EXPORTAR CSV & ACCESO PORTAL -->
+    <button id="btn-export-csv" class="btn-secondary">
+      📥 Descargar Acta de Anulaciones (.CSV)
+    </button>
+
+    <button id="btn-export-cobros" class="btn-secondary">
+      💵 Exportar cobros de anulaciones (.CSV)
+    </button>
+
     <a href="https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=61&idGrupo=58"
-      class="card primary" id="btn-navegar" style="padding: 15px; margin-top: 10px;">
-      <span class="card-title" style="font-size: 14px;">Ingresar al Portal sin PDFs</span>
+       id="btn-navegar" class="btn-secondary">
+      🌐 Entrar al Portal SRI Directo
     </a>
   </div>
 
   <div class="footer">
-    <strong>SOLUCIONES TRIBUTARIAS ESTRATÉGICAS</strong><br>
-    Ing. Santiago Córdova - Contable<br>
-    <span style="font-size: 10px; opacity: 0.8;">WhatsApp: 0978980722</span><br>
-    <div style="margin-top: 5px; opacity: 0.6; font-size: 9px;">v2.2.0</div>
+    <strong>Ing. Santiago Córdova</strong> · Asesor Tributario<br>
+    Soporte Inmediato WhatsApp: <a href="https://wa.me/593978980722" target="_blank">0978980722</a><br>
+    <span style="opacity: 0.6; font-size: 9px;">Compromiso Cero Fricción · Rendimiento 60 FPS</span>
   </div>
 
+  <script src="shared_config.js"></script>
   <script type="module" src="popup.js"></script>
 </body>
-
 </html>

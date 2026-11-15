@@ -4921,12 +4921,20 @@ window.addEventListener('message', async (event) => {
 
     if (event.data.type === 'SRI_AUTOFILL_DATA' && event.data.data) {
         const d = event.data.data;
+        // La web puede pedir sólo PROBAR el acceso ("probar_clave") en vez de
+        // arrancar una declaración. Antes se ignoraba y siempre declaraba.
+        const accion = String(d.pendingAction || 'turbo_step1_facturas');
+        const esSoloProbar = accion === 'probar_clave' || accion === 'solo_perfil' || d.soloEstarAdentro === true;
         const autofillObj = {
             ruc: d.ruc,
             password: d.password,
             name: d.name,
             timestamp: Date.now(),
-            manual: true
+            manual: true,
+            isBatch: false,
+            // Sin esto, el BLINDAJE 2 cancela el login cuando el semáforo está
+            // DETENIDO (modo "solo mirar" desde la web).
+            soloEstarAdentro: esSoloProbar
         };
         
         const now = new Date();
@@ -4936,13 +4944,14 @@ window.addEventListener('message', async (event) => {
 
         await SafeStorage.set({ 
             pending_sri_autofill: autofillObj,
-            pendingAction: 'turbo_step1_facturas',
-            checkFacturas: true,
-            checkRetenciones: true,
-            checkNC: true,
+            pendingAction: accion,
+            checkFacturas: !esSoloProbar,
+            checkRetenciones: !esSoloProbar,
+            checkNC: !esSoloProbar,
             workflowPeriod: { year: cYear, monthIndex: cMonth },
-            autoDeclaration: true,
-            sri_auto_mode: true,
+            autoDeclaration: !esSoloProbar,
+            solo_perfil_web: accion === 'solo_perfil',
+            sri_auto_mode: !esSoloProbar,
             sri_master_switch_on: true,
             sriAutomationPaused: false,
             actionTimestamp: Date.now(),
@@ -4954,6 +4963,62 @@ window.addEventListener('message', async (event) => {
             renderAnticipationWidget(items);
             executeLogin(d.ruc, d.password);
         }
+    }
+
+    // La web pide declarar el ICE en cero: deja el pendiente y abre el wizard.
+    if (event.data.type === 'SRI_DECLARAR_ICE' && event.data.data) {
+        const d = event.data.data;
+        await SafeStorage.set({
+            sc_ice_declarar: { anio: d.anio, mes: d.mes, cuando: Date.now() },
+            pending_sri_autofill: {
+                ruc: d.ruc, password: d.password, name: d.nombre || d.name || '',
+                timestamp: Date.now(), manual: true, isBatch: false, soloEstarAdentro: true
+            },
+            pendingAction: 'solo_perfil',
+            autoDeclaration: false,
+            sri_auto_mode: false,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            actionTimestamp: Date.now()
+        });
+        log.info('🧾 [ICE] declaración pedida desde la web: ' + d.ruc);
+        window.open('https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1294&idGrupo=232', '_blank');
+    }
+
+    // La web pide subir el Anexo ICE: se deja el pendiente y se abre Anexos.
+    if (event.data.type === 'SRI_SUBIR_ANEXO' && event.data.data) {
+        const a = event.data.data;
+        await SafeStorage.set({
+            pending_anexo_ice: {
+                ruc: a.ruc,
+                nombre: a.nombre || a.name || '',
+                anio: a.anio,
+                mes: a.mes,
+                cuando: Date.now()
+            },
+            pending_sri_autofill: {
+                ruc: a.ruc,
+                password: a.password,
+                name: a.nombre || a.name || '',
+                timestamp: Date.now(),
+                manual: true,
+                isBatch: false,
+                soloEstarAdentro: true
+            },
+            pendingAction: 'solo_perfil',
+            workflowPeriod: (typeof a.anio === 'number' && typeof a.mes === 'number')
+                ? { year: a.anio, monthIndex: a.mes - 1 }
+                : undefined,
+            autoDeclaration: false,
+            sri_auto_mode: false,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            skipSafetyCheck: true,
+            actionTimestamp: Date.now()
+        });
+        log.info('📤 [ANEXO ICE] pendiente de subida recibido desde la web: ' + a.ruc + ' ' + a.anio + '-' + a.mes);
+        const destino = 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=ICE';
+        window.open(destino, '_blank');
     }
 
     if (event.data.type === 'SRI_START_BATCH_DECLARATION' && event.data.data) {

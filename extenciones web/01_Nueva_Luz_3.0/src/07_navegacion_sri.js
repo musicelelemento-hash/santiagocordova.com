@@ -6,6 +6,7 @@
 //   ⏸  CORRIENDO → pausa suave: termina el cliente y ahí para
 //   🛑 EMERGENCIA → corta en el acto
 // ═══════════════════════════════════════════════════════════════════════════
+const SRI_PUENTE_FORMULARIO_ICE = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1294&idGrupo=232';
 const SRI_PUENTE_CONSULTA_DECLARACIONES =
     'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1292&idGrupo=73';
 
@@ -671,6 +672,35 @@ if (typeof window !== 'undefined') {
 
 const MESES_LARGOS = ['enero','febrero','marzo','abril','mayo','junio','julio',
                       'agosto','septiembre','octubre','noviembre','diciembre'];
+// Íconos del HUD (SVG en línea, sin dependencias ni emojis).
+const SC_ICONOS = {
+    play: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"currentColor\" stroke=\"none\"><path d=\"M8 5v14l11-7z\"/></svg>",
+    pause: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"currentColor\" stroke=\"none\"><path d=\"M7 4h4v16H7zM13 4h4v16h-4z\"/></svg>",
+    paso: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M6 4l10 8-10 8\"/><path d=\"M19 5v14\"/></svg>",
+    aqui: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg>",
+    pdfs: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><path d=\"M14 2v6h6\"/></svg>",
+    alert: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3l9 17H3z\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/></svg>",
+    omitir: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 4l8 8-8 8\"/><path d=\"M13 4l8 8-8 8\"/></svg>",
+    cerrar: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 3v18\"/><path d=\"M5 4h13l-2 4 2 4H5\"/></svg>",
+    cajon: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 4h6v6H4z\"/><path d=\"M14 4h6v6h-6z\"/><path d=\"M4 14h6v6H4z\"/><path d=\"M14 14h6v6h-6z\"/></svg>",
+    registro: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 20V10\"/><path d=\"M10 20V4\"/><path d=\"M16 20v-6\"/><path d=\"M22 20H2\"/></svg>",
+    migrar: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 2l9 5v10l-9 5-9-5V7z\"/><path d=\"M3 7l9 5 9-5\"/><path d=\"M12 12v10\"/></svg>",
+    subida: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 16V4\"/><path d=\"M7 9l5-5 5 5\"/><path d=\"M4 16v4h16v-4\"/></svg>",
+    cola: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-8 0v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.9\"/></svg>",
+    bitacora: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 6h13\"/><path d=\"M8 12h13\"/><path d=\"M8 18h13\"/><path d=\"M3 6h.01\"/><path d=\"M3 12h.01\"/><path d=\"M3 18h.01\"/></svg>",
+    notas: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"/><path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"/></svg>",
+    proveedores: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 3 12V4h8a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.8z\"/><path d=\"M7 7h.01\"/></svg>",
+    ir: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M16 8l-2 6-6 2 2-6z\"/></svg>",
+    casilleros: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M3 9h18\"/><path d=\"M3 15h18\"/><path d=\"M9 3v18\"/></svg>",
+    chequeo: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/></svg>",
+    sincronizar: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M23 4v6h-6\"/><path d=\"M1 20v-6h6\"/><path d=\"M3.5 9a9 9 0 0 1 14.9-3.4L23 10\"/><path d=\"M1 14l4.6 4.4A9 9 0 0 0 20.5 15\"/></svg>",
+    probarclaves: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"7.5\" cy=\"15.5\" r=\"4.5\"/><path d=\"M11 12l9-9\"/><path d=\"M16 4l4 4\"/></svg>",
+    extractor: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3v12\"/><path d=\"M7 10l5 5 5-5\"/><path d=\"M4 21h16\"/></svg>",
+    auditoria: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7v5l3 2\"/></svg>",
+    panel: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9\"/><path d=\"M13.7 21a2 2 0 0 1-3.4 0\"/></svg>",
+    stop: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"currentColor\" stroke=\"none\"><rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"/></svg>",
+    cal: "<svg viewBox=\"0 0 24 24\" width=\"15\" height=\"15\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"17\" rx=\"2\"/><path d=\"M8 2v4\"/><path d=\"M16 2v4\"/><path d=\"M3 10h18\"/></svg>",
+};
 const MESES_CORTOS = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
 
 const SriLoopHUD = {
@@ -716,10 +746,12 @@ const SriLoopHUD = {
         el.innerHTML = [
             '<span id="slh-drag" title="Arrastrar" style="opacity:0.45;padding:0 2px;cursor:grab">⠿</span>',
             '<button id="slh-play" aria-label="Reanudar o pausar el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer">▶</button>',
+            '<div id="slh-herramientas" class="slh-herramientas">',
             '<button id="slh-paso" aria-label="Modo paso a paso: frenar al empezar cada fase" title="Modo paso a paso: el lote frena al empezar cada fase y ▶ da un paso" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">👣</button>',
             '<div style="display:flex;flex-direction:column;line-height:1.25;min-width:104px">',
             '  <span id="slh-estado" role="status" aria-live="polite" aria-atomic="true" style="font-weight:800;font-size:11px">DETENIDO</span>',
             '  <span id="slh-detalle" style="font-size:10px;opacity:0.65;font-family:monospace">lote vacío</span>',
+            '  <span id="slh-orden" style="font-size:9px;opacity:0.45;font-family:monospace"></span>',
             '</div>',
             '<button id="slh-aqui" aria-label="Declarar al contribuyente que está logueado ahora" title="Declarar al contribuyente que está logueado ahora" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🎯</button>',
             '<button id="slh-pdfs" aria-label="Traer todos los comprobantes de este contribuyente" title="Traer TODOS los comprobantes de declaraciones de este contribuyente" style="display:none;border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(74,222,128,0.16);color:#4ade80">🧾</button>',
@@ -745,6 +777,8 @@ const SriLoopHUD = {
             '<button id="slh-sincronizar" aria-label="Sincronizar claves desde la nube (Web)" title="Sincronizar claves: descarga las contraseñas vigentes de la web a la extensión y limpia bloqueos obsoletos" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(52,211,153,0.18);color:#6ee7b7">🔄</button>',
             '<button id="slh-probarclaves" aria-label="Probar claves: entra con cada clave guardada y sale, sin declarar nada" title="Probar claves: recorre la cartera, entra con cada clave guardada y sale — nunca declara" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(56,189,248,0.16);color:#7dd3fc">🔑</button>',
             '<button id="slh-extractor" aria-label="Extractor de documentos: facturas, retenciones, NC (semestral, anual o mensual)" title="Extractor de documentos: extrae totales de facturas, retenciones, NC sin declarar (semestral, anual o mensual)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">📥</button>',
+            '<button id="slh-anexo-ice" aria-label="Subir el anexo ICE" title="Subir el Anexo ICE: arma el ZIP del mes y lo carga en la pantalla de Anexos del SRI (solo en la página de Anexos ICE)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(201,169,110,0.2);color:#e6d3ab">&#128228;</button>',
+            '<button id="slh-mapear-anexo" aria-label="Mapear la pantalla de Anexos del SRI" title="Mapear Anexos: copia lo que hay en esta pantalla (input de archivo, botones, formularios) para automatizar la subida del anexo ICE" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(34,211,238,0.16);color:#67e8f9">&#129517;</button>',
             '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // Período objetivo del lote: qué mes se va a declarar. El popup y este
@@ -752,10 +786,12 @@ const SriLoopHUD = {
             // mes anterior. Se abre en su propio panel para ◀ ▶, 🎯 mes que falta
             // y ✖ para volver al predeterminado.
             '<button id="slh-periodo" aria-label="Período objetivo del lote" title="Período objetivo del lote: qué mes se va a declarar (con ◀ ▶ o 🎯)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:12px;cursor:pointer;background:rgba(245,158,11,0.16);color:#fbbf24">🗓 —</button>',
+            '</div>',
             // El único botón que frena el semáforo de verdad. Antes había otro
             // igual de rojo en la barra de arriba que NO lo frenaba; se quitó.
             // Éste va rotulado: si es el que hay que apretar cuando algo va
             // mal, tiene que decir lo que hace sin pasar el mouse por encima.
+            '<button id="slh-mas" aria-label="Mas herramientas" aria-expanded="false" title="Herramientas y opciones" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;cursor:pointer;background:rgba(148,163,184,0.14);color:#cbd5e1">&#8943;</button>',
             '<button id="slh-stop" aria-label="Parada de emergencia: detiene el lote" title="Parada de emergencia: detiene el lote" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(239,68,68,0.2);color:#fca5a5;padding:8px 12px">🛑 Detener</button>',
             '</div>',
             // El cajón de herramientas: en su propia línea, para no empujar la
@@ -821,10 +857,125 @@ const SriLoopHUD = {
                 // mismo gesto que ya usa .sc-btn en 01_utilidades_y_pdf.js.
                 '#sri-loop-hud button{transition:filter .15s,transform .15s}',
                 '#sri-loop-hud button:hover{filter:brightness(1.25)}',
-                '#sri-loop-hud button:active{transform:scale(.93)}'
+                '#sri-loop-hud button:active{transform:scale(.93)}',
+                // ── SLH · REDISEÑO (Obsidian & Liquid Gold) ───────────────────
+                // Isla de vidrio, botones circulares uniformes y telemetría en mono.
+                // Los colores de cada acción se conservan: sólo cambia la forma.
+                '#sri-loop-hud{padding:10px 12px 12px;border-radius:20px;gap:7px;' +
+                'background:linear-gradient(180deg,rgba(9,26,42,.96),rgba(4,14,24,.98));' +
+                'border:1px solid rgba(255,255,255,.10);border-top-color:rgba(201,169,110,.45);' +
+                'box-shadow:0 18px 46px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);' +
+                'backdrop-filter:blur(22px) saturate(170%)}',
+                '#sri-loop-hud::before{content:"";width:6px;height:6px;border-radius:50%;' +
+                'background:#4edea3;box-shadow:0 0 10px #4edea3;flex:0 0 6px;animation:slh-latido 1.6s ease-in-out infinite}',
+                '#slh-drag{opacity:.35;font-size:12px;cursor:grab}',
+                '#sri-loop-hud button{width:32px;height:32px;min-width:32px;min-height:32px;' +
+                'border-radius:50%!important;padding:0!important;font-size:14px!important;line-height:1;' +
+                'display:inline-flex;align-items:center;justify-content:center;' +
+                'border:1px solid rgba(255,255,255,.08)!important;' +
+                'box-shadow:inset 0 1px 0 rgba(255,255,255,.10);' +
+                'transition:transform .16s cubic-bezier(.16,1,.3,1),filter .16s,box-shadow .2s}',
+                '#sri-loop-hud button:hover{transform:translateY(-1px);' +
+                'box-shadow:0 6px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.16)}',
+                '#sri-loop-hud button#slh-stop,#sri-loop-hud button#slh-periodo{' +
+                'width:auto;min-width:0;border-radius:11px!important;padding:0 10px!important;' +
+                'font-size:10px!important;font-family:var(--font-mono,monospace);' +
+                'letter-spacing:.06em;text-transform:uppercase}',
+                '#slh-estado{font-family:var(--font-mono,monospace);font-size:9.5px;' +
+                'letter-spacing:.14em;text-transform:uppercase;color:#e6d3ab}',
+                '#slh-detalle{font-family:var(--font-mono,monospace);font-size:9px;' +
+                'letter-spacing:.03em;opacity:.55}',
+                '#sri-loop-hud #slh-barra{height:2px;background:rgba(255,255,255,.08)}',
+                '#sri-loop-hud #slh-barra-fill{background:linear-gradient(90deg,#00A896,#4edea3 55%,#C9A96E)}',
+                '#sri-loop-hud [id$="-panel"]{font-size:11px}',
+                // Anillo de progreso: el avance se lee de un vistazo.
+                '#slh-play{position:relative}',
+                '#slh-play::after{content:"";position:absolute;inset:-4px;border-radius:50%;pointer-events:none;' +
+                'background:conic-gradient(#4edea3 var(--pct,0%),rgba(255,255,255,.08) 0);' +
+                '-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 0);' +
+                'mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 0)}',
+                // Iconos SVG y textos dentro de los botones.
+                '#sri-loop-hud{transition:padding .3s cubic-bezier(.16,1,.3,1),gap .3s ease}',
+                '#sri-loop-hud.slh-min{gap:5px;padding:8px 10px}',
+                '#sri-loop-hud.slh-min .slh-opcional{display:none!important}',
+                '#slh-herramientas{display:none;flex-basis:100%;flex-wrap:wrap;gap:5px;padding-top:8px;margin-top:2px;border-top:1px solid rgba(255,255,255,.10)}',
+                // Accesibilidad (UI/UX Pro Max §1 y §7): foco visible y respeto por reduced-motion.
+                '#sri-loop-hud button:focus-visible{outline:2px solid #C9A96E;outline-offset:2px}',
+                '@media (prefers-reduced-motion: reduce){#sri-loop-hud,#sri-loop-hud *{animation:none!important;transition:none!important}}',
+                '#slh-detalle{font-size:10px;opacity:.72}',
+                '#slh-orden{font-size:10px;opacity:.62}',
+                '#sri-loop-hud.slh-tools #slh-herramientas{display:flex}',
+                '#sri-loop-hud button svg{display:block}',
+                '#sri-loop-hud button span{font-size:10px;font-family:var(--font-mono,monospace);letter-spacing:.04em;margin-left:5px;text-transform:uppercase}',
+                '#sri-loop-hud button#slh-omitidos{width:auto;min-width:38px;border-radius:10px!important;padding:0 7px!important}',
+                '#sri-loop-hud button#slh-omitidos span{margin-left:3px;font-size:11px}',
+                '#slh-estado{font-size:10.5px!important}',
+                // Cola visual: orden por vencimiento, actual resaltado.
+                '#slh-cola-panel .scq-head{display:flex;align-items:center;gap:6px;font-size:10px;opacity:.85;margin-bottom:6px}',
+                '#slh-cola-panel .scq-head b{color:#4edea3}',
+                '#slh-cola-panel .scq-pct{margin-left:auto;font-family:monospace;color:#e6d3ab}',
+                '#slh-cola-panel .scq-bar{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-bottom:8px}',
+                '#slh-cola-panel .scq-bar i{display:block;height:100%;background:linear-gradient(90deg,#00A896,#4edea3,#C9A96E)}',
+                '#slh-cola-panel .scq-row{display:flex;align-items:center;gap:6px;padding:5px 4px;border-radius:8px;border-bottom:1px solid rgba(255,255,255,.05)}',
+                '#slh-cola-panel .scq-row.scq-actual{background:rgba(0,168,150,.10);box-shadow:inset 2px 0 0 #4edea3}',
+                '#slh-cola-panel .scq-num{font-family:monospace;font-size:9px;opacity:.45;width:16px}',
+                '#slh-cola-panel .scq-name{flex:1;min-width:0;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+                '#slh-cola-panel .scq-ruc{font-family:monospace;font-size:9px;opacity:.45}',
+                '#slh-cola-panel .scq-d9{font-family:monospace;font-size:9px;opacity:.55}',
+                '#slh-cola-panel .scq-est{font-family:monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:.06em;padding:1px 6px;border-radius:999px;border:1px solid}',
+                '#slh-cola-panel .scq-est.ok{color:#4edea3;border-color:rgba(78,222,163,.35)}',
+                '#slh-cola-panel .scq-est.parcial{color:#e6d3ab;border-color:rgba(201,169,110,.35)}',
+                '#slh-cola-panel .scq-est.omitido{color:#fbbf24;border-color:rgba(251,191,36,.35)}',
+                '#slh-cola-panel .scq-est.ahora{color:#7dd3fc;border-color:rgba(125,211,252,.4)}',
+                '#slh-cola-panel .scq-est.espera{color:#94a3b8;border-color:rgba(148,163,184,.25)}',
             ].join('');
             document.head.appendChild(st);
         }
+
+        // Íconos SVG: el HUD deja de ser una sopa de emojis.
+        try {
+            const poner = (id, clave) => {
+                const b = el.querySelector('#' + id);
+                if (b && SC_ICONOS[clave]) b.innerHTML = SC_ICONOS[clave];
+            };
+            [['slh-paso', 'paso'], ['slh-aqui', 'aqui'], ['slh-pdfs', 'pdfs'],
+            ['slh-omitir', 'omitir'], ['slh-cerrar', 'cerrar'], ['slh-cajon-btn', 'cajon'],
+            ['slh-registro', 'registro'], ['slh-migrar', 'migrar'], ['slh-subida', 'subida'],
+            ['slh-cola', 'cola'], ['slh-bitacora', 'bitacora'], ['slh-notas', 'notas'],
+            ['slh-proveedores', 'proveedores'], ['slh-ir', 'ir'], ['slh-casilleros', 'casilleros'],
+            ['slh-chequeo', 'chequeo'], ['slh-sincronizar', 'sincronizar'],
+            ['slh-probarclaves', 'probarclaves'], ['slh-extractor', 'extractor'],
+            ['slh-auditoria', 'auditoria'], ['slh-panel', 'panel']
+            ].forEach(([id, clave]) => poner(id, clave));
+
+            const playBtn = el.querySelector('#slh-play');
+            if (playBtn) playBtn.innerHTML = SC_ICONOS.play;
+            const stopBtn = el.querySelector('#slh-stop');
+            if (stopBtn) stopBtn.innerHTML = SC_ICONOS.stop + '<span>Detener</span>';
+            const omiBtn = el.querySelector('#slh-omitidos');
+            if (omiBtn) omiBtn.innerHTML = SC_ICONOS.alert + '<span>0</span>';
+            const perBtn = el.querySelector('#slh-periodo');
+            if (perBtn) perBtn.innerHTML = SC_ICONOS.cal + '<span>—</span>';
+        } catch (e) { /* si un icono falla, el HUD sigue andando */ }
+        // ⋯ despliega las herramientas en su propia fila: el núcleo queda limpio.
+        const btnMas = el.querySelector('#slh-mas');
+        if (btnMas) {
+            btnMas.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const abierto = el.classList.toggle('slh-tools');
+                btnMas.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+            });
+        }
+
+        // Modo limpio: los accesorios se ocultan solos si no se interactúa.
+        ['slh-drag', 'slh-paso', 'slh-aqui', 'slh-pdfs', 'slh-omitidos', 'slh-omitir',
+         'slh-cola', 'slh-chequeo', 'slh-periodo'].forEach((id) => {
+            const b = el.querySelector('#' + id);
+            if (b) b.classList.add('slh-opcional');
+        });
+
+        el.addEventListener('pointermove', () => this._despertarHUD());
+        el.addEventListener('pointerdown', () => this._despertarHUD());
 
         document.body.appendChild(el);
         this._el = el;
@@ -894,7 +1045,7 @@ const SriLoopHUD = {
             ev.stopPropagation();
             const btn = ev.currentTarget;
             const previo = btn.textContent;
-            btn.textContent = '⏳';
+            btn.innerHTML = SC_ICONOS.alert + '<span>' + lista.length + '</span>';
             try {
                 const r = await SriLoop.mesQueFalta();
                 if (r.encontrado) {
@@ -1013,6 +1164,28 @@ const SriLoopHUD = {
             soloUno('slh-cola-panel');
             panel.style.display = 'block';
             await this.pintarCola();
+        });
+
+        el.querySelector('#slh-anexo-ice').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const r = await subirAnexoIceActual();
+            if (r && r.ok) log.info('📤 [ANEXO ICE] ' + r.mensaje);
+            else log.warn('📤 [ANEXO ICE] ' + ((r && r.mensaje) || 'no se pudo'));
+        });
+
+        el.querySelector('#slh-mapear-anexo').addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            try {
+                const mapa = mapearAnexosSRI();
+                await navigator.clipboard.writeText(JSON.stringify(mapa, null, 2));
+                await SafeStorage.set({ sc_mapa_anexos: mapa });
+                log.info('🧭 [MAPA ANEXOS] ' + mapa.resumen + ' · copiado al portapapeles');
+                if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+                    window.sriAssistant.showEliteToast({ title: '🧭 Mapa de Anexos copiado', msg: mapa.resumen + '. Pegalo en el chat para automatizar.', duration: 9000 });
+                }
+            } catch (e) {
+                log.warn('🧭 [MAPA ANEXOS] no se pudo copiar:', e && e.message);
+            }
         });
 
         el.querySelector('#slh-bitacora').addEventListener('click', async (ev) => {
@@ -1426,7 +1599,7 @@ const SriLoopHUD = {
             celda.appendChild(b);
             const t = document.createElement('span');
             t.textContent = rotulo;
-            t.style.cssText = 'font-size:9px;opacity:0.7;text-align:center;line-height:1.2';
+            t.style.cssText = 'font-size:10px;opacity:0.78;text-align:center;line-height:1.25;min-height:24px';
             celda.appendChild(t);
             grupoDeNombre(grupoDe(id)).appendChild(celda);
         });
@@ -2115,6 +2288,21 @@ const SriLoopHUD = {
      * viene y quién quedó afuera vivía repartido en tres almacenes y solo se
      * podía mirar de a uno por consola.
      */
+    /** Vuelve al modo completo y reprograma el colapso si sigue corriendo. */
+    _despertarHUD() {
+        if (!this._el) return;
+        this._el.classList.remove('slh-min');
+        if (this._ultimoEstado === 'CORRIENDO') this._programarMinimizado();
+    },
+
+    /** A los 10 s sin interacción, deja sólo estado + acciones de control. */
+    _programarMinimizado() {
+        clearTimeout(this._timerMin);
+        this._timerMin = setTimeout(() => {
+            if (this._el && this._ultimoEstado === 'CORRIENDO') this._el.classList.add('slh-min');
+        }, 10000);
+    },
+
     async pintarCola() {
         const panel = document.getElementById('slh-cola-panel');
         if (!panel) return;
@@ -2131,32 +2319,40 @@ const SriLoopHUD = {
         try { (await Omitidos.lista()).forEach((o) => { omitidos[o.ruc] = o; }); } catch (e) { /* sin lista de omitidos: el aviso sale sin ellos */ }
 
         const esc = (t) => (typeof escapeHtml === 'function' ? escapeHtml(String(t || '')) : String(t || ''));
+        // Orden por vencimiento (9.º dígito): la fila lo muestra explícito.
+        const diasVence = { 1: 10, 2: 12, 3: 14, 4: 16, 5: 18, 6: 20, 7: 22, 8: 24, 9: 26, 0: 28 };
         const filas = [];
+        let hechos = 0;
         for (let i = 0; i < cola.length; i++) {
             const c = cola[i];
-            let marca = '⬜', color = 'opacity:0.55', nota = 'en espera';
+            const ruc = String(c.ruc || '');
+            const d9 = ruc.length >= 9 ? Number(ruc[8]) : null;
+            const vence = d9 === null ? '-' : (diasVence[d9] || 28);
 
+            let estado = 'espera', etiqueta = 'en espera';
             const om = omitidos[c.ruc];
             const reg = await SriLoop.declaracionLocal(c.ruc, periodo);
+            if (reg && reg.pdfSubido) { estado = 'ok'; etiqueta = 'declarado'; hechos++; }
+            else if (reg) { estado = 'parcial'; etiqueta = 'falta comprobante'; }
+            else if (om) { estado = 'omitido'; etiqueta = String(om.motivo || 'omitido').replace(/_/g, ' '); }
+            else if (i === (sem.indice || 0) && sem.estado === 'CORRIENDO') { estado = 'ahora'; etiqueta = 'en curso'; }
 
-            if (reg && reg.pdfSubido)      { marca = '✅'; color = 'color:#4ade80'; nota = 'declarado y guardado'; }
-            else if (reg)                  { marca = '🧾'; color = 'color:#fbbf24'; nota = 'declarado · falta el comprobante'; }
-            else if (om)                   { marca = '⚠️'; color = 'color:#fbbf24'; nota = om.motivo.replace(/_/g, ' '); }
-            else if (i === (sem.indice || 0) && sem.estado === 'CORRIENDO') {
-                                             marca = '⏳'; color = 'color:#7dd3fc'; nota = 'en curso ahora'; }
-
+            const actual = (i === (sem.indice || 0) && sem.estado === 'CORRIENDO') ? ' scq-actual' : '';
             filas.push(
-                '<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.06)">' +
-                `<span style="width:16px;text-align:center">${marca}</span>` +
-                `<span style="flex:1;font-size:11px;font-weight:700;${color}">${esc(c.name || c.ruc)}</span>` +
-                `<span style="font-size:10px;opacity:0.6">${esc(nota)}</span>` +
+                '<div class="scq-row' + actual + '">' +
+                '<span class="scq-num">' + String(i + 1).padStart(2, '0') + '</span>' +
+                '<span class="scq-name">' + esc(c.name || c.ruc) + '</span>' +
+                '<span class="scq-ruc">' + esc(ruc) + '</span>' +
+                '<span class="scq-d9">D9 ' + (d9 === null ? '-' : d9) + ' · vence ' + vence + '</span>' +
+                '<span class="scq-est ' + estado + '">' + esc(etiqueta) + '</span>' +
                 '</div>');
         }
 
-        const hechos = filas.filter((f) => f.includes('✅')).length;
+        const pct = cola.length ? Math.round((hechos / cola.length) * 100) : 0;
         panel.innerHTML =
-            `<div style="font-size:10px;opacity:0.75;margin-bottom:4px">` +
-            `<b style="color:#4ade80">${hechos}</b> de ${cola.length} con su comprobante guardado</div>` +
+            '<div class="scq-head"><b>' + hechos + '</b> de ' + cola.length + ' con comprobante' +
+            '<span class="scq-pct">' + pct + '%</span></div>' +
+            '<div class="scq-bar"><i style="width:' + pct + '%"></i></div>' +
             filas.join('');
     },
 
@@ -2179,7 +2375,7 @@ const SriLoopHUD = {
             const def = SriLoop.periodoPorDefecto();
             const esManual = objetivo.year !== def.year || objetivo.monthIndex !== def.monthIndex;
 
-            if (boton) boton.textContent = `🗓 ${MESES_CORTOS[objetivo.monthIndex]} ${String(objetivo.year).slice(2)}`;
+            if (boton) boton.innerHTML = SC_ICONOS.cal + `<span>${MESES_CORTOS[objetivo.monthIndex]} ${String(objetivo.year).slice(2)}</span>`;
             if (etiq) etiq.textContent = `${MESES_LARGOS[objetivo.monthIndex].toUpperCase()} ${objetivo.year}`;
             if (defTxt) defTxt.textContent = esManual
                 ? `· default: ${MESES_LARGOS[def.monthIndex]} ${def.year}`
@@ -3749,7 +3945,25 @@ const SriLoopHUD = {
         if (!play || !est || !det) return;
 
         const total = (e.cola || []).length;
+        // Segunda vuelta: el semáforo trabaja, pero no declara: recobra el PDF.
+        const enRecuperacion = String(e.motivo || '').toLowerCase().includes('segunda vuelta')
+            || (Array.isArray(e.cola) && e.cola.some((c) => c && c.soloRecuperar));
         const pos = total ? Math.min(e.indice + 1, total) : 0;
+        if (play && total) play.style.setProperty('--pct', `${Math.round((pos / total) * 100)}%`);
+
+        // El lote corre por orden de vencimiento (9.º dígito del RUC).
+        const orden = this._el.querySelector('#slh-orden');
+        if (orden) {
+            const item = (e.cola || [])[e.indice] || {};
+            const ruc = String(item.ruc || '');
+            if (ruc.length >= 9) {
+                const d9 = Number(ruc[8]);
+                const dias = { 1: 10, 2: 12, 3: 14, 4: 16, 5: 18, 6: 20, 7: 22, 8: 24, 9: 26, 0: 28 };
+                orden.textContent = `D9 ${d9} · vence ${dias[d9] || 28}`;
+            } else {
+                orden.textContent = 'orden: por vencimiento';
+            }
+        }
 
         const mapa = {
             CORRIENDO: { icono: '⏸', bg: 'rgba(34,197,94,0.2)', fg: '#4ade80', txt: 'CORRIENDO', tip: 'Pausar (termina el cliente actual)' },
@@ -3759,7 +3973,16 @@ const SriLoopHUD = {
         };
         const m = mapa[e.estado] || mapa.DETENIDO;
 
-        play.textContent = m.icono;
+        // Si arranca (o se reanuda), a los 10 s sin interacción se achica.
+        this._ultimoEstado = e.estado;
+        if (e.estado === 'CORRIENDO' && this._estadoPrevio !== 'CORRIENDO') this._programarMinimizado();
+        if (e.estado !== 'CORRIENDO') {
+            clearTimeout(this._timerMin);
+            if (this._el) this._el.classList.remove('slh-min');
+        }
+        this._estadoPrevio = e.estado;
+
+        play.innerHTML = (e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO') ? SC_ICONOS.pause : SC_ICONOS.play;
         play.title = m.tip;
         // El aria-label no puede quedar fijo en «Reanudar o pausar»: el mismo
         // botón hace tres cosas distintas según el estado.
@@ -3767,7 +3990,13 @@ const SriLoopHUD = {
         play.style.background = m.bg;
         play.style.color = m.fg;
         est.textContent = m.txt;
+        if (enRecuperacion && (e.estado === 'CORRIENDO' || e.estado === 'PAUSANDO')) {
+            est.textContent = `RECUPERANDO · ${pos}/${total}`;
+            est.style.color = '#e6d3ab';
+        }
         est.style.color = m.fg;
+        const ordenEl = this._el.querySelector('#slh-orden');
+        if (ordenEl && enRecuperacion) { ordenEl.textContent = 'solo comprobante · no declara'; }
         const nuevoDetalle = total ? `cliente ${pos} de ${total}` : (e.motivo || 'lote vacío');
         if (det.textContent !== nuevoDetalle) {
             det.textContent = nuevoDetalle;
@@ -5392,3 +5621,394 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
 // ==========================================
 // FIN DE NAVEGACIÓN SRI
 // ==========================================
+
+// ============================================================
+// MAPEO DE LA PANTALLA DE ANEXOS (para automatizar la subida)
+// Devuelve todo lo que hace falta para saber dónde se carga el ZIP:
+// input de archivo, botones, formularios, mensajes e iframes.
+// ============================================================
+function mapearAnexosSRI() {
+    const visible = (el) => { try { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; } catch (e) { return false; } };
+    const limpio = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 80);
+    const datos = (el) => ({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        name: el.getAttribute('name') || '',
+        clase: limpio(el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className).slice(0, 60),
+        texto: limpio(el.innerText || el.value || el.getAttribute('title') || ''),
+        visible: visible(el),
+    });
+    const archivos = Array.from(document.querySelectorAll('input[type=file]')).map((el) => ({
+        ...datos(el),
+        accept: el.getAttribute('accept') || '',
+    }));
+    const botones = Array.from(document.querySelectorAll('button, a, input[type=button], input[type=submit], span[role=button]'))
+        .map(datos)
+        .filter((b) => b.visible)
+        .filter((b) => /anexo|subir|cargar|enviar|seleccion|examin|proces|acept|adjunt|archivo/i.test(b.texto + ' ' + b.id + ' ' + b.name))
+        .slice(0, 40);
+    const selects = Array.from(document.querySelectorAll('select')).filter(visible).map((el) => ({
+        ...datos(el),
+        opciones: Array.from(el.options).slice(0, 8).map((o) => limpio(o.value + '=' + o.text)).join(' | '),
+    }));
+    const formularios = Array.from(document.forms).map((f) => ({
+        id: f.id || '', name: f.getAttribute('name') || '',
+        action: f.getAttribute('action') || '', method: (f.getAttribute('method') || 'get').toLowerCase(),
+        campos: f.elements ? f.elements.length : 0,
+    }));
+    const mensajes = Array.from(document.querySelectorAll('[class*=message i], [class*=error i], [class*=alerta i], [id*=mensaje i], .ui-messages-info, .ui-messages-error'))
+        .filter(visible).map((el) => limpio(el.innerText)).filter(Boolean).slice(0, 10);
+    const iframes = Array.from(document.querySelectorAll('iframe')).map((f) => f.src || '');
+    const resumen = `archivos:${archivos.length} · botones:${botones.length} · forms:${formularios.length} · iframes:${iframes.length}`;
+    return {
+        url: location.href,
+        titulo: document.title,
+        resumen,
+        archivos,
+        botones,
+        selects,
+        formularios,
+        mensajes,
+        iframes,
+        inputsTotales: document.querySelectorAll('input').length,
+        cuando: new Date().toISOString(),
+    };
+}
+
+if (typeof window !== 'undefined') {
+    window.scMapearAnexos = mapearAnexosSRI;
+}
+
+
+// ============================================================================
+// ANEXO ICE: subida automática (mapeo sacado del recorrido real del SRI)
+//   input de archivo : input[type=file][id$="anexosSubir_input"]   (auto=true)
+//   botón validar    : [id$="frmRecepcion:btnCargar"]
+//   botón confirmar  : [id$="frmRecepcion:btnAceptarConf"]
+//   mensajes         : [id$="frmRecepcion:messagesText1"]
+// ============================================================================
+function _iceCrc32(buf) {
+    let c;
+    const tabla = _iceCrc32._t || (_iceCrc32._t = (() => {
+        const t = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+        return t;
+    })());
+    let crc = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) crc = tabla[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+async function _iceZipDe(nombre, texto) {
+    const datos = new TextEncoder().encode(texto);
+    let comp = datos;
+    try {
+        if (typeof CompressionStream === 'function') {
+            const cs = new CompressionStream('deflate-raw');
+            const w = cs.writable.getWriter();
+            w.write(datos); w.close();
+            comp = new Uint8Array(await new Response(cs.readable).arrayBuffer());
+        }
+    } catch (e) { comp = datos; }
+    const comprimir = comp.length < datos.length;
+    const nombreBuf = new TextEncoder().encode(nombre);
+    const crc = _iceCrc32(datos);
+    const ahora = new Date();
+    const hora = (ahora.getHours() << 11) | (ahora.getMinutes() << 5) | Math.floor(ahora.getSeconds() / 2);
+    const fecha = ((ahora.getFullYear() - 1980) << 9) | ((ahora.getMonth() + 1) << 5) | ahora.getDate();
+
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(6, 0x0800, true);
+    local.setUint16(8, comprimir ? 8 : 0, true); local.setUint16(10, hora, true); local.setUint16(12, fecha, true);
+    local.setUint32(14, crc, true); local.setUint32(18, comp.length, true); local.setUint32(22, datos.length, true);
+    local.setUint16(26, nombreBuf.length, true); local.setUint16(28, 0, true);
+
+    const central = new DataView(new ArrayBuffer(46));
+    central.setUint32(0, 0x02014b50, true); central.setUint16(4, 20, true); central.setUint16(6, 20, true);
+    central.setUint16(8, 0x0800, true); central.setUint16(10, comprimir ? 8 : 0, true);
+    central.setUint16(12, hora, true); central.setUint16(14, fecha, true);
+    central.setUint32(16, crc, true); central.setUint32(20, comp.length, true); central.setUint32(24, datos.length, true);
+    central.setUint16(28, nombreBuf.length, true);
+
+    const inicioCentral = 30 + nombreBuf.length + comp.length;
+    const fin = new DataView(new ArrayBuffer(22));
+    fin.setUint32(0, 0x06054b50, true); fin.setUint16(8, 1, true); fin.setUint16(10, 1, true);
+    fin.setUint32(12, central.byteLength + nombreBuf.length, true); fin.setUint32(16, inicioCentral, true);
+
+    const partes = [new Uint8Array(local.buffer), nombreBuf, new Uint8Array(comp), new Uint8Array(central.buffer), nombreBuf, new Uint8Array(fin.buffer)];
+    const total = partes.reduce((s, x) => s + x.length, 0);
+    const salida = new Uint8Array(total);
+    let off = 0;
+    for (const x of partes) { salida.set(x, off); off += x.length; }
+    return salida;
+}
+
+function _iceXml(cfg, anio, mes) {
+    const dos = String(mes).padStart(2, '0');
+    const importe = (v) => { const n = Number(v); return !Number.isFinite(n) || n === 0 ? '0' : n.toFixed(2); };
+    const gramos = (v) => { const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '0.00'; };
+    const lineas = (cfg.productos || []).map((pr) => '<vta>'
+        + '<codProdICE>' + pr.codProdICE + '</codProdICE>'
+        + '<gramoAzucar>' + gramos(pr.gramoAzucar) + '</gramoAzucar>'
+        + '<tipoIdCliente>' + (pr.tipoIdCliente || 'F') + '</tipoIdCliente>'
+        + '<idCliente>' + (pr.idCliente || '9999999999999') + '</idCliente>'
+        + '<tipoVentaICE>' + (pr.tipoVentaICE || 1) + '</tipoVentaICE>'
+        + '<ventaICE>' + importe(pr.ventaICE) + '</ventaICE>'
+        + '<devICE>' + importe(pr.devICE) + '</devICE>'
+        + '<cantProdBajaICE>' + (Number(pr.cantProdBajaICE) || 0) + '</cantProdBajaICE>'
+        + '</vta>').join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="no"?><ice>'
+        + '<TipoIDInformante>R</TipoIDInformante>'
+        + '<IdInformante>' + cfg.ruc + '</IdInformante>'
+        + '<razonSocial>' + cfg.nombre + '</razonSocial>'
+        + '<Anio>' + anio + '</Anio><Mes>' + dos + '</Mes>'
+        + '<actImport>02</actImport><codigoOperativo>ICE</codigoOperativo>'
+        + '<ventas>' + lineas + '</ventas></ice>';
+}
+
+async function _iceDatosDelCliente(ruc, periodo) {
+    const r = await SafeStorage.get(['sc_clients_cache', 'pending_anexo_ice']);
+    const cache = Array.isArray(r.sc_clients_cache) ? r.sc_clients_cache : [];
+    const c = cache.find((x) => String(x.ruc) === String(ruc)) || null;
+    const tp = (c && c.taxProfile) || (c && c.tax_profile) || {};
+    const cfg = tp.ice_config || {};
+    const ventas = (tp.ice_ventas || {})[periodo] || null;
+    return {
+        ruc: String(ruc),
+        nombre: (c && c.name) || (r.pending_anexo_ice && r.pending_anexo_ice.nombre) || 'CLIENTE',
+        productos: (ventas && Array.isArray(ventas.productos) && ventas.productos.length)
+            ? ventas.productos
+            : [{
+                codProdICE: cfg.codProdICE || '3031-053-049147-013-000750-66-593-000012',
+                tipoIdCliente: cfg.tipoIdCliente || 'F',
+                idCliente: cfg.idCliente || '9999999999999',
+                tipoVentaICE: cfg.tipoVentaICE || '1',
+            }],
+    };
+}
+
+async function _icePublicarPresentado(ruc, periodo) {
+    try {
+        const url = (typeof SC_SUPABASE_URL !== 'undefined' && SC_SUPABASE_URL) || (window.SC_CONFIG && window.SC_CONFIG.SUPABASE_URL);
+        const key = (typeof SC_SUPABASE_ANON_KEY !== 'undefined' && SC_SUPABASE_ANON_KEY) || (window.SC_CONFIG && window.SC_CONFIG.SUPABASE_ANON_KEY);
+        if (!url || !key) return;
+        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const r = await fetch(url + '/rest/v1/clients?ruc=eq.' + encodeURIComponent(ruc) + '&select=id,tax_profile', { headers: cab });
+        const filas = await r.json();
+        if (!Array.isArray(filas) || !filas.length) return;
+        const tp = filas[0].tax_profile || {};
+        const anexos = Object.assign({}, tp.ice_anexos || {});
+        anexos[periodo] = { estado: 'presentado', cuando: new Date().toISOString(), origen: 'extension-01' };
+        await fetch(url + '/rest/v1/clients?id=eq.' + filas[0].id, {
+            method: 'PATCH', headers: cab,
+            body: JSON.stringify({ tax_profile: Object.assign({}, tp, { ice_anexos: anexos }) }),
+        });
+        log.info('📤 [ANEXO ICE] ' + periodo + ' marcado como presentado en la web.');
+    } catch (e) { log.warn('📤 [ANEXO ICE] no se pudo publicar:', e && e.message); }
+}
+
+function _iceEsperar(cond, ms) {
+    return new Promise((res) => {
+        const t0 = Date.now();
+        const id = setInterval(() => {
+            let ok = false;
+            try { ok = cond(); } catch (e) { ok = false; }
+            if (ok || Date.now() - t0 > ms) { clearInterval(id); res(ok); }
+        }, 400);
+    });
+}
+
+async function subirAnexoIceActual() {
+    const pend = await SafeStorage.get(['pending_anexo_ice', 'sri_target_period']);
+    const pendiente = pend.pending_anexo_ice || null;
+
+    if (!/anexos?|menuInicial/i.test(location.href) || !/menuInicial|anexo/i.test(location.href)) {
+        return { ok: false, mensaje: 'Abrí primero Anexos → Anexo ICE en el SRI (esta pestaña no es la de Anexos).' };
+    }
+
+    // Si el acordeón del formulario está cerrado, el input existe pero no se ve.
+    try {
+        const cont = document.querySelector('[id$="frmRecepcion:outPnlCargaAnexo"]');
+        const panel = cont && cont.closest('.ui-accordion-content');
+        if (panel && panel.getAttribute('aria-hidden') === 'true') {
+            const cabecera = panel.previousElementSibling;
+            if (cabecera) { cabecera.click(); log.info('📤 [ANEXO ICE] abriendo el acordeón de carga…'); await sleep(800); }
+        }
+    } catch (e) { /* sin acordeón se sigue */ }
+
+    const input = document.querySelector('input[type=file][id$="anexosSubir_input"]');
+    if (!input) {
+        return { ok: false, mensaje: 'No encuentro el campo de archivo (¿la sesión sigue abierta?). Recargá la pantalla de Anexos.' };
+    }
+
+    let ruc = pendiente && pendiente.ruc;
+    let anio = pendiente && pendiente.anio;
+    let mes = pendiente && pendiente.mes;
+    if (!ruc) {
+        const m = /(\d{13})/.exec((document.body.innerText || '').slice(0, 6000));
+        if (m) ruc = m[1];
+    }
+    if (!ruc) return { ok: false, mensaje: 'No pude detectar el RUC del contribuyente en esta pantalla.' };
+    // 🛡️ Seguridad: si la pantalla muestra OTRO RUC, no se sube nada.
+    const rucPantalla = (String((document.body && document.body.innerText) || '').slice(0, 8000).match(/(\d{13})/) || [])[1] || '';
+    if (rucPantalla && rucPantalla !== String(ruc)) {
+        return { ok: false, mensaje: 'La pantalla de Anexos es de ' + rucPantalla + ', no de ' + ruc + '. No subo un anexo de otro cliente.' };
+    }
+    if (!anio || !mes) {
+        const tp = pend.sri_target_period;
+        if (tp && typeof tp.year === 'number') { anio = tp.year; mes = tp.monthIndex + 1; }
+        else {
+            const hoy = new Date();
+            const prev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+            anio = prev.getFullYear(); mes = prev.getMonth() + 1;
+        }
+    }
+    const periodo = anio + '-' + String(mes).padStart(2, '0');
+    const datos = await _iceDatosDelCliente(ruc, periodo);
+    const xml = _iceXml(datos, anio, mes);
+    const nombre = 'AICE' + String(mes).padStart(2, '0') + anio + '.zip';
+    const zip = await _iceZipDe(nombre, xml);
+    log.info('📤 [ANEXO ICE] armando ' + nombre + ' (' + zip.length + ' B) para ' + periodo);
+
+    const dt = new DataTransfer();
+    dt.items.add(new File([zip], nombre, { type: 'application/zip' }));
+    input.files = dt.files;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const subido = await _iceEsperar(() => {
+        // Subida en curso: barra de progreso visible.
+        const enCurso = document.querySelector('[id$="frmRecepcion:anexosSubir"] .ui-fileupload-progress');
+        if (enCurso && enCurso.offsetParent !== null) return false;
+        const fila = document.querySelector('[id$="frmRecepcion:anexosSubir"] .ui-fileupload-files');
+        const conNombre = fila && /AICE\d{6}\.zip/i.test(fila.innerText || '');
+        const nombre = document.querySelector('[id$="frmRecepcion:lblArchivoSeleccionado"]');
+        const nombreVisible = nombre && /AICE\d{6}\.zip/i.test(nombre.innerText || '');
+        return Boolean(conNombre || nombreVisible);
+    }, 30000);
+
+    const btnCargar = document.querySelector('[id$="frmRecepcion:btnCargar"]');
+    if (!btnCargar) return { ok: false, mensaje: 'Subí el archivo pero no aparece el botón "Cargar".' + (subido ? '' : ' (la subida tardó)') };
+    btnCargar.click();
+    log.info('📤 [ANEXO ICE] archivo enviado; esperando confirmación…');
+
+    const hayAceptar = await _iceEsperar(() => !!document.querySelector('[id$="frmRecepcion:btnAceptarConf"]'), 25000);
+    if (hayAceptar) {
+        document.querySelector('[id$="frmRecepcion:btnAceptarConf"]').click();
+        log.info('📤 [ANEXO ICE] confirmación aceptada.');
+    }
+
+    const mensajeOk = await _iceEsperar(() => {
+        const el = document.querySelector('[id$="frmRecepcion:messagesText1"]');
+        const txt = el ? (el.innerText || '').trim() : '';
+        return /recib|recepci|correct|exitos|registrad/i.test(txt) ? txt : false;
+    }, 30000);
+
+    const mensajeErr = document.querySelector('[id$="frmRecepcion:pnlErrores"]');
+    const txtErr = mensajeErr ? (mensajeErr.innerText || '').trim() : '';
+
+    if (mensajeOk) {
+        await _icePublicarPresentado(ruc, periodo);
+        await SafeStorage.remove(['pending_anexo_ice']);
+        return { ok: true, mensaje: periodo + ' presentado. ' + String(mensajeOk).slice(0, 120) };
+    }
+    return { ok: false, mensaje: 'No pude confirmar la recepción.' + (txtErr ? ' SRI dice: ' + txtErr.slice(0, 160) : ' Revisá la pantalla.') };
+}
+
+if (typeof window !== 'undefined') {
+    window.scSubirAnexoIce = subirAnexoIceActual;
+    window.scMapearAnexos = mapearAnexosSRI;
+}
+
+// Al abrir la pantalla de Anexos con una subida pendiente, arranca sola.
+(function () {
+    try {
+        if (!/menuInicial/i.test(location.href)) return;
+        setTimeout(async () => {
+            const r = await SafeStorage.get(['pending_anexo_ice']);
+            if (!r.pending_anexo_ice) return;
+            log.info('📤 [ANEXO ICE] subida pendiente desde la web: esperando la pantalla…');
+            const hayInput = await _iceEsperar(() => !!document.querySelector('input[type=file][id$="anexosSubir_input"]'), 60000);
+            if (!hayInput) { log.warn('📤 [ANEXO ICE] la pantalla de Anexos no cargó el campo de archivo'); return; }
+            await subirAnexoIceActual();
+        }, 3500);
+    } catch (e) { /* arranque silencioso */ }
+})();
+
+
+// ============================================================================
+// DECLARACIÓN ICE (en cero): lleva al wizard con la obligación ya elegida.
+// Mapeo real: somObligacion → "3031 - ICE BEBIDAS ALCOHÓLICAS".
+// Por seguridad NO envía nada: deja el wizard listo y el usuario confirma.
+// ============================================================================
+function _iceEnWizard() {
+    return !!document.getElementById('frmFlujoDeclaracion:somObligacion_label') ||
+           !!document.querySelector('[id*="somObligacion"]') ||
+           /recibirDeclaracion\.jsf/i.test(location.href);
+}
+
+async function _iceElegirObligacion(codigo) {
+    const label = () => document.getElementById('frmFlujoDeclaracion:somObligacion_label');
+    for (let intento = 1; intento <= 6; intento++) {
+        const l = label();
+        if (l && (l.textContent || '').includes(codigo)) return true;
+        const trigger = document.querySelector('#frmFlujoDeclaracion\\:somObligacion .ui-selectonemenu-trigger')
+            || document.getElementById('frmFlujoDeclaracion:somObligacion')
+            || l;
+        if (!trigger) { await sleep(1000); continue; }
+        trigger.click();
+        await sleep(600);
+        const opciones = Array.from(document.querySelectorAll('.ui-selectonemenu-items li, li.ui-selectonemenu-item'));
+        const opt = opciones.find((li) => new RegExp(codigo).test(li.textContent || ''));
+        if (opt) {
+            opt.click();
+            log.info('🧾 [ICE] obligación ' + codigo + ' seleccionada.');
+            await sleep(1500);
+            return true;
+        }
+        await sleep(800);
+    }
+    return false;
+}
+
+async function iniciarDeclaracionICE(anio, mes) {
+    const pend = await SafeStorage.get(['sc_ice_declarar']);
+    if (!_iceEnWizard()) {
+        await SafeStorage.set({
+            sc_ice_declarar: { anio: anio || null, mes: mes || null, cuando: Date.now() },
+            pending_sri_autofill: (pend.pending_sri_autofill || undefined),
+        });
+        log.info('🧾 [ICE] abriendo el formulario ICE del SRI…');
+        window.location.href = SRI_PUENTE_FORMULARIO_ICE;
+        return { ok: false, mensaje: 'Abriendo el formulario ICE…' };
+    }
+    const ok = await _iceElegirObligacion('3031');
+    if (!ok) return { ok: false, mensaje: 'No pude elegir la obligación 3031 (ICE BEBIDAS ALCOHÓLICAS). Elegila a mano.' };
+    if (typeof window.sriAssistant !== 'undefined' && window.sriAssistant.showEliteToast) {
+        window.sriAssistant.showEliteToast({
+            title: '🧾 ICE listo',
+            msg: 'Obligación 3031 elegida. Elegí el período, seguí el wizard y confirmá vos. No envío nada sin que lo revises.',
+            duration: 12000,
+        });
+    }
+    return { ok: true, mensaje: 'Obligación 3031 lista; seguí con el período y las preguntas.' };
+}
+
+if (typeof window !== 'undefined') {
+    window.scIniciarDeclaracionICE = iniciarDeclaracionICE;
+}
+
+// Auto: si veníamos del puente y hay un pendiente, elegir la obligación.
+(function () {
+    try {
+        if (!/recibirDeclaracion\.jsf/i.test(location.href)) return;
+        setTimeout(async () => {
+            const r = await SafeStorage.get(['sc_ice_declarar']);
+            if (!r.sc_ice_declarar) return;
+            log.info('🧾 [ICE] declaración pendiente: preparando obligación…');
+            await iniciarDeclaracionICE(r.sc_ice_declarar.anio, r.sc_ice_declarar.mes);
+            await SafeStorage.remove(['sc_ice_declarar']);
+        }, 4000);
+    } catch (e) { /* arranque silencioso */ }
+})();
+

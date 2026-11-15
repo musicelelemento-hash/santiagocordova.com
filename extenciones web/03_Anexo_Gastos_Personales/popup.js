@@ -85,3 +85,88 @@ if (document.getElementById('go-to-anexos')) {
         });
     };
 }
+
+
+// ── IA · Gemini ───────────────────────────────────────────────────────────
+// La clave vive en chrome.storage.local, en la MISMA entrada que usa la 01
+// (`sc_ia_credenciales`): un solo lugar donde rotarla. Este popup es para
+// quien usa la 03 sola; con la suite, se carga en Ajustes y es la misma.
+const CLAVE_IA_POPUP = 'sc_ia_credenciales';
+const MODELO_IA_POPUP = 'gemini-2.5-flash';
+
+const iaInput = document.getElementById('sc-ia-key');
+const iaEstado = document.getElementById('sc-ia-estado');
+const iaGuardar = document.getElementById('sc-ia-guardar');
+const iaProbar = document.getElementById('sc-ia-probar');
+
+function pintarEstadoIA(cfg) {
+    if (!iaEstado) return;
+    const k = (cfg && cfg.apiKey) || '';
+    if (k) {
+        iaEstado.innerHTML = '<span class="ia-ok">✅ Clave cargada</span> · termina en …' +
+            k.slice(-4).replace(/[<>&]/g, '');
+        iaEstado.title = 'La misma clave que usan la extensión 01 y la suite.';
+    } else {
+        iaEstado.innerHTML = '<span class="ia-mal">⚠️ Sin clave</span> · se clasifica sin IA (catastro + mapeos).';
+        iaEstado.title = 'La clasificación por IA queda apagada hasta que cargues una clave.';
+    }
+}
+
+chrome.storage.local.get([CLAVE_IA_POPUP], (r) => pintarEstadoIA(r[CLAVE_IA_POPUP]));
+
+if (iaGuardar) {
+    iaGuardar.addEventListener('click', () => {
+        const apiKey = ((iaInput && iaInput.value) || '').trim();
+        if (!apiKey) {
+            iaEstado.innerHTML = '<span class="ia-mal">⚠️ Pegá la clave antes de guardar.</span>';
+            return;
+        }
+        chrome.storage.local.get([CLAVE_IA_POPUP], (r) => {
+            const previo = r[CLAVE_IA_POPUP] || {};
+            const nuevo = Object.assign({}, previo, { apiKey, cuando: Date.now() });
+            chrome.storage.local.set({ [CLAVE_IA_POPUP]: nuevo }, () => {
+                if (iaInput) iaInput.value = '';
+                pintarEstadoIA(nuevo);
+            });
+        });
+    });
+}
+
+if (iaProbar) {
+    iaProbar.addEventListener('click', async () => {
+        iaEstado.innerHTML = '⏳ Probando la clave…';
+        let apiKey = ((iaInput && iaInput.value) || '').trim();
+        let modelo = MODELO_IA_POPUP;
+        if (!apiKey) {
+            const r = await new Promise((ok) => chrome.storage.local.get([CLAVE_IA_POPUP], ok));
+            const cfg = r[CLAVE_IA_POPUP] || {};
+            apiKey = (cfg.apiKey || '').trim();
+            modelo = (cfg.modelo || '').trim() || MODELO_IA_POPUP;
+        }
+        if (!apiKey) {
+            iaEstado.innerHTML = '<span class="ia-mal">⚠️ No hay clave para probar.</span>';
+            return;
+        }
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: 'ping' }] }],
+                    generationConfig: { maxOutputTokens: 1 }
+                })
+            });
+            if (res.ok) {
+                iaEstado.innerHTML = '<span class="ia-ok">✅ La clave responde</span> · ' + modelo;
+            } else {
+                const cuerpo = (await res.text().catch(() => '')).slice(0, 120);
+                iaEstado.innerHTML = '<span class="ia-mal">❌ HTTP ' + res.status + '</span> · ' +
+                    cuerpo.replace(/[<>&]/g, '');
+            }
+        } catch (e) {
+            iaEstado.innerHTML = '<span class="ia-mal">❌ No se pudo conectar</span> · ' +
+                String((e && e.message) || e).replace(/[<>&]/g, '');
+        }
+    });
+}

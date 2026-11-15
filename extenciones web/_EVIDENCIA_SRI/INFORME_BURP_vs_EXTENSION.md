@@ -2,6 +2,7 @@
 
 Comparación de los tres exports de Burp Suite del `_EVIDENCIA_SRI` contra el
 código de Nueva Luz 3.0 (build `3.1.0+20260903.1804`). 04-sep-2026.
+**Revisado el 07-nov-2026: ver §7 para el estado actual de cada prioridad.**
 
 | Traza | Peticiones | Duración | Qué es |
 | :--- | ---: | ---: | :--- |
@@ -175,3 +176,57 @@ en la comparación. Conviene anotar en la Biblia que **los identificadores
 
 Esa distinción vale más que cualquier ID suelto: separa lo que se puede
 hardcodear de lo que hay que buscar por texto o por estructura.
+
+---
+
+## 7 · Estado al 07-nov-2026 — qué se cerró y qué sigue abierto
+
+> Revisión contra el código de `01_Nueva_Luz_3.0` (build `3.1.0+20261107.1255`)
+> y contra el log de una corrida real del mismo día (clientes 3 a 6, un solo
+> lote). La traza de Burp sigue siendo la verdad de referencia para la
+> **secuencia de peticiones**; el log sólo prueba lo que el bot hizo en esta
+> máquina.
+
+### 7.1 Prioridades del §5
+
+| # | Prioridad | Estado | Dónde se ve |
+| :---: | :--- | :--- | :--- |
+| 1 | `FIN_TURBO` decide con `SriLoop.puedeAvanzar()` | **Parcial** | `03_ingreso_y_sesion.js:1657-1663`: consulta el semáforo y registra las tres entradas, pero sigue haciendo `porSemaforo \|\| porBandera`. La bandera legacy no se retiró. |
+| 2 | Traza de dos clientes seguidos | **Sin traza, con evidencia operativa** | El log del 07-nov encadenó 3 → 4 → 5 → 6 con logout/login y declaración en cada uno. No hay XML de Burp que lo respalde: falta capturarlo. |
+| 3 | Degradar los `j_idt*` a «pista» | **Cerrado** | Ya no hay `j_idt947` ni `j_idt195` en `src/`. Se quitó además el respaldo `#j_idt15_content` de la lectura de período (`06:716-728`), donde acertar el id equivocado devolvía **otro período** en vez de null. Queda `#formCabecera\:j_idt31` dentro de una lista de selectores de RUC: ahí el peor caso es «no encuentra», no «encuentra mal». |
+| 4 | Pantalla de confirmación con el CEP | **Cerrado en operación** | Log del 07-nov: `🎉 [SRI WATCHER] ¡Pantalla de confirmación detectada!`, clic en `btnDescargarComprobante`, PDF oficial de 114.052 chars, subida a R2 y `upsert` en Supabase. Falta la traza de red para blindarlo. |
+| 5 | Anclar la tabla maestra | **Cerrado** | `04_extraccion_datos.js:1134` arma el enlace del XML con `frmPrincipal:tablaCompRecibidos:${indiceFila}:lnkXml`, el id semántico y estable. |
+
+### 7.2 Brechas del §3 y §4
+
+- **§3.1 (el salto colgaba de `autoDeclaration`)** — ya no cuelga sólo de eso,
+  pero no se cerró del todo: ver prioridad 1. Mientras exista el `||`, una
+  bandera vieja puede hacer declarar cuando el semáforo dice que no. **Es el
+  único punto del flujo donde la evidencia del recorrido manual todavía
+  contradice al código.**
+- **§3.4 (nunca llegó al envío sola)** — superado: el 07-nov el bot validó
+  saldo $0.00, confirmó el diálogo, envió, capturó el PDF y lo archivó.
+- **§4.2 (PDF → R2 → Supabase sin probar)** — superado en la misma corrida.
+- **§4.3 (falta la pantalla final)** — superado en operación; falta la traza.
+
+### 7.3 Hallazgo nuevo, del log del 07-nov
+
+Mientras la sesión detectada era del RUC `0703371740001`, el log escribió:
+
+```
+📊 [ARQUEO COMPRAS] Resumen guardado para 0705549145001: 23 facturas.
+```
+
+Es el cliente **anterior** del lote. Si ese resumen alimenta el llenado, las
+compras de un contribuyente terminan en la declaración de otro. No se corrigió
+a ciegas: hay que reproducirlo con el DOM real y decidir si el arqueo debe
+llevar el RUC con el que se leyó la tabla, no el `lastRuc` del almacén.
+**Candidato a prioridad 1 del próximo ciclo.**
+
+### 7.4 Regla que queda
+
+Una traza de Burp vale por la **secuencia** (qué petición habilita a cuál) y
+por los **ids semánticos**. Los `j_idt*`, los tiempos y los nombres de archivo
+no son evidencia de nada. Cuando el log de consola contradiga a la traza, gana
+la traza; cuando la traza calle, el log es una hipótesis, no una prueba.
+

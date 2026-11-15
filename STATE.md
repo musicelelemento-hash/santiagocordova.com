@@ -41,6 +41,94 @@
 
 ---
 
+## 🏆 2₉ · HITOS DE HOY (07-NOV-2026) — el bucle ya se pilotea desde la web
+
+> Pedido del usuario, resumido con sus palabras: *«lo más importante el bucle,
+> que se pueda ejecutar desde la web… ponle hora de cuánto dura… que sea
+> interactivo y sepa si el cliente no declara IVA entonces dormir… y que el
+> contador vea las compras separadas por nombres y clasificadas las de crédito
+> tributario»*.
+
+### 1. Pantalla nueva: `bucle` (Bucle Mensual) — el piloto del loop vive en la web
+
+- **`screens/LoopDeclaracionesScreen.tsx`** (nueva, lazy): el centro de mando
+  del bucle mensual. Dos modos reales, no un tema:
+  - **Cockpit**: KPIs, anillo de avance del mes, bitácora de ejecución en vivo,
+    histórico de tiempos y el expediente del cliente al costado.
+  - **Limpio**: se apaga todo lo flotante; queda el cronómetro, el botón y la
+    lista. El expediente se abre en modal. Se recuerda en `sc_loop_modo`.
+- **`services/loopEngine.ts`** (nuevo): el estado por cliente, que era lo que
+  faltaba para no disparar a ciegas.
+  - Buckets: `listo` · `declarado` · `por_pagar` · `no_aplica` · `sin_clave` ·
+    `credencial_mala` · `excluido`, cada uno con el **motivo en castellano**
+    («RIMPE Negocio Popular: no presenta IVA mensual», «Empieza a declarar en
+    2026-09», «Ya pasó la fecha límite»).
+  - `no_aplica` es el «dormir» que pidió el usuario: semestrales, populares,
+    solo-plan y clientes con `clientStartPeriod` futuro **no entran a la cola**.
+  - `por_pagar` = borrador con saldo a pagar: queda para revisión manual y no
+    se reenvía.
+  - `periodoIvaMensual()` (mes anterior), `esInicioDeMes()` y
+    `sugerenciaDelMes()`: la web **sugiere** la corrida cuando arranca el mes o
+    cuando hay vencidos; si no hay nada pendiente no muestra nada.
+- **Medición de tiempos** (lo que pidió explícitamente): la corrida se cronometra
+  con el reloj del navegador y se cierra sola cuando el semáforo pasa a
+  `DETENIDO`; el tiempo por cliente se deduce de los cambios de RUC en
+  `sc_telemetria_pulso`. Se guardan las últimas 25 corridas en `sc_loop_corridas`
+  y la pantalla muestra **cuánto tardó la última, el promedio por cliente y la
+  estimación de lo que falta**. Con 2000 clientes eso es la diferencia entre
+  saber si entra en la tarde o no.
+- **Ejecutar el bucle** usa el camino que ya existía (`armarCola`/cola del
+  bridge) vía `sendBatchDeclarationToExtension`, no una cola armada a mano —
+  misma lección que el 06-nov con el botón ⚡ del cockpit.
+
+### 2. Control de la corrida desde la web: pausar / reanudar / detener
+
+- `bridge_content.js`: nuevo `SRI_LOOP_CONTROL` con **sólo dos verbos**
+  (`pausar`, `detener`); cualquier otra cosa se ignora. `pausar` escribe
+  `sc_loop.estado = 'PAUSANDO'` (termina el cliente en curso y no salta al
+  siguiente) y `detener` replica el 🛑 del HUD: semáforo apagado, cola vacía y
+  `pendingAction` descartada — sin eso la página se recarga sola.
+- `sendLoopControlToExtension()` en `extensionBridge.ts`; `reanudar` se manda
+  como `SRI_RESUME_BATCH`, que es el camino ya probado.
+
+### 3. Expediente del mes: `components/features/DeclarationDossier.tsx`
+
+- Ventas, compras **proveedor por proveedor** con `Crédito · 500` /
+  `Sin crédito · 502` / `5% · 540` / `0% · 507`, barra apilada de composición
+  del gasto, y **vista previa del Formulario 104** por casillero
+  (401/403/425/499 · 500/502/540/507/509 · 564/601/620) con los números
+  reales del archivo `formato formulario de iva.txt` de la extensión.
+- Regla: nada se inventa. Sin facturas del mes lo dice y explica de dónde
+  saldrían; todo número proyectado va marcado como vista previa porque el 104
+  oficial suma saldos anteriores, retenciones y el factor de proporcionalidad.
+
+### 4. Arreglo colateral (build estaba roto en `main`)
+
+- `components/3d/TelemetryOrb3D.tsx` llamaba a `hapticAudio.playTone()`, que no
+  existe en `HapticAudioService` → `tsc` fallaba y `npm run build` no
+  compilaba desde el commit `5b54796`. Ahora usa `playCrystalResonance()`.
+
+### 5. Verificación
+
+- `node --check bridge_content.js` ✅
+- `npm run typecheck` ✅ (0 errores)
+- `npm run build` ✅ — chunk nuevo `LoopDeclaracionesScreen.*.js` (~51 kB).
+
+### Pendiente para la próxima
+
+1. **Probar el bucle real de noviembre**: los 3 de la corrida del 3-nov no
+   subieron porque faltaba el `anon key` de Supabase. Antes de una corrida de
+   47, revisar que la clave anon esté cargada en la extensión.
+2. **HUD de la extensión**: el usuario pidió que, cuando el bucle ya está
+   corriendo, el flotante deje de estorbar (colapsar a una pastilla mínima) y
+   que en la pantalla de declaraciones no aparezca salvo que falte declarar.
+3. **Vista para el cliente** (no contador) del expediente, animada y en
+   lenguaje simple: hoy el dossier está pensado para el contador.
+4. Costos: no se agregó nada de R2/Supabase pago. Todo lo nuevo vive en
+   `localStorage` (tiempos, modo, selección), así que no suma egress.
+
+---
+
 ## 📌 PEDIDO DEL USUARIO PARA LA PRÓXIMA SESIÓN (06-nov-2026, antes de cerrar)
 
 > El usuario cierra la sesión acá. Dicho con sus propias palabras, sin

@@ -43,6 +43,25 @@ try {
     }
 } catch (e) { /* sin almacén: queda el nivel por defecto */ }
 
+/** Guarda las últimas líneas en storage: si la pestaña se cierra, no se pierden. */
+let _scLogTimer = null;
+function scLogPersistir() {
+    if (_scLogTimer) return;
+    _scLogTimer = setTimeout(() => {
+        _scLogTimer = null;
+        try {
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({
+                    sc_log_ultimo: {
+                        t: Date.now(),
+                        url: (typeof location !== 'undefined' ? location.href : ''),
+                        lineas: SC_LOG.buffer.slice(-200)
+                    }
+                });
+            }
+        } catch (e) { /* el registro nunca rompe nada */ }
+    }, 1200);
+}
 function scLog(nivel, ...args) {
     try {
         SC_LOG.buffer.push({
@@ -55,6 +74,20 @@ function scLog(nivel, ...args) {
         });
         if (SC_LOG.buffer.length > SC_LOG.max) SC_LOG.buffer.shift();
     } catch (e) { /* el buffer no puede romper el registro */ }
+
+    scLogPersistir();
+    // Los avisos y errores van a un anillo aparte: el buffer general se
+    // pisa con la actividad normal y se pierden justo los importantes.
+    if (nivel === 'warn' || nivel === 'error') {
+        try {
+            SC_LOG.avisos = SC_LOG.avisos || [];
+            SC_LOG.avisos.push({ t: Date.now(), nivel, texto: String(args[0] || "") });
+            if (SC_LOG.avisos.length > 120) SC_LOG.avisos.shift();
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+                chrome.storage.local.set({ sc_log_avisos: SC_LOG.avisos.slice(-120) });
+            }
+        } catch (e) { /* sin storage no pasa nada */ }
+    }
 
     if (nivel === 'debug' && !SC_LOG.debug) return;
     const salida = nivel === 'error' ? console.error
@@ -1154,6 +1187,22 @@ function clientAunNoEmpiezaADeclarar(c, tp, targetPeriodRef) {
   return String(startPeriod) > targetKey;
 }
 
+/** Igual que en el popup: la historia manda cuando falta la frecuencia. */
+function frecuenciaPorHistorial01(db) {
+  const h = Array.isArray(db && db.declaration_history) ? db.declaration_history : [];
+  const iva = h.filter((e) => String((e && e.type) || '').toUpperCase().includes('IVA'));
+  if (!iva.length) return null;
+  const periodos = iva.map((e) => String((e && e.period) || '').trim()).filter(Boolean);
+  const mensuales = periodos.filter((x) => /^\d{4}-\d{2}$/.test(x));
+  const semestres = periodos.filter((x) => /^\d{4}-S[12]$/.test(x));
+  const ultimo = periodos.slice().sort((a, b) => String(b).localeCompare(String(a)))[0] || '';
+  if (/^\d{4}-\d{2}$/.test(ultimo)) return true;
+  if (/^\d{4}-S[12]$/.test(ultimo)) return false;
+  if (mensuales.length >= 3) return true;
+  if (semestres.length) return false;
+  return null;
+}
+
 function isClientMensual(db) {
   if (!db || !db.ruc) return false;
   if (db.isDeleted || db.is_deleted) return false;
@@ -1176,6 +1225,9 @@ function isClientMensual(db) {
   // así aparecían clientes viejos y de prueba que nunca declararon la
   // frecuencia en la web. La lista real es la que sincroniza tu web — un
   // cliente de verdad la trae marcada.
+  // Sin frecuencia marcada: que decida su historia (el último comprobante).
+  const porHistorial = frecuenciaPorHistorial01(db);
+  if (porHistorial !== null) return porHistorial;
   return false;
 }
 // ============================================================
@@ -2288,7 +2340,100 @@ async function syncDeclarationToSupabase(
   customStatus = "completado"
 ) {
   if (!ruc || !periodStr) return;
-  const SUPABASE_URL = SC_SUPABASE_URL;
+  /**
+ * Envía al cliente una copia del comprobante con el aviso de que su
+ * declaración quedó presentada. Claro, preciso y educado.
+ *
+ * El envío lo hace un servicio configurable (el bot/Gmail que ya existe):
+ *   sc_email_config = { url, token?, to?, firma? }
+ * Si no hay configuración o falla, NO se inventa nada: queda el log y sigue.
+ * Contrato del servicio: POST { to, subject, text, pdfUrl, nombre, ruc, periodo }.
+ */
+/**
+ * Envía el correo directo por Resend (si hay clave en Ajustes).
+ * Adjunta el PDF del comprobante bajándolo de su URL pública.
+ */
+async function enviarEmailResend({ apiKey, from, to, subject, text, pdfUrl }) {
+  let attachments;
+  if (pdfUrl) {
+    try {
+      const pdf = await fetch(pdfUrl);
+      if (pdf.ok) {
+        const buf = new Uint8Array(await pdf.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        attachments = [{ filename: "comprobante.pdf", content: btoa(bin) }];
+      }
+    } catch (e) { log.warn("[RESEND] No se pudo adjuntar el PDF:", e && e.message); }
+  }
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [to], subject, text, ...(attachments ? { attachments } : {}) }),
+  });
+  if (!res.ok) throw new Error(`Resend respondió ${res.status}: ${(await res.text()).slice(0, 140)}`);
+}
+
+async function enviarCopiaDeclaracion({ ruc, nombre, periodo, pdfUrl }) {
+  try {
+    const cfg = (await SafeStorage.get(['sc_email_config'])).sc_email_config;
+    if (!cfg || !cfg.url) return;
+
+    let to = String(cfg.to || '').trim();
+    if (!to) {
+      try {
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=email,name`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+        });
+        if (r.ok) {
+          const filas = await r.json();
+          to = String((filas[0] && filas[0].email) || '').trim();
+        }
+      } catch (e) { /* sin correo del cliente: no se envía */ }
+    }
+    if (!to) return;
+
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const [y, m] = String(periodo).split('-').map(Number);
+    const mes = (y && m) ? `${meses[m - 1]} ${y}` : String(periodo);
+
+    const asunto = `Declaración de IVA de ${mes} presentada`;
+    const texto = [
+      `Estimado/a ${nombre}:`,
+      '',
+      `Le informamos que su declaración de IVA correspondiente a ${mes} fue presentada correctamente ante el SRI.`,
+      '',
+      'Adjuntamos una copia del comprobante en PDF para su archivo.',
+      'Si necesita una copia física o tiene alguna consulta, puede responder a este correo.',
+      '',
+      'Saludos cordiales,',
+      cfg.firma || 'Soluciones Contables Pro',
+    ].join('\n');
+
+    // Resend directo: clave en resendKey, o el token si ya empieza con re_.
+    const resendKey = String(cfg.resendKey || (String(cfg.token || '').startsWith('re_') ? cfg.token : '')).trim();
+    if (resendKey) {
+      const from = String(cfg.resendFrom || '').trim() || 'Soluciones Contables Pro <onboarding@resend.dev>';
+      await enviarEmailResend({ apiKey: resendKey, from, to, subject: asunto, text: texto, pdfUrl });
+      log.info(`[CORREO] Comprobante de ${nombre || ruc} (${mes}) enviado por Resend a ${to}.`);
+      return;
+    }
+    const res = await fetch(cfg.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(cfg.token ? { Authorization: `Bearer ${cfg.token}` } : {}),
+      },
+      body: JSON.stringify({ to, subject: asunto, text: texto, pdfUrl, nombre, ruc, periodo, chatId: cfg.chatId || '' }),
+    });
+    if (res.ok) {
+      log.info(`[CORREO] Comprobante de ${nombre || ruc} (${mes}) enviado a ${to}.`);
+    } else {
+      log.warn(`[CORREO] El servicio respondió ${res.status}. El comprobante quedó en ${pdfUrl}.`);
+    }
+  } catch (e) { log.warn('[CORREO] No se pudo enviar la copia:', e && e.message); }
+}
+const SUPABASE_URL = SC_SUPABASE_URL;
   const SUPABASE_KEY =
     SC_SUPABASE_ANON_KEY;
 
@@ -2525,6 +2670,11 @@ async function syncDeclarationToSupabase(
           });
         }
       } catch (eAud) { log.warn('SriAuditor hito error:', eAud); }
+
+    // Copia por correo al cliente: sólo si hay comprobante y servicio configurado.
+    if (pdfUrl && typeof enviarCopiaDeclaracion === 'function') {
+      enviarCopiaDeclaracion({ ruc, nombre: clientName, periodo: canonicalPeriod, pdfUrl }).catch(() => {});
+    }
     }
 
     const fetchRes = await fetch(
@@ -3065,12 +3215,17 @@ async function handleBatchNextClient() {
         ? found.declarations
         : Array.isArray(found.declaration_history)
           ? found.declaration_history
-          : [];
+          : (Array.isArray(found.sri_declaraciones) ? found.sri_declaraciones : []);
       return decs.some((d) => {
         if (!d) return false;
-        const hasProof = !!(d.proof_file || d.pdfUrl || d.proofFile);
-        if (!hasProof) return false;
-        return (d.period || "").includes(clientPer);
+        const pRaw = String(d.period || '').toUpperCase().trim();
+        const pClean = pRaw.split(':')[0].trim();
+        const matchesPeriod = pClean === clientPer || pRaw.includes(clientPer);
+        if (!matchesPeriod) return false;
+        const hasProof = !!(d.proof_file || d.pdfUrl || d.proofFile || d.pdf_url);
+        const st = String(d.status || '').toLowerCase();
+        const isDoneStatus = ['completado', 'completada', 'enviada', 'pagada', 'realizada'].includes(st);
+        return hasProof || isDoneStatus;
       });
     }
     return false;
@@ -3286,7 +3441,26 @@ async function handleBatchNextClient() {
   } else {
     log.debug(
       "🎉 [MODO AUTO BUCLE] ¡Lote completado! Todos los clientes han sido procesados.",
-    );
+    )
+    // Cierre visible: aunque después se duerma, queda el resumen del lote.
+    try {
+      const stLote = await SafeStorage.get(['sc_declaraciones_locales', 'workflowPeriod', 'sri_target_period']);
+      const reg = stLote.sc_declaraciones_locales || {};
+      const wp = stLote.workflowPeriod || stLote.sri_target_period;
+      const periodo = (wp && wp.year && typeof wp.monthIndex === 'number')
+        ? `${wp.year}-${String(wp.monthIndex + 1).padStart(2, '0')}`
+        : '';
+      let total = 0;
+      let conPdf = 0;
+      Object.entries(reg).forEach(([clave, valor]) => {
+        if (!periodo || !String(clave).endsWith('|' + periodo)) return;
+        total += 1;
+        if (valor && valor.pdfSubido) conPdf += 1;
+      });
+      const resumen = { cuando: Date.now(), periodo, total, conPdf, sinPdf: total - conPdf };
+      await SafeStorage.set({ sc_ultimo_lote: resumen });
+      log.info(`🎉 [LOTE] ${conPdf}/${total} con comprobante · ${periodo || 'período sin definir'}`);
+    } catch (eResumen) { /* el resumen no puede tumbar el cierre */ };
     // 🛑 DETENER EL SEMÁFORO Y PURGAR CREDENCIALES: Si no se detiene SriLoop y no se limpia
     // pending_sri_autofill, el logout canónico redirige a Keycloak y la extensión
     // vuelve a iniciar sesión en bucle infinito para el último cliente procesado.

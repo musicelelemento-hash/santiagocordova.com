@@ -202,6 +202,17 @@ SafeStorage.get(null).then(async (items) => {
             window.location.href.includes('comprobantesRecibidos')
         )
     );
+    // 🔁 Si la web pidió un cliente y la sesión abierta es de OTRO, se cierra
+    // esa sesión (purga completa) para entrar con el correcto.
+    if (isAlreadyLoggedIn && items.pending_sri_autofill && items.pending_sri_autofill.ruc) {
+        const rucPedido = String(items.pending_sri_autofill.ruc);
+        const rucPantalla = _rucEnPantalla();
+        if (rucPantalla && rucPantalla !== rucPedido) {
+            log.info('🔁 [CAMBIO AL CARGAR] La sesión es de ' + rucPantalla + '; cierro y entro con ' + rucPedido + '…');
+            await SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
+            if (typeof cerrarSesionSRI === 'function') { await cerrarSesionSRI(true); return; }
+        }
+    }
 
     // ── Blindaje Anti-Bloqueo de Cuenta (Límite 1 Intento por Cliente) ─────────
     // Si el SRI rechaza las credenciales o la página recarga y sigue en el login
@@ -402,10 +413,43 @@ SafeStorage.get(null).then(async (items) => {
 
         // 🛑 BLINDAJE 1: YA DECLARADO — Si el cliente ya fue presentado para el período objetivo,
         // no tiene ningún sentido volver a iniciar sesión para declarar. Abortar auto-login y purgar.
-        if (clientRuc && targetPer && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(clientRuc, targetPer)) {
-            log.warn(`🛑 [BLINDAJE LOGIN] ${clientRuc} ya fue declarado para ${SriAuditor.normalizarPeriodo(targetPer)}. Descartando autofill en pantalla de login para prevenir bucle.`);
-            await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
-            return;
+        // Segunda vuelta: entrar SÍ tiene sentido aunque ya esté declarado,
+        // porque el objetivo es bajar el comprobante, no volver a declarar.
+        const esRecuperacion = items.pendingAction === 'recuperar_comprobante' || Boolean(items.recuperarComprobante);
+        // Acceso rápido desde la web ("Perfil SRI" / "Sólo entrar"): el usuario
+        // pidió entrar a MIRAR el portal. No declara nada, así que el blindaje
+        // de "ya fue declarado" no tiene por qué frenarlo.
+        const soloEntrar = items.pending_sri_autofill?.soloEstarAdentro === true || items.pendingAction === 'solo_perfil';
+
+        if (!esRecuperacion && !soloEntrar && clientRuc && targetPer && typeof SriAuditor !== 'undefined' && await SriAuditor.yaFueDeclarado(clientRuc, targetPer)) {
+            // Entrada individual (no lote): el usuario quiere MIRAR el portal.
+            // Se permite, pero se apaga cualquier intento de declarar.
+            // La web deja una cola de 1 cliente y el semáforo en CORRIENDO:
+            // eso NO es un lote. Si la acción es de "mirar" (verifyProfile,
+            // solo_perfil, probar_clave) o la cola tiene un solo cliente, se
+            // permite entrar apagando la declaración.
+            const accionDeMirar = items.pendingAction === 'verifyProfile'
+                || items.pendingAction === 'solo_perfil'
+                || items.pendingAction === 'probar_clave';
+            const cola = items.sc_loop && Array.isArray(items.sc_loop.cola) ? items.sc_loop.cola : [];
+            const esIndividual = Boolean(items.pending_sri_autofill)
+                && items.pending_sri_autofill.isBatch !== true
+                && (accionDeMirar || cola.length <= 1);
+            if (esIndividual) {
+                log.warn('👁️ [BLINDAJE LOGIN] Ya declarado: entra a mirar, SIN declarar.');
+                await SafeStorage.set({
+                    autoDeclaration: false,
+                    sri_auto_mode: false,
+                    pending_sri_autofill: { ...items.pending_sri_autofill, soloEstarAdentro: true }
+                });
+                items.autoDeclaration = false;
+                items.sri_auto_mode = false;
+                items.pending_sri_autofill = { ...items.pending_sri_autofill, soloEstarAdentro: true };
+            } else {
+                log.warn(`🛑 [BLINDAJE LOGIN] ${clientRuc} ya fue declarado para ${SriAuditor.normalizarPeriodo(targetPer)}. Descartando autofill en pantalla de login para prevenir bucle.`);
+                await SafeStorage.remove(['pending_sri_autofill', 'pendingAction', 'actionTimestamp', 'sri_auto_mode', 'autoDeclaration']);
+                return;
+            }
         }
 
         // 🛑 BLINDAJE 2: SEMÁFORO DETENIDO O LOTE COMPLETADO — Si el bucle no está CORRIENDO
@@ -1912,6 +1956,14 @@ async function ejecutarAccionPendiente(items) {
         }
 
         await SafeStorage.remove(['pendingAction', 'actionTimestamp', 'bajarTodos']);
+        const autoRes = await SafeStorage.get(['auto_batch_enabled', 'sri_auto_mode']);
+        const enLote = autoRes.auto_batch_enabled || autoRes.sri_auto_mode || (typeof SriLoop !== 'undefined' && await SriLoop.puedeAvanzar());
+        if (enLote && typeof handleBatchNextClient === 'function') {
+            log.debug('⏩ [TODOS] Comprobantes finalizados. Pasando al siguiente cliente del lote...');
+            await sleep(1500);
+            const hasNext = await handleBatchNextClient();
+            if (!hasNext && typeof cerrarSesionSRI === 'function') await cerrarSesionSRI(true);
+        }
         return;
     }
 
@@ -2394,8 +2446,8 @@ async function renderLoginCockpit(items) {
             const p = (d.period || '').split(':')[0].trim();
             const matchesPeriod = p.includes(targetPeriodStr) || p === targetPeriodStr;
             if (!matchesPeriod) return false;
-            const hasProof = !!(d.proof_file || d.pdfUrl || d.proofFile);
-            const isDoneStatus = d.status === 'Completado' || d.status === 'Enviada' || d.status === 'Pagada';
+            const hasProof = !!(d.proof_file || d.pdfUrl || d.proofFile || d.pdf_url);
+            const isDoneStatus = ['completado', 'completada', 'enviada', 'pagada', 'realizada'].includes((d.status || '').toLowerCase());
             return hasProof || isDoneStatus;
         });
     };
@@ -2837,6 +2889,38 @@ function initLoginCockpitWatcher() {
         // 🔄 SINCRONIZACIÓN EN TIEMPO REAL: Si se registra o actualiza un cliente en la web
         if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
             chrome.storage.onChanged.addListener((changes, namespace) => {
+                // 🔔 Credenciales que llegan DESPUÉS de abrir la pestaña del SRI:
+                // la web hace postMessage y abre la pestaña en el mismo instante;
+                // si la página carga primero, antes se quedaba dormida sin entrar.
+                if (namespace === 'local' && changes.pending_sri_autofill) {
+                    const nuevo = changes.pending_sri_autofill.newValue;
+                    if (nuevo && nuevo.ruc && nuevo.password) {
+                        try {
+                            const enLogin = isSRILoginPage();
+                            const yaAdentro = !enLogin && typeof document !== 'undefined' && (
+                                document.getElementById('id_nombre_razon_social') ||
+                                document.querySelector('.sri-icon-cerrar-sesion') ||
+                                /\/contribuyente\/perfil/i.test(location.href));
+                            const rucEnPantalla = (String((document.body && document.body.innerText) || '').slice(0, 6000).match(/(\d{13})/) || [])[1] || '';
+                            if (enLogin && typeof executeLogin === 'function') {
+                                log.info('🔑 [WAKE] Credenciales de ' + nuevo.ruc + ' llegaron con la página abierta: entrando…');
+                                SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false }).then(() => {
+                                    executeLogin(nuevo.ruc, nuevo.password);
+                                });
+                            } else if (yaAdentro && rucEnPantalla && rucEnPantalla !== String(nuevo.ruc)) {
+                                log.info('🔁 [CAMBIO] La sesión es de ' + rucEnPantalla + '; paso a ' + nuevo.ruc + '…');
+                                SafeStorage.set({ sri_master_switch_on: true, sriAutomationPaused: false });
+                                if (typeof cerrarSesionSRI === 'function') {
+                                    cerrarSesionSRI(true);
+                                } else {
+                                    try { chrome.runtime.sendMessage({ tipo: 'SC_LIMPIAR_SESION_SRI' }); } catch (e) {}
+                                    setTimeout(() => { location.href = 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT'; }, 1500);
+                                }
+                            }
+                        } catch (e) { /* sin cambiar de cliente no pasa nada */ }
+                    }
+                }
+
                 if (namespace === 'local' && (changes.sc_clients_cache || changes.selected_period_month || changes.selected_period_year)) {
                     log.debug('🔄 [SRI ELITE] Sincronización en tiempo real: Clientes actualizados desde la web.');
                     if (isSRILoginPage()) {
@@ -2858,4 +2942,15 @@ function initLoginCockpitWatcher() {
             });
         }
     } catch(e) { /* sin poder leer el documento: se sigue con lo visible */ }
+}
+
+/** RUC del contribuyente que muestra la pantalla (topbar/perfil). */
+function _rucEnPantalla() {
+    try {
+        const nombre = document.getElementById('id_nombre_razon_social');
+        const zona = nombre && nombre.closest ? (nombre.closest('div') || document.body) : document.body;
+        const txt = String((zona && zona.innerText) || '').slice(0, 6000);
+        const m = txt.match(/(\d{13})/);
+        return m ? m[1] : '';
+    } catch (e) { return ''; }
 }

@@ -24,7 +24,11 @@ function concatPlugin() {
         'src/04_extraccion_datos.js',
         'src/05_llenado_formulario.js',
         'src/06_panel_interfaz.js',
-        'src/07_navegacion_sri.js'
+        'src/07_navegacion_sri.js',
+        // Capa de experiencia: modo limpio/cockpit, cronómetro y resumen.
+        // Va última porque se engancha al HUD y al semáforo que arman las
+        // anteriores; no las modifica.
+        'src/08_experiencia.js'
       ];
       
       let concatenatedCode = '';

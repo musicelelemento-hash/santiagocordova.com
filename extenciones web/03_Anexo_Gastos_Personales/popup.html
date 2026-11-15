@@ -7,15 +7,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --accent: #f59e0b;
-            --bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
+            --primary: #00A896;
+            --primary-dark: #068a7b;
+            --accent: #C9A96E;
+            --bg: #020617;
+            --card-bg: rgba(5, 20, 36, 0.72);
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --border: rgba(255, 255, 255, 0.1);
-            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-bg: rgba(255, 255, 255, 0.04);
             --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
         }
 
@@ -63,12 +63,10 @@
 
         h2 {
             font-size: 18px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            background: linear-gradient(to right, #fff, #94a3b8);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            color: var(--gold-cream, #e6d3ab);
+            text-wrap: balance;
         }
 
 
@@ -170,6 +168,32 @@
             box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
         }
 
+        .ia-input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 13px;
+            margin-bottom: 4px;
+            outline: none;
+        }
+
+        .ia-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+        }
+
+        .ia-ok {
+            color: #4ade80;
+        }
+
+        .ia-mal {
+            color: #f87171;
+        }
+
         .cargas-help {
             font-size: 11px;
             color: var(--text-muted);
@@ -264,6 +288,20 @@
         .delay-3 {
             animation-delay: 0.3s;
         }
+
+    /* DESIGN SYSTEM · Obsidian & Liquid Gold */
+    :root {
+        --gold-cream: #e6d3ab;
+        --emerald-neon: #4edea3;
+        --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+    }
+    body { font-family: 'Manrope', 'Inter', system-ui, sans-serif; }
+    .card, .panel { backdrop-filter: blur(26px) saturate(180%); border-top-color: rgba(201, 169, 110, 0.28); }
+    .label, .hint, .small, .footer { font-family: var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+    input, .value, .metric { font-variant-numeric: tabular-nums; }
+    button { transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease, box-shadow 0.25s ease; }
+    button:hover { filter: brightness(1.05); }
+    button:active { transform: translateY(1px) scale(0.99); }
     </style>
 </head>
 
@@ -291,6 +329,17 @@
     </div>
 
     <div class="animate delay-2">
+        <h3 class="section-title">IA · Gemini</h3>
+        <input id="sc-ia-key" class="ia-input" type="password" autocomplete="off"
+            placeholder="Clave de API (AIza…)">
+        <div class="cargas-help" id="sc-ia-estado">Comprobando…</div>
+        <div class="action-row" style="margin-bottom: 24px;">
+            <button class="btn btn-secondary" id="sc-ia-guardar" style="flex: 1;">Guardar clave</button>
+            <button class="btn btn-secondary" id="sc-ia-probar" style="flex: 1;">Probar</button>
+        </div>
+    </div>
+
+    <div class="animate delay-2">
         <h3 class="section-title">Ajustes de Cargas (2025)</h3>
         <select id="cargas-familiares">
             <option value="0">0 Cargas (Tope $5.588) • 7 Canastas</option>
@@ -313,15 +362,15 @@
     <div class="animate delay-3">
         <h3 class="section-title">Paleta Elite</h3>
         <div class="theme-container">
-            <div class="theme-circle" data-theme="default" style="background: #1e3a8a;" title="Titanium Blue"></div>
+            <div class="theme-circle" data-theme="default" style="background: linear-gradient(135deg, #00c3ab, #00A896); border: 1px solid rgba(255,255,255,0.18);" title="Esmeralda"></div>
             <div class="theme-circle" data-theme="dark"
-                style="background: #0f172a; border: 1px solid rgba(255,255,255,0.1);" title="Midnight Pro"></div>
-            <div class="theme-circle" data-theme="glass" style="background: linear-gradient(45deg, #6366f1, #a855f7);"
-                title="Aurora Glass"></div>
-            <div class="theme-circle" data-theme="gold" style="background: linear-gradient(45deg, #d4af37, #f59e0b);"
-                title="Premium Gold"></div>
-            <div class="theme-circle" data-theme="cyber" style="background: #fbbf24; border: 1px solid #000;"
-                title="Cyberpunk"></div>
+                style="background: #020617; border: 1px solid rgba(255,255,255,0.12);" title="Obsidian"></div>
+            <div class="theme-circle" data-theme="glass" style="background: linear-gradient(45deg, #2B6AFF, #4edea3);"
+                title="Azul cuántico"></div>
+            <div class="theme-circle" data-theme="gold" style="background: linear-gradient(45deg, #C9A96E, #e6d3ab);"
+                title="Oro líquido"></div>
+            <div class="theme-circle" data-theme="cyber" style="background: #e6d3ab; border: 1px solid rgba(0,0,0,0.4);"
+                title="Crema"></div>
         </div>
 
         <div class="action-row">

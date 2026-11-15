@@ -1,0 +1,99 @@
+<!doctype html><meta charset="utf-8"><title>La memoria que se limpiaba sola</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Un cambio de cliente se avisa una vez, no diez</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  En una corrida real (log del 07-nov-2026) la consola mostraba, para el mismo
+  cliente y la misma página:
+  <code>👤 Cambio de contexto de cliente detectado: 070…001 -&gt; 080…001.</code>
+  repetido muchas veces seguidas, con <b>«Limpiando memoria previa…»</b>
+  incluido.
+  <br><br>
+  Eso no es ruido: <code>GhostMemory.clearCurrent()</code> <b>borra las facturas
+  ya extraídas</b>. Si se dispara en medio de la extracción, el lote declara
+  con datos vacíos. El portal emite varios cambios de storage por el mismo
+  cambio de RUC, y <code>checkRucChange()</code> además escribe
+  <code>lastRuc</code>, que vuelve a despertar al listener que lo llamó.
+  <br><br>
+  La regla: la limpieza se hace <b>una vez por transición real</b>. Un aviso
+  repetido del mismo cambio, dentro de la ventana, no vuelve a borrar nada.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+
+  const debe = window.scDebeLimpiarMemoria;
+  push('la función viaja en el bundle', typeof debe, 'function');
+
+  if (typeof debe === 'function') {
+    // ══ A · lo que NO debe limpiar ═══════════════════════════════════════════
+    sec('A · cuando no hay nada que limpiar');
+    push('sin RUC previo no borra nada',        debe(null, '0703371740001', 1000), false);
+    push('sin RUC actual tampoco',              debe('0703371740001', '', 1000), false);
+    push('el mismo RUC no es un cambio',        debe('0703371740001', '0703371740001', 1000), false);
+
+    // ══ B · el cambio real, una vez ═════════════════════════════════════════
+    sec('B · un cambio real limpia UNA vez');
+    push('el primer aviso del cambio limpia',   debe('0705549145001', '0801048844001', 1000), true);
+    push('el segundo aviso del MISMO cambio no',
+         debe('0705549145001', '0801048844001', 1500), false);
+    push('ni el tercero, ni el cuarto',
+         [debe('0705549145001', '0801048844001', 2000),
+          debe('0705549145001', '0801048844001', 2500)], [false, false]);
+
+    // ══ C · no se come cambios legítimos ════════════════════════════════════
+    sec('C · un cliente que vuelve no se queda sin limpieza');
+    // A→B, B→A, A→B en segundos. La tercera es una entrada REAL a B: la
+    // memoria de A tiene que borrarse. La ventana protege contra avisos
+    // repetidos, no contra el usuario yendo y viniendo.
+    push('volver al cliente anterior sí limpia',
+         debe('0801048844001', '0705549145001', 2600), true);
+    push('y regresar al de antes también',
+         debe('0705549145001', '0801048844001', 2700), true);
+
+    // ══ D · la ventana caduca ═══════════════════════════════════════════════
+    sec('D · pasada la ventana, un aviso nuevo cuenta');
+    // Es la red de seguridad para el caso en que el almacén no consiguió
+    // fijar el RUC nuevo: no queremos un borrado en bucle cada 200 ms.
+    push('el mismo cambio, 5 s después, limpia otra vez',
+         debe('0705549145001', '0801048844001', 2700 + 5001), true);
+  }
+
+  // ══ E · el código real está enganchado ════════════════════════════════════
+  sec('E · así lo usa checkRucChange');
+  // El banco prueba la función, pero lo que rompió en producción fue el
+  // CABLEADO. Si alguien deja `checkRucChange` limpiando sin preguntar, esto
+  // se pone en rojo.
+  const fuente = await (await fetch('../src/06_panel_interfaz.js')).text();
+  push('checkRucChange consulta la función',
+       /scDebeLimpiarMemoria\(\s*stored\.lastRuc\s*,\s*info\.ruc/.test(fuente), true);
+  push('y no queda una limpieza suelta', /await GhostMemory\.clearCurrent\(\);\s*await SafeStorage\.set\(\{\s*lastRuc/.test(fuente), false);
+  push('tiene guarda de re-entrada', /_chequeoRucEnCurso/.test(fuente), true);
+  push('y un solo write de lastRuc',
+       (fuente.match(/lastRuc:\s*info\.ruc/g) || []).length <= 1, true);
+  push('la detección se avisa con filtro', /function scAvisarDeteccion\(/.test(fuente), true);
+  push('el RUC de Angular ya no puede ser null',
+       /const rucMatch = rText\.match\([\s\S]{0,80}if \(rucMatch\)/.test(fuente), true);
+
+  const fallos=ok.filter(x=>!x).length;
+  document.getElementById('out').textContent=
+    L.join('\n')+'\n\n'+
+    (fallos?'✗ '+fallos+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+    (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');
+})();
+</script>

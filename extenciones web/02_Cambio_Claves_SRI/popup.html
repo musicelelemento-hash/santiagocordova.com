@@ -4,114 +4,179 @@
   <meta charset="UTF-8">
   <title>SC PRO - Asistente Claves SRI</title>
   <style>
+    /* Sistema Obsidian & Liquid Gold (apple-tier-uiux-director) */
+    :root {
+      --bg: #020617;
+      --card: rgba(5, 20, 36, 0.72);
+      --line: rgba(255, 255, 255, 0.10);
+      --line-gold: rgba(201, 169, 110, 0.30);
+      --gold: #C9A96E;
+      --gold-cream: #e6d3ab;
+      --emerald: #00A896;
+      --emerald-neon: #4edea3;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', monospace;
+      --manrope: 'Manrope', 'Inter', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
     body {
       width: 340px;
       margin: 0;
       padding: 16px;
-      background-color: #0f172a;
-      color: #ffffff;
-      font-family: system-ui, -apple-system, sans-serif;
+      background: radial-gradient(120% 90% at 50% -10%, rgba(0, 168, 150, 0.16), transparent 60%), var(--bg);
+      color: var(--text);
+      font-family: var(--manrope);
       font-size: 12px;
     }
     .header {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      padding-bottom: 8px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line-gold);
     }
-    .icon { font-size: 20px; }
+    .icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      font-size: 17px;
+      border-radius: 10px;
+      background: rgba(201, 169, 110, 0.12);
+      border: 1px solid var(--line-gold);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    }
     .title {
       font-weight: 800;
       font-size: 12px;
-      color: #fbbf24;
+      letter-spacing: -0.02em;
+      color: var(--gold-cream);
       text-transform: uppercase;
+    }
+    .subtitle {
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0.8;
+      margin-top: 2px;
     }
     .tabs {
       display: flex;
       gap: 6px;
       margin-bottom: 12px;
+      padding: 4px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--line);
+      border-radius: 12px;
     }
     .tab-btn {
       flex: 1;
-      padding: 6px;
+      padding: 7px 6px;
       border: none;
-      background: #1e293b;
-      color: #94a3b8;
-      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 9px;
       font-weight: 700;
-      font-size: 10px;
+      font-size: 9.5px;
       cursor: pointer;
       text-transform: uppercase;
-      transition: all 0.2s;
+      letter-spacing: 0.06em;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     }
+    .tab-btn:hover { color: var(--text); }
     .tab-btn.active {
-      background: #f59e0b;
-      color: #ffffff;
+      background: linear-gradient(180deg, #00c3ab, #00A896);
+      color: #04231f;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 6px 16px rgba(0, 168, 150, 0.25);
     }
     .card {
-      background: #1e293b;
+      background: var(--card);
       padding: 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      border-top-color: var(--line-gold);
       margin-bottom: 10px;
+      backdrop-filter: blur(26px) saturate(180%);
     }
     .label {
-      font-size: 9px;
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.15em;
       text-transform: uppercase;
-      color: #94a3b8;
+      color: var(--muted);
       font-weight: 700;
-      margin-bottom: 4px;
+      margin-bottom: 5px;
     }
     .value {
-      font-family: monospace;
+      font-family: var(--mono);
       font-weight: 700;
       font-size: 12px;
-      color: #f8fafc;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      word-break: break-all;
     }
     .input-field {
       width: 100%;
-      padding: 8px;
-      box-sizing: border-box;
-      background: #0f172a;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 8px;
-      color: #ffffff;
-      font-size: 10px;
-      font-family: monospace;
+      padding: 9px;
+      background: rgba(0, 0, 0, 0.32);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 10.5px;
+      font-family: var(--mono);
       margin-bottom: 8px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: var(--line-gold);
+      box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.12);
     }
     .btn {
       width: 100%;
-      padding: 9px;
-      border: none;
-      border-radius: 10px;
+      padding: 10px;
+      border: 1px solid transparent;
+      border-radius: 11px;
       font-weight: 800;
       font-size: 10px;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       cursor: pointer;
-      margin-top: 4px;
-      transition: all 0.2s;
+      margin-top: 6px;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, filter 0.2s ease;
     }
+    .btn:active { transform: translateY(1px) scale(0.99); }
     .btn-primary {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #ffffff;
+      background: linear-gradient(180deg, #00c3ab, #00A896 60%, #068a7b);
+      color: #04231f;
+      border-color: rgba(255, 255, 255, 0.16);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 10px 26px rgba(0, 168, 150, 0.22);
     }
+    .btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); }
     .btn-secondary {
-      background: #334155;
+      background: rgba(255, 255, 255, 0.05);
       color: #cbd5e1;
-      border: 1px solid rgba(255,255,255,0.1);
+      border-color: var(--line);
     }
     .btn-success {
-      background: linear-gradient(135deg, #10b981, #059669);
-      color: #ffffff;
+      background: rgba(0, 168, 150, 0.14);
+      color: var(--emerald-neon);
+      border-color: rgba(0, 168, 150, 0.35);
     }
     .footer {
-      font-size: 9px;
+      font-family: var(--mono);
+      font-size: 8.5px;
+      letter-spacing: 0.1em;
       color: #64748b;
       text-align: center;
-      margin-top: 10px;
+      margin-top: 12px;
+      text-transform: uppercase;
     }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
@@ -122,7 +187,7 @@
     <span class="icon">🔑</span>
     <div>
       <div class="title">SC PRO - Asistente SRI Nube</div>
-      <div style="font-size: 9px; color: #94a3b8;">SantiagoCordova.com Direct Cloud Sync</div>
+      <div class="subtitle">SantiagoCordova.com Direct Cloud Sync</div>
     </div>
   </div>
 
@@ -142,8 +207,8 @@
       <div class="label">Clave Actual:</div>
       <div id="popup-old-pass" class="value">-</div>
       
-      <div class="label" style="margin-top: 8px;">Nueva Clave (* ➔ @):</div>
-      <div id="popup-new-pass" class="value" style="color: #fbbf24;">-</div>
+      <div class="label" style="margin-top: 10px;">Nueva Clave (* ➔ @):</div>
+      <div id="popup-new-pass" class="value" style="color: #e6d3ab;">-</div>
     </div>
 
     <button id="btn-open-sri" class="btn btn-primary">🚀 Abrir Portal SRI</button>

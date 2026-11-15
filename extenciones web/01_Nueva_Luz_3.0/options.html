@@ -191,6 +191,123 @@ footer {
 @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
 }
+    /* ── DESIGN SYSTEM · Obsidian & Liquid Gold ─────────────────────────── */
+    :root {
+        --gold: #C9A96E;
+        --gold-cream: #e6d3ab;
+        --line-gold: rgba(201, 169, 110, 0.35);
+    }
+
+    header h1 {
+        background: linear-gradient(120deg, #ffffff 0%, #e6d3ab 55%, #C9A96E 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.03em;
+    }
+
+    .tarjeta {
+        background: linear-gradient(180deg, rgba(9, 26, 42, 0.96), rgba(4, 14, 24, 0.98));
+        border: 1px solid rgba(255, 255, 255, 0.10);
+        border-top-color: var(--line-gold);
+        border-radius: 20px;
+        padding: 22px 24px;
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+
+    .tarjeta > h2 {
+        color: var(--gold-cream);
+        letter-spacing: -0.02em;
+    }
+
+    .campo label {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 9px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--gold);
+    }
+
+    .para-que { color: #8fa3b8; }
+
+    .campo input,
+    .campo select,
+    .campo textarea {
+        background: rgba(0, 0, 0, 0.32);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 10px;
+        color: var(--text-main);
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 12px;
+        padding: 9px 11px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .campo input:focus,
+    .campo select:focus,
+    .campo textarea:focus {
+        outline: none;
+        border-color: var(--line-gold);
+        box-shadow: 0 0 0 3px rgba(201, 169, 110, 0.12);
+    }
+
+    .estado {
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.04em;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        color: #94a3b8;
+        background: rgba(148, 163, 184, 0.08);
+        display: inline-block;
+    }
+
+    .estado[data-hay="si"] {
+        color: #4edea3;
+        border-color: rgba(78, 222, 163, 0.35);
+        background: rgba(78, 222, 163, 0.10);
+    }
+
+    .b-guardar {
+        background: linear-gradient(180deg, #00c3ab, #00A896 60%, #068a7b);
+        color: #04231f;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 11px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 10px 16px;
+        cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 10px 26px rgba(0, 168, 150, 0.22);
+        transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+    }
+
+    .b-guardar:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .b-guardar:active { transform: translateY(1px) scale(0.99); }
+
+    .b-borrar,
+    .b-borrar-uno,
+    .b-cuidado {
+        border-radius: 11px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        transition: transform 0.16s ease, background 0.18s ease;
+    }
+
+    .b-borrar { background: rgba(248, 113, 113, 0.10); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.32); padding: 10px 16px; text-transform: uppercase; font-weight: 800; cursor: pointer; }
+    .b-borrar:hover { background: rgba(248, 113, 113, 0.20); }
+    .b-borrar:active, .b-borrar-uno:active, .b-cuidado:active { transform: translateY(1px) scale(0.99); }
+
+    .aviso-ambar {
+        background: rgba(251, 191, 36, 0.08);
+        border: 1px solid rgba(251, 191, 36, 0.30);
+        border-radius: 12px;
+        color: #fde68a;
+    }
 </style>
 </head>
 <body>
@@ -273,6 +390,66 @@ footer {
 </section>
 
 <section class="tarjeta">
+    <h2>📧 Copia por correo de la declaración</h2>
+    <p class="bajada">
+        Cuando una declaración termina con su comprobante subido, el cliente recibe un
+        correo con el PDF y el aviso de que quedó presentada. Lo envía el bot, con el
+        Gmail que ya está autorizado.
+    </p>
+
+    <div class="campo">
+        <label for="emailResendKey">Clave de Resend</label>
+        <span class="para-que">Pegá tu API key de Resend (empieza con <code>re_</code>). Se usa contra <code>https://api.resend.com/emails</code>. Si está, no hace falta el bot.</span>
+        <input type="password" id="emailResendKey" autocomplete="off" spellcheck="false" placeholder="re_...">
+    </div>
+
+    <div class="campo">
+        <label for="emailResendFrom">Remitente de Resend</label>
+        <span class="para-que">Hasta verificar el dominio, usá <code>onboarding@resend.dev</code>.</span>
+        <input type="text" id="emailResendFrom" autocomplete="off" spellcheck="false" placeholder="Soluciones Contables Pro <facturacion@santiagocordova.com>">
+    </div>        <div style="display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap">
+            <button type="button" class="b-guardar" id="btnProbarResend">Probar Resend</button>
+            <span class="estado" id="estadoResend">—</span>
+        </div>
+<div class="campo">
+        <label for="emailUrl">URL del servicio</label>
+        <span class="para-que">La ruta del bot. <b>Sólo si usás el bot.</b> Con Resend, dejalo vacío.</span>
+        <input type="text" id="emailUrl" autocomplete="off" spellcheck="false"
+               placeholder="https://santiagocordova.onrender.com/email/declaracion">
+    </div>
+
+    <div class="campo">
+        <label for="emailToken">Token del servicio</label>
+        <span class="para-que">Sólo para el bot. <b>Con Resend no hace falta.</b> Si guardaste una clave <code>re_…</code> acá, también la usa.</span>
+        <input type="password" id="emailToken" autocomplete="off" spellcheck="false" placeholder="token">
+    </div>
+
+    <div class="campo">
+        <label for="emailChatId">Chat ID de Telegram</label>
+        <span class="para-que">El chat con el Gmail autorizado del bot.</span>
+        <input type="text" id="emailChatId" autocomplete="off" spellcheck="false" placeholder="123456789">
+    </div>
+
+    <div class="campo">
+        <label for="emailFirma">Firma</label>
+        <span class="para-que">Cómo termina el correo. Opcional.</span>
+        <input type="text" id="emailFirma" autocomplete="off" spellcheck="false" placeholder="Soluciones Contables Pro">
+    </div>
+
+    <div class="campo">
+        <label for="emailTo">Destinatario fijo</label>
+        <span class="para-que">Si lo dejás vacío, se usa el correo del cliente en la web.</span>
+        <input type="text" id="emailTo" autocomplete="off" spellcheck="false" placeholder="opcional">
+    </div>
+
+    <div class="botones">
+        <button class="b-guardar" id="btnGuardarEmail">Guardar correo</button>
+    </div>
+
+    <div class="estado" id="estadoEmail">—</div>
+</section>
+
+<section class="tarjeta">
     <h2>👥 Bóveda Local de Contraseñas de Contribuyentes</h2>
     <p class="bajada">
         Las claves del SRI de los clientes viven de manera aislada en este navegador (<code>sc_clients_cache</code>).
@@ -352,6 +529,31 @@ footer {
         <li>Del lado de Google conviene además <b>restringir la clave</b> a la API que
             usás y ponerle cuota diaria: si algún día se escapa, el daño tiene techo.</li>
     </ol>
+</section>
+
+<section class="tarjeta">
+    <h2>🩺 Diagnóstico</h2>
+    <p class="bajada">
+        Si algo se cierra o se tilda, la última bitácora queda guardada acá.
+        Descargala y mandala: dice qué se estaba haciendo justo antes.
+    </p>
+    <div class="botones">
+        <button class="b-guardar" id="btnDescargarLog">Descargar última bitácora</button>
+    </div>
+    <div class="estado" id="estadoLog">—</div>
+</section>
+
+<section class="tarjeta">
+    <h2>🔎 Auditoría rápida</h2>
+    <p class="bajada">
+        Revisa el almacén local y da un veredicto con hechos: qué lote quedó,
+        cuántas con comprobante, qué está colgado. Sin red, sin IA.
+    </p>
+    <div class="botones">
+        <button class="b-guardar" id="btnAuditoria">Auditar ahora</button>
+        <button class="b-borrar" id="btnAuditoriaGuardar">Guardar informe</button>
+    </div>
+    <pre id="auditoriaSalida" style="margin-top:12px; max-height:340px; overflow:auto; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.10); border-radius:12px; padding:12px; font-family:'JetBrains Mono',ui-monospace,monospace; font-size:10.5px; line-height:1.55; color:#c7d2de; white-space:pre-wrap;">—</pre>
 </section>
 
 <footer>SC TaxPilot PRO · <span id="version">v3.1.0</span></footer>

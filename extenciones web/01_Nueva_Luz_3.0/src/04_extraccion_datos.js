@@ -130,6 +130,44 @@ async function autoLlenarPeriodoFiscal(data) {
     }
 }
 
+/**
+ * Publica el resumen de compras por proveedor en `clients.tax_profile`.
+ * Merge: no pisa otras claves del perfil ni otros períodos. Si la nube no
+ * está configurada o falla, no rompe la extracción.
+ */
+async function publicarComprasEnLaNube(ruc, periodo, proveedores) {
+    try {
+        const cfg = (typeof window !== 'undefined' && window.SC_CONFIG) || {};
+        const url = String(cfg.SUPABASE_URL || '').trim();
+        const key = String(cfg.SUPABASE_ANON_KEY || '').trim();
+        if (!url || !key || !ruc || !periodo) return;
+
+        const cab = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+        const res = await fetch(`${url}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=id,tax_profile`, { headers: cab });
+        if (!res.ok) return;
+        const filas = await res.json();
+        const cli = Array.isArray(filas) ? filas[0] : null;
+        if (!cli || !cli.id) return;
+
+        const tp = (cli.tax_profile && typeof cli.tax_profile === 'object') ? cli.tax_profile : {};
+        const purchaseSummary = {
+            ...(tp.purchase_summary && typeof tp.purchase_summary === 'object' ? tp.purchase_summary : {}),
+            [periodo]: proveedores,
+        };
+
+        const patch = await fetch(`${url}/rest/v1/clients?id=eq.${encodeURIComponent(cli.id)}`, {
+            method: 'PATCH',
+            headers: { ...cab, Prefer: "return=minimal" },
+            body: JSON.stringify({ tax_profile: { ...tp, purchase_summary: purchaseSummary } }),
+        });
+        if (patch.ok) {
+            log.debug(`[COMPRAS] ${proveedores.length} proveedor(es) publicados para ${ruc} (${periodo}).`);
+        }
+    } catch (e) {
+        log.warn('[COMPRAS] No se pudo publicar en la nube:', e && e.message);
+    }
+}
+
 async function extraerTodasLasFacturas() {
     log.debug('Iniciando extracción de facturas...');
 
@@ -245,6 +283,45 @@ async function extraerTodasLasFacturas() {
                 prev.facturas += 1;
                 provMap.set(nombre, prev);
             });
+            // Lista completa por proveedor (con RUC) para la Bóveda de la web.
+            const provRuc = new Map();
+            // Decisiones del contador: proveedor sin derecho a crédito.
+            let mapaCredito = new Map();
+            try {
+                if (typeof Proveedores !== 'undefined' && Proveedores.mapaCredito) {
+                    mapaCredito = await Proveedores.mapaCredito(clienteRuc);
+                }
+            } catch (e) { /* sin mapa: todo entra como crédito */ }
+            todasLasFacturas.forEach((f) => {
+                const m = String(f.rucRazon || '').match(/(\d{13})/);
+                const ruc = m ? m[1] : '';
+                const nombre = String(f.razonSocial || f.rucRazon || 'Proveedor').trim();
+                const clave = ruc || nombre;
+                const base = Number(f.valorSinImpuestos || f.base || 0);
+                const iva = Number(f.valorIva || f.iva || 0);
+                const prev = provRuc.get(clave) || { ruc, razonSocial: nombre, base: 0, iva: 0, facturas: 0, sinCredito: false };
+                if (ruc) {
+                    const dec = mapaCredito.get(ruc);
+                    if (dec && dec.deducible === false) prev.sinCredito = true;
+                }
+                prev.base = Number((prev.base + base).toFixed(2));
+                prev.iva = Number((prev.iva + iva).toFixed(2));
+                prev.facturas += 1;
+                provRuc.set(clave, prev);
+            });
+            const proveedores = Array.from(provRuc.values())
+                .filter((p) => p.base > 0 || p.iva > 0)
+                .sort((a, b) => b.base - a.base);
+
+            let periodoObjetivo = '';
+            try {
+                const st = await SafeStorage.get(['sri_target_period']);
+                const tp = st.sri_target_period;
+                if (tp && tp.year && typeof tp.monthIndex === 'number') {
+                    periodoObjetivo = `${tp.year}-${String(tp.monthIndex + 1).padStart(2, '0')}`;
+                }
+            } catch (e) { /* sin período: se publica sin clave */ }
+
             const topProveedores = Array.from(provMap.values())
                 .sort((a, b) => b.total - a.total)
                 .slice(0, 3)
@@ -274,10 +351,17 @@ async function extraerTodasLasFacturas() {
                     base5: redondear(resumen.iva5?.baseImponible || 0),
                     iva5: redondear(resumen.iva5?.montoIva || 0),
                     base0: redondear(resumen.iva0?.baseImponible || 0),
-                    topProveedores
+                    topProveedores,
+                    proveedores,
+                    periodo: periodoObjetivo
                 }
             });
             log.debug(`📊 [ARQUEO COMPRAS] Resumen guardado para ${clienteRuc}: ${todasLasFacturas.length} facturas.`);
+
+            // A la nube: la Bóveda de la web muestra estas compras por proveedor.
+            if (proveedores.length && periodoObjetivo) {
+                publicarComprasEnLaNube(clienteRuc, periodoObjetivo, proveedores).catch(() => {});
+            }
         }
     } catch (e) {
         log.warn('📊 [ARQUEO COMPRAS] No se pudo guardar el arqueo:', e.message);
@@ -1807,6 +1891,46 @@ function calcularResumen(facturas, opciones = {}) {
                 log.debug(`   🧾 [Factura ${factura.numero || i + 1}] Mezclada: ` +
                             `$${partes.basePlena} al ${TARIFA_PLENA}% + $${partes.base0} al 0%.`);
                 return;   // ya quedó repartida; no cae en ningún balde único
+            }
+
+            // El proveedor manda: quien factura al 5% no emite al 15%.
+            //
+            // Cuando el cociente cabe en las dos lecturas (15%+0% y 5%+0%),
+            // el IVA acreditable es EL MISMO en ambos casos —lo único que
+            // cambia es a qué casillero va la base—. Frenar el lote entero
+            // por una factura así deja al cliente sin declarar: se resuelve
+            // al 5% (la tarifa conocida del emisor) y queda anotada para
+            // revisión en el arqueo, sin bloquear el envío.
+            if (tambienCabeAl5) {
+                const partes5 = repartirMezclada(factura.valorSinImpuestos, factura.iva, 5, factura.importeTotal);
+                if (partes5) {
+                    resumen.iva5.cantidad++;
+                    resumen.iva5.baseImponible += partes5.basePlena;
+                    resumen.iva5.montoIva += factura.iva;
+                    resumen.iva5.total += partes5.basePlena + factura.iva;
+                    resumen.detalle5.push({
+                        numero: factura.numero || i + 1,
+                        ruc: rucDeFactura(factura),
+                        rucRazon: factura.rucRazon || 'S/N',
+                        base: redondear(partes5.basePlena),
+                        iva: redondear(factura.iva)
+                    });
+                    resumen.al5.push({
+                        numero: factura.numero || i + 1,
+                        rucRazon: factura.rucRazon || 'S/N',
+                        base: redondear(factura.valorSinImpuestos),
+                        iva: redondear(factura.iva),
+                        resueltaPorProveedor: true
+                    });
+                    if (partes5.base0 > 0.005) {
+                        resumen.iva0.cantidad++;
+                        resumen.iva0.baseImponible += partes5.base0;
+                        resumen.iva0.total += partes5.base0;
+                    }
+                    log.warn(`   ⚖️ [Factura ${factura.numero || i + 1}] Resuelta al 5% por el proveedor ` +
+                                `(revisar): $${redondear(partes5.basePlena)} al 5% + $${redondear(partes5.base0)} al 0%. El IVA acreditable es el mismo con cualquiera de las dos lecturas.`);
+                    return;
+                }
             }
 
             // O el reparto no cabe —hay una tercera tarifa de por medio— o cabe
