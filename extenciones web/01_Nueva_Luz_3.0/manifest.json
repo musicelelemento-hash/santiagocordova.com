@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "⚡ [SC PRO 01] - Declaración IVA & Robot SRI",
-  "version": "3.2.0",
-  "description": "Automatización inteligente de declaración de IVA, cálculo matemático Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
+  "version": "3.3.0",
+  "description": "Automatización de declaración de IVA, ATS, REBEFICS/APS y sociedades. Cálculo Elite, anticipación SRI, captura de PDF oficial y sincronización con SantiagoCordova.com.",
   "permissions": [
     "storage",
     "activeTab",

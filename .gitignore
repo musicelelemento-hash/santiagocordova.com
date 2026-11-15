@@ -93,3 +93,6 @@ extenciones web/tools/bench/bench_2000.html
 # ── Datos de clientes / recursos de compañías (certificados, fichas) ──
 # No se versionan: son datos personales/tributarios de clientes.
 RECURSOS PARA COMPANIAS O SOC/
+
+# Paquetes para la tienda (se regeneran con tools/empaquetar_tienda.mjs)
+entregables/
