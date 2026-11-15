@@ -6,6 +6,16 @@
 //   ⏸  CORRIENDO → pausa suave: termina el cliente y ahí para
 //   🛑 EMERGENCIA → corta en el acto
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Módulo de Anexos del SRI (mapeado del recorrido Burp del 15-nov-2026) ──
+// Cada anexo entra por codOperativo en el menú operativo, con su nombre en actualMPT.
+const SRI_ANEXOS_MODULO = {
+    ATS: { cod: 'IVA', nombre: 'Anexo Transaccional Simplificado' },
+    APS: { cod: 'APS', nombre: 'Reporte de Beneficiarios Finales y de Composición Societaria' },
+    ADI: { cod: 'ADI', nombre: 'Anexo de Dividendos' },
+    ICE: { cod: 'ICE', nombre: 'Anexo a los Consumos Especiales' },
+    PVP: { cod: 'PVP', nombre: 'Anexo Reporte de Precios de Venta' }
+};
+
 const SRI_PUENTE_FORMULARIO_ICE = 'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1294&idGrupo=232';
 const SRI_PUENTE_CONSULTA_DECLARACIONES =
     'https://srienlinea.sri.gob.ec/tuportal-internet/accederAplicacion.jspa?redireccion=1292&idGrupo=73';
@@ -779,7 +789,8 @@ const SriLoopHUD = {
             '<button id="slh-extractor" aria-label="Extractor de documentos: facturas, retenciones, NC (semestral, anual o mensual)" title="Extractor de documentos: extrae totales de facturas, retenciones, NC sin declarar (semestral, anual o mensual)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(245,158,11,0.18);color:#fbbf24">📥</button>',
             '<button id="slh-anexo-ice" aria-label="Subir el anexo ICE" title="Subir el Anexo ICE: arma el ZIP del mes y lo carga en la pantalla de Anexos del SRI (solo en la página de Anexos ICE)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(201,169,110,0.2);color:#e6d3ab">&#128228;</button>',
             '<button id="slh-mapear-anexo" aria-label="Mapear la pantalla de Anexos del SRI" title="Mapear Anexos: copia lo que hay en esta pantalla (input de archivo, botones, formularios) para automatizar la subida del anexo ICE" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(34,211,238,0.16);color:#67e8f9">&#129517;</button>',
-            '<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
+            '<button id="slh-anexos" aria-label="Abrir el modulo de Anexos del SRI" title="Abrir Anexos: entra al modulo de Envio y consulta de anexos (ATS/APS/ADI) con el codOperativo correcto. No sube nada por si solo." style="border:none;border-radius:8px;padding:4px 7px;cursor:pointer;font-size:13px;background:rgba(201,169,110,.14);color:#e6d3ab;" data-tool="anexos">🗂</button>',
+'<button id="slh-auditoria" aria-label="Auditar períodos: comprobantes que pudieron archivarse con el año sacado del RUC" title="Lista, sin mover nada, los comprobantes que pudieron archivarse con el año sacado del RUC (bug corregido el 07-sep-2026)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(251,191,36,0.16);color:#fcd34d">🕵️</button>',
             '<button id="slh-panel" aria-label="Abrir el panel detallado" title="Abrir el panel detallado (clientes, progreso, registro de la corrida)" style="border:none;border-radius:10px;padding:8px 10px;min-width:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font-weight:800;font-size:13px;cursor:pointer;background:rgba(148,163,184,0.16);color:#cbd5e1">🗔</button>',
             // Período objetivo del lote: qué mes se va a declarar. El popup y este
             // botón comparten la preferencia (sri_target_period); si falta, es el
@@ -1173,7 +1184,15 @@ const SriLoopHUD = {
             else log.warn('📤 [ANEXO ICE] ' + ((r && r.mensaje) || 'no se pudo'));
         });
 
-        el.querySelector('#slh-mapear-anexo').addEventListener('click', async (ev) => {
+        el.querySelector('#slh-anexos').addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    try {
+        const r = await abrirAnexoSRI('ATS');
+        log.info('🗂 [ANEXOS] ' + (r && r.mensaje || 'abriendo'));
+    } catch (e) { log.warn('🗂 [ANEXOS] no se pudo abrir: ' + e.message); }
+});
+
+el.querySelector('#slh-mapear-anexo').addEventListener('click', async (ev) => {
             ev.stopPropagation();
             try {
                 const mapa = mapearAnexosSRI();
@@ -5659,6 +5678,21 @@ function mapearAnexosSRI() {
     const mensajes = Array.from(document.querySelectorAll('[class*=message i], [class*=error i], [class*=alerta i], [id*=mensaje i], .ui-messages-info, .ui-messages-error'))
         .filter(visible).map((el) => limpio(el.innerText)).filter(Boolean).slice(0, 10);
     const iframes = Array.from(document.querySelectorAll('iframe')).map((f) => f.src || '');
+    // En el módulo de Anexos el tipo se elige con enlaces o radios, no con un select.
+    const radiosDeAnexos = Array.from(document.querySelectorAll('input[type=radio]'))
+        .filter(visible)
+        .map((el) => ({ ...datos(el), marcado: !!el.checked }))
+        .slice(0, 20);
+    const enlacesDeAnexos = Array.from(document.querySelectorAll('a'))
+        .map(datos)
+        .filter((a) => a.visible && /anexo|iva|ats|dividendo|rebec|benefici|pvp|retenci/i.test(a.texto + ' ' + a.id))
+        .slice(0, 30);
+    const etiquetasDeAnexos = Array.from(document.querySelectorAll('label'))
+        .filter(visible)
+        .map((el) => limpio(el.innerText))
+        .filter((x) => /anexo|iva|ats|dividendo|rebec|benefici|comprobante|tipo/i.test(x))
+        .slice(0, 20);
+
     const resumen = `archivos:${archivos.length} · botones:${botones.length} · forms:${formularios.length} · iframes:${iframes.length}`;
     return {
         url: location.href,
@@ -5670,6 +5704,9 @@ function mapearAnexosSRI() {
         formularios,
         mensajes,
         iframes,
+        radiosDeAnexos,
+        enlacesDeAnexos,
+        etiquetasDeAnexos,
         inputsTotales: document.querySelectorAll('input').length,
         cuando: new Date().toISOString(),
     };
@@ -5941,6 +5978,22 @@ if (typeof window !== 'undefined') {
 // Mapeo real: somObligacion → "3031 - ICE BEBIDAS ALCOHÓLICAS".
 // Por seguridad NO envía nada: deja el wizard listo y el usuario confirma.
 // ============================================================================
+/**
+ * Abre el módulo de Anexos del SRI en el anexo indicado.
+ * ATS → codOperativo=IVA · REBEFICS → APS · Dividendos → ADI.
+ */
+async function abrirAnexoSRI(tipo) {
+    const clave = String(tipo || 'ATS').toUpperCase();
+    const anexo = SRI_ANEXOS_MODULO[clave];
+    if (!anexo) return { ok: false, mensaje: 'Anexo desconocido: ' + clave };
+    const url = 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=' + anexo.cod
+        + '&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=&actualMPT='
+        + encodeURIComponent(anexo.nombre);
+    log.info('🗂 [ANEXOS] abriendo ' + clave + ' (' + anexo.cod + '): ' + anexo.nombre);
+    window.location.href = url;
+    return { ok: true, mensaje: 'Abriendo ' + anexo.nombre };
+}
+
 function _iceEnWizard() {
     return !!document.getElementById('frmFlujoDeclaracion:somObligacion_label') ||
            !!document.querySelector('[id*="somObligacion"]') ||
@@ -5996,6 +6049,7 @@ async function iniciarDeclaracionICE(anio, mes) {
 
 if (typeof window !== 'undefined') {
     window.scIniciarDeclaracionICE = iniciarDeclaracionICE;
+    window.scAbrirAnexoSRI = abrirAnexoSRI;
 }
 
 // Auto: si veníamos del puente y hay un pendiente, elegir la obligación.

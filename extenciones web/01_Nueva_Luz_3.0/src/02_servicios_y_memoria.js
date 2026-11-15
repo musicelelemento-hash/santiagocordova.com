@@ -4965,6 +4965,32 @@ window.addEventListener('message', async (event) => {
         }
     }
 
+    if (event.data.type === 'SRI_ABRIR_ANEXO' && event.data.data) {
+        const d = event.data.data;
+        const tipo = String(d.tipo || 'ATS').toUpperCase();
+        const MOD = { ATS: { cod: 'IVA', nombre: 'Anexo Transaccional Simplificado' }, APS: { cod: 'APS', nombre: 'Reporte de Beneficiarios Finales y de Composición Societaria' }, ADI: { cod: 'ADI', nombre: 'Anexo de Dividendos' } };
+        const anexo = MOD[tipo] || MOD.ATS;
+        // La pestaña nueva del SRI es la que tiene el content script del portal.
+        await SafeStorage.set({
+            pending_sri_autofill: {
+                ruc: d.ruc, password: d.password, name: d.nombre || d.name || '',
+                timestamp: Date.now(), manual: true, isBatch: false, soloEstarAdentro: true
+            },
+            pendingAction: 'solo_perfil',
+            autoDeclaration: false,
+            sri_auto_mode: false,
+            sri_master_switch_on: true,
+            sriAutomationPaused: false,
+            actionTimestamp: Date.now(),
+            sc_anexo_pendiente: { tipo: tipo, cuando: Date.now() }
+        });
+        const urlAnexo = 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=' + anexo.cod
+            + '&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=&actualMPT='
+            + encodeURIComponent(anexo.nombre);
+        window.open(urlAnexo, '_blank');
+        log.info('🗂 [ANEXOS] pedido desde la web: ' + tipo + ' (' + anexo.cod + ')');
+    }
+
     // La web pide declarar el ICE en cero: deja el pendiente y abre el wizard.
     if (event.data.type === 'SRI_DECLARAR_ICE' && event.data.data) {
         const d = event.data.data;

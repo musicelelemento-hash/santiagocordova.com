@@ -351,7 +351,26 @@ async function extraerTodasLasFacturas() {
                     base5: redondear(resumen.iva5?.baseImponible || 0),
                     iva5: redondear(resumen.iva5?.montoIva || 0),
                     base0: redondear(resumen.iva0?.baseImponible || 0),
-                    topProveedores,
+                    // 🧾 Facturas completas: las usa la web para generar el ATS.
+        invoices: todasLasFacturas.map((f, i) => ({
+            id: 'ext-' + clienteRuc + '-' + (f.numero || i),
+            numero: f.numero,
+            secuencial: f.secuencial || '',
+            fechaEmision: f.fechaEmision || '',
+            rucEmisor: f.rucEmisor || '',
+            razonSocial: f.rucRazon || '',
+            valorSinImpuestos: f.valorSinImpuestos || 0,
+            iva: f.iva || 0,
+            importeTotal: f.importeTotal || 0,
+            tieneCreditoTributario: true,
+            tarifaIva: 15,
+            tipoComprobante: f.tipoComprobante || 'factura',
+            claveAcceso: f.claveAcceso || '',
+            establecimiento: f.establecimiento || '',
+            puntoEmision: f.puntoEmision || ''
+        })),
+
+        topProveedores,
                     proveedores,
                     periodo: periodoObjetivo
                 }
@@ -661,13 +680,31 @@ function extraerFacturasPaginaActual() {
                 }
             }
 
+            // 🧾 Identidad del comprobante (para el ATS): RUC del proveedor,
+            // fecha de emisión, clave de acceso (49 dígitos), serie y tipo.
+            const textosCeldas = celdas.map((c) => (c.textContent || "").trim());
+            const textoFila = textosCeldas.join(" ");
+            const rucEmisorFila = (textoFila.match(/\b(\d{13})\b/) || [])[1] || "";
+            const fechaEmisionFila = (textoFila.match(/\b(\d{2}\/\d{2}\/\d{4})\b/) || [])[1] || "";
+            const claveAccesoFila = (textoFila.match(/\b(\d{49})\b/) || [])[1] || "";
+            const serieFila = textoFila.match(/\b(\d{3})-(\d{3})-(\d{9})\b/) || [];
+            const tipoComprobanteFila = /nota de cr[eé]dito/i.test(textoFila)
+                ? "nota_credito"
+                : /liquidaci[oó]n/i.test(textoFila) ? "liquidacion" : "factura";
             facturas.push({
                 numero: idx + 1,
                 rucRazon: celdas[1] ? celdas[1].textContent.trim() : 'S/N',
                 valorSinImpuestos: valorSinImpuestos,
                 iva: iva,
                 importeTotal: importeTotal,
-                tieneIva: iva > 0
+                tieneIva: iva > 0,
+                rucEmisor: rucEmisorFila,
+                fechaEmision: fechaEmisionFila,
+                claveAcceso: claveAccesoFila,
+                establecimiento: serieFila[1] || "",
+                puntoEmision: serieFila[2] || "",
+                secuencial: serieFila[3] || "",
+                tipoComprobante: tipoComprobanteFila,
             });
 
             log.debug(`      Factura agregada: SinImp=${valorSinImpuestos}, IVA=${iva}, Total=${importeTotal}`);

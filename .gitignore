@@ -89,3 +89,7 @@ extenciones web/_respaldos/
 
 # Banco de prueba generado (se regenera con tools/bench/generar_bench.mjs)
 extenciones web/tools/bench/bench_2000.html
+
+# ── Datos de clientes / recursos de compañías (certificados, fichas) ──
+# No se versionan: son datos personales/tributarios de clientes.
+RECURSOS PARA COMPANIAS O SOC/

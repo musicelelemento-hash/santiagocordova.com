@@ -474,6 +474,12 @@ function frecuenciaPorHistorial(c) {
     return null;
 }
 
+/** ¿El RUC es de una sociedad? 3.er dígito = 9 (persona jurídica). */
+function esRucSociedad(ruc) {
+    const limpio = String(ruc || '').replace(/\D/g, '');
+    return limpio.length === 13 && limpio[2] === '9';
+}
+
 function evaluarRegimenCliente(c) {
     if (!c || !c.ruc) return { esMensual: false, label: 'Sin RUC', motivo: 'invalido' };
     if (c.force_mensual === true) return { esMensual: true, label: 'IVA Mensual (Forzado)', motivo: 'forzado' };
@@ -1499,7 +1505,7 @@ function createClientCard(client, statusType) {
 
     card.innerHTML = `
         <div class="cc-head">
-            <div class="cc-name" title="${client.name}">${client.name}</div>
+            <div class="cc-name" title="${client.name}">${client.name}${esRucSociedad(client.ruc) ? ' <span class="cc-sociedad" title="RUC de sociedad: lleva 1021 Renta, REBEFICS, ADI y ATS">S.A.S.</span>' : ''}</div>
             <span class="cc-badge ${badge.kind}"><i></i>${badge.label}</span>
         </div>
         <div class="cc-meta">

@@ -349,6 +349,17 @@ try {
       const compras = st.sri_ultimo_arqueo_compras;
       if (compras && compras.ruc) {
         try { localStorage.setItem(`sc_compras_${compras.ruc}`, JSON.stringify(compras)); } catch (e) {}
+        // Con período: la web lo lee como compras del mes (para el ATS).
+        try {
+          if (compras.periodo && Array.isArray(compras.invoices)) {
+            localStorage.setItem(`sc_compras_${compras.ruc}_${compras.periodo}`, JSON.stringify({
+              ruc: compras.ruc,
+              period: compras.periodo,
+              updatedAt: new Date().toISOString(),
+              invoices: compras.invoices,
+            }));
+          }
+        } catch (e) {}
       }
       const af = st.pending_sri_autofill || {};
       if (af.ruc) {
