@@ -2894,7 +2894,12 @@ function initLoginCockpitWatcher() {
                 // si la página carga primero, antes se quedaba dormida sin entrar.
                 if (namespace === 'local' && changes.pending_sri_autofill) {
                     const nuevo = changes.pending_sri_autofill.newValue;
-                    if (nuevo && nuevo.ruc && nuevo.password) {
+                    // Solo se despierta para una entrada MANUAL y suelta: en un lote manda el
+        // semáforo y este atajo duplicaba logins (y bloqueó cuentas).
+        const esManualSuelto = nuevo && nuevo.ruc && nuevo.password && nuevo.manual === true
+            && nuevo.isBatch !== true && nuevo.soloEstarAdentro === true
+            && (!nuevo.timestamp || (Date.now() - Number(nuevo.timestamp)) < 120000);
+        if (esManualSuelto) {
                         try {
                             const enLogin = isSRILoginPage();
                             const yaAdentro = !enLogin && typeof document !== 'undefined' && (

@@ -3552,6 +3552,12 @@ async function _sriEsperar(condicion, timeoutMs = 12000, pasoMs = 250) {
 }
 
 function _sriTextoError() {
+    // El portal a veces pone el bloqueo fuera de #input-error.
+    try {
+        const zona = document.querySelector('#kc-content-wrapper, #kc-form, .kc-form, #kc-content');
+        const txtZona = zona ? String(zona.innerText || '') : '';
+        if (/bloquead|recuperar clave|superado el n[uú]mero de intentos/i.test(txtZona)) return txtZona.slice(0, 300);
+    } catch (e) {}
     for (const s of SRI_LOGIN.error) {
         const el = document.querySelector(s);
         const txt = el && (el.textContent || '').trim();
@@ -3614,6 +3620,28 @@ async function loginSRI(ruc, password, opciones = {}) {
         } catch (e) { /* sin UI: no rompe el login */ }
     };
 
+    // 🛡️ La bóveda manda: si esta clave ya fue rechazada, NO se reintenta.
+    try {
+        const chk = await SriCredentialVault.canAttemptLogin(ruc, password, { isManual: opciones.manual === true });
+        if (!chk || !chk.allowed) {
+            log.warn('🛡️ [LOGIN SRI] bloqueado por la bóveda: ' + ((chk && chk.reason) || ''));
+            return { ok: false, motivo: 'vault', mensaje: (chk && chk.reason) || 'Credencial bloqueada por seguridad' };
+        }
+        // 🔢 Tope diario propio (el SRI bloquea a los 5): máximo 3 intentos por día.
+        const stDia = await SafeStorage.get(['sc_login_intentos_dia']);
+        const hoy = new Date().toISOString().slice(0, 10);
+        const registro = stDia.sc_login_intentos_dia || {};
+        const actual = registro[ruc] && registro[ruc].fecha === hoy ? registro[ruc] : { fecha: hoy, veces: 0 };
+        if (actual.veces >= 3) {
+            log.warn('🔢 [LOGIN SRI] tope diario de 3 intentos alcanzado para ' + ruc + '. No se intenta más hoy.');
+            try { await SriCredentialVault.recordLocked(ruc, 'Tope diario de intentos de la extensión (3)'); } catch (e) {}
+            return { ok: false, motivo: 'tope_diario', mensaje: 'Se alcanzaron 3 intentos hoy; esperar 24 h o recuperar la clave.' };
+        }
+        actual.veces += 1;
+        registro[ruc] = actual;
+        await SafeStorage.set({ sc_login_intentos_dia: registro });
+    } catch (e) { /* la bóveda no debe romper el login */ }
+
     if (_sriYaAdentro()) {
         log.info('🔑 [LOGIN SRI] ya había sesión abierta.');
         return { ok: true, yaAdentro: true };
@@ -3667,6 +3695,7 @@ async function loginSRI(ruc, password, opciones = {}) {
         if (_sriYaAdentro()) {
             log.info('✅ [LOGIN SRI] sesión iniciada con ' + ruc);
             try { await SafeStorage.set({ sc_login_en_curso: false, sc_login_estado: { ruc, estado: 'ok', cuando: Date.now() } }); } catch (e) {}
+            try { await SriCredentialVault.recordSuccess(ruc, password); } catch (e) {}
             // Un solo aviso, al final: nada de parpadeos durante el proceso.
             return { ok: true };
         }
@@ -3674,6 +3703,10 @@ async function loginSRI(ruc, password, opciones = {}) {
         if (errorTxt) {
             const motivo = _sriClasificarError(errorTxt);
             log.warn('🔑 [LOGIN SRI] rechazo (' + motivo + '): ' + errorTxt);
+            try {
+                if (motivo === 'bloqueada') await SriCredentialVault.recordLocked(ruc, errorTxt);
+                else await SriCredentialVault.recordFailure(ruc, password, errorTxt);
+            } catch (e) {}
             try { await SafeStorage.set({ sc_login_en_curso: false, sc_login_estado: { ruc, estado: motivo, mensaje: errorTxt, cuando: Date.now() } }); } catch (e) {}
             return { ok: false, motivo: motivo, mensaje: errorTxt };
         }

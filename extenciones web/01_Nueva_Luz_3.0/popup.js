@@ -650,7 +650,17 @@ function evaluarRegimenCliente(c) {
     const reg = (c.regime || '').toLowerCase();
     const type = (c.client_type || c.clientType || tp.clientType || '').toLowerCase();
 
-    if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) {
+    // 🛡️ Credencial rechazada o cuenta bloqueada por el SRI: no entra al lote.
+  // El SRI bloquea a los 5 intentos; reintentar solo empeora el caso.
+  const cred = tp.sriCredencial || {};
+  if (cred.estado && cred.estado !== 'ok') {
+    const etiqueta = cred.estado === 'bloqueada' ? 'SRI bloqueado (recuperar clave)'
+      : cred.estado === 'caducada' ? 'Clave vencida (cambiar en el SRI)'
+      : 'Clave rechazada por el SRI';
+    return { esMensual: false, label: etiqueta, motivo: 'credencial_mala' };
+  }
+
+  if (type === 'solo_plan' || c.requires_declarations === false || tp.requiresDeclarations === false) {
         return { esMensual: false, label: 'Solo Plan (Sin Declaraciones)', motivo: 'solo_plan' };
     }
 
