@@ -148,6 +148,61 @@ async function autoLlenarFormulario(data) {
     return total;
 }
 
+/**
+ * Captura de VENTAS sin declarar.
+ *
+ * El 104 llega PRELLENADO con las ventas de facturación electrónica. Antes los
+ * números sólo se guardaban al llenar/enviar el formulario; si la cuenta estaba
+ * bloqueada no se capturaba nada y la web mostraba 0 en todos.
+ *
+ * Lee los casilleros de la sección VENTAS y los guarda en el cliente.
+ */
+async function capturarVentasDelFormulario(opciones = {}) {
+    log.info('💵 [VENTAS] capturando del formulario 104…');
+    try {
+        await toggleSriSection('Ventas', true);
+        const leer = async (c) => { try { return Number(await leerCampo(c)) || 0; } catch (e) { return 0; } };
+        const [v401, v411, v402, v403, v413, v404, v414, v405, v415, v419, v421, v422, v424] = await Promise.all([
+            '401', '411', '402', '403', '413', '404', '414', '405', '415', '419', '421', '422', '424',
+        ].map(leer));
+        const conIva = v411 || v401;
+        const sinIva = v413 || v403 || v402;
+        const base5 = v414 || v404;
+        const base8 = v415 || v405;
+        const total = v419 || (conIva + sinIva + base5 + base8);
+        const iva = v421 || (conIva * 0.15) + v422 || 0;
+        const datos = { conIva, sinIva, base5, base8, total, iva };
+        try { await GhostMemory.set('ventasExtraidas', { ...datos, base15: conIva, base0: sinIva }); } catch (e) {}
+        const info = (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function')
+            ? window.sriAssistant.extractClientInfo() : {};
+        const ruc = String(opciones.ruc || info.ruc || '').replace(/\D/g, '');
+        let periodo = String(opciones.periodo || '');
+        if (!/^\d{4}-\d{2}$/.test(periodo)) {
+            const m = (location.href.match(/periodo[=:]?(20\d{2})(\d{2})/i) || []);
+            if (m) periodo = m[1] + '-' + m[2];
+            else {
+                const st = await SafeStorage.get(['workflowPeriod']);
+                const wp = st.workflowPeriod;
+                if (wp && wp.year) periodo = wp.year + '-' + String(Number(wp.monthIndex) + 1).padStart(2, '0');
+            }
+        }
+        log.info(`💵 [VENTAS] ${periodo || '(sin período)'} · con IVA ${conIva.toFixed(2)} · sin IVA ${sinIva.toFixed(2)} · total ${total.toFixed(2)}`);
+        let nube = { ok: false };
+        if (ruc.length === 13 && /^\d{4}-\d{2}$/.test(periodo)) {
+            nube = await guardarVentasEnNube(ruc, periodo, { ...datos, origen: 'formulario-104' });
+        }
+        try { await SafeStorage.set({ sc_ventas_formulario: { ruc, periodo, ...datos, nube, cuando: Date.now() } }); } catch (e) {}
+        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+            window.sriAssistant.showEliteToast({ title: '💵 Ventas capturadas',
+                msg: `Con IVA ${conIva.toFixed(2)} · Sin IVA ${sinIva.toFixed(2)} · guardado ${nube.ok ? 'en la web' : 'solo local'}`, duration: 9000 });
+        }
+        return { ok: true, ruc, periodo, ...datos, nube };
+    } catch (e) {
+        log.error('💵 [VENTAS] error: ' + (e && e.message));
+        return { ok: false, error: e && e.message };
+    }
+}
+
 async function llenarVentas(data) {
     log.debug('📋 Procesando VENTAS (Espejo de Columnas: Bruto -> Neto) ...');
     let camposLlenados = 0;
@@ -2174,6 +2229,33 @@ async function detectarValorSugeridoEnDOM(casillero, inputElement) {
     return { found: false, value: 0 };
 }
 
+if (typeof window !== "undefined") {
+    window.scCapturarVentas = capturarVentasDelFormulario;
+}
 
+/**
+ * Al abrir el formulario 104, captura las ventas prellenadas sin declarar.
+ * Muchas veces la cuenta está bloqueada o no se envía: las ventas igual se ven.
+ */
+async function autoCapturarVentasSiFormulario() {
+    try {
+        const url = location.href;
+        if (!/recibirDeclaracion|FormularioIva|recepcion\/recibirDeclaracion/i.test(url)) return;
+        const st = await SafeStorage.get(['sc_ventas_auto']);
+        const prev = st.sc_ventas_auto || {};
+        if (prev.url === url && (Date.now() - (prev.cuando || 0)) < 10 * 60 * 1000) return;
+        for (let i = 0; i < 6; i++) {
+            await sleep(2000);
+            const campos = document.querySelectorAll('input[type="text"]').length;
+            if (campos < 5) continue;
+            const r = await capturarVentasDelFormulario({});
+            if (r && r.ok && (r.total > 0 || r.conIva > 0 || r.sinIva > 0)) {
+                await SafeStorage.set({ sc_ventas_auto: { url, cuando: Date.now(), periodo: r.periodo, ruc: r.ruc } });
+                log.info('💵 [VENTAS] captura automática lista: ' + JSON.stringify({ conIva: r.conIva, sinIva: r.sinIva, total: r.total }));
+                return;
+            }
+        }
+    } catch (e) { /* la captura no debe molestar */ }
+}
 
-
+setTimeout(() => { try { autoCapturarVentasSiFormulario(); } catch (e) {} }, 4000);

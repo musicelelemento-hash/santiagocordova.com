@@ -3754,6 +3754,49 @@ function scDiagnosticoLogin() {
  * saber nada, así que un ATS cargado seguía figurando pendiente. Esto escribe
  * `sri_declaraciones` (lo que lee la web) y deja el acuse en el JSON del cliente.
  */
+/**
+ * Guarda las VENTAS capturadas del formulario 104 en el cliente (Supabase).
+ * Sirve para verlas en la web sin haber declarado (p. ej. cuenta bloqueada).
+ */
+async function guardarVentasEnNube(ruc, periodo, datos = {}) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        const per = String(periodo || '').replace(/[^0-9-]/g, '');
+        if (limpio.length !== 13 || !/^\d{4}-\d{2}$/.test(per)) return { ok: false, motivo: 'datos' };
+        const cfg = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG) ? SC_CONFIG : {};
+        const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
+        const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
+        if (!url || !key) return { ok: false, motivo: 'sin_supabase' };
+        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
+        const filas = rc.ok ? await rc.json() : [];
+        const cliente = Array.isArray(filas) ? filas[0] : null;
+        if (!cliente) return { ok: false, motivo: 'cliente_no_encontrado' };
+        const tp = cliente.tax_profile || {};
+        const ventasPorPeriodo = { ...(tp.ventasPorPeriodo || {}) };
+        ventasPorPeriodo[per] = {
+            conIva: Number(datos.conIva) || 0,
+            sinIva: Number(datos.sinIva) || 0,
+            base5: Number(datos.base5) || 0,
+            base8: Number(datos.base8) || 0,
+            total: Number(datos.total) || 0,
+            iva: Number(datos.iva) || 0,
+            origen: datos.origen || 'formulario-104',
+            cuando: new Date().toISOString(),
+        };
+        const res = await fetch(`${url}/rest/v1/clients?id=eq.${cliente.id}`, {
+            method: 'PATCH', headers: cab,
+            body: JSON.stringify({ tax_profile: { ...tp, ventasPorPeriodo } }),
+        });
+        log.info('💵 [VENTAS] guardadas en la nube para ' + limpio + ' ' + per + ': HTTP ' + res.status);
+        try { await SafeStorage.set({ sc_ventas_formulario: { ruc: limpio, periodo: per, ...ventasPorPeriodo[per] } }); } catch (e) {}
+        return { ok: res.ok };
+    } catch (e) {
+        log.warn('💵 [VENTAS] no se pudo guardar en la nube: ' + (e && e.message));
+        return { ok: false, motivo: 'error' };
+    }
+}
+
 async function marcarAnexoEnLaNube(ruc, periodo, datos = {}) {
     try {
         const limpio = String(ruc || '').replace(/\D/g, '');

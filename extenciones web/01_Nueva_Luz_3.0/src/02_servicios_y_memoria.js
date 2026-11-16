@@ -4628,6 +4628,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'capturarVentas') {
+    (async () => {
+      try {
+        const fn = (typeof capturarVentasDelFormulario === 'function') ? capturarVentasDelFormulario
+          : (typeof window !== 'undefined' && window.scCapturarVentas) || null;
+        if (!fn) { sendResponse({ ok: false, error: "captura no disponible en esta página" }); return; }
+        const r = await fn({});
+        sendResponse({ ok: true, resultado: r });
+      } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    })();
+    return true;
+  }
+
   if (request.action === 'mapearAnexos') {
     (async () => {
       try {

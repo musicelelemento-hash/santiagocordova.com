@@ -147,6 +147,24 @@ function bindEvents() {
     // 🎛 Mostrar la barra flotante en el SRI: la despierta y la monta en la pestaña activa.
 // 🧭 Mapear la pantalla de Anexos (sin depender de la barra flotante).
 // 🔑 Diagnóstico de login: copia la foto de la pantalla del SRI.
+document.getElementById('btnVentas104')?.addEventListener('click', async () => {
+    const estado = document.getElementById('anexosEstado');
+    const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí el formulario 104 del SRI y volvé a intentar.', false); return; }
+        chrome.tabs.sendMessage(tab.id, { action: "capturarVentas" }, (resp) => {
+            if (chrome.runtime.lastError || !resp) { pintar("Sin respuesta: " + (chrome.runtime.lastError?.message || ""), false); return; }
+            const r = resp.resultado || {};
+            if (!resp.ok || !r.ok) { pintar('No se pudo capturar: ' + (resp.error || r.error || 'formulario no encontrado'), false); return; }
+            const conIva = Number(r.conIva || 0).toFixed(2);
+            const sinIva = Number(r.sinIva || 0).toFixed(2);
+            const total = Number(r.total || 0).toFixed(2);
+            pintar('💵 ' + (r.periodo || '') + ' · con IVA ' + conIva + ' · sin IVA ' + sinIva + ' · total ' + total + (r.nube && r.nube.ok ? ' · guardado en la web' : ' · solo local'), true);
+        });
+    } catch (e) { pintar("Error: " + e.message, false); }
+});
+
 document.getElementById('btnDiagLogin')?.addEventListener('click', async () => {
     const estado = document.getElementById('anexosEstado');
     const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
