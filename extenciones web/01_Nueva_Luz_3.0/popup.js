@@ -274,6 +274,21 @@ try {
     if (chip) chip.textContent = 'v' + chrome.runtime.getManifest().version;
 } catch (e) { /* sin chip no pasa nada */ }
 
+// 📅 Estado del mes en una sola línea: período · pendientes · comprobantes · errores · ATS.
+let mesLineaDatos = { periodo: '', pend: 0, comp: 0, err: 0, ats: 0 };
+function pintarMesLinea() {
+    const per = document.getElementById('mesLineaPeriodo');
+    const dat = document.getElementById('mesLineaDatos');
+    if (!per || !dat) return;
+    const partes = [];
+    if (mesLineaDatos.pend) partes.push(mesLineaDatos.pend + ' sin declarar');
+    if (mesLineaDatos.comp) partes.push(mesLineaDatos.comp + ' con comprobante');
+    if (mesLineaDatos.err) partes.push(mesLineaDatos.err + ' con error');
+    if (mesLineaDatos.ats) partes.push(mesLineaDatos.ats + ' ATS pendiente' + (mesLineaDatos.ats === 1 ? '' : 's'));
+    per.textContent = mesLineaDatos.periodo || '—';
+    dat.textContent = partes.length ? partes.join(' · ') : 'todo al día';
+}
+
 renderSesionSri();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
 
@@ -288,6 +303,8 @@ function renderAtsPendientes() {
         const entradas = Object.values(mapa).filter((x) => x && x.ruc);
         entradas.sort((a, b) => (b.cuando || 0) - (a.cuando || 0));
         cuenta.textContent = String(entradas.length);
+        mesLineaDatos.ats = entradas.length;
+        pintarMesLinea();
         caja.style.display = entradas.length ? 'block' : 'none';
         lista.innerHTML = entradas.map((e) => {
             const c = cache.find((x) => x && String(x.ruc) === String(e.ruc));

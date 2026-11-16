@@ -767,6 +767,13 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
   *{ transition:none!important; animation:none!important; scroll-behavior:auto!important; }
 }
 
+
+.mes-linea{ display:flex; align-items:baseline; gap:8px; margin:10px 12px 0; padding:6px 10px;
+  border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.02); overflow:hidden; }
+.mes-linea b{ font-family:var(--mono); font-size:10px; letter-spacing:.14em; color:var(--gold,#C9A96E);
+  text-transform:uppercase; white-space:nowrap; }
+.mes-linea span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.04em; color:var(--text-dim);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -881,6 +888,13 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
 </div>
 
     <!-- La única acción que importa. El resto se elige solo. -->
+
+<!-- 📅 Estado del mes en una sola línea -->
+<div id="mesLinea" class="mes-linea" aria-live="polite">
+  <b id="mesLineaPeriodo">—</b>
+  <span id="mesLineaDatos">—</span>
+</div>
+
     <div class="lote">
         <div class="lote-info">
             <b id="loteCuenta">Cargando clientes…</b>
