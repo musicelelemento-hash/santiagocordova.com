@@ -1735,6 +1735,7 @@ function createClientCard(client, statusType) {
     const restan = dueDay - hoyDia;
     const semaforo = restan < 0 ? 'vencido' : restan <= 3 ? 'pronto' : 'ok';
     let actionBtnHtml = `
+        <button class="btn-start btn-ojo" data-action="solo-entrar" data-ruc="${client.ruc}" title="Entrar al SRI y quedarse en el perfil: NO declara">👁️</button>
         <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="white-space:nowrap;">
             ▶ Ingresar
         </button>
@@ -1745,6 +1746,7 @@ function createClientCard(client, statusType) {
 
     if (isDone) {
         actionBtnHtml = `
+            <button class="btn-start btn-ojo" data-action="solo-entrar" data-ruc="${client.ruc}" title="Entrar al SRI y quedarse en el perfil: NO declara">👁️</button>
             <button class="btn-start" data-action="iniciar" data-ruc="${client.ruc}" style="opacity:0.6; filter:grayscale(0.5); white-space:nowrap;">
                 ▶ Ingresar
             </button>
@@ -1905,7 +1907,19 @@ document.addEventListener('click', async (e) => {
     const action = el.dataset.action;
     const ruc = el.dataset.ruc;
 
-    if (action === 'iniciar') {
+    if (action === 'solo-entrar') {
+        const cli = allRawClients.find(c => c.ruc === ruc) || allClients.find(c => c.ruc === ruc) || otrosClients.find(c => c.ruc === ruc);
+        const clave = cli && (cli.password || cli.sriPassword);
+        if (!cli || !clave) { showToast('⚠️ Este cliente no tiene clave SRI guardada.'); return; }
+        await chrome.storage.local.set({
+            pending_sri_autofill: { ruc: String(ruc), password: clave, name: cli.name || '', timestamp: Date.now(), manual: true, isBatch: false, soloEstarAdentro: true },
+            pendingAction: 'solo_perfil', autoDeclaration: false, sri_auto_mode: false,
+            sri_master_switch_on: true, sriAutomationPaused: false, actionTimestamp: Date.now(),
+        });
+        showToast('👁️ Entrando al perfil de ' + (cli.name || ruc) + '…');
+        chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT' });
+        window.close();
+    } else if (action === 'iniciar') {
         iniciarCliente(ruc);
     } else if (action === 'toggle-mes-orden') {
         toggleMesOrden(ruc, el.dataset.periodo);
