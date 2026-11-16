@@ -588,6 +588,7 @@ async function scRunnerPoll() {
       const termino = loop.estado === 'DETENIDO';
       const cuerpo = {
         progreso: { hecho, total, actual: (cola[hecho] && cola[hecho].name) || '', mensaje: loop.motivo || '' },
+        heartbeat_at: new Date().toISOString(),
         ...(termino ? { estado: 'hecho', finished_at: new Date().toISOString(), mensaje: loop.motivo || 'Terminado' } : {}),
       };
       await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(enCurso.id)}`, { method: 'PATCH', body: JSON.stringify(cuerpo) });
@@ -598,10 +599,24 @@ async function scRunnerPoll() {
       return;
     }
 
-    // 2) Buscar un trabajo pendiente asignado a este runner.
-    const filas = await scRunnerApi(`${SC_RUNNER_TABLA}?estado=eq.pendiente&runner_id=eq.${encodeURIComponent(cfg.id)}&select=*&order=created_at.asc&limit=1`);
-    const job = Array.isArray(filas) ? filas[0] : null;
+    // 2) Claim ATÓMICO: la función de Postgres toma un solo trabajo por runner
+    //    (for update skip locked). Si la función no está creada, cae al camino viejo.
+    let job = null;
+    try {
+      const tomado = await scRunnerApi('rpc/claim_bucle_remoto', { method: 'POST', body: JSON.stringify({ p_runner_id: cfg.id }) });
+      job = Array.isArray(tomado) ? tomado[0] : tomado;
+    } catch (e) {
+      if (!/PGRST202|does not exist|Could not find the function/i.test(e && e.message)) {
+        console.warn('[RUNNER] claim atómico falló: ' + (e && e.message));
+      }
+      // fallback: buscar pendiente y marcarlo corriendo
+      const filas = await scRunnerApi(`${SC_RUNNER_TABLA}?estado=eq.pendiente&runner_id=eq.${encodeURIComponent(cfg.id)}&select=*&order=created_at.asc&limit=1`);
+      job = Array.isArray(filas) ? filas[0] : null;
+    }
     if (!job) return;
+
+    // Si el claim ya lo dejó corriendo, no hace falta el PATCH posterior.
+    const yaTomado = job.estado === 'corriendo';
 
     // 3) Credenciales: se usan las que ya sincronizó el dashboard en este equipo.
     const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
@@ -632,7 +647,9 @@ async function scRunnerPoll() {
       sri_target_period: per, workflowPeriod: { year: yy, monthIndex: mm - 1 },
       autoDeclaration: job.modo !== 'solo_perfil', sri_auto_mode: true, sri_master_switch_on: true, sriAutomationPaused: false,
     });
-    await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(job.id)}`, { method: 'PATCH', body: JSON.stringify({ estado: 'corriendo', started_at: new Date().toISOString(), runner_id: cfg.id, progreso: { hecho: 0, total: conClave.length } }) });
+    if (!yaTomado) {
+        await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(job.id)}`, { method: 'PATCH', body: JSON.stringify({ estado: 'corriendo', started_at: new Date().toISOString(), runner_id: cfg.id, heartbeat_at: new Date().toISOString(), progreso: { hecho: 0, total: conClave.length } }) });
+    }
     console.log('[RUNNER] arrancando trabajo ' + job.id + ' (' + conClave.length + ' clientes)');
     chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT' });
   } catch (e) {
