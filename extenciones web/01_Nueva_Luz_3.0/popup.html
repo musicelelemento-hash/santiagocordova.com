@@ -792,6 +792,22 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
   transform: translateY(-1px);
 }
 .pie{border-top:1px solid var(--border); background: linear-gradient(180deg, rgba(5,20,36,.6), rgba(3,15,29,.9));}
+
+/* Progreso del lote en vivo */
+.lote-progreso{ margin: 2px 0 8px; padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: 10px; background: rgba(0,168,150,.05); }
+.lp-linea{ display:flex; align-items:baseline; gap:8px; }
+.lp-linea span:first-child{ font-family:'JetBrains Mono',monospace; font-size:10px; color:#c7f5e6;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+.lp-eta{ font-family:'JetBrains Mono',monospace; font-size:9px; color: var(--text-dim); white-space:nowrap; }
+.lp-barra{ height:3px; border-radius:3px; background:rgba(255,255,255,.08); overflow:hidden; margin-top:6px; }
+.lp-barra i{ display:block; height:100%; width:0%;
+  background: linear-gradient(90deg,#00A896,#4edea3,#C9A96E);
+  transition: width .5s cubic-bezier(.16,1,.3,1); }
+/* Chip del último acuse */
+.acuse-chip{ font-family:'JetBrains Mono',monospace; font-size:9px; color:#e6d3ab;
+  border:1px solid rgba(201,169,110,.35); background:rgba(201,169,110,.10);
+  border-radius:8px; padding:2px 7px; white-space:nowrap; cursor:default; }
 </style>
 </head>
 <body>
@@ -936,6 +952,15 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
                 <span title="Filtro opcional: si está activo, sólo corren los clientes marcados. Si está apagado, corren todos los pendientes.">en la lista</span>
             </div>
         </div>
+        <!-- Progreso del lote en vivo -->
+        <div id="loteProgreso" class="lote-progreso" style="display:none" aria-live="polite">
+            <div class="lp-linea">
+                <span id="loteProgresoTexto">—</span>
+                <span id="loteProgresoEta" class="lp-eta">≈ —</span>
+            </div>
+            <div class="lp-barra"><i id="loteProgresoFill"></i></div>
+        </div>
+
         <button id="btnEjecutarLote" class="btn-run" title="Arma la cola con todos los pendientes del período y abre el SRI">
             <span>▶</span> <span id="loteBotonTexto">Ejecutar lote</span> <small id="loteBotonCuenta"></small>
         </button>
@@ -1052,6 +1077,7 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
         <button id="btnAjustesPie" class="pie-btn" title="Claves de IA, R2 y Supabase; diagnóstico del lote">⚙ Ajustes y claves</button>
         <span id="ultimoLote" class="ultimo-lote" style="display:none"></span>
         <button id="btnBuzon" aria-label="Buzón de sugerencias" class="pie-btn buzon-btn" title="Sugerencias: lo que pedís llega a la próxima versión">💡</button>
+        <span id="ultimoAcuse" class="acuse-chip" style="display:none" title="Último anexo subido"></span>
         <span id="nubeEstado" class="nube-chip" title="Estado de la conexión con Supabase">☁ …</span>
         <span id="popupFootVersion">v3.1.0</span>
     </footer>

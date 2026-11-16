@@ -326,8 +326,53 @@ chrome.storage.onChanged.addListener((c) => {
     if (c.sc_estado_mes && c.sc_estado_mes.newValue) { mesLineaDatos.web = c.sc_estado_mes.newValue; pintarMesLinea(); }
 });
 
+chrome.storage.local.get(['sc_loop'], (r) => pintarProgresoLote(r && r.sc_loop));
+chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.sc_loop) pintarProgresoLote(c.sc_loop.newValue); });
+pintarUltimoAcuse();
+chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.sc_anexo_ultimo) pintarUltimoAcuse(); });
+
 renderSesionSri();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
+
+// ⏱️ Progreso del lote en vivo: quién va, cuántos faltan y ETA aproximada.
+function pintarProgresoLote(loop) {
+    const caja = document.getElementById('loteProgreso');
+    const texto = document.getElementById('loteProgresoTexto');
+    const eta = document.getElementById('loteProgresoEta');
+    const fill = document.getElementById('loteProgresoFill');
+    if (!caja || !texto || !eta || !fill) return;
+    const cola = Array.isArray(loop && loop.cola) ? loop.cola : [];
+    const corriendo = loop && (loop.estado === 'CORRIENDO' || loop.estado === 'PAUSANDO');
+    if (!corriendo || cola.length === 0) { caja.style.display = 'none'; return; }
+    const idx = Math.min(Number(loop.indice) || 0, cola.length - 1);
+    const actual = cola[idx] || {};
+    const nombre = String(actual.name || actual.ruc || '').slice(0, 28);
+    texto.textContent = `cliente ${idx + 1} de ${cola.length} · ${nombre}`;
+    const faltan = Math.max(0, cola.length - idx - 1);
+    const min = Math.round(faltan * 2.5);
+    eta.textContent = faltan === 0 ? 'último' : '≈ ' + (min >= 60 ? Math.round(min / 60) + ' h' : min + ' min');
+    const pct = Math.round(((idx + (corriendo ? 0.5 : 0)) / Math.max(1, cola.length)) * 100);
+    fill.style.width = Math.min(100, pct) + '%';
+    caja.style.display = 'block';
+}
+
+function pintarUltimoAcuse() {
+    const chip = document.getElementById('ultimoAcuse');
+    if (!chip) return;
+    chrome.storage.local.get(['sc_anexo_ultimo'], (st) => {
+        const a = st && st.sc_anexo_ultimo;
+        if (!a || !a.nombre) { chip.style.display = 'none'; return; }
+        const m = String(a.nombre).match(/(20\d{2})[-_](0[1-9]|1[0-2])/);
+        const per = m ? (m[1] + '-' + m[2]) : '';
+        const tipo = /^APS|Anexo_APS/i.test(a.nombre) ? 'APS' : (/^ADI|Anexo_ADI/i.test(a.nombre) ? 'ADI' : 'ATS');
+        const cuando = Number(a.cuando || a.timestamp || 0);
+        const hace = cuando ? Math.round((Date.now() - cuando) / 60000) : null;
+        const rel = hace === null ? '' : (hace < 60 ? 'hace ' + hace + ' min' : 'hace ' + Math.round(hace / 60) + ' h');
+        chip.textContent = '📎 ' + tipo + (per ? ' ' + per : '') + (rel ? ' · ' + rel : '');
+        chip.title = (a.mensaje || a.acuse || 'Anexo subido') + (a.acuse ? ' · acuse ' + a.acuse : '');
+        chip.style.display = 'inline-block';
+    });
+}
 
 function renderAtsPendientes() {
     const caja = document.getElementById('atsPendientes');
