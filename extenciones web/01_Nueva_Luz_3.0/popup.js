@@ -20,6 +20,12 @@ let listaBendita = null;   // null = Bendita inactiva · array de RUC = activa
 let syncBajasBloqueado = false; // true si Supabase rechazó leer is_deleted (falta el GRANT)
 // ◱ Modo compacto: una línea por cliente. Se guarda entre sesiones.
 let modoCompacto = false;
+let temaClaro = false;
+function aplicarTema() {
+    document.body.classList.toggle('claro', temaClaro);
+    const b = document.getElementById('btnTema');
+    if (b) { b.textContent = temaClaro ? '☀️' : '🌙'; b.setAttribute('aria-pressed', temaClaro ? 'true' : 'false'); b.title = temaClaro ? 'Tema claro activo · tocá para oscuro' : 'Cambiar a tema claro'; }
+}
 function aplicarModoCompacto() {
     document.body.classList.toggle('compacto', modoCompacto);
     const b = document.getElementById('btnCompacto');
@@ -350,6 +356,12 @@ pintarUltimoAcuse();
 chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.sc_anexo_ultimo) pintarUltimoAcuse(); });
 
 chrome.storage.local.get(['sc_popup_compacto'], (st) => { modoCompacto = !!(st && st.sc_popup_compacto); aplicarModoCompacto(); });
+chrome.storage.local.get(['sc_popup_tema'], (st) => { temaClaro = !!(st && st.sc_popup_tema === 'claro'); aplicarTema(); });
+document.getElementById('btnTema')?.addEventListener('click', () => {
+    temaClaro = !temaClaro;
+    aplicarTema();
+    try { chrome.storage.local.set({ sc_popup_tema: temaClaro ? 'claro' : 'oscuro' }); } catch (e) {}
+});
 document.getElementById('btnCompacto')?.addEventListener('click', () => {
     modoCompacto = !modoCompacto;
     aplicarModoCompacto();

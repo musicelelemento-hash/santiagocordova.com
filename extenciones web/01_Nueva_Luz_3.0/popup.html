@@ -845,6 +845,44 @@ body.compacto #btnCompacto{ color: #e6d3ab; border-color: rgba(201,169,110,.45);
 /* Filas de ATS pendientes */
 #atsPendLista > *{ border-radius: 9px; transition: background .15s, transform .15s; }
 #atsPendLista > *:hover{ background: rgba(201,169,110,.06); transform: translateX(1px); }
+
+/* ── Tema claro "Glass Light" ─────────────────────────────────────────── */
+body.claro{
+  --bg-deep:#eef2f7; --bg-surface:#ffffff;
+  --text-main:#0f172a; --text-dim:#475569; --tenue:#64748b;
+  --border:rgba(15,23,42,.10); --border-highlight:rgba(15,23,42,.18);
+  --primary:#00806f; --primary-glow:rgba(0,128,111,.15);
+  background: radial-gradient(120% 90% at 50% -10%, #ffffff 0%, #eef2f7 55%, #e3e9f2 100%) !important;
+  color: var(--text-main);
+}
+body.claro header.top{ background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(238,242,247,.80)); }
+body.claro .client-card, body.claro .tools{ background: transparent; }
+body.claro .client-card:hover{ background: rgba(15,23,42,.03); }
+body.claro .cc-name, body.claro .client-name, body.claro .tools-head{ color:#0f172a; }
+body.claro .cc-badge{ color:#0f172a; }
+body.claro .menu{ background:#ffffff; border-color:rgba(15,23,42,.12); }
+body.claro .menu-item{ color:#0f172a; }
+body.claro .menu-item:hover{ background:rgba(15,23,42,.05); }
+body.claro .pie{ background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(238,242,247,.95)); }
+body.claro .lote{ background: rgba(255,255,255,.65); border-color:rgba(15,23,42,.10); }
+body.claro #sesionSri{ background: linear-gradient(90deg, rgba(176,141,87,.10), rgba(176,141,87,.03)) !important; }
+body.claro #sesionSri b{ color:#0f172a !important; }
+body.claro #sesionSri span{ color:#475569 !important; }
+body.claro #atsPendientes{ background: linear-gradient(180deg, rgba(176,141,87,.10), rgba(176,141,87,.03)) !important; }
+body.claro .mes-linea{ background: rgba(255,255,255,.6); }
+body.claro .mes-linea span{ color:#475569; }
+body.claro .lote-progreso{ background: rgba(0,128,111,.06); }
+body.claro .lp-linea span:first-child{ color:#00695c; }
+body.claro .onboarding{ background: linear-gradient(180deg, rgba(176,141,87,.10), rgba(176,141,87,.02)); }
+body.claro .onboarding li, body.claro .onboarding .ob-pie{ color:#475569; }
+body.claro .acuse-chip{ color:#7a5c2e; background:rgba(176,141,87,.12); }
+body.claro .btn-start{ color:#00695c; background:rgba(0,168,150,.12); border-color:rgba(0,168,150,.35); }
+body.claro .btn-ojo{ color:#475569; }
+body.claro .btn-run{ color:#ffffff !important; }
+body.claro .uno{ color:#0f172a; }
+body.claro input, body.claro select, body.claro textarea{ background:#ffffff; color:#0f172a; border-color:rgba(15,23,42,.18); }
+body.claro #onboarding .ob-head{ color:#7a5c2e; }
+body.claro .build-chip{ color:#475569; }
 </style>
 </head>
 <body>
@@ -858,6 +896,7 @@ body.compacto #btnCompacto{ color: #e6d3ab; border-color: rgba(201,169,110,.45);
             </div>
         </div>
         <button id="btnMenu" class="icon-btn" aria-label="Más acciones" aria-expanded="false" title="Más acciones: nube, claves, lote continuo, ajustes">⋯</button>
+        <button id="btnTema" class="icon-btn" aria-label="Cambiar tema" title="Cambiar tema: oscuro / claro">🌙</button>
         <button id="btnCompacto" class="icon-btn" aria-pressed="false" aria-label="Modo compacto" title="Modo compacto: una línea por cliente (para carteras grandes)">▤</button>
 <span id="buildChip" class="build-chip" title="Versión instalada de la extensión">v—</span>
 <button id="btnMostrarHud" class="icon-btn" aria-label="Mostrar barra flotante en el SRI" title="Mostrar la barra flotante: despierta la extensión y la monta en la pestaña del SRI">🎛</button>
