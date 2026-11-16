@@ -280,14 +280,33 @@ function pintarMesLinea() {
     const per = document.getElementById('mesLineaPeriodo');
     const dat = document.getElementById('mesLineaDatos');
     if (!per || !dat) return;
+    // Si la web publicó el resumen de ESTE período, mandan sus números.
+    const claveLocal = `${currentYear}-${String(Number(currentMonth) + 1).padStart(2, '0')}`;
+    const remoto = mesLineaDatos.web;
+    let desdeWeb = false;
+    if (remoto && remoto.periodo === claveLocal) {
+        desdeWeb = true;
+        mesLineaDatos.pend = Number(remoto.pendientes) || 0;
+        mesLineaDatos.comp = Number(remoto.conComprobante) || 0;
+        mesLineaDatos.err = Number(remoto.errores) || 0;
+    }
     const partes = [];
     if (mesLineaDatos.pend) partes.push(mesLineaDatos.pend + ' sin declarar');
     if (mesLineaDatos.comp) partes.push(mesLineaDatos.comp + ' con comprobante');
     if (mesLineaDatos.err) partes.push(mesLineaDatos.err + ' con error');
     if (mesLineaDatos.ats) partes.push(mesLineaDatos.ats + ' ATS pendiente' + (mesLineaDatos.ats === 1 ? '' : 's'));
     per.textContent = mesLineaDatos.periodo || '—';
-    dat.textContent = partes.length ? partes.join(' · ') : 'todo al día';
+    dat.textContent = (partes.length ? partes.join(' · ') : 'todo al día') + (desdeWeb ? ' · web' : '');
 }
+
+// 📅 Resumen que publica la web (matriz) — se refresca cada vez que cambia.
+chrome.storage.local.get(['sc_estado_mes'], (st) => {
+    const r = st && st.sc_estado_mes;
+    if (r && r.periodo) { mesLineaDatos.web = r; pintarMesLinea(); }
+});
+chrome.storage.onChanged.addListener((c) => {
+    if (c.sc_estado_mes && c.sc_estado_mes.newValue) { mesLineaDatos.web = c.sc_estado_mes.newValue; pintarMesLinea(); }
+});
 
 renderSesionSri();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });

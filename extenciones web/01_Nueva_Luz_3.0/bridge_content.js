@@ -428,6 +428,14 @@ window.addEventListener("message", (event) => {
   const data = event.data;
 
   if (data && data.source === 'SC_PRO_DASHBOARD') {
+    if (data.type === 'SRI_ESTADO_MES' && data.data) {
+      // 📅 La web es la que sabe: sus números son los de la matriz.
+      chrome.storage.local.set({ sc_estado_mes: { ...data.data, recibido: Date.now() } }, () => {
+        console.log('📅 [BRIDGE] Resumen del mes recibido: ' + JSON.stringify(data.data));
+      });
+      return;
+    }
+
     if (data.type === 'SRI_FULL_MATRIX_DATA' && Array.isArray(data.data)) {
       processAndSaveClientsList(data.data.slice(0, MAX_CLIENTES_MATRIZ));
     }
