@@ -3747,6 +3747,81 @@ function scDiagnosticoLogin() {
     log.info('🔑 [DIAGNÓSTICO LOGIN] ' + JSON.stringify(diag).slice(0, 600));
     return diag;
 }
+/**
+ * Persistir el anexo subido: marca el ATS/APS/ADI como presentado.
+ *
+ * Antes el acuse quedaba solo en la extensión. La matriz y la web seguían sin
+ * saber nada, así que un ATS cargado seguía figurando pendiente. Esto escribe
+ * `sri_declaraciones` (lo que lee la web) y deja el acuse en el JSON del cliente.
+ */
+async function marcarAnexoEnLaNube(ruc, periodo, datos = {}) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13) return { ok: false, motivo: 'sin_ruc' };
+        const nombre = String(datos.nombre || '');
+        const tipoAnexo = /^APS|Anexo_APS/i.test(nombre) ? 'REBEFICS'
+            : /^ADI|Anexo_ADI/i.test(nombre) ? 'ADI'
+            : 'ATS';
+        const per = String(periodo || '').replace(/[^0-9-]/g, '');
+        if (!/^\d{4}-\d{2}$/.test(per)) return { ok: false, motivo: 'sin_periodo' };
+
+        const cfg = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG) ? SC_CONFIG : {};
+        const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
+        const key = cfg.SUPABASE_ANON_KEY || (cfg.SUPABASE_KEY) || '';
+        if (!url || !key) return { ok: false, motivo: 'sin_supabase' };
+
+        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
+        const filas = rc.ok ? await rc.json() : [];
+        const cliente = Array.isArray(filas) ? filas[0] : null;
+        if (!cliente) { log.warn('📎 [ANEXO] no encontré el cliente ' + limpio + ' en Supabase.'); return { ok: false, motivo: 'cliente_no_encontrado' }; }
+
+        const prueba = {
+            name: nombre,
+            type: 'xml',
+            metadata: {
+                anexo: tipoAnexo,
+                period: per,
+                acuse: datos.acuse || '',
+                mensaje: datos.mensaje || '',
+                subido: new Date().toISOString(),
+                origen: 'extension',
+            },
+        };
+        const body = {
+            client_id: cliente.id,
+            type: tipoAnexo,
+            period: per,
+            status: 'Enviada',
+            proof_file: prueba,
+            updated_at: new Date().toISOString(),
+        };
+        const ru = await fetch(`${url}/rest/v1/sri_declaraciones?on_conflict=client_id,type,period`, {
+            method: 'POST',
+            headers: { ...cab, Prefer: 'resolution=merge-duplicates' },
+            body: JSON.stringify(body),
+        });
+        log.info('📎 [ANEXO] ' + tipoAnexo + ' ' + per + ' marcado en la nube: HTTP ' + ru.status);
+
+        // Acuse también en el JSON del cliente (lo lee el panel).
+        try {
+            const tp = cliente.tax_profile || {};
+            const anexos = { ...(tp.anexos || {}) };
+            anexos[per] = { tipo: tipoAnexo, nombre, acuse: datos.acuse || '', mensaje: datos.mensaje || '', cuando: new Date().toISOString() };
+            await fetch(`${url}/rest/v1/clients?id=eq.${cliente.id}`, {
+                method: 'PATCH',
+                headers: cab,
+                body: JSON.stringify({ tax_profile: { ...tp, anexos } }),
+            });
+        } catch (e) { /* el JSON es complementario */ }
+
+        try { await SafeStorage.set({ sc_anexos_presentados: { ...(await SafeStorage.get(['sc_anexos_presentados'])).sc_anexos_presentados, [limpio + '|' + per]: { tipo: tipoAnexo, acuse: datos.acuse || '', cuando: Date.now() } } }); } catch (e) {}
+        return { ok: ru.ok || ru.status === 201 || ru.status === 204 };
+    } catch (e) {
+        log.warn('📎 [ANEXO] no se pudo marcar en la nube: ' + (e && e.message));
+        return { ok: false, motivo: 'error' };
+    }
+}
 async function executeLogin(ruc, password) {
   if (typeof SriCredentialVault !== 'undefined') {
     const check = await SriCredentialVault.canAttemptLogin(ruc, password);

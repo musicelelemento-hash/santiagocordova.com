@@ -202,13 +202,18 @@ document.getElementById('inputAnexoZip')?.addEventListener('change', (ev) => {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí Anexos → Envío y consulta del anexo y volvé a intentar.', false); return; }
             pintar("Subiendo " + file.name + "…", true);
-            chrome.tabs.sendMessage(tab.id, { action: "subirAnexoZip", data: { nombre: file.name, b64 } }, (resp) => {
+            // El RUC de la sesión va en el mensaje: con eso la extensión marca
+            // el anexo como presentado en Supabase.
+            chrome.storage.local.get(['pending_sri_autofill'], (stPend) => {
+                const rucActual = String((stPend && stPend.pending_sri_autofill && stPend.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
+            chrome.tabs.sendMessage(tab.id, { action: "subirAnexoZip", data: { nombre: file.name, b64, ruc: rucActual } }, (resp) => {
                 if (chrome.runtime.lastError || !resp) { pintar("Sin respuesta del portal: " + (chrome.runtime.lastError?.message || ""), false); return; }
                 const r = resp.resultado || {};
                 pintar((r.ok ? "✅ " : "⚠️ ") + (r.mensaje || resp.error || "") + (r.acuse ? "\nAcuse: " + r.acuse : ""), !!r.ok);
                 // 📌 Si el ATS quedó subido, se cierra el pendiente de esa sociedad.
                 if (r.ok) limpiarPendienteTrasSubida(file.name);
             });
+            }); // cierre del storage.get
         } catch (e) { pintar('Error: ' + e.message, false); }
     };
     lector.readAsDataURL(file);

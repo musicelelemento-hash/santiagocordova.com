@@ -6131,6 +6131,16 @@ async function subirAnexoDesdeZip(nombreArchivo, base64, opciones = {}) {
         cuando: Date.now(),
         url: location.href,
     };
+    // 📎 Marcar en la nube: la matriz y la web dejan de verlo pendiente.
+    try {
+        const stPend = await SafeStorage.get(['pending_sri_autofill', 'workflowPeriod']);
+        const rucAnexo = String((opciones && opciones.ruc) || (stPend.pending_sri_autofill && stPend.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
+        const mm = String(nombreArchivo || '').match(/(20\d{2})[-_](0[1-9]|1[0-2])/);
+        const periodoAnexo = mm ? (mm[1] + '-' + mm[2])
+            : (stPend.workflowPeriod && stPend.workflowPeriod.year ? (stPend.workflowPeriod.year + '-' + String(Number(stPend.workflowPeriod.monthIndex) + 1).padStart(2, '0')) : '');
+        if (rucAnexo && periodoAnexo) await marcarAnexoEnLaNube(rucAnexo, periodoAnexo, { nombre: nombreArchivo, acuse: resultado.acuse, mensaje: resultado.mensaje });
+    } catch (e) { /* marcar es complementario */ }
+
     try {
         await SafeStorage.set({ sc_anexo_ultimo: resultado });
         log.info('📤 [ANEXO] resultado guardado: ' + (exito ? 'OK' : 'con observaciones') + (acuse ? ' · acuse ' + acuse : ''));

@@ -4636,10 +4636,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         const d = request.data || {};
         if (typeof window !== "undefined" && typeof window.scSubirAnexoZip === "function") {
-          const r = await window.scSubirAnexoZip(d.nombre, d.b64, {});
+          const r = await window.scSubirAnexoZip(d.nombre, d.b64, { ruc: d.ruc });
           sendResponse({ ok: !!(r && r.ok), resultado: r });
         } else {
-          const r = await subirAnexoDesdeZip(d.nombre, d.b64, {});
+          const r = await subirAnexoDesdeZip(d.nombre, d.b64, { ruc: d.ruc });
           sendResponse({ ok: !!(r && r.ok), resultado: r });
         }
       } catch (e) { sendResponse({ ok: false, error: e.message }); }
