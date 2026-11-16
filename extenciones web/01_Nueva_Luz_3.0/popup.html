@@ -808,6 +808,34 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
 .acuse-chip{ font-family:'JetBrains Mono',monospace; font-size:9px; color:#e6d3ab;
   border:1px solid rgba(201,169,110,.35); background:rgba(201,169,110,.10);
   border-radius:8px; padding:2px 7px; white-space:nowrap; cursor:default; }
+
+/* ── Modo compacto: una línea por cliente ─────────────────────────────── */
+body.compacto .client-card{ padding: 6px 2px; gap: 4px; }
+body.compacto .cc-name{ font-size: .72rem; }
+body.compacto .cc-badge{ font-size: 8px; padding: 1px 5px; }
+body.compacto .cc-meta{ display: none; }
+body.compacto .cc-row{ display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+body.compacto .cc-row .client-password,
+body.compacto .cc-row .cc-seal{ display: none; }
+body.compacto .cc-actions{ display: flex; gap: 4px; margin-left: auto; }
+body.compacto .btn-start{ padding: 3px 7px; font-size: .6rem; }
+body.compacto .btn-start.btn-ojo{ padding: 3px 6px; font-size: 10px; }
+body.compacto .orden-meses{ display: none; }
+body.compacto .client-card-main{ gap: 8px; }
+body.compacto #btnCompacto{ color: #e6d3ab; border-color: rgba(201,169,110,.45); background: rgba(201,169,110,.10); }
+
+/* Bienvenida de 3 pasos */
+.onboarding{ margin: 10px 12px 0; padding: 10px 12px; border: 1px solid rgba(201,169,110,.30);
+  border-radius: 12px; background: linear-gradient(180deg, rgba(201,169,110,.10), rgba(201,169,110,.03)); }
+.ob-head{ display:flex; align-items:center; justify-content:space-between; font-size:11px; color:#e6d3ab; }
+.ob-x{ cursor:pointer; opacity:.7; font-size:14px; line-height:1; }
+.onboarding ol{ margin:8px 0 0; padding-left:16px; display:grid; gap:4px; }
+.onboarding li{ font-size:10px; color:var(--text-dim); line-height:1.45; }
+.onboarding .ob-pie{ margin:7px 0 0; font-size:9.5px; color:var(--tenue); }
+.ob-btn{ margin-top:8px; width:100%; padding:6px; border-radius:9px; border:1px solid rgba(201,169,110,.4);
+  background: rgba(201,169,110,.14); color:#e6d3ab; font-size:10px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.08em; cursor:pointer; }
+.ob-btn:hover{ background: rgba(201,169,110,.22); }
 </style>
 </head>
 <body>
@@ -821,6 +849,7 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
             </div>
         </div>
         <button id="btnMenu" class="icon-btn" aria-label="Más acciones" aria-expanded="false" title="Más acciones: nube, claves, lote continuo, ajustes">⋯</button>
+        <button id="btnCompacto" class="icon-btn" aria-pressed="false" aria-label="Modo compacto" title="Modo compacto: una línea por cliente (para carteras grandes)">▤</button>
 <span id="buildChip" class="build-chip" title="Versión instalada de la extensión">v—</span>
 <button id="btnMostrarHud" class="icon-btn" aria-label="Mostrar barra flotante en el SRI" title="Mostrar la barra flotante: despierta la extensión y la monta en la pestaña del SRI">🎛</button>
 
@@ -913,6 +942,18 @@ header.top{ position:sticky; top:0; z-index:50; backdrop-filter: blur(18px) satu
   <span style="font-size:10px; color:#94a3b8;">🪪 Sesión SRI:</span>
   <b id="sesionSriNombre" style="font-size:10px; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">—</b>
   <button id="btnCerrarSesionSri" title="Cerrar la sesión del SRI (purga completa)" style="margin-left:auto; border:1px solid rgba(248,113,113,.35); background:rgba(248,113,113,.10); color:#f87171; border-radius:8px; padding:3px 8px; font-size:9px; font-weight:800; text-transform:uppercase; cursor:pointer;">Cerrar</button>
+</div>
+
+<!-- 🚀 Bienvenida de 3 pasos (sólo la primera vez) -->
+<div id="onboarding" class="onboarding" style="display:none">
+  <div class="ob-head"><b>🚀 Empezá en 3 pasos</b><span id="obCerrar" class="ob-x">×</span></div>
+  <ol>
+    <li><b>Sincronizá</b> los clientes (menú ⋮ → Sincronizar nube).</li>
+    <li>Elegí el <b>mes</b> en el selector y revisá los KPIs.</li>
+    <li><b>▶ Ejecutar lote</b>: la extensión entra, declara y guarda el comprobante.</li>
+  </ol>
+  <p class="ob-pie">Para mirar un perfil sin declarar, usá <b>👁️</b> en la tarjeta del cliente.</p>
+  <button id="obEntendido" class="ob-btn">Entendido</button>
 </div>
 
 <!-- 📌 ATS pendientes: lo que ya se declaró y todavía falta subir -->

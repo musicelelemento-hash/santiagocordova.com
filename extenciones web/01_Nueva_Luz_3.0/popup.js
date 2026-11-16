@@ -18,6 +18,13 @@ let visiblePasswords = {}; // Mapa para recordar qué claves están visibles
 let flaggedErrors = {}; // Mapa de contribuyentes con error
 let listaBendita = null;   // null = Bendita inactiva · array de RUC = activa
 let syncBajasBloqueado = false; // true si Supabase rechazó leer is_deleted (falta el GRANT)
+// ◱ Modo compacto: una línea por cliente. Se guarda entre sesiones.
+let modoCompacto = false;
+function aplicarModoCompacto() {
+    document.body.classList.toggle('compacto', modoCompacto);
+    const b = document.getElementById('btnCompacto');
+    if (b) { b.setAttribute('aria-pressed', modoCompacto ? 'true' : 'false'); b.title = modoCompacto ? 'Modo compacto activo · tocá para volver' : 'Modo compacto: una línea por cliente (para carteras grandes)'; }
+}
 let syncUltimoTs = null;   // timestamp de la última sincronización exitosa
 let ordenMeses = {};       // 🗓️ RUC → Set de 'AAAA-MM' que se declaran en orden (popup)
 let ordenMesesAbierto = {}; // 🗓️ RUC → true si el acordeón de "Orden de meses" está expandido.
@@ -330,6 +337,31 @@ chrome.storage.local.get(['sc_loop'], (r) => pintarProgresoLote(r && r.sc_loop))
 chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.sc_loop) pintarProgresoLote(c.sc_loop.newValue); });
 pintarUltimoAcuse();
 chrome.storage.onChanged.addListener((c, area) => { if (area === 'local' && c.sc_anexo_ultimo) pintarUltimoAcuse(); });
+
+chrome.storage.local.get(['sc_popup_compacto'], (st) => { modoCompacto = !!(st && st.sc_popup_compacto); aplicarModoCompacto(); });
+document.getElementById('btnCompacto')?.addEventListener('click', () => {
+    modoCompacto = !modoCompacto;
+    aplicarModoCompacto();
+    try { chrome.storage.local.set({ sc_popup_compacto: modoCompacto }); } catch (e) {}
+    try { renderClients(); } catch (e) {}
+});
+
+// 🚀 Bienvenida de 3 pasos: sólo la primera vez.
+chrome.storage.local.get(['sc_popup_onboarding_visto'], (st) => {
+    const caja = document.getElementById('onboarding');
+    if (!caja) return;
+    caja.style.display = (st && st.sc_popup_onboarding_visto) ? 'none' : 'block';
+});
+document.getElementById('obEntendido')?.addEventListener('click', () => {
+    const caja = document.getElementById('onboarding');
+    if (caja) caja.style.display = 'none';
+    try { chrome.storage.local.set({ sc_popup_onboarding_visto: true }); } catch (e) {}
+});
+document.getElementById('obCerrar')?.addEventListener('click', () => {
+    const caja = document.getElementById('onboarding');
+    if (caja) caja.style.display = 'none';
+    try { chrome.storage.local.set({ sc_popup_onboarding_visto: true }); } catch (e) {}
+});
 
 renderSesionSri();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
