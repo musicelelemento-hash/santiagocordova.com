@@ -836,6 +836,15 @@ body.compacto #btnCompacto{ color: #e6d3ab; border-color: rgba(201,169,110,.45);
   background: rgba(201,169,110,.14); color:#e6d3ab; font-size:10px; font-weight:800; text-transform:uppercase;
   letter-spacing:.08em; cursor:pointer; }
 .ob-btn:hover{ background: rgba(201,169,110,.22); }
+
+/* Acento de autoridad en la línea del mes */
+.mes-linea{ position: relative; padding-left: 12px; }
+.mes-linea::before{ content:''; position:absolute; left:0; top:6px; bottom:6px; width:2px;
+  border-radius:2px; background: linear-gradient(180deg,#00A896,#C9A96E); opacity:.85; }
+.mes-linea:hover{ border-color: rgba(201,169,110,.30); }
+/* Filas de ATS pendientes */
+#atsPendLista > *{ border-radius: 9px; transition: background .15s, transform .15s; }
+#atsPendLista > *:hover{ background: rgba(201,169,110,.06); transform: translateX(1px); }
 </style>
 </head>
 <body>

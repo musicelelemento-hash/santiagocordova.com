@@ -314,6 +314,17 @@ function pintarMesLinea() {
         mesLineaDatos.pend = Number(remoto.pendientes) || 0;
         mesLineaDatos.comp = Number(remoto.conComprobante) || 0;
         mesLineaDatos.err = Number(remoto.errores) || 0;
+        // El ATS pendiente también lo calcula la web (sociedades con IVA
+        // declarado sin ATS): si viene, manda su número.
+        if (remoto.atsPendientes !== undefined && remoto.atsPendientes !== null) {
+            mesLineaDatos.ats = Number(remoto.atsPendientes) || 0;
+        }
+        const det = Array.isArray(remoto.atsDetalle) ? remoto.atsDetalle : [];
+        const listaAts = det.slice(0, 8).map((x) => (x.name || x.ruc) + ' · ' + x.periodo).join('\n');
+        if (listaAts) {
+            const datEl = document.getElementById('mesLineaDatos');
+            if (datEl) datEl.title = 'ATS pendientes (según la web):\n' + listaAts;
+        }
     }
     const partes = [];
     if (mesLineaDatos.pend) partes.push(mesLineaDatos.pend + ' sin declarar');
