@@ -41,7 +41,7 @@ const RAIZ = path.resolve(TOOLS, '..');
 const SUITE = path.join(RAIZ, 'suite');
 const SOLO_VERIFICAR = process.argv.includes('--check');
 
-const VERSION_SUITE = '4.3.5';
+const VERSION_SUITE = '4.4.0';
 const NOMBRE_SUITE = '🧰 [SC PRO SUITE] - IVA · Claves · Gastos · Anulador';
 
 const errores = [];

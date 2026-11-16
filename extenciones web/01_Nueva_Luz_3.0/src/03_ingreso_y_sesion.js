@@ -1119,7 +1119,24 @@ SafeStorage.get(null).then(async (items) => {
             return;
         }
 
-        log.debug('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
+        // 👁️ MODO SOLO MIRAR: si lo que se pidió fue entrar al perfil, la sesión
+    // activa NO debe plantar turbo_step1 ni declarar. Antes esto seguía y un
+    // "solo entrar" terminaba extrayendo comprobantes y armando el formulario.
+    if (items.pending_sri_autofill && (items.pending_sri_autofill.soloEstarAdentro === true
+        || String(items.pendingAction || '') === 'solo_perfil')) {
+        log.info('👁️ [SOLO MIRAR] sesión lista: no se extrae ni se declara. Quedamos en el perfil.');
+        try { await SafeStorage.set({ sc_loop: { estado: 'DETENIDO', cola: [], indice: 0, motivo: 'Solo mirar', latido: Date.now() } }); } catch (e) {}
+        if (typeof window !== 'undefined' && window.sriAssistant && window.sriAssistant.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '👁️ Solo mirar',
+                msg: 'Entraste al perfil. No se declara ni se extrae nada.',
+                duration: 6000,
+            });
+        }
+        return;
+    }
+
+    log.debug('🚀 Sesión activa detectada: Redirigiendo DIRECTO al Paso 1: Comprobantes Recibidos...');
         items.pendingAction = 'turbo_step1_facturas';
         const now = new Date();
         let cMonth = now.getMonth() - 1;
