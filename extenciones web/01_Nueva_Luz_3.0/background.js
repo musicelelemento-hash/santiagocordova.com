@@ -1,4 +1,8 @@
-importScripts('shared_config.js');
+// En el service worker carga la config; en una PÁGINA (tests/subidas.html)
+// `importScripts` no existe y reventaba la carga entera del módulo.
+if (typeof importScripts === 'function') {
+  try { importScripts('shared_config.js'); } catch (e) { /* sin config, se usa la global */ }
+}
 
 // ============================================================
 // SERVICE WORKER — Nueva Luz 3.0

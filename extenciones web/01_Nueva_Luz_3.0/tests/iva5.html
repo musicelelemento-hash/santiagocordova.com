@@ -514,10 +514,10 @@
   // actualizó el 04-nov-2026: el bundle que corría este banco estaba viejo y
   // todavía no lo tenía, así que el banco pasaba por desactualizado, no por sano.
   push('en la barra quedan los del lote',
-       barra, ['slh-play','slh-paso','slh-aqui','slh-omitidos','slh-omitir',
-               'slh-cerrar','slh-cajon-btn','slh-periodo','slh-stop']);
+     barra, ['slh-play','slh-mas','slh-stop']);
   push('el 🛑 sigue a la vista, que es el que importa',
        barra.includes('slh-stop'), true);
+push('y el ▶ también', barra.includes('slh-play'), true);
 
   const cajon = document.getElementById('slh-cajon');
   push('el cajón nace cerrado', cajon.style.display, 'none');
@@ -628,17 +628,23 @@
 
   // Pero si a ESE emisor ya se le vio un comprobante al 5%, el reparto cabe de
   // dos maneras, y eso no se resuelve adivinando.
-  rz = calcularResumen([mez(OBRERO)], { rucsAl5: new Set([OBRERO]) });
-  push('con un emisor que factura al 5%, ambigua', rz.ambiguas.length, 1);
-  push('y NO se reparte',                          rz.mezcladas.length, 0);
-  push('el motivo nombra las dos cuentas',
-       /12\.2 al 15%/.test(rz.ambiguas[0].motivo) && /36\.6 al 5%/.test(rz.ambiguas[0].motivo), true);
+rz = calcularResumen([mez(OBRERO)], { rucsAl5: new Set([OBRERO]) });
+// Decisión de producto: entre 15%+0% y 5%+0% el IVA acreditable es el mismo;
+// se resuelve al 5% (la tarifa conocida del emisor) y se marca para revisión
+// en vez de frenar el lote. El banco comprueba ESA conducta.
+push('con un emisor que factura al 5%, se resuelve al 5%', rz.al5.length, 1);
+push('y queda marcada para revisión',                    rz.al5[0].resueltaPorProveedor, true);
+push('sin ambigüedad que frene el envío',                rz.ambiguas.length, 0);
+push('y no se reparte como mezclada',                    rz.mezcladas.length, 0);
+push('la base va al balde del 540',                      rz.iva5.baseImponible, 36.6);
+push('con su IVA',                                       rz.iva5.montoIva, 1.83);
 
   // La lista es por RUC, no un interruptor global: el supermercado de la misma
   // corrida se sigue repartiendo bien.
   rz = calcularResumen([mez(MERCADO), mez(OBRERO)], { rucsAl5: new Set([OBRERO]) });
   push('cada emisor por su cuenta · repartidas',   rz.mezcladas.length, 1);
-  push('cada emisor por su cuenta · ambiguas',     rz.ambiguas.length, 1);
+push('cada emisor por su cuenta · resueltas al 5%', rz.al5.length, 1);
+push('cada emisor por su cuenta · ambiguas',     rz.ambiguas.length, 0);
 
   // Y cuando el reparto al 5% NO cabe, no hay ambigüedad aunque el emisor
   // facture al 5%: con IVA del 10% de la base, al 5% haría falta el doble de
