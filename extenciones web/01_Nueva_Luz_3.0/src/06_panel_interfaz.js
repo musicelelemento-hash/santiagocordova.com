@@ -3301,7 +3301,11 @@ class SriAssistantPanel {
             const info = this.extractClientInfo();
             const nameEl = this.container.querySelector('#sri-client-name');
             if (nameEl) {
-                nameEl.textContent = info.name || info.ruc || 'No detectado';
+                // «Sesión:» deja claro que es el contribuyente con el que está abierto
+            // el portal AHORA (no un resto de la lista ni del lote anterior).
+            nameEl.textContent = info.name ? ('Sesión: ' + info.name)
+                : (info.ruc ? ('Sesión: ' + info.ruc) : 'Sesión: sin detectar');
+            nameEl.title = info.highConfidence ? 'Contribuyente detectado en esta página' : 'Detección de baja confianza: revisar si la sesión es la correcta';
                 if (nameEl.textContent.length > 25) nameEl.style.fontSize = '8px';
             }
 
