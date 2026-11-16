@@ -819,6 +819,13 @@ escal e todo el popup (UI/UX Pro Max §6). */
         </div>
     </header>
 
+<!-- 🪪 Quién está logueado en el SRI ahora mismo -->
+<div id="sesionSri" style="display:none; margin:10px 12px 0; padding:7px 10px; border:1px solid rgba(148,163,184,.25); border-radius:12px; background:rgba(148,163,184,.06); display:flex; align-items:center; gap:8px;">
+  <span style="font-size:10px; color:#94a3b8;">🪪 Sesión SRI:</span>
+  <b id="sesionSriNombre" style="font-size:10px; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">—</b>
+  <button id="btnCerrarSesionSri" title="Cerrar la sesión del SRI (purga completa)" style="margin-left:auto; border:1px solid rgba(248,113,113,.35); background:rgba(248,113,113,.10); color:#f87171; border-radius:8px; padding:3px 8px; font-size:9px; font-weight:800; text-transform:uppercase; cursor:pointer;">Cerrar</button>
+</div>
+
 <!-- 📌 ATS pendientes: lo que ya se declaró y todavía falta subir -->
 <div id="atsPendientes" style="display:none; margin:10px 12px 0; padding:8px 10px; border:1px solid rgba(201,169,110,.35); border-radius:12px; background:rgba(201,169,110,.08);">
   <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">

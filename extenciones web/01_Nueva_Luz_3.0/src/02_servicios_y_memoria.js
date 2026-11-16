@@ -4617,6 +4617,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === 'cerrarSesionSRI') {
+    (async () => {
+      try {
+        if (typeof cerrarSesionSRI === 'function') { await cerrarSesionSRI(true); sendResponse({ ok: true }); }
+        else { try { chrome.runtime.sendMessage({ tipo: 'SC_LIMPIAR_SESION_SRI' }); } catch (e) {} sendResponse({ ok: true }); }
+        try { await SafeStorage.set({ sri_master_switch_on: false, sc_sesion_confirmada: null }); } catch (e) {}
+      } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    })();
+    return true;
+  }
+
   if (request.action === 'mapearAnexos') {
     (async () => {
       try {

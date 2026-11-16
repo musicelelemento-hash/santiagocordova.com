@@ -242,6 +242,36 @@ function limpiarPendienteTrasSubida(nombreArchivo) {
     } catch (e) { /* limpiar es cosmético: no rompe la subida */ }
 }
 
+// 🪪 Quién está logueado en el SRI (para no confundir clientes).
+function renderSesionSri() {
+    const caja = document.getElementById('sesionSri');
+    const nombreEl = document.getElementById('sesionSriNombre');
+    if (!caja || !nombreEl) return;
+    chrome.storage.local.get(['sc_sesion_confirmada', 'sri_ultimo_cliente', 'pending_sri_autofill', 'sc_clients_cache'], (st) => {
+        const ses = st.sc_sesion_confirmada || st.sri_ultimo_cliente || st.pending_sri_autofill || {};
+        const ruc = String(ses.ruc || '');
+        if (!ruc) { caja.style.display = 'none'; return; }
+        const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+        const c = cache.find((x) => x && String(x.ruc) === ruc);
+        nombreEl.textContent = ((c && (c.name || c.nombre)) || ses.name || ruc) + ' · ' + ruc;
+        caja.style.display = 'flex';
+    });
+}
+document.getElementById('btnCerrarSesionSri')?.addEventListener('click', async () => {
+    const estado = document.getElementById('anexosEstado');
+    const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí una pestaña del SRI para cerrar esa sesión.', false); return; }
+        chrome.tabs.sendMessage(tab.id, { action: "cerrarSesionSRI" }, (resp) => {
+            pintar((resp && resp.ok) ? '🪪 Sesión cerrada (purga completa).' : 'No se pudo cerrar la sesión.', !!(resp && resp.ok));
+        });
+    } catch (e) { pintar("Error: " + e.message, false); }
+});
+
+renderSesionSri();
+chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
+
 function renderAtsPendientes() {
     const caja = document.getElementById('atsPendientes');
     const lista = document.getElementById('atsPendLista');
@@ -273,7 +303,22 @@ document.addEventListener('click', (ev) => {
     const abrir = ev.target.closest && ev.target.closest('[data-ats-abrir]');
     if (abrir) {
         ev.stopPropagation();
-        chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=IVA&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=&actualMPT=' + encodeURIComponent('Anexo Transaccional Simplificado') });
+        const ruc = abrir.getAttribute('data-ats-abrir');
+        chrome.storage.local.get(['sc_clients_cache'], (st) => {
+            const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+            const c = cache.find((x) => x && String(x.ruc) === String(ruc));
+            const url = 'https://srienlinea.sri.gob.ec/rig/pages/menuInicial.xhtml?codOperativo=IVA&contextoMPT=https://srienlinea.sri.gob.ec/tuportal-internet&pathMPT=&actualMPT=' + encodeURIComponent('Anexo Transaccional Simplificado');
+            const claveCli = c && (c.password || c.sriPassword);
+            if (c && claveCli) {
+                chrome.storage.local.set({
+                    pending_sri_autofill: { ruc: String(ruc), password: claveCli, name: c.name || c.nombre || '', timestamp: Date.now(), manual: true, isBatch: false, soloEstarAdentro: true },
+                    pendingAction: 'solo_perfil', autoDeclaration: false, sri_auto_mode: false,
+                    sri_master_switch_on: true, sriAutomationPaused: false, actionTimestamp: Date.now(),
+                }, () => { chrome.tabs.create({ url }); window.close(); });
+            } else {
+                chrome.tabs.create({ url }); window.close();
+            }
+        });
         return;
     }
     const listo = ev.target.closest && ev.target.closest('[data-ats-listo]');
