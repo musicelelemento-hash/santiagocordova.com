@@ -269,6 +269,11 @@ document.getElementById('btnCerrarSesionSri')?.addEventListener('click', async (
     } catch (e) { pintar("Error: " + e.message, false); }
 });
 
+try {
+    const chip = document.getElementById('buildChip');
+    if (chip) chip.textContent = 'v' + chrome.runtime.getManifest().version;
+} catch (e) { /* sin chip no pasa nada */ }
+
 renderSesionSri();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
 
