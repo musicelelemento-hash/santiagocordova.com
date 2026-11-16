@@ -1,3 +1,5 @@
+importScripts('shared_config.js');
+
 // ============================================================
 // SERVICE WORKER — Nueva Luz 3.0
 // ============================================================
@@ -537,3 +539,116 @@ chrome.runtime.onMessage.addListener((msg, sender, responder) => {
 });
 
 console.log("⚙️ [SW] Nueva Luz 3.0 — service worker listo (subidas sin CORS).");
+
+// ═══════════════════════════════════════════════════════════════════
+// 🖥️ RUNNER REMOTO
+//
+// La web (celular) encola un trabajo en Supabase (`bucle_remoto`).
+// Este equipo, con la extensión y el dashboard abierto, lo ejecuta:
+// consulta cada 30 s, arranca la misma cola del bucle y reporta avance.
+// Es opcional: si `sc_runner.enabled` está apagado, no hace nada.
+// ═══════════════════════════════════════════════════════════════════
+const SC_RUNNER_ALARMA = 'sc_runner_poll';
+const SC_RUNNER_TABLA = 'bucle_remoto';
+
+function scRunnerBase() {
+  return (typeof SC_CONFIG !== 'undefined' && SC_CONFIG.SUPABASE_URL) || '';
+}
+
+function scRunnerHeaders(token) {
+  const key = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG.SUPABASE_ANON_KEY) || '';
+  return { apikey: key, Authorization: 'Bearer ' + (token || key), 'Content-Type': 'application/json' };
+}
+
+async function scRunnerApi(path, opciones = {}) {
+  const base = scRunnerBase();
+  if (!base) throw new Error('sin Supabase configurado');
+  const st = await chrome.storage.local.get(['sc_supabase_token']);
+  const res = await fetch(`${base}/rest/v1/${path}`, {
+    ...opciones, headers: { ...scRunnerHeaders(st.sc_supabase_token), ...(opciones.headers || {}) },
+  });
+  const texto = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${texto.slice(0, 200)}`);
+  return texto ? JSON.parse(texto) : null;
+}
+
+async function scRunnerPoll() {
+  try {
+    const st = await chrome.storage.local.get(['sc_runner', 'sc_runner_job', 'sc_loop', 'sc_clients_cache']);
+    const cfg = st.sc_runner || {};
+    if (!cfg.enabled || !cfg.id) return;
+
+    // 1) Trabajo en curso: reportar avance y cerrar cuando el bucle para.
+    const enCurso = st.sc_runner_job;
+    if (enCurso && enCurso.estado === 'corriendo') {
+      const loop = st.sc_loop || {};
+      const cola = Array.isArray(loop.cola) ? loop.cola : [];
+      const hecho = Number(loop.indice) || 0;
+      const total = cola.length || enCurso.total || 0;
+      const termino = loop.estado === 'DETENIDO';
+      const cuerpo = {
+        progreso: { hecho, total, actual: (cola[hecho] && cola[hecho].name) || '', mensaje: loop.motivo || '' },
+        ...(termino ? { estado: 'hecho', finished_at: new Date().toISOString(), mensaje: loop.motivo || 'Terminado' } : {}),
+      };
+      await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(enCurso.id)}`, { method: 'PATCH', body: JSON.stringify(cuerpo) });
+      if (termino) {
+        await chrome.storage.local.remove(['sc_runner_job']);
+        console.log('[RUNNER] trabajo terminado: ' + enCurso.id);
+      }
+      return;
+    }
+
+    // 2) Buscar un trabajo pendiente asignado a este runner.
+    const filas = await scRunnerApi(`${SC_RUNNER_TABLA}?estado=eq.pendiente&runner_id=eq.${encodeURIComponent(cfg.id)}&select=*&order=created_at.asc&limit=1`);
+    const job = Array.isArray(filas) ? filas[0] : null;
+    if (!job) return;
+
+    // 3) Credenciales: se usan las que ya sincronizó el dashboard en este equipo.
+    const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+    const conClave = [];
+    const sinClave = [];
+    for (const c of (job.clientes || [])) {
+      const ruc = String(c.ruc || '').replace(/\D/g, '');
+      const hit = cache.find((x) => String(x.ruc) === ruc);
+      const pass = hit && (hit.password || hit.sriPassword || hit.sri_password);
+      if (pass) conClave.push({ ruc, name: (hit.name || c.name || ''), password: pass });
+      else sinClave.push(ruc);
+    }
+    if (!conClave.length) {
+      await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(job.id)}`, { method: 'PATCH', body: JSON.stringify({ estado: 'error', mensaje: 'Sin claves en el runner: abrí el dashboard en esta PC para sincronizarlas.', finished_at: new Date().toISOString() }) });
+      return;
+    }
+
+    // 4) Armar la misma cola que "Ejecutar lote" del popup.
+    const per = String(job.periodo || '');
+    const [yy, mm] = per.split('-').map(Number);
+    const primero = conClave[0];
+    await chrome.storage.local.set({
+      sc_runner_job: { ...job, estado: 'corriendo', total: conClave.length, sinClave },
+      sc_loop: { estado: 'CORRIENDO', cola: conClave, indice: 0, periodo: per, latido: Date.now(), motivo: 'Bucle remoto' },
+      pending_sri_autofill: { ruc: primero.ruc, password: primero.password, name: primero.name, timestamp: Date.now(), manual: true, isBatch: true, soloEstarAdentro: false, vieneDeRunner: true },
+      pendingAction: 'verifyProfile', actionTimestamp: Date.now(),
+      auto_batch_enabled: true, auto_batch_queue: conClave, auto_batch_index: 0, auto_batch_period: per,
+      sri_target_period: per, workflowPeriod: { year: yy, monthIndex: mm - 1 },
+      autoDeclaration: job.modo !== 'solo_perfil', sri_auto_mode: true, sri_master_switch_on: true, sriAutomationPaused: false,
+    });
+    await scRunnerApi(`${SC_RUNNER_TABLA}?id=eq.${encodeURIComponent(job.id)}`, { method: 'PATCH', body: JSON.stringify({ estado: 'corriendo', started_at: new Date().toISOString(), runner_id: cfg.id, progreso: { hecho: 0, total: conClave.length } }) });
+    console.log('[RUNNER] arrancando trabajo ' + job.id + ' (' + conClave.length + ' clientes)');
+    chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/sri-en-linea/inicio/NAT' });
+  } catch (e) {
+    console.warn('[RUNNER] ' + (e && e.message));
+  }
+}
+
+try {
+  chrome.alarms.create(SC_RUNNER_ALARMA, { periodInMinutes: 0.5 });
+  chrome.alarms.onAlarm.addListener((a) => { if (a.name === SC_RUNNER_ALARMA) scRunnerPoll(); });
+  if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(() => scRunnerPoll());
+  scRunnerPoll();
+} catch (e) { /* sin alarms no corre el runner, el resto sigue igual */ }
+
+// Estado del runner para el popup:
+async function scRunnerEstadoParaPopup() {
+  const st = await chrome.storage.local.get(['sc_runner', 'sc_runner_job']);
+  return { cfg: st.sc_runner || {}, job: st.sc_runner_job || null };
+}

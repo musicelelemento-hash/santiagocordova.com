@@ -178,6 +178,32 @@ document.getElementById('btnVentas104')?.addEventListener('click', async () => {
     } catch (e) { pintar("Error: " + e.message, false); }
 });
 
+// 🖥️ Runner remoto: este equipo ejecuta los trabajos encolados desde la web.
+function pintarRunnerRemoto() {
+    chrome.storage.local.get(['sc_runner', 'sc_runner_job'], (st) => {
+        const el = document.getElementById('runnerEstado');
+        if (!el) return;
+        const cfg = st.sc_runner || {};
+        const job = st.sc_runner_job || null;
+        el.textContent = cfg.enabled ? (job ? 'corriendo…' : 'ACTIVO') : 'desactivado';
+        el.style.color = cfg.enabled ? (job ? "#fbbf24" : "#34d399") : "#94a3b8";
+    });
+}
+document.getElementById('btnRunnerRemoto')?.addEventListener('click', () => {
+    chrome.storage.local.get(['sc_runner'], (st) => {
+        const r = st.sc_runner || {};
+        const activar = !r.enabled;
+        const id = r.id || ('pc-' + Math.random().toString(36).slice(2, 10));
+        const nombre = r.nombre || ((navigator.platform || 'PC') + ' · Chrome');
+        chrome.storage.local.set({ sc_runner: { enabled: activar, id, nombre } }, () => {
+            showToast(activar ? '🖥️ Runner ACTIVO: este equipo ejecutará los trabajos de la web.' : '🖥️ Runner desactivado.');
+            pintarRunnerRemoto();
+        });
+    });
+});
+pintarRunnerRemoto();
+chrome.storage.onChanged.addListener((c) => { if (c.sc_runner || c.sc_runner_job) pintarRunnerRemoto(); });
+
 document.getElementById('btnDiagLogin')?.addEventListener('click', async () => {
     const estado = document.getElementById('anexosEstado');
     const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
