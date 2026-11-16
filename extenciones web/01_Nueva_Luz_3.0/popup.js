@@ -146,6 +146,26 @@ function bindEvents() {
     };
     // 🎛 Mostrar la barra flotante en el SRI: la despierta y la monta en la pestaña activa.
 // 🧭 Mapear la pantalla de Anexos (sin depender de la barra flotante).
+// 🔑 Diagnóstico de login: copia la foto de la pantalla del SRI.
+document.getElementById('btnDiagLogin')?.addEventListener('click', async () => {
+    const estado = document.getElementById('anexosEstado');
+    const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab || !/sri\.gob\.ec/.test(tab.url || '')) { pintar('Abrí la pantalla de login del SRI y volvé a intentar.', false); return; }
+        chrome.tabs.sendMessage(tab.id, { action: "diagnosticoLogin" }, async (resp) => {
+            if (chrome.runtime.lastError || !resp || !resp.ok) {
+                pintar('Sin respuesta: ' + (chrome.runtime.lastError?.message || resp?.error || ''), false);
+                return;
+            }
+            const d = resp.diagnostico || {};
+            const texto = JSON.stringify(d, null, 2);
+            try { await navigator.clipboard.writeText(texto); pintar("🔑 Diagnóstico copiado\n" + (d.url || "") + "\nCampos: " + (d.campos ? "sí" : "no") + " · Error: " + (d.errorVisible || "ninguno"), true); }
+            catch (e) { pintar("Diagnóstico listo (no se pudo copiar)\n" + (d.url || ""), true); }
+        });
+    } catch (e) { pintar('Error: ' + e.message, false); }
+});
+
 document.getElementById('btnMapearAnexos')?.addEventListener('click', async () => {
     const estado = document.getElementById('anexosEstado');
     const pintar = (txt, ok) => { if (estado) { estado.style.display = "block"; estado.style.color = ok ? "#34d399" : "#f87171"; estado.textContent = txt; } };

@@ -4607,7 +4607,17 @@ async function limpiarAtsPendiente(ruc, periodo) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     log.debug('📨 Mensaje recibido en Content:', request.action);
 
-    if (request.action === 'mapearAnexos') {
+    if (request.action === 'diagnosticoLogin') {
+    try {
+      const d = (typeof window !== "undefined" && typeof window.scDiagnosticoLogin === "function")
+        ? window.scDiagnosticoLogin()
+        : { error: "diagnóstico no disponible en esta página", url: location.href };
+      sendResponse({ ok: true, diagnostico: d });
+    } catch (e) { sendResponse({ ok: false, error: e.message }); }
+    return true;
+  }
+
+  if (request.action === 'mapearAnexos') {
     (async () => {
       try {
         const mapa = (typeof window !== "undefined" && typeof window.scMapearAnexos === "function")

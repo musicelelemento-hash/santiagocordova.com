@@ -2925,6 +2925,7 @@ function initLoginCockpitWatcher() {
                     log.debug('🔄 [SRI ELITE] Sincronización en tiempo real: Clientes actualizados desde la web.');
                     if (isSRILoginPage()) {
                         SafeStorage.get(null).then(items => {
+                            if (items && items.sc_login_en_curso === true) return; // login en curso: no repintar
                             renderLoginCockpit(items);
                             // Sólo refresca el panel de pendientes si el usuario YA lo
                             // abrió con el ▾ de la isla — nunca lo crea de la nada acá.

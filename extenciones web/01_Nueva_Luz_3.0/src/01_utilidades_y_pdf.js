@@ -3569,8 +3569,43 @@ function _sriClasificarError(txt) {
     return 'desconocido';
 }
 
+/**
+ * Las sociedades a veces caen en una pantalla de «seleccione perfil /
+ * establecimiento» después del login. Sin elegir, el portal no avanza y
+ * parece que la clave no funcionó.
+ */
+function _sriPantallaSeleccionPerfil() {
+    try {
+        const txt = String((document.body && document.body.innerText) || '').slice(0, 5000);
+        if (!/seleccione\s+(perfil|establecimiento|empresa|contribuyente|sucursal)/i.test(txt)) return false;
+        const sel = document.querySelector('select');
+        if (sel && sel.options && sel.options.length > 1) {
+            sel.selectedIndex = 1;
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            log.info('🔑 [LOGIN SRI] perfil seleccionado: ' + sel.options[sel.selectedIndex].text);
+        }
+        const btn = Array.from(document.querySelectorAll('button, input[type=submit], a')).find((b) =>
+            /aceptar|continuar|ingresar|seleccionar/i.test((b.innerText || b.value || '').trim()));
+        if (btn) {
+            log.info('🔑 [LOGIN SRI] aceptando la pantalla de selección de perfil…');
+            if (typeof clickElement === 'function') clickElement(btn, 'Seleccionar perfil'); else btn.click();
+        }
+        return true;
+    } catch (e) { return false; }
+}
+
 async function loginSRI(ruc, password, opciones = {}) {
-    const intentos = opciones.intentos || 2;
+    const intentos = opciones.intentos || 1; // una pasada limpia; reintentar sólo si el form no aparece
+    // 🧊 Anti-bucle: si el mismo RUC se intentó hace < 15 s, no se repite solo.
+    try {
+        const ult = await SafeStorage.get(['sc_login_ultimo']);
+        const prev = ult.sc_login_ultimo || {};
+        if (prev.ruc === ruc && Date.now() - (prev.cuando || 0) < 15000) {
+            log.warn('🔑 [LOGIN SRI] ya se intentó con ' + ruc + ' hace instantes; no se repite.');
+            return { ok: false, motivo: 'repetido' };
+        }
+        await SafeStorage.set({ sc_login_ultimo: { ruc, cuando: Date.now() }, sc_login_en_curso: true });
+    } catch (e) {}
     const avisar = (titulo, msg, dur) => {
         try {
             if (window.sriAssistant && typeof window.sriAssistant.showEliteToast === 'function') {
@@ -3586,6 +3621,7 @@ async function loginSRI(ruc, password, opciones = {}) {
 
     if (!_sriEnLogin()) {
         log.info('🔑 [LOGIN SRI] fuera del formulario: abriendo el SSO…');
+        try { await SafeStorage.set({ sc_login_estado: { ruc, estado: 'redirigiendo', cuando: Date.now() } }); } catch (e) {}
         await SafeStorage.set({
             pending_sri_autofill: { ruc, password, manual: true, timestamp: Date.now() },
         });
@@ -3601,7 +3637,7 @@ async function loginSRI(ruc, password, opciones = {}) {
     }
 
     for (let intento = 1; intento <= intentos; intento++) {
-        const listo = await _sriEsperar(() => !!(_sriPrimero(SRI_LOGIN.usuario) && _sriPrimero(SRI_LOGIN.clave)), 10000);
+        const listo = await _sriEsperar(() => !!(_sriPrimero(SRI_LOGIN.usuario) && _sriPrimero(SRI_LOGIN.clave)), 6000);
         if (!listo) {
             log.warn('🔑 [LOGIN SRI] intento ' + intento + ': el formulario no aparece (' + location.pathname + ').');
             await sleep(1200);
@@ -3623,25 +3659,60 @@ async function loginSRI(ruc, password, opciones = {}) {
             if (_sriYaAdentro()) return true;
             if (_sriTextoError()) return true;
             if (typeof esPantallaCambioClave === 'function' && esPantallaCambioClave()) return true;
+            // Sociedades: pantalla de selección de perfil/establecimiento.
+            if (_sriPantallaSeleccionPerfil()) return false;
             return false;
-        }, 15000);
+        }, 10000);
 
         if (_sriYaAdentro()) {
             log.info('✅ [LOGIN SRI] sesión iniciada con ' + ruc);
-            avisar('✅ Sesión SRI', 'Entraste con ' + ruc, 5000);
+            try { await SafeStorage.set({ sc_login_en_curso: false, sc_login_estado: { ruc, estado: 'ok', cuando: Date.now() } }); } catch (e) {}
+            // Un solo aviso, al final: nada de parpadeos durante el proceso.
             return { ok: true };
         }
         const errorTxt = _sriTextoError();
         if (errorTxt) {
             const motivo = _sriClasificarError(errorTxt);
             log.warn('🔑 [LOGIN SRI] rechazo (' + motivo + '): ' + errorTxt);
+            try { await SafeStorage.set({ sc_login_en_curso: false, sc_login_estado: { ruc, estado: motivo, mensaje: errorTxt, cuando: Date.now() } }); } catch (e) {}
             return { ok: false, motivo: motivo, mensaje: errorTxt };
         }
         if (!resultado) log.warn('🔑 [LOGIN SRI] sin respuesta del portal tras el envío.');
     }
 
     log.warn('🔑 [LOGIN SRI] no se pudo entrar con ' + ruc);
+    try { await SafeStorage.set({ sc_login_en_curso: false, sc_login_estado: { ruc, estado: 'timeout', cuando: Date.now() } }); } catch (e) {}
     return { ok: false, motivo: 'timeout' };
+}
+/**
+ * DIAGNÓSTICO DE LOGIN — una foto de la pantalla para saber por qué no entra.
+ * Se pide desde el popup (🔑 Diagnóstico login) y copia el JSON.
+ */
+function scDiagnosticoLogin() {
+    const campos = (typeof encontrarCamposLogin === 'function') ? encontrarCamposLogin() : null;
+    const diag = {
+        url: location.href,
+        titulo: document.title,
+        enLogin: _sriEnLogin(),
+        yaAdentro: _sriYaAdentro(),
+        cambioClave: (typeof esPantallaCambioClave === 'function') && esPantallaCambioClave(),
+        errorVisible: _sriTextoError(),
+        campos: campos ? {
+            ruc: (campos.ruc && (campos.ruc.id || campos.ruc.name || campos.ruc.type)) || '',
+            clave: (campos.pass && (campos.pass.id || campos.pass.name)) || '',
+            boton: (campos.btn && (campos.btn.id || (campos.btn.innerText || campos.btn.value || '').trim().slice(0, 40))) || '',
+        } : null,
+        inputs: Array.from(document.querySelectorAll('input')).slice(0, 25).map((i) => ({
+            id: i.id || '', name: i.name || '', type: i.type || '', visible: !!i.offsetParent,
+        })),
+        botones: Array.from(document.querySelectorAll('button, input[type=submit], a[role=button]'))
+            .map((b) => ({ id: b.id || '', texto: (b.innerText || b.value || '').trim().slice(0, 40) }))
+            .filter((b) => b.id || b.texto)
+            .slice(0, 25),
+        cuando: new Date().toISOString(),
+    };
+    log.info('🔑 [DIAGNÓSTICO LOGIN] ' + JSON.stringify(diag).slice(0, 600));
+    return diag;
 }
 async function executeLogin(ruc, password) {
   if (typeof SriCredentialVault !== 'undefined') {
@@ -4576,3 +4647,7 @@ async function renderAnticipationWidget(items) {
 // ============================================================
 // SAFE STORAGE WRAPPER (Indestructible v10.5)
 // ============================================================
+
+if (typeof window !== "undefined") {
+    window.scDiagnosticoLogin = scDiagnosticoLogin;
+}
