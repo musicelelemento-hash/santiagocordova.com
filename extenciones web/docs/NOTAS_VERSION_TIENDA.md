@@ -11,11 +11,11 @@ Salida en `extenciones web/entregables/` (ignorada por git):
 
 | Paquete | Archivo | Contenido |
 |---|---|---|
-| 01 | `SC-PRO-01-NuevaLuz-v3.3.0.zip` | 40 archivos · ~2 MB |
+| 01 | `SC-PRO-01-NuevaLuz-v3.5.1.zip` | 40 archivos · ~2 MB |
 | 02 | `SC-PRO-02-ClavesSRI-v1.1.0.zip` | 6 archivos · ~11 KB |
 | 03 | `SC-PRO-03-GastosPersonales-v1.2.0.zip` | 6 archivos · ~62 KB |
 | 04 | `SC-PRO-04-Anulador-v2.5.0.zip` | 11 archivos · ~987 KB |
-| SUITE | `SC-PRO-SUITE-v4.3.0.zip` | 27 archivos · ~2,6 MB |
+| SUITE | `SC-PRO-SUITE-v4.5.1.zip` | 27 archivos · ~2,6 MB |
 
 Cada paquete incluye solo lo que carga la extensión en runtime:
 `manifest.json`, `build/`, `popup`, `options`, `background.js`, `bridge_content.js`,
@@ -28,6 +28,39 @@ Cada paquete incluye solo lo que carga la extensión en runtime:
 ---
 
 ## Novedades de esta versión
+
+### 01 · Nueva Luz `v3.5.0 → v3.5.1` (tema claro + SCVS + pulido final)
+
+**Interfaz (Obsidian & Liquid Gold + Glass Light)**
+- **Tema claro** con botón 🌙/☀️ en el encabezado; se guarda entre sesiones (`sc_popup_tema`).
+- **Modo compacto** ▤: una línea por cliente para carteras grandes.
+- **Bienvenida de 3 pasos** la primera vez (se oculta sola).
+- Botón **👁️ Solo entrar** por cliente: entra al perfil y **no declara**.
+- **Línea del mes**: `OCT 2026 · 12 sin declarar · 38 con comprobante · 2 ATS · web`.
+- **Progreso del lote en vivo** con ETA y chip del **último acuse** en el pie.
+- Fuente **Inter** para texto (Manrope para títulos, JetBrains Mono para cifras).
+
+**Funcionalidad**
+- **ATS pendientes oficiales**: la web publica el resumen del mes (declaraciones + `proof_file`) y el popup usa esos números, no su caché.
+- **Ventas del 104 sin declarar**: captura casilleros 401/411/413/419/421… y las guarda en `tax_profile.ventasPorPeriodo` (aunque la cuenta esté bloqueada).
+- **Anexo subido** se marca en `sri_declaraciones` + acuse en el cliente (la matriz deja de verlo pendiente).
+- **Anti-bloqueo de login**: bóveda obligatoria, tope propio de 3 intentos/día y WAKE solo para entradas manuales.
+- **Tira de sesión SRI** con botón para cerrar la sesión (purga completa).
+
+**SCVS (Superintendencia de Compañías)**
+- Obligaciones anuales: **nómina de socios** (fin de febrero), **EEFF** y **actas** (30 de abril).
+- Recordatorios del bot **por documento** (omite lo ya subido).
+
+### SUITE `v4.5.0 → v4.5.1`
+- Incluye la 01 v3.5.1 y la 04 v2.5.0; se reempaquetó para mantener la tienda sincronizada.
+
+### 02 · 03 · 04
+- Sin cambios de código en esta tanda; se reempaquetaron con la misma versión.
+
+### Publicación automatizada
+- Nuevo `tools/publicar_tienda.mjs` (API Chrome Web Store) y guía `docs/PUBLICAR_TIENDA.md`.
+- `--check` valida entorno sin tocar la tienda; `--upload` / `--publish` / `--status`.
+
 
 ### 01 · Nueva Luz `v3.3.5 → v3.3.6` (ATS pendientes)
 
