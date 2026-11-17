@@ -5302,11 +5302,13 @@ async function responderFirmaContadorSiAparece() {
         let respuesta = 'no';
         let modoFirma = 'auto';
         let rucFirma = '';
+        let nombreFirma = '';
         try {
             const tpCache = (await SafeStorage.get(['pending_sri_autofill', 'sc_clients_cache']));
             rucFirma = String((tpCache.pending_sri_autofill && tpCache.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
             const cache = Array.isArray(tpCache.sc_clients_cache) ? tpCache.sc_clients_cache : [];
             const cli = cache.find((c) => String(c.ruc) === rucFirma);
+            nombreFirma = (cli && (cli.name || cli.razonSocial)) || '';
             const tp = (cli && (cli.tax_profile || cli.taxProfile)) || {};
 
             // Orden: modo nuevo → legado booleano → deducción automática.
@@ -5314,7 +5316,10 @@ async function responderFirmaContadorSiAparece() {
             const legado = tp.requiereFirmaContador;
             const esSociedad = rucFirma.length === 13 && rucFirma[2] === '9';
             const obligadoContabilidad = (tp.company && tp.company.keepsAccounting === true) || tp.obligadoContabilidad === true;
-            if (modo === 'si' || modo === 'no') {
+            if (modo === 'pendiente') {
+                respuesta = 'si'; // a la SAS no se le pone «no»: se deja para firma
+                modoFirma = 'pendiente';
+            } else if (modo === 'si' || modo === 'no') {
                 respuesta = modo === 'si' ? 'si' : 'no';
                 modoFirma = modo;
             } else if (legado === true || legado === false) {
@@ -5373,6 +5378,19 @@ async function responderFirmaContadorSiAparece() {
         if (typeof clickElement === 'function') clickElement(btn, 'Aceptar encuesta de firma de contador');
         else btn.click();
         await sleep(1200);
+
+        // La SAS no se marca «no firmada»: queda PENDIENTE de firma del contador.
+        if (modoFirma === 'pendiente' && typeof marcarFirmaPendiente === 'function') {
+            try {
+                const stPer = await SafeStorage.get(['sri_target_period', 'auto_batch_period', 'workflowPeriod']);
+                let perFirma = stPer.sri_target_period || stPer.auto_batch_period || '';
+                if (!/^\d{4}-\d{2}$/.test(String(perFirma))) {
+                    const wp = stPer.workflowPeriod;
+                    if (wp && wp.year) perFirma = wp.year + '-' + String(Number(wp.monthIndex) + 1).padStart(2, '0');
+                }
+                await marcarFirmaPendiente(rucFirma, perFirma, nombreFirma);
+            } catch (e) { /* no frena el flujo */ }
+        }
         return true;
     } catch (e) {
         log.warn('🧾 [FIRMA CONTADOR] no se pudo responder: ' + (e && e.message));

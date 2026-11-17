@@ -300,6 +300,21 @@ function limpiarPendienteTrasSubida(nombreArchivo) {
 }
 
 // 🪪 Quién está logueado en el SRI (para no confundir clientes).
+// 🧾 Aviso de declaraciones presentadas que esperan firma del contador.
+function renderFirmaPendiente() {
+  chrome.storage.local.get(['sc_firma_pendiente'], (st) => {
+    const mapa = st.sc_firma_pendiente || {};
+    const lista = Object.values(mapa).filter((x) => x && x.periodo);
+    const el = document.getElementById('firmaPendiente');
+    if (!el) return;
+    if (!lista.length) { el.style.display = 'none'; return; }
+    el.style.display = 'flex';
+    const txt = document.getElementById('firmaPendienteTexto');
+    if (txt) txt.textContent = `🧾 Firma pendiente: ${lista.length}`;
+    el.title = lista.map((x) => `${x.nombre || x.ruc} · ${x.periodo}`).join('\n');
+  });
+}
+
 function renderSesionSri() {
     const caja = document.getElementById('sesionSri');
     const nombreEl = document.getElementById('sesionSriNombre');
@@ -413,6 +428,7 @@ document.getElementById('obCerrar')?.addEventListener('click', () => {
 });
 
 renderSesionSri();
+renderFirmaPendiente();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
 
 // ⏱️ Progreso del lote en vivo: quién va, cuántos faltan y ETA aproximada.

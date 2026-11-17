@@ -3807,6 +3807,60 @@ async function guardarVentasEnNube(ruc, periodo, datos = {}) {
     }
 }
 
+/**
+ * La declaración ya se presentó, pero su firma de contador queda pendiente.
+ * Se guarda para que la web y el popup la muestren y no se pierda de vista.
+ */
+async function marcarFirmaPendiente(ruc, periodo, nombre) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        const per = String(periodo || '').replace(/[^0-9-]/g, '');
+        if (limpio.length !== 13) return { ok: false, motivo: 'ruc' };
+        const cuando = new Date().toISOString();
+
+        // 1) Local: para el popup y el estado del lote.
+        try {
+            const st = await SafeStorage.get(['sc_firma_pendiente']);
+            const mapa = st.sc_firma_pendiente || {};
+            mapa[limpio] = { ruc: limpio, periodo: per, nombre: nombre || '', cuando, estado: 'pendiente' };
+            await SafeStorage.set({ sc_firma_pendiente: mapa });
+        } catch (e) { /* opcional */ }
+
+        // 2) Nube: tax_profile.firmaContadorPendiente (lo lee la web).
+        try {
+            const cfg = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG) ? SC_CONFIG : {};
+            const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
+            const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
+            if (url && key) {
+                const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+                const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
+                const filas = rc.ok ? await rc.json() : [];
+                const cliente = Array.isArray(filas) ? filas[0] : null;
+                if (cliente) {
+                    const tp = cliente.tax_profile || {};
+                    await fetch(`${url}/rest/v1/clients?id=eq.${cliente.id}`, {
+                        method: 'PATCH', headers: cab,
+                        body: JSON.stringify({ tax_profile: { ...tp, firmaContadorPendiente: { periodo: per, cuando, estado: 'pendiente' } } }),
+                    });
+                }
+            }
+        } catch (e) { /* la nube es un extra: no frena */ }
+
+        log.info('🧾 [FIRMA] pendiente de contador: ' + limpio + ' ' + (per || '(sin período)'));
+        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+            window.sriAssistant.showEliteToast({
+                title: '🧾 Queda para la firma del contador',
+                msg: 'Declaración ' + (per || '') + ' presentada. No se marcó como «no firmada»: queda PENDIENTE de firma y avisada en la web.',
+                duration: 14000,
+            });
+        }
+        return { ok: true };
+    } catch (e) {
+        log.warn('🧾 [FIRMA] no se pudo marcar pendiente: ' + (e && e.message));
+        return { ok: false, motivo: 'error' };
+    }
+}
+
 async function marcarAnexoEnLaNube(ruc, periodo, datos = {}) {
     try {
         const limpio = String(ruc || '').replace(/\D/g, '');
