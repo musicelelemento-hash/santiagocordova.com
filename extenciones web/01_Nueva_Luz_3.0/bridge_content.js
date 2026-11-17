@@ -428,6 +428,40 @@ window.addEventListener("message", (event) => {
   const data = event.data;
 
   if (data && data.source === 'SC_PRO_DASHBOARD') {
+    if (data.type === 'SRI_CLIENT_UPDATED' && data.data && data.data.ruc) {
+      // 🔑 La clave cambió en la web: que la caché del popup la tome YA y
+      // que se borren las marcas de error/bloqueo de este RUC.
+      const ruc = String(data.data.ruc).replace(/\D/g, '');
+      chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos'], (st) => {
+        const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+        const idx = cache.findIndex((c) => String(c.ruc) === ruc);
+        const clave = String(data.data.password || '');
+        if (idx >= 0) {
+          cache[idx] = {
+            ...cache[idx],
+            password: clave || cache[idx].password,
+            sri_password: clave || cache[idx].sri_password,
+            sriPassword: clave || cache[idx].sriPassword,
+            tax_profile: data.data.taxProfile || cache[idx].tax_profile,
+            taxProfile: data.data.taxProfile || cache[idx].taxProfile,
+          };
+        }
+        const errs = { ...(st.flagged_errors || {}) };
+        const tried = { ...(st.sri_tried_credentials || {}) };
+        const omit = { ...(st.sc_omitidos || {}) };
+        delete errs[ruc];
+        delete tried[ruc];
+        delete omit[ruc];
+        chrome.storage.local.set({
+          sc_clients_cache: cache,
+          flagged_errors: errs,
+          sri_tried_credentials: tried,
+          sc_omitidos: omit,
+        }, () => console.log('🔑 [BRIDGE] clave actualizada para ' + ruc + ' (marcas limpias)'));
+      });
+      return;
+    }
+
     if (data.type === 'SRI_ESTADO_MES' && data.data) {
       // 📅 La web es la que sabe: sus números son los de la matriz.
       chrome.storage.local.set({ sc_estado_mes: { ...data.data, recibido: Date.now() } }, () => {
