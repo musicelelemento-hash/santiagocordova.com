@@ -270,6 +270,13 @@ async function llenarVentas(data) {
         log.warn('⚠️ [Ventas] Error extrayendo métricas de ventas:', e);
     }
 
+    // 💵 Persistir las ventas del formulario aunque el usuario cierre el aviso:
+    // es la base que la web usa para el ATS y para mostrar el 104.
+    try {
+        if (typeof capturarVentasDelFormulario === 'function') await capturarVentasDelFormulario({});
+        else if (typeof persistirVentasDelFormulario === 'function') await persistirVentasDelFormulario();
+    } catch (e) { log.warn('💵 [VENTAS] no se pudo persistir tras el llenado: ' + (e && e.message)); }
+
     log.info(`📊 FINALIZADO VENTAS: ${camposLlenados} campos procesados.`);
     
     // Colapsar Sección Ventas (Sequential Visual)

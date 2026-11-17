@@ -2890,6 +2890,16 @@ const SUPABASE_URL = SC_SUPABASE_URL;
     // 📌 Si es sociedad y el IVA mensual quedó presentado, el ATS queda pendiente de subir.
     if (String(decType).toUpperCase() === 'IVA') {
       try { await marcarAtsPendiente(ruc, canonicalPeriod); } catch (e) {}
+      // 🧾 Siguiente paso visible: el ATS no se genera solo, se arma en la web.
+      try {
+        if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+          window.sriAssistant.showEliteToast({
+            title: '🧾 Falta el ATS de ' + canonicalPeriod,
+            msg: 'El IVA quedó presentado. En la web: ficha del cliente → Círculo mensual → Generar ATS, y subí el ZIP desde el popup (📤).',
+            duration: 12000,
+          });
+        }
+      } catch (e) { /* aviso opcional */ }
     }
 
     log.debug(
