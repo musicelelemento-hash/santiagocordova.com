@@ -1207,6 +1207,14 @@ class SriAssistantPanel {
                         return;
                     }
 
+                    // 🙈 Si el usuario ya la omitió para este período, no volver a molestar.
+                    const omitidaKey = `omitted_${ruc}_2011_${monthIndex}_${detectedYear}`;
+                    const omitidaAntes = await SafeStorage.get([omitidaKey]);
+                    if (omitidaAntes[omitidaKey] && (Date.now() - omitidaAntes[omitidaKey] < 10 * 24 * 60 * 60 * 1000)) {
+                        log.debug(`🙈 [AVISO] ${detectedMonth} ${detectedYear} omitida por el usuario; no se repite.`);
+                        return;
+                    }
+
                     let isExpired = false;
                     if (expirationDateStr) {
                         const [day, month, year] = expirationDateStr.split('/').map(Number);
@@ -1226,38 +1234,84 @@ class SriAssistantPanel {
                         return;
                     }
 
-                    // MODO MANUAL: Mostrar tarjeta interactiva
+                    // MODO MANUAL: tarjeta accionable (iniciar / revisar / comprobantes / omitir).
+                    // Al elegir, se deja el MISMO estado que usa la web y el bucle, así la
+                    // declaración queda sincronizada y la matriz la ve igual.
+                    const venceTexto = expirationDateStr ? `vence el ${expirationDateStr}` : 'vence este mes';
+                    const rucAviso = String(ruc || '');
+                    const prepararDeclaracion = async (modo) => {
+                        const MM = String(Number(monthIndex) + 1).padStart(2, '0');
+                        const periodoIso = `${detectedYear}-${MM}`;
+                        try {
+                            await SafeStorage.set({
+                                workflowPeriod: { year: detectedYear, monthIndex },
+                                sri_target_period: periodoIso,
+                                targetPeriodSource: 'aviso-detectado',
+                                declaration_synced_flag: false,
+                                sri_master_switch_on: true,
+                                sriAutomationPaused: false,
+                                actionTimestamp: Date.now(),
+                            });
+                            if (typeof anotarBitacora === 'function') {
+                                await anotarBitacora('declaración desde el aviso', `${periodoIso} · ${modo}`);
+                            }
+                        } catch (e) { /* el flujo sigue igual */ }
+                        return periodoIso;
+                    };
+                    
                     this.showContextCard({
-                        title: `📅 Declaración ${isExpired ? '⚠️ VENCIDA' : 'Detectada'}`,
-                        subtitle: `${detectedMonth} ${detectedYear} ${isExpired ? '(Con Multas)' : ''}`,
+                        title: `📋 IVA ${isExpired ? 'VENCIDO' : 'detectado'} · ${detectedMonth} ${detectedYear}`,
+                        subtitle: `FORMULARIO 2011 · IVA MENSUAL · ${venceTexto.toUpperCase()}` + (isExpired ? ' · CON RECARGOS' : ''),
                         message: `
-                            Se detectó la obligación <b>2011 (IVA)</b> de ${detectedMonth} ${detectedYear}.
-                            <br>Haz click para iniciar la declaración automatizada.
+                            <b>${(this.extractClientInfo().name) || 'Este contribuyente'}</b>${rucAviso ? ' · ' + rucAviso : ''}<br>
+                            El SRI pide el <b>IVA de ${detectedMonth} ${detectedYear}</b> (formulario 2011).<br>
+                            <span style="color:#94a3b8;font-size:13px">Al iniciar: extrae comprobantes, llena ventas y compras, revisa el saldo y lo deja listo para enviar.</span>
                         `,
-                        icon: '🚀',
-                        actionText: '🪄 INICIAR MÁGIA (ELITE)',
+                        icon: '🧾',
+                        actionText: '▶ Iniciar declaración',
                         timeout: null,
                         magicMode: true,
-                        onAction: () => {
+                        onAction: async () => {
+                            await prepararDeclaracion('completa');
                             this.runUnifiedWorkflow('TURBO_FULL', { monthIndex, year: detectedYear });
                         },
                         secondaryActions: [
                             {
-                                text: '❌ Omitir / Cancelar',
-                                action: () => {
-                                    this.suggestionDismissed = true;
-                                    if (this.contextCard) {
-                                        this.contextCard.remove();
-                                        this.contextCard = null;
-                                    }
-                                    if (this.contextOverlay) {
-                                        this.contextOverlay.remove();
-                                        this.contextOverlay = null;
-                                    }
-                                    this.showEliteToast({ title: '⏸️ Cancelado', msg: 'Declaración omitida.' });
-                                }
-                            }
-                        ]
+                                text: '👁 Revisar antes de enviar',
+                                action: async () => {
+                                    await prepararDeclaracion('revisar');
+                                    this.runUnifiedWorkflow('NAVIGATE_AND_FILL', { monthIndex, year: detectedYear });
+                                },
+                            },
+                            {
+                                text: '🧾 Traer comprobantes primero',
+                                action: async () => {
+                                    await prepararDeclaracion('comprobantes');
+                                    this.runUnifiedWorkflow('EXTRACT_DATA', { monthIndex, year: detectedYear });
+                                },
+                            },
+                            {
+                                text: '⏭ Omitir este período (lo verá la web)',
+                                action: async () => {
+                                    const periodoIso = await prepararDeclaracion('omitida');
+                                    try {
+                                        const key = `omitted_${rucAviso}_2011_${monthIndex}_${detectedYear}`;
+                                        await SafeStorage.set({ [key]: Date.now() });
+                                        if (typeof Omitidos !== 'undefined' && Omitidos.anotar) {
+                                            await Omitidos.anotar(rucAviso, 'omitido_manual', {
+                                                nombre: this.extractClientInfo().name || rucAviso,
+                                                detalle: `Omitida a mano desde el aviso (${periodoIso})`,
+                                            });
+                                        }
+                                        this.showEliteToast({
+                                            title: '⏭ Omitida',
+                                            msg: `No se declara ${detectedMonth} ${detectedYear}. Queda registrada para que la web la muestre como omitida.`,
+                                            duration: 7000,
+                                        });
+                                    } catch (e) { /* sin registro, igual no molesta 10 días */ }
+                                },
+                            },
+                        ],
                     });
                 }
             }
