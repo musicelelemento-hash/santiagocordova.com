@@ -5,7 +5,7 @@ function _scLocalSet(clave, valor) {
     try {
         const texto = typeof valor === 'string' ? valor : JSON.stringify(valor);
         if (typeof texto === 'string' && texto.length > 200000) return; // no llenar el portal
-        localStorage.setItem(clave, texto);
+        _scLocalSet(clave, texto);
     } catch (e) { /* cuota llena: se ignora, no se rompe el portal */ }
 }
 // Bridge Content Script for Nueva Luz 3.0
@@ -359,7 +359,7 @@ try {
         try {
           chrome.storage.local.get(['sc_anexo_ultimo'], (ax) => {
             if (ax && ax.sc_anexo_ultimo) {
-              try { localStorage.setItem('sc_anexo_ultimo', JSON.stringify(ax.sc_anexo_ultimo)); } catch (e) {}
+              try { _scLocalSet('sc_anexo_ultimo', JSON.stringify(ax.sc_anexo_ultimo)); } catch (e) {}
             }
           });
         } catch (e) {}
@@ -367,11 +367,11 @@ try {
     chrome.storage.local.get(['sri_ultimo_arqueo_compras', 'pending_sri_autofill', 'workflowPeriod'], (st) => {
       const compras = st.sri_ultimo_arqueo_compras;
       if (compras && compras.ruc) {
-        try { localStorage.setItem(`sc_compras_${compras.ruc}`, JSON.stringify(compras)); } catch (e) {}
+        try { _scLocalSet(`sc_compras_${compras.ruc}`, JSON.stringify(compras)); } catch (e) {}
         // Con período: la web lo lee como compras del mes (para el ATS).
         try {
           if (compras.periodo && Array.isArray(compras.invoices)) {
-            localStorage.setItem(`sc_compras_${compras.ruc}_${compras.periodo}`, JSON.stringify({
+            _scLocalSet(`sc_compras_${compras.ruc}_${compras.periodo}`, JSON.stringify({
               ruc: compras.ruc,
               period: compras.periodo,
               updatedAt: new Date().toISOString(),
@@ -817,7 +817,7 @@ window.addEventListener("message", (event) => {
         chrome.storage.local.get(['sc_prueba_claves'], (st) => {
           const resultado = st.sc_prueba_claves || {};
           try {
-            localStorage.setItem('sc_prueba_claves', JSON.stringify(resultado));
+            _scLocalSet('sc_prueba_claves', JSON.stringify(resultado));
           } catch (e) {}
           window.postMessage({
             source: 'SC_PRO_EXTENSION',
@@ -888,7 +888,7 @@ try {
     chrome.storage.local.get(['sc_prueba_claves'], (st) => {
       if (st && st.sc_prueba_claves) {
         try {
-          localStorage.setItem('sc_prueba_claves', JSON.stringify(st.sc_prueba_claves));
+          _scLocalSet('sc_prueba_claves', JSON.stringify(st.sc_prueba_claves));
         } catch (e) {}
       }
     });
@@ -912,7 +912,7 @@ try {
       if (area === 'local' && changes.sc_telemetria_pulso && changes.sc_telemetria_pulso.newValue) {
         const pulso = changes.sc_telemetria_pulso.newValue;
         try {
-          localStorage.setItem('sc_ultimo_pulso_rpa', JSON.stringify(pulso));
+          _scLocalSet('sc_ultimo_pulso_rpa', JSON.stringify(pulso));
         } catch (e) {}
         window.postMessage({
           source: 'SC_PRO_EXTENSION',
@@ -923,7 +923,7 @@ try {
       if (area === 'local' && changes.sc_prueba_claves && changes.sc_prueba_claves.newValue) {
         const pruebaClaves = changes.sc_prueba_claves.newValue;
         try {
-          localStorage.setItem('sc_prueba_claves', JSON.stringify(pruebaClaves));
+          _scLocalSet('sc_prueba_claves', JSON.stringify(pruebaClaves));
         } catch (e) {}
         window.postMessage({
           source: 'SC_PRO_EXTENSION',
@@ -934,7 +934,7 @@ try {
       if (area === 'local' && changes.sri_ultimo_arqueo_compras && changes.sri_ultimo_arqueo_compras.newValue) {
         const compras = changes.sri_ultimo_arqueo_compras.newValue;
         try {
-          localStorage.setItem(`sc_compras_${compras.ruc}`, JSON.stringify(compras));
+          _scLocalSet(`sc_compras_${compras.ruc}`, JSON.stringify(compras));
         } catch (e) {}
         window.postMessage({
           source: 'SC_PRO_EXTENSION',
