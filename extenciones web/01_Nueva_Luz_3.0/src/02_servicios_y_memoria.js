@@ -5300,13 +5300,35 @@ async function responderFirmaContadorSiAparece() {
 
         // ¿Este cliente pide firma de contador? (ficha → flag)
         let respuesta = 'no';
+        let modoFirma = 'auto';
+        let rucFirma = '';
         try {
             const tpCache = (await SafeStorage.get(['pending_sri_autofill', 'sc_clients_cache']));
-            const ruc = String((tpCache.pending_sri_autofill && tpCache.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
+            rucFirma = String((tpCache.pending_sri_autofill && tpCache.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
             const cache = Array.isArray(tpCache.sc_clients_cache) ? tpCache.sc_clients_cache : [];
-            const cli = cache.find((c) => String(c.ruc) === ruc);
+            const cli = cache.find((c) => String(c.ruc) === rucFirma);
             const tp = (cli && (cli.tax_profile || cli.taxProfile)) || {};
-            if (tp.requiereFirmaContador === true) respuesta = 'si';
+
+            // Orden: modo nuevo → legado booleano → deducción automática.
+            const modo = String(tp.firmaContadorModo || '').toLowerCase();
+            const legado = tp.requiereFirmaContador;
+            const esSociedad = rucFirma.length === 13 && rucFirma[2] === '9';
+            const obligadoContabilidad = (tp.company && tp.company.keepsAccounting === true) || tp.obligadoContabilidad === true;
+            if (modo === 'si' || modo === 'no') {
+                respuesta = modo === 'si' ? 'si' : 'no';
+                modoFirma = modo;
+            } else if (legado === true || legado === false) {
+                respuesta = legado === true ? 'si' : 'no';
+                modoFirma = 'legado';
+            } else {
+                respuesta = (esSociedad || obligadoContabilidad) ? 'si' : 'no';
+                modoFirma = 'auto';
+            }
+            log.info('🧾 [FIRMA CONTADOR] modo=' + modoFirma + ' · respuesta=' + respuesta.toUpperCase() +
+                ' · sociedad=' + esSociedad + ' · contabilidad=' + obligadoContabilidad);
+            try {
+                await SafeStorage.set({ sc_firma_contador_ultima: { ruc: rucFirma, respuesta, modo: modoFirma, cuando: Date.now() } });
+            } catch (e) { /* opcional */ }
         } catch (e) { /* por defecto No */ }
 
         const scope = panel || document.body;
