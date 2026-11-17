@@ -5,7 +5,7 @@ function _scLocalSet(clave, valor) {
     try {
         const texto = typeof valor === 'string' ? valor : JSON.stringify(valor);
         if (typeof texto === 'string' && texto.length > 200000) return; // no llenar el portal
-        _scLocalSet(clave, texto);
+        localStorage.setItem(clave, texto);
     } catch (e) { /* cuota llena: se ignora, no se rompe el portal */ }
 }
 // Bridge Content Script for Nueva Luz 3.0

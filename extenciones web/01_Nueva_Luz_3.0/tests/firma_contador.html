@@ -1,0 +1,180 @@
+<!doctype html><meta charset="utf-8"><title>La encuesta de firma del contador del SRI</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>La encuesta final del SRI se contesta sola: No, y Aceptar</h3>
+<pre id="out">…</pre>
+<div id="portal"></div>
+<script>
+  // El bundle real corre sobre un chrome de mentira, igual que en los demás
+  // bancos. El almacén es mutable: el caso C necesita que la ficha del cliente
+  // diga que SÍ requiere firma.
+  const store = {};
+  window.__errors = [];
+  window.__logs = [];
+  const cap = (f) => (...a) => { window.__logs.push(a.map(String).join(' ')); f(...a); };
+  console.log = cap(console.log); console.warn = cap(console.warn); console.error = cap(console.error);
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  window.chrome = {
+    runtime: { getURL: p => p, onMessage: { addListener() {} }, sendMessage: () => Promise.resolve({}), id: 's' },
+    storage: {
+      local: {
+        get: k => Promise.resolve(
+          k === null ? { ...store }
+          : Array.isArray(k) ? Object.fromEntries(k.filter(x => x in store).map(x => [x, store[x]]))
+          : (typeof k === 'string' ? (k in store ? { [k]: store[k] } : {}) : {})),
+        set: o => { Object.assign(store, o); return Promise.resolve(); },
+        remove: k => { [].concat(k).forEach(x => delete store[x]); return Promise.resolve(); }
+      },
+      onChanged: { addListener() {} }
+    },
+    tabs: { create() {}, query: () => Promise.resolve([]) }
+  };
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(60) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+  };
+
+  // La pregunta se arma por partes a propósito: si el texto quedara literal en
+  // el <script>, `document.body.textContent` la "vería" siempre y el caso D
+  // (que NO hay encuesta) no probaría nada. El bundle no lee innerText: lee el
+  // texto del body entero, scripts incluidos.
+  const FRASE = '¿Requiere ' + 'firma de contador para esta declaración?';
+
+  const el = (id) => document.getElementById(id);
+  const dentro = (op, texto, radioId) => `
+      <td class="opcion" data-op="${op}">
+        <div class="ui-radiobutton ui-widget"><div class="ui-radiobutton-box" data-op="${op}"><span class="ui-radiobutton-icon"></span></div></div>
+        <label for="frmFlujoDeclaracion:${radioId}">${texto}</label>
+        <input type="radio" class="ui-helper-hidden-accessible" id="frmFlujoDeclaracion:${radioId}"
+               name="frmFlujoDeclaracion:firmaContador" value="${op}">
+      </td>`;
+
+  // PrimeFaces no marca el radio con CSS: su JS escucha el clic del box. Acá se
+  // imita eso, para poder comprobar QUÉ opción quedó elegida y no sólo que
+  // alguien clickeó algo.
+  const conectarEncuesta = () => {
+    const portal = el('portal');
+    portal.querySelectorAll('.ui-radiobutton-box').forEach((caja) => {
+      caja.addEventListener('click', () => {
+        portal.querySelectorAll('.ui-radiobutton-box').forEach((c) => c.classList.remove('ui-state-active'));
+        caja.classList.add('ui-state-active');
+        portal.querySelectorAll('input[type="radio"]').forEach((r) => { r.checked = false; });
+        const celda = caja.closest('td');
+        const radio = celda && celda.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+        window.__clicksCaja = (window.__clicksCaja || 0) + 1;
+        window.__cajaTocada = caja.getAttribute('data-op');
+      });
+    });
+    const btn = el('frmFlujoDeclaracion:divBotonContinuarConfirmacion');
+    if (btn) btn.addEventListener('click', () => { window.__clicksAceptar = (window.__clicksAceptar || 0) + 1; });
+  };
+  const reiniciar = () => {
+    window.__clicksAceptar = 0; window.__clicksCaja = 0; window.__cajaTocada = null;
+    el('portal').innerHTML = '';
+  };
+  const checked = (radioId) => {
+    const r = el('frmFlujoDeclaracion:' + radioId);
+    return r ? r.checked : 'NO EXISTE';
+  };
+
+  const responder = (typeof responderFirmaContadorSiAparece === 'function')
+    ? responderFirmaContadorSiAparece
+    : (window.responderFirmaContadorSiAparece || null);
+
+  sec('0 · la función que contesta la encuesta');
+  push('responderFirmaContadorSiAparece es global', typeof responder, 'function');
+  if (typeof responder !== 'function') { pintar(); return; }
+
+  // ══ A · el DOM real: panel + dos radios PrimeFaces + Aceptar ══════════════
+  // Como lo pinta el portal al final de la declaración: el panel de la encuesta
+  // con la pregunta y las dos opciones (cada una en su celda, como panelGrid),
+  // y el botón Aceptar afuera del panel.
+  sec('A · con el panel de la encuesta en pantalla');
+  reiniciar();
+  el('portal').innerHTML = `
+    <div id="frmFlujoDeclaracion:panelContador">
+      <div class="pregunta">${FRASE}</div>
+      <table><tbody><tr>${dentro('si', 'Sí', 'optSi')}${dentro('no', 'No', 'optNo')}</tr></tbody></table>
+    </div>
+    <button id="frmFlujoDeclaracion:divBotonContinuarConfirmacion">Aceptar</button>`;
+  conectarEncuesta();
+
+  const rA = await responder();
+  push('devuelve true',                                  rA, true);
+  push('deja marcado el radio NO',                       checked('optNo'), true);
+  push('y no toca el radio SÍ',                          checked('optSi'), false);
+  push('el box que quedó activo es el del No',           window.__cajaTocada, 'no');
+  push('la caja del No se pinta como elegida',
+       document.querySelector('[data-op="no"] .ui-radiobutton-box').classList.contains('ui-state-active'), true);
+  push('pulsa Aceptar una sola vez',                     window.__clicksAceptar, 1);
+
+  // ══ B · sin panelContador: la pregunta se reconoce por el texto ═══════════
+  // El portal a veces renombra o no envuelve el panel. Si la pregunta está en
+  // pantalla, la encuesta se tiene que contestar igual: es lo que quedaba
+  // colgada la declaración. (El botón Aceptar forma parte de la encuesta: sin
+  // él no hay nada que aceptar y la función, con razón, no dice que respondió.)
+  sec('B · sin panel, sólo la pregunta en el body');
+  reiniciar();
+  el('portal').innerHTML = `
+    <div class="pregunta">${FRASE}</div>
+    <button id="frmFlujoDeclaracion:divBotonContinuarConfirmacion">Aceptar</button>`;
+  conectarEncuesta();
+
+  const rB = await responder();
+  push('detecta la pregunta sin el panel y devuelve true', rB, true);
+  push('y pulsa Aceptar',                                  window.__clicksAceptar, 1);
+  push('sin radios no inventa un clic de radio',           window.__clicksCaja, 0);
+
+  // ══ C · la ficha del cliente que pide firma de contador ══════════════════
+  // La respuesta por defecto es No, pero si el contador marcó al cliente con
+  // `requiereFirmaContador`, la encuesta se contesta Sí. Eso se lee de
+  // SafeStorage: si el stub no alcanzara, la respuesta saldría No y se vería
+  // acá.
+  sec('C · cuando la ficha del cliente pide firma');
+  reiniciar();
+  store.pending_sri_autofill = { ruc: '0999999999001' };
+  store.sc_clients_cache = [{ ruc: '0999999999001', taxProfile: { requiereFirmaContador: true } }];
+  el('portal').innerHTML = `
+    <div id="frmFlujoDeclaracion:panelContador">
+      <div class="pregunta">${FRASE}</div>
+      <table><tbody><tr>${dentro('si', 'Sí', 'optSi')}${dentro('no', 'No', 'optNo')}</tr></tbody></table>
+    </div>
+    <button id="frmFlujoDeclaracion:divBotonContinuarConfirmacion">Aceptar</button>`;
+  conectarEncuesta();
+
+  const rC = await responder();
+  push('devuelve true',                    rC, true);
+  push('marca el radio SÍ',                checked('optSi'), true);
+  push('y no toca el NO',                  checked('optNo'), false);
+  push('pulsa Aceptar',                    window.__clicksAceptar, 1);
+  delete store.pending_sri_autofill;
+  delete store.sc_clients_cache;
+
+  // ══ D · sin encuesta a la vista: el vigía no puede inventar un clic ═══════
+  // Esta función la llama el vigía de éxito cada pocos segundos. Si dijera
+  // "respondí" en una pantalla cualquiera, el flujo se cortaría antes de
+  // terminar. Tiene que devolver false y no tocar nada.
+  sec('D · sin encuesta en pantalla');
+  reiniciar();
+  push('sin pregunta ni panel devuelve false', await responder(), false);
+  push('y no pulsa ningún Aceptar',            window.__clicksAceptar, 0);
+
+  pintar();
+})();
+</script>
+</body>
+</html>

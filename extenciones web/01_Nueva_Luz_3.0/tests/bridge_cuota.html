@@ -1,0 +1,116 @@
+<!doctype html><meta charset="utf-8"><title>Bridge: el guardián de cuota del portal</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Un payload gigante no puede llenar el localStorage del SRI</h3>
+<pre id="out">…</pre>
+<script>
+  // El bridge real (el que corre en santiagocordova.com) se evalúa tal cual,
+  // sobre el mismo chrome de mentira que usan los otros bancos.
+  const store = {};
+  window.__errors = [];
+  window.__logs = [];
+  const cap = (f) => (...a) => { window.__logs.push(a.map(String).join(' ')); f(...a); };
+  console.log = cap(console.log); console.warn = cap(console.warn); console.error = cap(console.error);
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  window.chrome = {
+    runtime: { getURL: p => p, onMessage: { addListener() {} }, sendMessage: () => Promise.resolve({}), id: 's' },
+    storage: {
+      local: {
+        get: k => Promise.resolve(
+          k === null ? { ...store }
+          : Array.isArray(k) ? Object.fromEntries(k.filter(x => x in store).map(x => [x, store[x]]))
+          : (typeof k === 'string' ? (k in store ? { [k]: store[k] } : {}) : {})),
+        set: o => { Object.assign(store, o); return Promise.resolve(); },
+        remove: k => { [].concat(k).forEach(x => delete store[x]); return Promise.resolve(); }
+      },
+      onChanged: { addListener() {} }
+    },
+    tabs: { create() {}, query: () => Promise.resolve([]) }
+  };
+</script>
+<script src="../shared_config.js"></script>
+<script src="../bridge_content.js"></script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(60) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+  };
+
+  // Se usan claves propias y se limpian al final: todos los bancos comparten el
+  // mismo origen, así que no hay que dejar basura que otro banco pueda leer.
+  const CLAVES = ['sc_test_gigante', 'sc_test_gigante_json', 'sc_test_chico', 'sc_test_json'];
+  const limpiar = () => CLAVES.forEach((k) => localStorage.removeItem(k));
+  limpiar();
+
+  // Llamar al guardián y decir SÓLO si lanzó (para no confundir el valor
+  // devuelto con un error).
+  const sinLanzar = (fn) => {
+    try { fn(); return 'no lanzó'; } catch (e) { return 'LANZÓ: ' + ((e && e.message) || e); }
+  };
+
+  sec('A · el guardián existe y el bridge cargó');
+  push('_scLocalSet es una función', typeof _scLocalSet, 'function');
+  // El bridge real registró su diagnóstico y su sync de arranque: si el archivo
+  // no se hubiera evaluado, estas funciones no existirían.
+  push('el bridge expone syncFullClientsMatrix', typeof syncFullClientsMatrix, 'function');
+  if (typeof _scLocalSet !== 'function') { pintar(); return; }
+
+  // ══ B · el caso que rompía el portal: un payload de >200 KB ══════════════
+  // «kQuotaBytes quota exceeded» es el error que deja el portal del SRI sin
+  // poder guardar NADA mientras el bot está abierto. La matriz de un cliente
+  // grande (facturas + proveedores) supera los 200 KB sin despeinarse.
+  sec('B · un valor de más de 200 KB no se escribe');
+  const gigante = 'x'.repeat(201 * 1024);
+  push('el valor de prueba pasa de 200 KB', gigante.length > 200000, true);
+  push('guardarlo no lanza', sinLanzar(() => _scLocalSet('sc_test_gigante', gigante)), 'no lanzó');
+  push('y NO queda en localStorage', localStorage.getItem('sc_test_gigante'), null);
+
+  // También cuando llega como objeto: el guardián mide el JSON serializado.
+  const giganteJson = { ruc: '0999999999001', invoices: [{ numero: 1, relleno: gigante }] };
+  push('un objeto que serializa a >200 KB tampoco se escribe',
+       sinLanzar(() => _scLocalSet('sc_test_gigante_json', giganteJson)), 'no lanzó');
+  push('y su JSON también supera los 200 KB', JSON.stringify(giganteJson).length > 200000, true);
+  push('no queda la clave gigante del objeto', localStorage.getItem('sc_test_gigante_json'), null);
+
+  // ══ C · lo chico sí tiene que guardarse ══════════════════════════════════
+  // El guardián existe para proteger la cuota, no para no guardar nada: el
+  // portal lee estas claves para mostrar el arqueo de compras y los
+  // proveedores aprendidos. Si no se escriben, la web se queda sin datos.
+  sec('C · un valor chico se guarda y se puede releer');
+  push('guardarlo no lanza', sinLanzar(() => _scLocalSet('sc_test_chico', 'hola')), 'no lanzó');
+  push('sí queda en localStorage', localStorage.getItem('sc_test_chico'), 'hola');
+
+  const chico = { ruc: '0999999999001', invoices: [{ numero: 1, base: 100 }] };
+  push('un JSON chico tampoco lanza', sinLanzar(() => _scLocalSet('sc_test_json', chico)), 'no lanzó');
+  push('y se relee igual a lo que se guardó',
+       JSON.parse(localStorage.getItem('sc_test_json') || 'null'), chico);
+
+  // ── D · el guardián no toca lo que ya estaba ─────────────────────────────
+  // Vive en el localStorage del PORTAL (mismo origen): borrar o pisar claves
+  // ajenas rompería al SRI. La prueba es que la clave gigante, al rebotar, no
+  // se lleve por delante el testigo ni la cuenta total.
+  sec('D · el rechazo es sólo de esa clave');
+  localStorage.setItem('sc_test_testigo', 'sigue-estando');
+  const antes = localStorage.length;
+  _scLocalSet('sc_test_gigante', gigante);
+  push('el testigo sigue intacto', localStorage.getItem('sc_test_testigo'), 'sigue-estando');
+  push('no se creó ninguna entrada nueva', localStorage.length, antes);
+
+  // Limpieza: los bancos comparten origen.
+  localStorage.removeItem('sc_test_testigo');
+  limpiar();
+
+  pintar();
+})();
+</script>
+</body>
+</html>
