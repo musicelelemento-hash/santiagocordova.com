@@ -1,3 +1,13 @@
+// El portal del SRI comparte el localStorage del origen: si escribimos
+// de más, el propio portal falla con «kQuotaBytes quota exceeded».
+// Todo lo que el bridge guarda acá pasa por este guardián.
+function _scLocalSet(clave, valor) {
+    try {
+        const texto = typeof valor === 'string' ? valor : JSON.stringify(valor);
+        if (typeof texto === 'string' && texto.length > 200000) return; // no llenar el portal
+        localStorage.setItem(clave, texto);
+    } catch (e) { /* cuota llena: se ignora, no se rompe el portal */ }
+}
 // Bridge Content Script for Nueva Luz 3.0
 // Escucha mensajes de SantiagoCordova.com y sincroniza la Matriz Completa y Credenciales de Declaración
 console.log("⚡ [SC PRO Bridge Nueva Luz 3.0] Conectado al Sistema Web SantiagoCordova.com");
@@ -335,7 +345,7 @@ function publicarProveedoresDeCliente(ruc, periodo) {
   if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
   chrome.storage.local.get(['sc_proveedores'], (st) => {
     const payload = construirProveedoresDeCliente(st.sc_proveedores || {}, ruc, periodo);
-    try { localStorage.setItem(`sc_proveedores_cliente_${payload.ruc}`, JSON.stringify(payload)); } catch (e) {}
+    try { _scLocalSet(`sc_proveedores_cliente_${payload.ruc}`, JSON.stringify(payload)); } catch (e) {}
     window.postMessage({ source: 'SC_PRO_EXTENSION', type: 'SRI_CLIENT_PROVIDERS_SYNC', data: payload }, '*');
   });
 }

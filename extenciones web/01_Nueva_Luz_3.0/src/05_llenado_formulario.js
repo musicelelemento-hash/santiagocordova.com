@@ -175,15 +175,43 @@ async function capturarVentasDelFormulario(opciones = {}) {
         try { await GhostMemory.set('ventasExtraidas', { ...datos, base15: conIva, base0: sinIva }); } catch (e) {}
         const info = (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function')
             ? window.sriAssistant.extractClientInfo() : {};
-        const ruc = String(opciones.ruc || info.ruc || '').replace(/\D/g, '');
+
+        // 🔎 El RUC puede no estar en la topbar durante el auto-llenado: se busca
+        // en lo que dejó el lote, el pendiente y el texto de la página.
+        let ruc = String(opciones.ruc || info.ruc || '').replace(/\D/g, '');
+        if (ruc.length !== 13) {
+            const stCli = await SafeStorage.get(['pending_sri_autofill', 'sri_active_credentials', 'auto_batch_current', 'sc_ventas_formulario']);
+            const candidatos = [
+                stCli && stCli.pending_sri_autofill && stCli.pending_sri_autofill.ruc,
+                stCli && stCli.sri_active_credentials && stCli.sri_active_credentials.ruc,
+                stCli && stCli.auto_batch_current && stCli.auto_batch_current.ruc,
+                stCli && stCli.sc_ventas_formulario && stCli.sc_ventas_formulario.ruc,
+            ].map((x) => String(x || '').replace(/\D/g, '')).filter((x) => x.length === 13);
+            if (candidatos.length) ruc = candidatos[0];
+        }
+        if (ruc.length !== 13) {
+            const mRuc = (String((document.body && document.body.textContent) || '').match(/\b(\d{13})\b/) || []);
+            if (mRuc) ruc = mRuc[1];
+        }
+
+        // 📅 El período viene del aviso, del lote o de la pantalla del SRI.
         let periodo = String(opciones.periodo || '');
         if (!/^\d{4}-\d{2}$/.test(periodo)) {
             const m = (location.href.match(/periodo[=:]?(20\d{2})(\d{2})/i) || []);
             if (m) periodo = m[1] + '-' + m[2];
             else {
-                const st = await SafeStorage.get(['workflowPeriod']);
-                const wp = st.workflowPeriod;
-                if (wp && wp.year) periodo = wp.year + '-' + String(Number(wp.monthIndex) + 1).padStart(2, '0');
+                const st = await SafeStorage.get(['workflowPeriod', 'sri_target_period', 'auto_batch_period']);
+                if (st.sri_target_period && /^\d{4}-\d{2}$/.test(st.sri_target_period)) periodo = st.sri_target_period;
+                else if (st.auto_batch_period && /^\d{4}-\d{2}$/.test(st.auto_batch_period)) periodo = st.auto_batch_period;
+                else {
+                    const wp = st.workflowPeriod;
+                    if (wp && wp.year) periodo = wp.year + '-' + String(Number(wp.monthIndex) + 1).padStart(2, '0');
+                }
+                if (!/^\d{4}-\d{2}$/.test(periodo)) {
+                    const MESES = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+                    const mTxt = String((document.body && document.body.textContent) || '').toLowerCase().match(/(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\D{0,12}(20\d{2})/);
+                    if (mTxt) periodo = mTxt[2] + '-' + String(MESES[mTxt[1]]).padStart(2, '0');
+                }
             }
         }
         log.info(`💵 [VENTAS] ${periodo || '(sin período)'} · con IVA ${conIva.toFixed(2)} · sin IVA ${sinIva.toFixed(2)} · total ${total.toFixed(2)}`);

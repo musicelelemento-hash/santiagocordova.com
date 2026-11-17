@@ -1807,9 +1807,15 @@ class SriAssistantPanel {
                     await sleep(4000); // 4s en vez de 8s
 
         // 🧾 El SRI pregunta si la declaración requiere firma de contador.
-        // Sin responder, el flujo se queda en esa pantalla. Se contesta y sigue.
-        if (typeof responderFirmaContadorSiAparece === 'function') {
-            if (await responderFirmaContadorSiAparece()) await sleep(1500);
+        // Se espera hasta 18 s a que aparezca: en conexiones lentas tarda.
+        for (let intentoFirma = 0; intentoFirma < 9; intentoFirma++) {
+            if (typeof responderFirmaContadorSiAparece === 'function' && await responderFirmaContadorSiAparece()) {
+                await sleep(1500);
+                break;
+            }
+            // Si ya estamos en la pantalla del comprobante, no hay encuesta.
+            if (document.getElementById('frmFlujoDeclaracion:btnDescargarComprobante') || document.getElementById('panelSinValorAPagar')) break;
+            await sleep(2000);
         }
                     
                     // Paso 5: Impresión Final

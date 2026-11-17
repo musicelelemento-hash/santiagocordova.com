@@ -5310,26 +5310,37 @@ async function responderFirmaContadorSiAparece() {
         } catch (e) { /* por defecto No */ }
 
         const scope = panel || document.body;
-        const objetivo = respuesta === 'si' ? ['si', 'sí'] : ['no'];
-        const textos = Array.from(scope.querySelectorAll('label, span, td, div')).filter((el) => {
-            const t = String(el.textContent || '').trim().toLowerCase();
-            return objetivo.includes(t);
-        });
+        const objetivo = respuesta === 'si' ? ['si', 'sí', 'sÃ­'] : ['no'];
+        const norm = (s) => String(s || '').trim().toLowerCase().replace(/[^a-záéíóúñ]/g, '');
+
+        // 1) por label: PrimeFaces pinta <div class="ui-radiobutton"><div class="ui-radiobutton-box">…</div></div><label>No</label>
         let marco = false;
-        for (const el of textos) {
-            const cont = el.closest('tr, td, div');
-            const caja = (cont && cont.querySelector('.ui-radiobutton-box')) || (el.querySelector && el.querySelector('.ui-radiobutton-box'));
-            if (caja) {
-                caja.click();
-                marco = true;
-                break;
+        const labels = Array.from(scope.querySelectorAll('label')).filter((el) => objetivo.includes(norm(el.textContent)));
+        for (const lab of labels) {
+            const cont = lab.closest('td, tr, div');
+            let caja = cont && cont.querySelector('.ui-radiobutton-box');
+            if (!caja && lab.previousElementSibling) {
+                const prev = lab.previousElementSibling;
+                caja = prev.classList && prev.classList.contains('ui-radiobutton-box') ? prev : (prev.querySelector ? prev.querySelector('.ui-radiobutton-box') : null);
             }
-            const input = cont && cont.querySelector('input[type="radio"]');
-            if (input) {
-                input.click();
-                marco = true;
-                break;
+            if (caja) { caja.click(); marco = true; break; }
+        }
+
+        // 2) por estructura: buscar el input radio cuyo texto cercano sea el elegido
+        if (!marco) {
+            const cajas = Array.from(scope.querySelectorAll('.ui-radiobutton-box'));
+            for (const caja of cajas) {
+                const cont = caja.closest('td, tr, div');
+                const txt = norm(cont && cont.textContent).slice(0, 12);
+                if (txt.includes(respuesta === 'si' ? 'si' : 'no')) { caja.click(); marco = true; break; }
             }
+        }
+
+        // 3) último recurso: el orden del portal (Sí primero, No segundo)
+        if (!marco) {
+            const cajas = Array.from(scope.querySelectorAll('.ui-radiobutton-box'));
+            const caja = respuesta === 'si' ? cajas[0] : cajas[1];
+            if (caja) { caja.click(); marco = true; }
         }
 
         const btn = document.getElementById('frmFlujoDeclaracion:divBotonContinuarConfirmacion') ||
