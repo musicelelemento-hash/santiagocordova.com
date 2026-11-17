@@ -259,8 +259,14 @@ SafeStorage.get(null).then(async (items) => {
             pending_sri_autofill: { ...items.pending_sri_autofill, loginAttempted: false }
         });
     }
-    const isAccountLocked = /(cuenta|usuario) (bloquead|suspendid|inactiv)/i.test(feedbackText || textoDelPortal) ||
-        /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(feedbackText || textoDelPortal);
+    // El SRI no siempre dice "cuenta bloqueada": con la clave también avisa
+    // «Clave bloqueada, acceda a recuperar clave.» Antes ese texto no matcheaba
+    // y la cuenta quedaba marcada como «clave incorrecta», que es otra cosa
+    // (y esconde que hay que recuperarla, no reintentar).
+    const textoRechazo = feedbackText || textoDelPortal || '';
+    const isAccountLocked = /(bloquead|suspendid|inactiv)/i.test(textoRechazo) ||
+        /recuperar\s+clave/i.test(textoRechazo) ||
+        /(n[uú]mero m[aá]ximo|superado el n[uú]mero) de intentos/i.test(textoRechazo);
     // El portal DIJO que la credencial no sirve. Es lo único que autoriza a
     // anotar `clave_incorrecta`: esa marca escribe en la bóveda y en la ficha
     // web del cliente, y lo deja afuera hasta que alguien la borre a mano.
