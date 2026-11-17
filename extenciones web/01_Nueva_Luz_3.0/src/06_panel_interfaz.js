@@ -1805,6 +1805,12 @@ class SriAssistantPanel {
                     if (typeof clickElement === 'function') clickElement(clickableTarget, 'Aceptar Resumen Final (Cierre)');
                     else clickableTarget.click();
                     await sleep(4000); // 4s en vez de 8s
+
+        // 🧾 El SRI pregunta si la declaración requiere firma de contador.
+        // Sin responder, el flujo se queda en esa pantalla. Se contesta y sigue.
+        if (typeof responderFirmaContadorSiAparece === 'function') {
+            if (await responderFirmaContadorSiAparece()) await sleep(1500);
+        }
                     
                     // Paso 5: Impresión Final
                     // DELEGADO: Ya no hacemos clic bruto, syncDeclarationToSupabase hará un fetch silencioso del formulario
@@ -4143,6 +4149,10 @@ class SriAssistantPanel {
      * No confundir con ejecutarCierreMagico(), que es el cierre PRE-ENVÍO.
      */
     async finalizarPostEnvioSRI() {
+        // Si quedó la encuesta de firma de contador, se contesta antes de sincronizar.
+        if (typeof responderFirmaContadorSiAparece === 'function') {
+            try { await responderFirmaContadorSiAparece(); } catch (e) { /* opcional */ }
+        }
         if (this.state.isPostSubmitClosing) return;
         // Si el Cierre Mágico pre-envío está en vuelo, él se encarga del sync.
         if (this.state.isProcessingFinal) return;

@@ -5281,6 +5281,72 @@ window.addEventListener('message', async (event) => {
 });
 
 // WATCHER DE ÉXITO DE DECLARACIÓN (CAPTURA DE COMPROBANTE OFICIAL)
+/**
+ * El SRI, al final de la declaración, pregunta:
+ * «¿Requiere firma de contador para esta declaración?» con Sí / No y Aceptar.
+ *
+ * Si nadie la contesta, el flujo se queda ahí y parece que la declaración no
+ * terminó. Esta función elige la respuesta y pulsa Aceptar.
+ *
+ * La respuesta por defecto es **No**. Si el cliente está marcado con
+ * `requiereFirmaContador: true` en su ficha, se elige **Sí**.
+ */
+async function responderFirmaContadorSiAparece() {
+    try {
+        const bodyText = String((document.body && document.body.textContent) || '').toLowerCase();
+        const panel = document.querySelector('[id*="panelContador"]');
+        const pregunta = /requiere\s+firma\s+de\s+contador/.test(bodyText);
+        if (!pregunta && !panel) return false;
+
+        // ¿Este cliente pide firma de contador? (ficha → flag)
+        let respuesta = 'no';
+        try {
+            const tpCache = (await SafeStorage.get(['pending_sri_autofill', 'sc_clients_cache']));
+            const ruc = String((tpCache.pending_sri_autofill && tpCache.pending_sri_autofill.ruc) || '').replace(/\D/g, '');
+            const cache = Array.isArray(tpCache.sc_clients_cache) ? tpCache.sc_clients_cache : [];
+            const cli = cache.find((c) => String(c.ruc) === ruc);
+            const tp = (cli && (cli.tax_profile || cli.taxProfile)) || {};
+            if (tp.requiereFirmaContador === true) respuesta = 'si';
+        } catch (e) { /* por defecto No */ }
+
+        const scope = panel || document.body;
+        const objetivo = respuesta === 'si' ? ['si', 'sí'] : ['no'];
+        const textos = Array.from(scope.querySelectorAll('label, span, td, div')).filter((el) => {
+            const t = String(el.textContent || '').trim().toLowerCase();
+            return objetivo.includes(t);
+        });
+        let marco = false;
+        for (const el of textos) {
+            const cont = el.closest('tr, td, div');
+            const caja = (cont && cont.querySelector('.ui-radiobutton-box')) || (el.querySelector && el.querySelector('.ui-radiobutton-box'));
+            if (caja) {
+                caja.click();
+                marco = true;
+                break;
+            }
+            const input = cont && cont.querySelector('input[type="radio"]');
+            if (input) {
+                input.click();
+                marco = true;
+                break;
+            }
+        }
+
+        const btn = document.getElementById('frmFlujoDeclaracion:divBotonContinuarConfirmacion') ||
+            Array.from(document.querySelectorAll('button')).find((b) => /^aceptar$/i.test(String((b.innerText || '').trim())));
+        if (!btn) return marco;
+
+        log.info(`🧾 [FIRMA CONTADOR] Respuesta: ${respuesta.toUpperCase()}${marco ? '' : ' (no encontré el radio, pulso Aceptar)'}`);
+        if (typeof clickElement === 'function') clickElement(btn, 'Aceptar encuesta de firma de contador');
+        else btn.click();
+        await sleep(1200);
+        return true;
+    } catch (e) {
+        log.warn('🧾 [FIRMA CONTADOR] no se pudo responder: ' + (e && e.message));
+        return false;
+    }
+}
+
 function initDeclarationSuccessWatcher() {
     if (window.__sriDeclarationSuccessWatcherActive) return;
     window.__sriDeclarationSuccessWatcherActive = true;
@@ -5288,6 +5354,9 @@ function initDeclarationSuccessWatcher() {
     setInterval(async () => {
         // 🛑 Blindaje absoluto: Solo actuar si estamos dentro del wizard oficial de Formulario IVA
         if (typeof estaEnFormularioIva === 'function' && !estaEnFormularioIva()) return;
+
+        // Encuesta de firma de contador: si aparece, se contesta y se sigue.
+        if (await responderFirmaContadorSiAparece()) return;
 
         // Si todavía estamos editando casilleros o en selección de periodo, no es pantalla de éxito
         if (document.getElementById('concepto401') || document.getElementById('concepto500') || document.getElementById('frmFlujoDeclaracion:calPeriodo')) {
