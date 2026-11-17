@@ -4564,6 +4564,17 @@ async function marcarAtsPendiente(ruc, periodo) {
     try {
         const limpio = String(ruc || '').replace(/\D/g, '');
         if (limpio.length !== 13 || limpio[2] !== '9') return; // solo sociedades
+        // La ficha manda: hay sociedades a las que el RUC no les pide ATS
+        // (o se lo quitaron). No se anota un pendiente que no existe.
+        try {
+            const cache = (await SafeStorage.get(['sc_clients_cache'])).sc_clients_cache || [];
+            const cli = (Array.isArray(cache) ? cache : []).find((c) => String(c.ruc) === limpio);
+            const tp = (cli && (cli.tax_profile || cli.taxProfile)) || {};
+            if (tp.requiresAts === false) {
+                log.info('📌 [ATS] ' + limpio + ': su ficha dice que NO presenta ATS; no se anota pendiente.');
+                return;
+            }
+        } catch (e) { /* si no hay caché, se mantiene la regla de sociedad */ }
         const st = await SafeStorage.get([SC_ATS_KEY, 'sri_ultimo_arqueo_compras']);
         const mapa = st[SC_ATS_KEY] || {};
         const compras = st.sri_ultimo_arqueo_compras || {};
