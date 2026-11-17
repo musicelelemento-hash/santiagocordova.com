@@ -12,6 +12,8 @@
 (function () {
   var SC_CONFIG = {
     SUPABASE_URL: "https://afssvsxlxiwqgtcgvqxp.supabase.co",
+    // Panel web (para el salto "generar ATS" después de declarar)
+    WEB_URL: "https://santiagocordova.com",
     SUPABASE_ANON_KEY:
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmc3N2c3hseGl3cWd0Y2d2cXhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2MzY1ODgsImV4cCI6MjA4OTIxMjU4OH0.pLqgC4_5dVEOV2Bgfwa14Ib2PbVfz6QmSnSIEKfRZ9I",
     R2_ACCOUNT_ID: "5daf9742bb674b34c0a69fb60557c90b",

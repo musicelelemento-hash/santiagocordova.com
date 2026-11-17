@@ -1265,6 +1265,7 @@ class SriAssistantPanel {
                         message: `
                             <b>${(this.extractClientInfo().name) || 'Este contribuyente'}</b>${rucAviso ? ' · ' + rucAviso : ''}<br>
                             El SRI pide el <b>IVA de ${detectedMonth} ${detectedYear}</b> (formulario 2011).<br>
+        <span style="color:#e6d3ab;font-size:13px"><b>Un solo clic:</b> si el saldo final da <b>$0</b> lo envía; si da <b>distinto de $0</b> guarda el borrador y <b>NO avanza</b>.</span><br>
                             <span style="color:#94a3b8;font-size:13px">Al iniciar: extrae comprobantes, llena ventas y compras, revisa el saldo y lo deja listo para enviar.</span>
                         `,
                         icon: '🧾',
@@ -1277,7 +1278,7 @@ class SriAssistantPanel {
                         },
                         secondaryActions: [
                             {
-                                text: '👁 Revisar antes de enviar',
+                                text: '👁 Solo llenar (no enviar)',
                                 action: async () => {
                                     await prepararDeclaracion('revisar');
                                     this.runUnifiedWorkflow('NAVIGATE_AND_FILL', { monthIndex, year: detectedYear });
@@ -1910,6 +1911,27 @@ class SriAssistantPanel {
                         }, 3500);
                         return;
                     }
+
+                    // 📦 Siguiente paso: el ATS. Se ofrece, no se fuerza.
+                    try {
+                        const perTxt = typeof targetPeriodStr === 'string' ? targetPeriodStr : '';
+                        this.showContextCard({
+                            title: '✅ IVA presentado',
+                            subtitle: perTxt ? ('PERÍODO ' + perTxt + ' · FALTA EL ATS') : 'FALTA EL ATS',
+                            message: 'El comprobante quedó guardado. El <b>ATS</b> se arma con las ventas y las compras de este período.<br>' +
+                                '<span style="font-size:13px;color:#94a3b8">La web lo genera (ventas del 104 + compras) y acá lo subís con 📤.</span>',
+                            icon: '🧾',
+                            actionText: '📦 Ir a generar el ATS',
+                            timeout: null,
+                            onAction: () => {
+                                const WEB = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG.WEB_URL) || 'https://santiagocordova.com';
+                                window.open(WEB, '_blank');
+                            },
+                            secondaryActions: [
+                                { text: '⏭ Después', action: () => {} },
+                            ],
+                        });
+                    } catch (e) { /* el aviso es opcional */ }
 
                 } else {
                     this.log('⚠️ No se encontró el botón Finalizar/Aceptar. Por favor finalice manualmente.');
