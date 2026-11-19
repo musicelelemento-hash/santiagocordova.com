@@ -301,6 +301,27 @@ function limpiarPendienteTrasSubida(nombreArchivo) {
 
 // 🪪 Quién está logueado en el SRI (para no confundir clientes).
 // 🧾 Aviso de declaraciones presentadas que esperan firma del contador.
+// 🕵️ Muestra los últimos accesos para verificar lo que dice el SRI.
+function renderLoginAuditoria() {
+  chrome.storage.local.get(['sc_historial_login'], (st) => {
+    const lista = Array.isArray(st.sc_historial_login) ? st.sc_historial_login.slice(0, 5) : [];
+    const box = document.getElementById('loginAuditoria');
+    const cont = document.getElementById('loginAuditoriaLista');
+    if (!box || !cont) return;
+    if (!lista.length) { box.style.display = 'none'; return; }
+    const iconos = { exito: '✅', fallo: '⚠️', bloqueo: '⛔', omitido: '⏭', sesion_abierta: '🔓', intento: '🔑' };
+    const etiquetas = { exito: 'entró', fallo: 'clave rechazada', bloqueo: 'bloqueo', omitido: 'omitido', sesion_abierta: 'sesión abierta', intento: 'intento' };
+    cont.innerHTML = lista.map((x) => {
+      const hora = x.cuando ? new Date(x.cuando).toLocaleTimeString('es-EC', { hour: '2-digit', minute: '2-digit' }) : '';
+      const ico = iconos[x.evento] || '•';
+      const et = etiquetas[x.evento] || x.evento;
+      return `<div style="display:flex;gap:5px;font-size:9px;color:#cbd5e1;"><span>${ico}</span><span style="font-family:monospace;color:#94a3b8;">${hora}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${et}${x.motivo ? ' · ' + String(x.motivo).slice(0, 60) : ''}</span></div>`;
+    }).join('');
+    box.style.display = 'block';
+    box.title = lista.map((x) => `${x.evento} · ${x.ruc} · ${x.motivo || ''}`).join('\n');
+  });
+}
+
 function renderFirmaPendiente() {
   chrome.storage.local.get(['sc_firma_pendiente'], (st) => {
     const mapa = st.sc_firma_pendiente || {};
@@ -429,6 +450,7 @@ document.getElementById('obCerrar')?.addEventListener('click', () => {
 
 renderSesionSri();
 renderFirmaPendiente();
+renderLoginAuditoria();
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
 
 // ⏱️ Progreso del lote en vivo: quién va, cuántos faltan y ETA aproximada.

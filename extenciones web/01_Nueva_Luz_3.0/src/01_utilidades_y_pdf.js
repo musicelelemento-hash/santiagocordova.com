@@ -404,6 +404,76 @@ function scMarcaHtml(px = 20, titulo = '') {
 //    en el dashboard de SantiagoCordova.com, se le concede 1 intento para la nueva clave.
 // 4. Bloqueo preventivo: nunca se tocan inputs ni se pulsa login si la clave ya falló.
 // 5. Exclusión automática del bucle ferrocarril para no frenar el lote.
+/**
+ * 🕵️ Auditoría de accesos al SRI.
+ *
+ * Guarda CADA intento (exitoso o no) con fecha, RUC, motivo y si la
+ * sesión quedó abierta. Sirve para verificar la verdad del portal cuando
+ * dice «cuenta bloqueada» pero el usuario entró varias veces en el día.
+ * Se guarda local (popup) y en tax_profile.loginAuditoria (ficha web).
+ */
+const SriLoginAuditoria = {
+    _KEY: 'sc_historial_login',
+    _MAX: 200,
+    async registrar(evento, datos = {}) {
+        try {
+            const entry = {
+                cuando: new Date().toISOString(),
+                evento,
+                ruc: String(datos.ruc || '').replace(/\D/g, ''),
+                nombre: String(datos.nombre || '').slice(0, 80),
+                motivo: String(datos.motivo || '').slice(0, 300),
+                origen: datos.origen || 'manual',
+                sesionAbierta: datos.sesionAbierta !== false,
+                claveHash: String(datos.claveHash || ''),
+                url: (typeof location !== 'undefined' ? String(location.pathname || '').slice(0, 120) : ''),
+            };
+            const st = await SafeStorage.get([this._KEY]);
+            const lista = Array.isArray(st[this._KEY]) ? st[this._KEY] : [];
+            lista.unshift(entry);
+            await SafeStorage.set({ [this._KEY]: lista.slice(0, this._MAX) });
+            log.info('🕵️ [AUDITORÍA LOGIN] ' + evento.toUpperCase() + ' ' + entry.ruc +
+                (entry.motivo ? ' · ' + entry.motivo : '') + ' · ' + entry.origen);
+            try { await this._subirNube(entry); } catch (e) { /* la nube es un extra */ }
+            return entry;
+        } catch (e) {
+            log.warn('🕵️ [AUDITORÍA LOGIN] no se pudo registrar: ' + (e && e.message));
+            return null;
+        }
+    },
+    /** Refleja los últimos 30 accesos en la ficha web (best effort). */
+    async _subirNube(entry) {
+        if (!entry || entry.ruc.length !== 13) return;
+        const cfg = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG) ? SC_CONFIG : {};
+        const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
+        const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
+        if (!url || !key) return;
+        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${entry.ruc}&select=id,tax_profile`, { headers: cab });
+        const filas = rc.ok ? await rc.json() : [];
+        const cliente = Array.isArray(filas) ? filas[0] : null;
+        if (!cliente) return;
+        const tp = cliente.tax_profile || {};
+        const previa = Array.isArray(tp.loginAuditoria) ? tp.loginAuditoria : [];
+        const loginAuditoria = [
+            { cuando: entry.cuando, evento: entry.evento, motivo: entry.motivo, origen: entry.origen, sesionAbierta: entry.sesionAbierta },
+            ...previa,
+        ].slice(0, 30);
+        await fetch(`${url}/rest/v1/clients?id=eq.${cliente.id}`, {
+            method: 'PATCH', headers: cab,
+            body: JSON.stringify({ tax_profile: { ...tp, loginAuditoria } }),
+        });
+    },
+    async listar(ruc) {
+        try {
+            const st = await SafeStorage.get([this._KEY]);
+            const lista = Array.isArray(st[this._KEY]) ? st[this._KEY] : [];
+            const filtro = String(ruc || '').replace(/\D/g, '');
+            return filtro ? lista.filter((x) => x.ruc === filtro) : lista;
+        } catch (e) { return []; }
+    },
+};
+
 const SriCredentialVault = {
   /**
    * Una marca para saber si la clave cambió — sin que la marca sea la clave.
@@ -491,6 +561,7 @@ const SriCredentialVault = {
     };
     await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
     log.warn(`🛡️ [VAULT] Credencial fallida registrada para ${ruc}. Intentos: ${tried[ruc].attempts}. Motivo: ${reason}`);
+    try { await SriLoginAuditoria.registrar('fallo', { ruc, motivo: reason || 'Credenciales incorrectas', sesionAbierta: false, claveHash: this.getSignature(password) }); } catch (e) {}
   },
 
   async recordLocked(ruc, reason) {
@@ -506,14 +577,15 @@ const SriCredentialVault = {
     };
     await SafeStorage.set({ sri_tried_credentials: tried, flagged_errors: flagged });
     log.error(`🚨 [VAULT] Cuenta BLOQUEADA por SRI registrada para ${ruc}: ${reason}`);
+    try { await SriLoginAuditoria.registrar('bloqueo', { ruc, motivo: reason || 'Cuenta bloqueada o intentos superados', sesionAbierta: false }); } catch (e) {}
   },
 
   async recordSuccess(ruc, password) {
     if (!ruc) return;
     const { tried, flagged } = await this.getRegistry();
-    if (flagged[ruc] === 'error_credenciales') {
-      delete flagged[ruc];
-    }
+    // Un acceso REAL borra cualquier bloqueo/rechazo anterior: la verdad es
+    // que el SRI aceptó esta clave ahora. Antes quedaba «bloqueado» para siempre.
+    delete flagged[ruc];
     tried[ruc] = {
       status: 'success',
       ruc,
@@ -529,6 +601,8 @@ const SriCredentialVault = {
       sc_sesion_confirmada: { ruc, ts: Date.now() }
     });
     log.info(`✅ [VAULT] Acceso exitoso registrado para ${ruc}. Bóveda actualizada.`);
+    try { await SriLoginAuditoria.registrar('exito', { ruc, motivo: 'Acceso aceptado por el SRI', sesionAbierta: true, claveHash: this.getSignature(password) }); } catch (e) {}
+    try { if (typeof Omitidos !== 'undefined' && Omitidos.reintentar) await Omitidos.reintentar(ruc); } catch (e) {}
   },
 
   async resetClient(ruc) {
@@ -3635,7 +3709,8 @@ async function loginSRI(ruc, password, opciones = {}) {
         const chk = await SriCredentialVault.canAttemptLogin(ruc, password, { isManual: opciones.manual === true });
         if (!chk || !chk.allowed) {
             log.warn('🛡️ [LOGIN SRI] bloqueado por la bóveda: ' + ((chk && chk.reason) || ''));
-            return { ok: false, motivo: 'vault', mensaje: (chk && chk.reason) || 'Credencial bloqueada por seguridad' };
+            try { await SriLoginAuditoria.registrar('omitido', { ruc, motivo: (chk && chk.reason) || 'Credencial bloqueada por seguridad', origen: opciones.manual === true ? 'manual' : 'lote', sesionAbierta: false }); } catch (e) {}
+return { ok: false, motivo: 'vault', mensaje: (chk && chk.reason) || 'Credencial bloqueada por seguridad' };
         }
         // 🔢 Tope diario propio (el SRI bloquea a los 5): máximo 3 intentos por día.
         const stDia = await SafeStorage.get(['sc_login_intentos_dia']);
@@ -3645,7 +3720,8 @@ async function loginSRI(ruc, password, opciones = {}) {
         if (actual.veces >= 3) {
             log.warn('🔢 [LOGIN SRI] tope diario de 3 intentos alcanzado para ' + ruc + '. No se intenta más hoy.');
             try { await SriCredentialVault.recordLocked(ruc, 'Tope diario de intentos de la extensión (3)'); } catch (e) {}
-            return { ok: false, motivo: 'tope_diario', mensaje: 'Se alcanzaron 3 intentos hoy; esperar 24 h o recuperar la clave.' };
+            try { await SriLoginAuditoria.registrar('bloqueo', { ruc, motivo: 'Tope diario de 3 intentos de la extensión', origen: opciones.manual === true ? 'manual' : 'lote', sesionAbierta: false }); } catch (e) {}
+return { ok: false, motivo: 'tope_diario', mensaje: 'Se alcanzaron 3 intentos hoy; esperar 24 h o recuperar la clave.' };
         }
         actual.veces += 1;
         registro[ruc] = actual;
@@ -3654,6 +3730,7 @@ async function loginSRI(ruc, password, opciones = {}) {
 
     if (_sriYaAdentro()) {
         log.info('🔑 [LOGIN SRI] ya había sesión abierta.');
+        try { await SriLoginAuditoria.registrar('sesion_abierta', { ruc, motivo: 'Ya había sesión abierta; no se re-loginó', origen: opciones.manual === true ? 'manual' : 'lote', sesionAbierta: true }); } catch (e) {}
         return { ok: true, yaAdentro: true };
     }
 
