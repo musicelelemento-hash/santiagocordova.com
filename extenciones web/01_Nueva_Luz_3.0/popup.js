@@ -1052,7 +1052,8 @@ async function importarClavesDesdeCsv(texto) {
         sc_clients_cache: cacheList,
         flagged_errors: errs,
         sri_tried_credentials: tried,
-        sc_omitidos: omit
+        sc_omitidos: omit,
+        sc_login_intentos_dia: intentosDia
     });
 
     flaggedErrors = errs;
@@ -1370,14 +1371,26 @@ async function guardarClaveManual(ruc, clave) {
     if (!clave) { showToast('⚠️ Escribí la clave SRI del cliente.'); return false; }
 
     const cacheRes = await chrome.storage.local.get([
-        'sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos', 'sc_declaraciones_locales'
+        'sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos', 'sc_declaraciones_locales', 'sc_login_intentos_dia'
     ]);
     let cacheList = Array.isArray(cacheRes.sc_clients_cache) ? cacheRes.sc_clients_cache : [];
     let cliente = cacheList.find(c => c.ruc === ruc);
 
+    // Una clave nueva deja la credencial en «ok» y borra el tope diario:
+    // antes quedaba «bloqueada» en la caché y el popup no dejaba entrar.
+    const tpPrev = (cliente && (cliente.tax_profile || cliente.taxProfile)) || {};
+    const credOk = {
+        ...((tpPrev && tpPrev.sriCredencial) || {}),
+        estado: 'ok',
+        motivo: 'Clave actualizada desde el popup',
+        cuando: new Date().toISOString(),
+    };
     if (cliente) {
         cliente.password = clave;
         cliente.sri_password = clave;
+        if (cliente.tax_profile) cliente.tax_profile.sriCredencial = credOk;
+        else if (cliente.taxProfile) cliente.taxProfile.sriCredencial = credOk;
+        else cliente.tax_profile = { sriCredencial: credOk };
     } else {
         // ¿Estaba en la caché como baja? Se revive (escrito a mano manda) en
         // vez de duplicar el RUC. Si no estaba del todo: cliente del contador.
@@ -1401,6 +1414,8 @@ async function guardarClaveManual(ruc, clave) {
     delete tried[ruc];
     const omit = cacheRes.sc_omitidos || {};
     delete omit[ruc];
+    const intentosDia = { ...(cacheRes.sc_login_intentos_dia || {}) };
+    delete intentosDia[ruc];
     declaracionesLocales = cacheRes.sc_declaraciones_locales || {};
     await chrome.storage.local.set({
         sc_clients_cache: cacheList,

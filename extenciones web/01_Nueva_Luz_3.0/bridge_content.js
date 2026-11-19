@@ -442,7 +442,7 @@ window.addEventListener("message", (event) => {
       // 🔑 La clave cambió en la web: que la caché del popup la tome YA y
       // que se borren las marcas de error/bloqueo de este RUC.
       const ruc = String(data.data.ruc).replace(/\D/g, '');
-      chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos'], (st) => {
+      chrome.storage.local.get(['sc_clients_cache', 'flagged_errors', 'sri_tried_credentials', 'sc_omitidos', 'sc_login_intentos_dia'], (st) => {
         const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
         const idx = cache.findIndex((c) => String(c.ruc) === ruc);
         const clave = String(data.data.password || '');
@@ -459,9 +459,11 @@ window.addEventListener("message", (event) => {
         const errs = { ...(st.flagged_errors || {}) };
         const tried = { ...(st.sri_tried_credentials || {}) };
         const omit = { ...(st.sc_omitidos || {}) };
+        const intentosDia = { ...(st.sc_login_intentos_dia || {}) };
         delete errs[ruc];
         delete tried[ruc];
         delete omit[ruc];
+        delete intentosDia[ruc];
         chrome.storage.local.set({
           sc_clients_cache: cache,
           flagged_errors: errs,
