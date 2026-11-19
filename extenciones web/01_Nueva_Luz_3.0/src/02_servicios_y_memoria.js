@@ -5291,6 +5291,34 @@ window.addEventListener('message', async (event) => {
  * La respuesta por defecto es **No**. Si el cliente está marcado con
  * `requiereFirmaContador: true` en su ficha, se elige **Sí**.
  */
+/**
+ * ¿La declaración quedó sin movimiento? (todos los casilleros en 0)
+ * Criterio confirmado con abogado: una declaración EN CERO de una SAS puede
+ * enviarse SIN firma de contador. Basta un valor distinto de 0 para que la
+ * regla deje de aplicar.
+ */
+async function declaracionEnCero() {
+    try {
+        const casilleros = [
+            '401', '411', '402', '403', '404', '405', '413', '414', '415', '419', '421', '422', '424',
+            '500', '510', '540', '550', '507', '517', '502', '512', '564', '565', '609', '610',
+        ];
+        let leidos = 0;
+        for (const cas of casilleros) {
+            let valor;
+            try { valor = await leerCampo(cas); } catch (e) { continue; }
+            if (valor === null || valor === undefined || valor === '') continue;
+            const numero = Number(String(valor).replace(/[^\d.-]/g, ''));
+            if (!Number.isFinite(numero)) continue;
+            leidos++;
+            if (Math.abs(numero) > 0.004) return false;
+        }
+        return leidos > 0;
+    } catch (e) {
+        return false;
+    }
+}
+
 async function responderFirmaContadorSiAparece() {
     try {
         const bodyText = String((document.body && document.body.textContent) || '').toLowerCase();
@@ -5316,7 +5344,23 @@ async function responderFirmaContadorSiAparece() {
             const legado = tp.requiereFirmaContador;
             const esSociedad = rucFirma.length === 13 && rucFirma[2] === '9';
             const obligadoContabilidad = (tp.company && tp.company.keepsAccounting === true) || tp.obligadoContabilidad === true;
-            if (modo === 'pendiente') {
+            // ¿Declaración en cero? Criterio legal confirmado: se envía sin firma.
+            let enCero = false;
+            try {
+                const stCero = await SafeStorage.get(['sc_declaracion_en_cero']);
+                enCero = !!(stCero.sc_declaracion_en_cero && stCero.sc_declaracion_en_cero.enCero);
+            } catch (e) { /* si no se sabe, no se asume */ }
+
+            if (modo === 'si') {
+                respuesta = 'si';
+                modoFirma = 'si';
+            } else if (modo === 'no') {
+                respuesta = 'no';
+                modoFirma = 'no';
+            } else if (enCero) {
+                respuesta = 'no';
+                modoFirma = modo === 'pendiente' ? 'pendiente-en-cero' : 'auto-en-cero';
+            } else if (modo === 'pendiente') {
                 respuesta = 'si'; // a la SAS no se le pone «no»: se deja para firma
                 modoFirma = 'pendiente';
             } else if (modo === 'si' || modo === 'no') {
@@ -5329,10 +5373,10 @@ async function responderFirmaContadorSiAparece() {
                 respuesta = (esSociedad || obligadoContabilidad) ? 'si' : 'no';
                 modoFirma = 'auto';
             }
-            log.info('🧾 [FIRMA CONTADOR] modo=' + modoFirma + ' · respuesta=' + respuesta.toUpperCase() +
+            log.info('🧾 [FIRMA CONTADOR] modo=' + modoFirma + ' · enCero=' + enCero + ' · respuesta=' + respuesta.toUpperCase() +
                 ' · sociedad=' + esSociedad + ' · contabilidad=' + obligadoContabilidad);
             try {
-                await SafeStorage.set({ sc_firma_contador_ultima: { ruc: rucFirma, respuesta, modo: modoFirma, cuando: Date.now() } });
+                await SafeStorage.set({ sc_firma_contador_ultima: { ruc: rucFirma, respuesta, modo: modoFirma, enCero, cuando: Date.now() } });
             } catch (e) { /* opcional */ }
         } catch (e) { /* por defecto No */ }
 
@@ -5378,6 +5422,18 @@ async function responderFirmaContadorSiAparece() {
         if (typeof clickElement === 'function') clickElement(btn, 'Aceptar encuesta de firma de contador');
         else btn.click();
         await sleep(1200);
+
+        // En cero: se envía sin firma (criterio legal confirmado); se avisa.
+        if (modoFirma === 'auto-en-cero' || modoFirma === 'pendiente-en-cero') {
+            log.info('🧾 [FIRMA] declaración en cero → enviada sin firma de contador (criterio confirmado).');
+            if (window.sriAssistant && window.sriAssistant.showEliteToast) {
+                window.sriAssistant.showEliteToast({
+                    title: '🧾 Declaración en cero',
+                    msg: 'Se envió sin firma de contador (sin movimiento). Queda registrado así.',
+                    duration: 9000,
+                });
+            }
+        }
 
         // La SAS no se marca «no firmada»: queda PENDIENTE de firma del contador.
         if (modoFirma === 'pendiente' && typeof marcarFirmaPendiente === 'function') {

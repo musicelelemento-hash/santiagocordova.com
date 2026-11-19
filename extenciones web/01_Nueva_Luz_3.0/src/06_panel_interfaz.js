@@ -1799,7 +1799,19 @@ class SriAssistantPanel {
                 }
                 
                 const btnAceptarFinal = typeof findAceptarBtnOnSummary === 'function' ? findAceptarBtnOnSummary() : Array.from(document.querySelectorAll('button span')).find(el => el.textContent.trim() === 'Aceptar');
-                if (btnAceptarFinal) {
+                // 📸 Antes de enviar: se guarda si la declaración quedó en cero.
+        try {
+            if (typeof declaracionEnCero === 'function') {
+                const enCero = await declaracionEnCero();
+                const quien = this.extractClientInfo ? this.extractClientInfo() : {};
+                await SafeStorage.set({
+                    sc_declaracion_en_cero: { ruc: (quien && quien.ruc) || '', enCero, cuando: Date.now() },
+                });
+                this.log('📸 [EN CERO] ' + (enCero ? 'sí (sin movimiento)' : 'no (tiene valores)'));
+            }
+        } catch (e) { /* no frena el envío */ }
+
+        if (btnAceptarFinal) {
                     this.showEliteToast({ title: '🚀 LANZAMIENTO', msg: 'Enviando...', duration: 3000 });
                     const clickableTarget = btnAceptarFinal.closest('button, a, div[class*="button"]') || btnAceptarFinal;
                     if (typeof clickElement === 'function') clickElement(clickableTarget, 'Aceptar Resumen Final (Cierre)');
