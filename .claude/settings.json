@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/nube.cjs",
+            "timeout": 600,
+            "statusMessage": "Preparando el workspace de la nube (web + dependencias)..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Read|Edit|Write",
