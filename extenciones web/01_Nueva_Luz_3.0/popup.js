@@ -302,6 +302,28 @@ function limpiarPendienteTrasSubida(nombreArchivo) {
 // 🪪 Quién está logueado en el SRI (para no confundir clientes).
 // 🧾 Aviso de declaraciones presentadas que esperan firma del contador.
 // 🕵️ Muestra los últimos accesos para verificar lo que dice el SRI.
+// ⛔ Si alguna credencial está bloqueada/rechazada, deja el camino de salida.
+function renderCredBloqueada() {
+  chrome.storage.local.get(['sc_clients_cache'], (st) => {
+    const cache = Array.isArray(st.sc_clients_cache) ? st.sc_clients_cache : [];
+    const roto = cache.find((c) => {
+      const tp = c && (c.tax_profile || c.taxProfile) || {};
+      const e = tp.sriCredencial && tp.sriCredencial.estado;
+      return e && e !== 'ok';
+    });
+    const box = document.getElementById('credBloqueada');
+    if (!box) return;
+    if (!roto) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    const tp = roto.tax_profile || roto.taxProfile || {};
+    const cred = tp.sriCredencial || {};
+    const txt = document.getElementById('credBloqueadaTexto');
+    const mot = document.getElementById('credBloqueadaMotivo');
+    if (txt) txt.textContent = '⛔ Cuenta SRI ' + (cred.estado || '').toUpperCase() + ': ' + (roto.name || roto.ruc);
+    if (mot) mot.textContent = (cred.motivo || 'El portal no deja entrar con esta clave.') + ' · Recuperá la clave y cargala en la web o con ✏️ Nueva Clave.';
+  });
+}
+
 function renderLoginAuditoria() {
   chrome.storage.local.get(['sc_historial_login'], (st) => {
     const lista = Array.isArray(st.sc_historial_login) ? st.sc_historial_login.slice(0, 5) : [];
@@ -451,6 +473,9 @@ document.getElementById('obCerrar')?.addEventListener('click', () => {
 renderSesionSri();
 renderFirmaPendiente();
 renderLoginAuditoria();
+renderCredBloqueada();
+document.getElementById('btnRecuperarClaveSRI')?.addEventListener('click', () => chrome.tabs.create({ url: 'https://srienlinea.sri.gob.ec/sri-generacion-claves-web-internet/publico/opciones-clave.jsf' }));
+document.getElementById('btnAgenciaSRI')?.addEventListener('click', () => chrome.tabs.create({ url: 'https://www.sri.gob.ec/agendamiento' }));
 chrome.storage.onChanged.addListener((c) => { if (c.sc_sesion_confirmada || c.pending_sri_autofill) renderSesionSri(); });
 
 // ⏱️ Progreso del lote en vivo: quién va, cuántos faltan y ETA aproximada.

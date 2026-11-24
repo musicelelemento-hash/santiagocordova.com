@@ -1005,6 +1005,15 @@ body.claro .build-chip{ color:#475569; }
 <div id="firmaPendiente" style="display:none; margin:10px 12px 0; padding:7px 10px; border:1px solid rgba(56,189,248,.35); border-radius:12px; background:rgba(56,189,248,.08); display:flex; align-items:center; gap:6px;">
   <b id="firmaPendienteTexto" style="font-size:10px; color:#7dd3fc; white-space:nowrap;">🧾 Firma pendiente: 0</b>
 </div>
+<!-- ⛔ Credencial bloqueada/rechazada: cómo desbloquear -->
+<div id="credBloqueada" style="display:none; margin:10px 12px 0; padding:8px 10px; border:1px solid rgba(244,63,94,.4); border-radius:12px; background:rgba(244,63,94,.08);">
+  <b id="credBloqueadaTexto" style="font-size:10px; color:#fda4af;">⛔ Cuenta SRI bloqueada</b>
+  <p id="credBloqueadaMotivo" style="margin:2px 0 6px; font-size:9px; color:#fecdd3;"></p>
+  <div style="display:flex; gap:6px; flex-wrap:wrap;">
+    <button id="btnRecuperarClaveSRI" style="border:1px solid rgba(0,168,150,.5); background:rgba(0,168,150,.15); color:#5eead4; border-radius:8px; padding:4px 8px; font-size:9px; font-weight:700; cursor:pointer;">🔑 Recuperar clave en SRI</button>
+    <button id="btnAgenciaSRI" style="border:1px solid rgba(148,163,184,.35); background:rgba(148,163,184,.08); color:#cbd5e1; border-radius:8px; padding:4px 8px; font-size:9px; font-weight:700; cursor:pointer;">🏢 Agendar en agencia</button>
+  </div>
+</div>
 <!-- 🕵️ Auditoría de accesos al SRI (últimos intentos) -->
 <div id="loginAuditoria" style="display:none; margin:10px 12px 0; padding:7px 10px; border:1px solid rgba(148,163,184,.3); border-radius:12px; background:rgba(148,163,184,.06);">
   <b style="font-size:10px; color:#cbd5e1;">🕵️ Últimos accesos SRI</b>
