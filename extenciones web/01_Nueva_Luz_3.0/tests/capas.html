@@ -1,0 +1,142 @@
+<!doctype html><meta charset="utf-8"><title>Capas flotantes: orden, un toque y 99+</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>Lo que flota sobre el SRI tiene orden y no frena el lote</h3>
+<p style="max-width:80ch;line-height:1.6;color:#9fb4d4">
+  INFORME_FLOTANTES_2026-11, tandas G, I y J y hallazgo F4. Había siete
+  <code>z-index</code> mágicos sin jerarquía (el HUD quedaba <b>encima</b> del
+  modal de notas), una píldora vieja con un «Sync» que presentaba, un
+  <code>confirm()</code> en «Omitir» que congelaba el lote desatendido y un
+  contador de omitidos que con 112 partía el HUD en dos filas y además borraba
+  su propio ícono al actualizarse.
+</p>
+<pre id="out">…</pre>
+<script>
+  const store={};
+  window.__errors=[]; window.__logs=[];
+  const cap=(f)=>(...a)=>{window.__logs.push(a.map(String).join(' '));f(...a);};
+  console.log=cap(console.log); console.warn=cap(console.warn); console.error=cap(console.error);
+  window.onerror=(m,s,l,c,e)=>window.__errors.push(String(e&&e.stack||m));
+  window.addEventListener('unhandledrejection',e=>window.__errors.push('RECHAZO: '+(e.reason&&e.reason.message||e.reason)));
+  window.chrome={runtime:{getURL:p=>p,onMessage:{addListener(){}},sendMessage:()=>Promise.resolve({ok:false}),id:'s'},
+   storage:{local:{get:k=>Promise.resolve(k===null?{...store}:(Array.isArray(k)?Object.fromEntries(k.filter(x=>x in store).map(x=>[x,store[x]])):(typeof k==='string'?(k in store?{[k]:store[k]}:{}):{}))),set:(o,cb)=>{Object.assign(store,o);cb&&cb();return Promise.resolve()},remove:k=>{[].concat(k).forEach(x=>delete store[x]);return Promise.resolve()}},onChanged:{addListener(){}}},tabs:{create(){}}};
+  // Cualquier confirm() que se abra queda anotado y se contesta «no».
+  window.__confirms = [];
+  window.confirm = (m) => { window.__confirms.push(String(m)); return false; };
+</script>
+<script src="../shared_config.js"></script>
+<script src="../build/content.js"></script>
+<script>
+(async()=>{
+  const L=[],ok=[];
+  const push=(k,v,e)=>{const b=typeof e==='function'?e(v):JSON.stringify(v)===JSON.stringify(e);ok.push(b);
+    L.push((b?'  ':'✗ ')+String(k).padEnd(58)+JSON.stringify(v)+(b?'':'  ESPERADO: '+JSON.stringify(e)));};
+  const sec=(t)=>L.push('\n── '+t+' '+'─'.repeat(Math.max(0,70-t.length)));
+  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+  const pintar=()=>{const f=ok.filter(x=>!x).length;
+    document.getElementById('out').textContent=L.join('\n')+'\n\n'+
+      (f?'✗ '+f+' de '+ok.length+' fallaron':'✓ '+ok.length+' comprobaciones, todas bien')+
+      (window.__errors.length?'\n\nERRORES SUELTOS:\n'+window.__errors.join('\n'):'');};
+
+  try {
+  // ══ A · la escala existe y tiene orden ═══════════════════════════════════
+  sec('A · una sola escala, en orden');
+  push('SC_Z está definida', typeof SC_Z, 'object');
+  push('y no se puede pisar', Object.isFrozen(SC_Z), true);
+  const orden = ['hud','riel','toast','modal','critico'];
+  push('HUD < riel < aviso < modal < crítico',
+       orden.every((k,i)=> i===0 || SC_Z[orden[i-1]] < SC_Z[k]), true);
+  push('el modal deja lugar a +2 sin tocar al crítico', SC_Z.modal + 2 < SC_Z.critico, true);
+  push('el crítico entra en un int32', SC_Z.critico <= 2147483647, true);
+  push('las variables CSS están en :root',
+       getComputedStyle(document.documentElement).getPropertyValue('--sc-z-modal').trim(), String(SC_Z.modal));
+
+  // ══ B · el bundle no escribe números a mano ══════════════════════════════
+  sec('B · ningún z-index literal en el bundle');
+  const src = await (await fetch('../build/content.js')).text();
+  const literales = (src.match(/z-index\s*:\s*\d{3,}/gi) || []);
+  push('z-index de 3 o más cifras escritos a mano', literales, []);
+  push('ni zIndex = número', (src.match(/zIndex\s*=\s*['"]?\d{3,}/g) || []), []);
+  push('renderPillLegacy ya no existe', /renderPillLegacy/.test(src), false);
+  push('ni el «Sync» que presentaba (btn-force-sync)', /btn-force-sync/.test(src), false);
+  push('Detener ya no tiene rama con confirm', /requireConfirm/.test(src), false);
+
+  // ══ C · el HUD y la barra roja usan su capa ══════════════════════════════
+  sec('C · cada capa en su lugar');
+  SriLoopHUD._enSri = () => true;
+  await SriLoopHUD.montar();
+  await sleep(100);
+  const hud = document.getElementById('sri-loop-hud');
+  push('el HUD se monta', !!hud, true);
+  push('en la capa HUD', hud && Number(getComputedStyle(hud).zIndex), SC_Z.hud);
+  await SafeStorage.set({ sc_loop: { estado: 'CORRIENDO', cola: [{ ruc: '0704789205001', password: 'x', name: 'APOLO' }],
+    indice: 0, periodo: { year: 2026, monthIndex: 8 }, latido: Date.now(), motivo: '' } });
+  if (typeof renderEmergencyStopBar === 'function') renderEmergencyStopBar();
+  await sleep(150);
+  const barra = document.getElementById('sri-emergency-stop-bar');
+  push('la barra roja aparece', !!barra, true);
+  push('en la capa HUD, debajo de cualquier modal',
+       barra && Number(getComputedStyle(barra).zIndex) < SC_Z.modal, true);
+  if (barra) barra.remove();
+  await SafeStorage.remove(['sc_loop']);
+
+  // ══ D · el contador de omitidos ══════════════════════════════════════════
+  sec('D · ⚠️ con 112 omitidos dice 99+ y conserva el ícono');
+  const btn = document.getElementById('slh-omitidos');
+  push('el botón existe', !!btn, true);
+  const tieneSvgAntes = !!(btn && btn.querySelector('svg'));
+  const lista = {};
+  for (let i = 0; i < 112; i++) {
+    const ruc = String(1000000000001 + i);
+    lista[ruc] = { ruc, nombre: 'CLIENTE ' + i, motivo: 'prueba', cuando: Date.now() - i, veces: 1 };
+  }
+  await SafeStorage.set({ [Omitidos._KEY]: lista });
+  await SriLoopHUD.refrescarContadorOmitidos();
+  const span = btn && btn.querySelector('span');
+  push('muestra 99+', span ? span.textContent : btn && btn.textContent, '99+');
+  push('el número real queda en el título', btn && btn.title, '112 clientes sin declarar: ver por qué');
+  push('y para el lector de pantalla', btn && btn.getAttribute('aria-label'), '112 clientes sin declarar: ver por qué');
+  push('el ícono SVG sigue ahí', !!(btn && btn.querySelector('svg')), tieneSvgAntes);
+  push('está visible', btn && btn.style.display, '');
+
+  const tres = Object.fromEntries(Object.entries(lista).slice(0, 3));
+  await SafeStorage.set({ [Omitidos._KEY]: tres });
+  await SriLoopHUD.refrescarContadorOmitidos();
+  push('con 3 dice 3', (btn.querySelector('span') || btn).textContent.replace('⚠️ ', ''), '3');
+  await SafeStorage.set({ [Omitidos._KEY]: {} });
+  await SriLoopHUD.refrescarContadorOmitidos();
+  push('con 0 se esconde', btn.style.display, 'none');
+
+  // ══ E · Omitir no abre diálogos del navegador ════════════════════════════
+  sec('E · Omitir pide un segundo toque, no un confirm()');
+  const toasts = [];
+  const falso = {
+    extractClientInfo: () => ({ ruc: '0704789205001', name: 'APOLO' }),
+    showEliteToast: (t) => toasts.push(t),
+    log: () => {}
+  };
+  window.__confirms.length = 0;
+  await SriAssistantPanel.prototype.omitirClienteActual.call(falso);
+  push('no abrió ningún confirm()', window.__confirms.length, 0);
+  push('avisó con un toast', toasts.length, 1);
+  push('el aviso dice qué hacer', /otra vez/.test((toasts[0] || {}).msg || ''), true);
+  push('el primer toque NO omite', (await Omitidos.lista()).length, 0);
+  push('quedó armado para el mismo cliente', falso._omitirArmado && falso._omitirArmado.ruc, '0704789205001');
+  // Un toque viejo (más de 5 s) no cuenta como confirmación: vuelve a avisar.
+  falso._omitirArmado.t = Date.now() - 6000;
+  await SriAssistantPanel.prototype.omitirClienteActual.call(falso);
+  push('un toque de hace 6 s vuelve a preguntar', toasts.length, 2);
+  push('y sigue sin omitir', (await Omitidos.lista()).length, 0);
+  // Otro cliente en pantalla tampoco hereda la confirmación.
+  falso.extractClientInfo = () => ({ ruc: '0999999999001', name: 'OTRO' });
+  await SriAssistantPanel.prototype.omitirClienteActual.call(falso);
+  push('otro cliente no hereda el toque', toasts.length, 3);
+  push('ni se omite', (await Omitidos.lista()).length, 0);
+  } catch (e) {
+    window.__errors.push(String(e && e.stack || e));
+  }
+
+  pintar();
+})();
+</script>
+</body>
+</html>

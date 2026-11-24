@@ -195,6 +195,22 @@ function sleep(ms) {
  * módulos dibujando interfaz sin compartir nada. Cambiar un color obligaba a
  * tocar cientos de líneas.
  */
+/**
+ * Escala de capas flotantes (INFORME_FLOTANTES_2026-11 §2, tanda G).
+ * Antes había 7 números mágicos sin orden y el HUD quedaba por ENCIMA del
+ * modal de notas. Ahora cada capa sale de acá y ninguna escribe un número.
+ * Los valores son altos a propósito: el portal del SRI (PrimeFaces) apila
+ * sus diálogos desde 1000 hacia arriba y no queremos quedar debajo.
+ * Orden: HUD/isla < panel (riel) < avisos < modal < crítico.
+ */
+const SC_Z = Object.freeze({
+  hud: 2147483000,
+  riel: 2147483100,
+  toast: 2147483200,
+  modal: 2147483300,
+  critico: 2147483400,
+});
+
 function instalarEstilosSC() {
   if (typeof document === 'undefined' || document.getElementById('sc-tokens')) return;
   const st = document.createElement('style');
@@ -215,6 +231,8 @@ function instalarEstilosSC() {
       --sc-radio-btn:10px;
       --sc-sombra:0 10px 30px rgba(0,0,0,.5);
       --sc-fuente:'Manrope','Inter',system-ui,sans-serif;
+      --sc-z-hud:${SC_Z.hud}; --sc-z-riel:${SC_Z.riel}; --sc-z-toast:${SC_Z.toast};
+      --sc-z-modal:${SC_Z.modal}; --sc-z-critico:${SC_Z.critico};
     }
     .sc-panel{
       background:var(--sc-fondo); border:1px solid var(--sc-borde);
@@ -1486,7 +1504,7 @@ function renderEmergencyStopBar() {
       if (!bar) {
         bar = document.createElement('div');
         bar.id = 'sri-emergency-stop-bar';
-        bar.style.cssText = 'position: fixed; top: 12px; right: 20px; z-index: 2147483647; display: flex; align-items: center; gap: 8px; background: rgba(185, 28, 28, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 30px; padding: 6px 14px; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: white; cursor: pointer; user-select: none; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);';
+        bar.style.cssText = 'position: fixed; top: 12px; right: 20px; z-index: ' + SC_Z.hud + '; display: flex; align-items: center; gap: 8px; background: rgba(185, 28, 28, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 30px; padding: 6px 14px; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: white; cursor: pointer; user-select: none; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);';
         bar.innerHTML = `
           <span style="font-size: 13px;">🛑</span>
           <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em;">DETENER BUCLE</span>
@@ -4417,7 +4435,7 @@ async function renderAnticipationWidget(items) {
       const conector = document.createElement('div');
       conector.id = 'sri-anticipacion-conector';
       conector.style.cssText =
-        'position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid rgba(5, 20, 36, 0.96); z-index: 999999; pointer-events: none;';
+        'position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid rgba(5, 20, 36, 0.96); z-index: ' + SC_Z.riel + '; pointer-events: none;';
       document.body.appendChild(conector);
     }
 
@@ -4428,7 +4446,7 @@ async function renderAnticipationWidget(items) {
     // no como un panel aparte en la esquina — era lo que hacía que el login
     // mostrara dos interfaces separadas haciendo casi lo mismo.
     sidebar.style.cssText =
-      "position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 440px; max-height: calc(100vh - 100px); z-index: 999999; background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
+      "position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 440px; max-height: calc(100vh - 100px); z-index: " + SC_Z.riel + "; background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
 
     sidebar.innerHTML = `
             <div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; flex-direction: column; gap: 16px;">

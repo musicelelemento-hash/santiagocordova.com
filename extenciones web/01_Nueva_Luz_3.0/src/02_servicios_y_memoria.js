@@ -34,7 +34,7 @@ const SafeStorage = {
         const overlay = document.createElement('div');
         overlay.id = 'sri-disconnection-overlay';
         overlay.innerHTML = `
-            <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Inter', sans-serif; text-align: center; padding: 20px;">
+            <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: ${SC_Z.critico}; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Inter', sans-serif; text-align: center; padding: 20px;">
                 <div style="font-size: 50px; margin-bottom: 20px;">🛡️</div>
                 <h1 style="margin: 0; font-size: 24px;">Extensión Actualizada</h1>
                 <p style="margin: 15px 0; font-size: 16px; max-width: 400px; color: #cbd5e1;">La extensión se ha actualizado o reiniciado. Para continuar con el proceso de extracción o navegación sin errores:</p>
@@ -4804,7 +4804,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === 'STOP_ACTION') {
         if (window.sriAssistant) {
-            window.sriAssistant.stopAutomation(false); // false = no confirm
+            window.sriAssistant.stopAutomation();
         }
         sendResponse({ success: true });
         return true;

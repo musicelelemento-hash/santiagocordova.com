@@ -10,6 +10,23 @@ quién va encima de quién, dónde se ancla, cuánto ocupa y qué pasa cuando se
 **Método:** lectura del código que construye cada capa, más la corrida real del 07-nov-2026
 (clientes 3→6) que quedó en consola. Donde un número es estimación, se dice.
 
+> **Avance al 24-nov-2026 (v3.7.16, suite 1008 verdes, banco nuevo `tests/capas.html`):**
+> - **G hecha**: escala única `SC_Z` en `01` (hud < riel < toast < modal < crítico) y variables
+>   `--sc-z-*` en `:root`. Se dejaron valores altos (desde `2147483000`) en vez de 1000–1400: el portal
+>   del SRI apila sus diálogos de PrimeFaces desde 1000 y no queremos quedar debajo. El banco revisa que
+>   el bundle no tenga ningún `z-index` literal de 3+ cifras. «Descongelar» comparaba `zIndex` como
+>   texto (`>= '999999'`); ahora compara número contra `SC_Z.modal`.
+> - **H revisada, no aplicada**: el `showEliteToast` global de `07` no es un duplicado del aviso: es la
+>   tarjeta de resultado de la extracción (facturas, retenciones, botón «Ir a declaración»). Se dejó,
+>   sólo entra en la capa `toast`.
+> - **I hecha**: `renderPillLegacy()` borrada con `#btn-force-sync`, `#btn-pill-skip` y `#btn-force-scan`.
+> - **J hecha**: Detener ya no tiene rama con `confirm()`; Omitir pide un segundo toque dentro de 5 s y
+>   sobre el mismo cliente (aviso en toast), sin diálogo del navegador.
+> - **F4 hecha**: el contador ⚠️ dice `99+` desde 100 (número real en `title`/`aria-label`). Además
+>   tenía un bug: al actualizarse pisaba el botón con `textContent` y borraba el ícono SVG.
+> - **Pendiente**: K (HUD `nowrap`, cajón popover, riel con `--sc-hud-alto`) y L (carril de avisos,
+>   isla con ellipsis). Son de riesgo medio y conviene verlas en el portal real antes de publicar.
+
 ---
 
 ## 1 · Inventario medido

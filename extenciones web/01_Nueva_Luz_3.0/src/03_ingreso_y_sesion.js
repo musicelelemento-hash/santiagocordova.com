@@ -2508,13 +2508,13 @@ async function renderLoginCockpit(items) {
 
     const island = document.createElement('div');
     island.id = 'sri-dynamic-island';
-    island.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: flex; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.12); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 6px 14px; box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; white-space: nowrap; max-width: 98vw; overflow-x: auto; scrollbar-width: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);';
+    island.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: ' + SC_Z.hud + '; display: flex; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.12); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 6px 14px; box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; white-space: nowrap; max-width: 98vw; overflow-x: auto; scrollbar-width: none; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);';
 
     let minibar = document.getElementById('sri-island-minibar');
     if (!minibar) {
         minibar = document.createElement('div');
         minibar.id = 'sri-island-minibar';
-        minibar.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2147483647; display: none; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.14); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 5px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; font-size: 11px; cursor: pointer; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); user-select: none;';
+        minibar.style.cssText = 'position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: ' + SC_Z.hud + '; display: none; align-items: center; gap: 8px; background: rgba(7, 15, 29, 0.94); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px); border: 1px solid rgba(255, 255, 255, 0.14); border-top: 1px solid rgba(94, 234, 212, 0.45); border-radius: 40px; padding: 5px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(0, 168, 150, 0.15); font-family: Manrope, system-ui, sans-serif; color: #f8fafc; font-size: 11px; cursor: pointer; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); user-select: none;';
         document.body.appendChild(minibar);
     }
 

@@ -146,7 +146,7 @@ class SriAssistantPanel {
                 -webkit-backdrop-filter: blur(25px) saturate(200%);
                 box-shadow: 0 20px 50px rgba(0,0,0,0.3), 0 0 1px rgba(255,255,255,0.3);
                 border-radius: 18px;
-                z-index: 999999;
+                z-index: ${SC_Z.riel};
                 font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
                 transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
                 border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1055,7 +1055,7 @@ class SriAssistantPanel {
             border: 1px solid rgba(99, 102, 241, 0.4);
             border-radius: 20px;
             padding: 20px;
-            z-index: 2000000;
+            z-index: ${SC_Z.toast};
             color: white;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             font-family: 'Manrope', system-ui, sans-serif;
@@ -1505,7 +1505,7 @@ class SriAssistantPanel {
                     onAction: async () => {
                         cancelled = true;
                         if (countdownInterval) clearInterval(countdownInterval);
-                        await this.stopAutomation(false);
+                        await this.stopAutomation();
                     }
                 }
             ]
@@ -2205,7 +2205,7 @@ class SriAssistantPanel {
         
         // Efecto confeti visual simple
         const canvas = document.createElement('div');
-        canvas.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:999999;';
+        canvas.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:' + SC_Z.toast + ';';
         document.body.appendChild(canvas);
         for(let i=0; i<50; i++) {
             const p = document.createElement('div');
@@ -2222,7 +2222,7 @@ class SriAssistantPanel {
         this.clearCards();
         const card = document.createElement('div');
         card.className = 'elite-context-card final-report animate-pop-in';
-        card.style.cssText = 'position:fixed; top:20px; right:20px; z-index:999999; border-left:4px solid #f59e0b; width:320px;';
+        card.style.cssText = 'position:fixed; top:20px; right:20px; z-index:' + SC_Z.toast + '; border-left:4px solid #f59e0b; width:320px;';
         card.innerHTML = `
             <div class="card-header">
                 <span class="icon">🏆</span>
@@ -2270,7 +2270,7 @@ class SriAssistantPanel {
             -webkit-backdrop-filter: blur(25px) saturate(180%);
             box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 1px rgba(255,255,255,0.25);
             border-radius: 18px;
-            z-index: 999999;
+            z-index: ${SC_Z.riel};
             font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
             border: 1px solid rgba(255, 255, 255, 0.14);
             color: #f8fafc;
@@ -2340,7 +2340,7 @@ class SriAssistantPanel {
                     color: white;
                     font-family: 'Manrope', system-ui, sans-serif;
                     user-select: none;
-                    z-index: 1000000;
+                    z-index: ${SC_Z.riel};
                 }
                 .sri-elite-pill:hover {
                     background: rgba(15, 23, 42, 0.95);
@@ -2361,7 +2361,7 @@ class SriAssistantPanel {
                     border-radius: 28px;
                     padding: 30px;
                     box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.5);
-                    z-index: 2147483647;
+                    z-index: ${SC_Z.modal + 1};
                     animation: slideInElite 0.6s cubic-bezier(0.16, 1, 0.3, 1);
                     transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
@@ -2489,53 +2489,27 @@ class SriAssistantPanel {
         if (tab) tab.onclick = () => this.toggleMinimize(false);
     }
 
-    renderPillLegacy() {
-        if (!this.container) return; // ELITE FIX: Safety check
-        const info = this.extractClientInfo();
-        const clientName = info.name ? info.name.split(' ')[0] : 'SRI';
-
-        this.container.style.width = 'auto'; // Ajuste dinámico
-        this.container.innerHTML = `
-            <div id="sri-smart-hub" class="sri-elite-pill" role="toolbar" aria-label="Controles del asistente SRI" style="opacity: 0.95; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 100%;">
-                <div style="font-size: 16px;">💎</div>
-                <div style="font-size: 10px; font-weight: 700;">Panel ${escapeHtml(clientName)}</div>
-                <div id="btn-pill-skip" role="button" tabindex="0" aria-label="Omitir este cliente y pasar al siguiente" style="font-size: 12px; cursor: pointer; padding: 8px 12px; min-height: 32px; display: flex; align-items: center; background: rgba(245, 158, 11, 0.25); border: 1px solid rgba(245, 158, 11, 0.5); border-radius: 8px; font-weight: 800; color: #fbbf24;" title="Omitir este cliente y pasar al siguiente">⏭️ Omitir</div>
-                <div id="btn-force-scan" role="button" tabindex="0" aria-label="Forzar escaneo de obligaciones" style="font-size: 14px; cursor: pointer; padding: 8px 10px; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 8px;" title="Forzar Escaneo de Obligaciones">🔍</div>
-                <div id="btn-force-sync" role="button" tabindex="0" aria-label="Sincronizar manualmente" style="font-size: 12px; cursor: pointer; padding: 8px 12px; min-height: 32px; display: flex; align-items: center; background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); border-radius: 8px; font-weight: 800; color: #10b981;" title="Sincronizar Manualmente (Si terminaste por fuera)">✨ Sync</div>
-            </div>
-        `;
-
-        const hub = this.container.querySelector('#sri-smart-hub');
-        hub.onclick = (e) => {
-            if (e.target.id === 'btn-pill-skip') {
-                e.stopPropagation();
-                this.omitirClienteActual();
-                return;
-            }
-            if (e.target.id === 'btn-force-scan') {
-                e.stopPropagation();
-                log.debug('🔍 [FORCE SCAN] Ejecutando escaneo manual...');
-                this.scanObligacionesSRI();
-                return;
-            }
-            if (e.target.id === 'btn-force-sync') {
-                e.stopPropagation();
-                log.debug('✨ [FORCE SYNC] Ejecutando cierre mágico manual...');
-                this.ejecutarCierreMagico();
-                return;
-            }
-            this.toggleMinimize(false);
-        };
-    }
-
     async omitirClienteActual() {
         const info = this.extractClientInfo();
         const ruc = info.ruc;
         const name = info.name || ruc || 'este cliente';
 
-        if (!confirm(`¿Omitir a ${name}?\nSe guardará en la lista de omitidos y se avanzará al siguiente cliente.`)) {
+        // Sin confirm(): un diálogo del navegador en medio de un lote
+        // desatendido lo congela hasta que alguien conteste (INFORME_FLOTANTES
+        // F3/tanda J). La fricción ahora es visual: el primer toque avisa y
+        // sólo el segundo, dentro de 5 s y sobre el MISMO cliente, omite.
+        const ahora = Date.now();
+        const previo = this._omitirArmado;
+        if (!previo || previo.ruc !== (ruc || name) || ahora - previo.t > 5000) {
+            this._omitirArmado = { ruc: ruc || name, t: ahora };
+            this.showEliteToast({
+                title: '⏭️ ¿Omitir a este cliente?',
+                msg: `Tocá «Omitir» otra vez para pasar a ${name} a la lista de omitidos y seguir con el próximo.`,
+                duration: 5000
+            });
             return;
         }
+        this._omitirArmado = null;
 
         this.log(`⏭️ Omitiendo cliente ${name}...`);
         this.showEliteToast({
@@ -3259,7 +3233,7 @@ class SriAssistantPanel {
             this.contextOverlay.style.cssText = `
                 position: fixed; top: 0; left: 0; width: 100%; height: 100%;
                 background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px);
-                z-index: 2147483646; animation: fadeIn 0.3s ease-out;
+                z-index: ${SC_Z.modal}; animation: fadeIn 0.3s ease-out;
             `;
             document.body.appendChild(this.contextOverlay);
 
@@ -3770,7 +3744,7 @@ class SriAssistantPanel {
             blockers.forEach(b => b.remove());
             const overlays = Array.from(document.querySelectorAll('div')).filter(el => {
                 const style = getComputedStyle(el);
-                return style.position === 'fixed' && style.zIndex >= '999999' && el !== this.container;
+                return style.position === 'fixed' && Number(style.zIndex) >= SC_Z.modal && el !== this.container;
             });
             overlays.forEach(o => o.remove());
             this.showEliteToast({ title: '🔓 Descongelado', msg: 'Capas de bloqueo eliminadas.' });
@@ -4734,10 +4708,9 @@ class SriAssistantPanel {
         this.render();
     }
 
-    async stopAutomation(requireConfirm = false) {
-        if (requireConfirm && !confirm('¿Desea detener la automatización?')) {
-            return;
-        }
+    // Detener nunca pregunta: es el freno de emergencia y tiene que responder
+    // al primer toque, aun con el lote corriendo (INFORME_FLOTANTES F3).
+    async stopAutomation() {
         if (typeof marcarParadaPedida === 'function') marcarParadaPedida();
 
         // 🚦 Si hay un bucle vivo (semáforo en CORRIENDO/PAUSANDO/PAUSADO), la
