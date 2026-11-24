@@ -693,13 +693,13 @@ if (btnNube) {
     }
     try {
       const res = await fetch(`${url}/rest/v1/annulments?select=clave&limit=1`, {
-        headers: { apikey: key, Authorization: `Bearer ${key}` }
+        headers: { apikey: key, Authorization: `Bearer ${window.ScSesion ? await window.ScSesion.bearer(key) : key}` }
       });
       if (res.ok) {
         el.textContent = '☁ conexión OK';
         el.style.color = '#00A896';
       } else {
-        el.textContent = `⚠ HTTP ${res.status}`;
+        el.textContent = (res.status === 401 || res.status === 403) ? '⚠ inicia sesión' : `⚠ HTTP ${res.status}`;
         el.style.color = '#C9A96E';
         el.title = (await res.text()).slice(0, 140);
       }
@@ -710,3 +710,7 @@ if (btnNube) {
     }
   });
 }
+
+// 👤 Sesión del estudio: sin ella, el cobro de anulaciones deja de subir a la
+// web cuando se cierre `annulments` para la llave pública.
+if (window.ScSesion) window.ScSesion.montarFormulario(document.getElementById('sc-sesion-caja'));

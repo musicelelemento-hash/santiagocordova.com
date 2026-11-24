@@ -2,6 +2,7 @@
 // `importScripts` no existe y reventaba la carga entera del módulo.
 if (typeof importScripts === 'function') {
   try { importScripts('shared_config.js'); } catch (e) { /* sin config, se usa la global */ }
+  try { importScripts('sc_sesion.js'); } catch (e) { /* sin sesión: la llave pública */ }
 }
 
 // ============================================================
@@ -567,9 +568,12 @@ function scRunnerHeaders(token) {
 async function scRunnerApi(path, opciones = {}) {
   const base = scRunnerBase();
   if (!base) throw new Error('sin Supabase configurado');
-  const st = await chrome.storage.local.get(['sc_supabase_token']);
+  // Sesión del estudio (Ajustes) primero; si no hay, el token prestado de la web.
+  let token = null;
+  try { if (typeof ScSesion !== 'undefined') token = await ScSesion.token(); } catch (e) { token = null; }
+  if (!token) token = (await chrome.storage.local.get(['sc_supabase_token'])).sc_supabase_token || null;
   const res = await fetch(`${base}/rest/v1/${path}`, {
-    ...opciones, headers: { ...scRunnerHeaders(st.sc_supabase_token), ...(opciones.headers || {}) },
+    ...opciones, headers: { ...scRunnerHeaders(token), ...(opciones.headers || {}) },
   });
   const texto = await res.text();
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${texto.slice(0, 200)}`);

@@ -142,7 +142,7 @@ async function publicarComprasEnLaNube(ruc, periodo, proveedores) {
         const key = String(cfg.SUPABASE_ANON_KEY || '').trim();
         if (!url || !key || !ruc || !periodo) return;
 
-        const cab = { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" };
+        const cab = { apikey: key, Authorization: `Bearer ${await scBearer(key)}`, "Content-Type": "application/json" };
         const res = await fetch(`${url}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=id,tax_profile`, { headers: cab });
         if (!res.ok) return;
         const filas = await res.json();

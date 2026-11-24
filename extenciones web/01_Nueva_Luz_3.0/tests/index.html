@@ -161,7 +161,9 @@ const BANCOS = [
   ['firma_contador.html', 'La encuesta final de firma del contador',
                        'Que si el SRI pregunta si hace falta firma de contador, el bot conteste No —o Sí si la ficha del cliente lo pide— y pulse Aceptar, en vez de dejar la declaración colgada.'],
   ['bridge_cuota.html', 'El guardián de cuota del bridge',
-                       'Que un payload de más de 200 KB no se escriba en el localStorage del portal —ni le tumbe la cuota— y que lo chico se siga guardando.']
+                       'Que un payload de más de 200 KB no se escriba en el localStorage del portal —ni le tumbe la cuota— y que lo chico se siga guardando.'],
+  ['sesion.html', 'La sesión del estudio en Supabase',
+                       'Que la extensión hable con Supabase como usuario (y se renueve sola), que sin sesión siga con la llave pública, y que la contraseña no quede guardada nunca.']
 ];
 
 const $ = (id) => document.getElementById(id);

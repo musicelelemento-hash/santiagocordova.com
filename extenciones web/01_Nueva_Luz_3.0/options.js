@@ -834,3 +834,55 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 })();
+
+// ── 👤 Sesión del estudio (sc_sesion.js) ─────────────────────────────
+// La contraseña sólo vive en el campo hasta que Supabase contesta; después
+// se borra del DOM. Lo que queda guardado son los tokens de la sesión.
+(function () {
+    const $ = (id) => document.getElementById(id);
+
+    async function pintarSesion() {
+        if (typeof ScSesion === 'undefined') return;
+        const e = await ScSesion.estado();
+        const est = $('estadoSesion');
+        if (e.conectado) {
+            est.textContent = `✅ Conectado como ${e.email}` + (e.aviso ? ` · ⚠️ ${e.aviso}` : '');
+            est.dataset.hay = 'si';
+        } else {
+            est.textContent = e.aviso ? `⚠️ ${e.aviso}` : 'Sin sesión: la extensión usa la llave pública, que se va a cerrar.';
+            est.dataset.hay = 'no';
+        }
+        $('formSesion').hidden = e.conectado;
+        $('btnIniciarSesion').hidden = e.conectado;
+        $('btnCerrarSesion').hidden = !e.conectado;
+    }
+
+    async function iniciar() {
+        const btn = $('btnIniciarSesion');
+        const pass = $('sesionPass');
+        btn.disabled = true;
+        try {
+            await ScSesion.iniciar($('sesionEmail').value, pass.value);
+            avisar('Sesión iniciada.');
+        } catch (err) {
+            avisar('No se pudo iniciar sesión: ' + err.message);
+        } finally {
+            pass.value = '';
+            btn.disabled = false;
+            pintarSesion();
+        }
+    }
+
+    function init() {
+        if (!$('tarjetaSesion')) return;
+        $('btnIniciarSesion').addEventListener('click', iniciar);
+        $('sesionPass').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') iniciar(); });
+        $('btnCerrarSesion').addEventListener('click', async () => { await ScSesion.cerrar(); avisar('Sesión cerrada.'); pintarSesion(); });
+        chrome.storage.onChanged.addListener((ch, area) => {
+            if (area === 'local' && (ch.sc_sesion_web || ch.sc_sesion_web_aviso)) pintarSesion();
+        });
+        pintarSesion();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();

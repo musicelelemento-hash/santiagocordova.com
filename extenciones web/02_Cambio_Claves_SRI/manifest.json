@@ -32,6 +32,7 @@
         "https://*.ecuafact.com/*"
       ],
       "js": [
+        "sc_sesion.js",
         "supabase_bridge.js",
         "content.js"
       ],

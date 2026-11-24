@@ -40,6 +40,7 @@
       ],
       "js": [
         "shared_config.js",
+        "sc_sesion.js",
         "content.js"
       ],
       "run_at": "document_end"

@@ -2,6 +2,17 @@
 const SC_SUPABASE_DEFAULT_URL = "https://afssvsxlxiwqgtcgvqxp.supabase.co";
 const SC_SUPABASE_DEFAULT_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmc3N2c3hseGl3cWd0Y2d2cXhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2MzY1ODgsImV4cCI6MjA4OTIxMjU4OH0.pLqgC4_5dVEOV2Bgfwa14Ib2PbVfz6QmSnSIEKfRZ9I";
 
+// Para sc_sesion.js: la misma URL y llave pública que usa este puente.
+if (typeof self !== 'undefined' && !self.SC_CONFIG) {
+  self.SC_CONFIG = { SUPABASE_URL: SC_SUPABASE_DEFAULT_URL, SUPABASE_ANON_KEY: SC_SUPABASE_DEFAULT_KEY };
+}
+
+/** Token de la sesión del estudio si hay; si no, la llave pública. */
+async function scBearer02(llave) {
+  try { if (typeof ScSesion !== 'undefined') return await ScSesion.bearer(llave); } catch (e) { /* sin sesión */ }
+  return llave;
+}
+
 function getNinthDigit(ruc) {
   if (!ruc || ruc.length < 9) return 99;
   const char = ruc.charAt(8);
@@ -84,13 +95,14 @@ async function fetchClientsFromSupabase() {
       method: 'GET',
       headers: {
         'apikey': config.key,
-        'Authorization': `Bearer ${config.key}`,
+        'Authorization': `Bearer ${await scBearer02(config.key)}`,
         'Content-Type': 'application/json'
       }
     });
 
     if (!response.ok) {
       console.error(`❌ [SC PRO Supabase] Error al consultar clientes: ${response.status} ${response.statusText}`);
+      if (typeof ScSesion !== 'undefined') ScSesion.rechazoSinSesion(response.status);
       return null;
     }
 
@@ -135,7 +147,7 @@ async function updatePasswordInSupabase(ruc, newPassword) {
       keepalive: true,
       headers: {
         'apikey': config.key,
-        'Authorization': `Bearer ${config.key}`,
+        'Authorization': `Bearer ${await scBearer02(config.key)}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },
@@ -148,10 +160,11 @@ async function updatePasswordInSupabase(ruc, newPassword) {
 
     if (!response.ok) {
       console.error(`❌ [SC PRO Supabase] Falló actualización en Supabase para RUC ${rucClean}: ${response.status}`);
+      if (typeof ScSesion !== 'undefined') ScSesion.rechazoSinSesion(response.status);
       return false;
     }
 
-    console.log(`🎉 [SC PRO Supabase] Clave de RUC ${rucClean} actualizada DIRECTAMENTE en Supabase a: ${passClean}`);
+    console.log(`🎉 [SC PRO Supabase] Clave de RUC ${rucClean} actualizada DIRECTAMENTE en Supabase.`);
     return true;
   } catch (err) {
     console.error("❌ [SC PRO Supabase] Excepción en updatePasswordInSupabase:", err);

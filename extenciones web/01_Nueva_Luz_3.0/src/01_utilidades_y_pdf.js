@@ -147,6 +147,24 @@ function aplicarCredencialesSupabaseGuardadas(items) {
     log.debug('🔑 [WEB] Usando la llave de Supabase guardada en Ajustes, no la del código.');
   }
 }
+
+/**
+ * Lo que va después de «Bearer » en cada petición a Supabase.
+ *
+ * Con sesión del estudio (`sc_sesion.js`, iniciada en Ajustes) es el access
+ * token del usuario: la base responde como `authenticated`. Sin sesión cae a
+ * la llave pública, que deja de servir cuando se cierren las tablas para
+ * `anon` — por eso el `apikey` sigue siendo la llave y sólo cambia esto.
+ *
+ * @param {string} llave la llave pública en uso (la de Ajustes, si hay).
+ * @returns {Promise<string>}
+ */
+async function scBearer(llave) {
+  try {
+    if (typeof ScSesion !== 'undefined' && ScSesion && ScSesion.bearer) return await ScSesion.bearer(llave);
+  } catch (e) { /* sin sesión: la llave */ }
+  return llave;
+}
 const SC_R2_UPLOAD_ENDPOINT = (typeof window !== 'undefined' && window.SC_CONFIG && window.SC_CONFIG.R2_UPLOAD_ENDPOINT)
   ? window.SC_CONFIG.R2_UPLOAD_ENDPOINT
   : null;
@@ -448,7 +466,7 @@ const SriLoginAuditoria = {
         const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
         const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
         if (!url || !key) return;
-        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const cab = { apikey: key, Authorization: 'Bearer ' + (await scBearer(key)), 'Content-Type': 'application/json' };
         const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${entry.ruc}&select=id,tax_profile`, { headers: cab });
         const filas = rc.ok ? await rc.json() : [];
         const cliente = Array.isArray(filas) ? filas[0] : null;
@@ -829,6 +847,13 @@ function parseImporteEstricto(texto) {
 function avisoLlaveWeb(status) {
   if (status !== 401 && status !== 403) return '';
 
+  // Si no hay sesión del estudio, lo más probable desde que se cierran las
+  // tablas para `anon` es eso: lo deja anotado para que popup y Ajustes
+  // digan «Inicia sesión». No cambia el texto que devuelve esta función.
+  if (typeof ScSesion !== 'undefined' && ScSesion && ScSesion.rechazoSinSesion) {
+    ScSesion.token().then((t) => { if (!t) ScSesion.rechazoSinSesion(status); }).catch(() => {});
+  }
+
   // Antes que nada: ¿HAY una llave? Si `shared_config.js` no cargó, la
   // petición sale sin `apikey` y Supabase contesta 401 igual — pero decir «la
   // rechaza» manda a rotar una credencial que está sana. Un diagnóstico
@@ -942,7 +967,7 @@ async function listarComprobantesEmbebidos(periodo = null) {
   if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
     return { ...vacio, error: 'No hay credenciales de Supabase cargadas.' };
   }
-  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}` };
+  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}` };
 
   let filas;
   try {
@@ -1029,7 +1054,7 @@ async function auditarPeriodosSospechosos() {
   if (!SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) {
     return { ...vacio, error: 'No hay credenciales de Supabase cargadas.' };
   }
-  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}` };
+  const cab = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}` };
 
   let filas;
   try {
@@ -1133,7 +1158,7 @@ async function migrarUnComprobanteEmbebido(item) {
 
   // 5 · Recién ahora se toca la base. Se relee el cliente para no pisar lo que
   //     otra corrida haya escrito mientras tanto.
-  const cabS = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+  const cabS = { apikey: SC_SUPABASE_ANON_KEY, Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}`,
                  'Content-Type': 'application/json' };
   try {
     const r = await fetch(
@@ -2333,7 +2358,7 @@ async function marcarCredencialEnLaWeb(ruc, estado, motivo = '') {
   if (!ruc || !SC_SUPABASE_URL || !SC_SUPABASE_ANON_KEY) return false;
   const cab = {
     apikey: SC_SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+    Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}`,
     'Content-Type': 'application/json'
   };
 
@@ -2457,7 +2482,7 @@ async function enviarCopiaDeclaracion({ ruc, nombre, periodo, pdfUrl }) {
     if (!to) {
       try {
         const r = await fetch(`${SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=email,name`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}` },
         });
         if (r.ok) {
           const filas = await r.json();
@@ -2678,7 +2703,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
                 method: "POST",
                 headers: {
                   apikey: SUPABASE_KEY,
-                  Authorization: `Bearer ${SUPABASE_KEY}`,
+                  Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
                   "Content-Type": "application/pdf",
                   "x-upsert": "true",
                 },
@@ -2697,7 +2722,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
                   method: "POST",
                   headers: {
                     apikey: SUPABASE_KEY,
-                    Authorization: `Bearer ${SUPABASE_KEY}`,
+                    Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
                     "Content-Type": "application/pdf",
                     "x-upsert": "true",
                   },
@@ -2756,7 +2781,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
       {
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
         },
       },
     );
@@ -2862,7 +2887,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
         method: "POST",
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
           "Content-Type": "application/json",
           Prefer: "resolution=merge-duplicates"
         },
@@ -2882,7 +2907,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
             method: "POST",
             headers: {
               apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
+              Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify(declarationToUpsert),
@@ -2942,7 +2967,7 @@ const SUPABASE_URL = SC_SUPABASE_URL;
         method: "PATCH",
         headers: {
           apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
+          Authorization: `Bearer ${await scBearer(SUPABASE_KEY)}`,
           "Content-Type": "application/json",
           Prefer: "return=minimal"
         },
@@ -3086,7 +3111,7 @@ async function guardarReporteExtraccionEnPerfil(reportData) {
     try {
       const cab = {
         apikey: SC_SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`,
+        Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}`,
         'Content-Type': 'application/json'
       };
       const rCli = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?ruc=eq.${encodeURIComponent(ruc)}&select=id,name,declaration_history`, { headers: cab });
@@ -3854,7 +3879,7 @@ async function guardarVentasEnNube(ruc, periodo, datos = {}) {
         const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
         const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
         if (!url || !key) return { ok: false, motivo: 'sin_supabase' };
-        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const cab = { apikey: key, Authorization: 'Bearer ' + (await scBearer(key)), 'Content-Type': 'application/json' };
         const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
         const filas = rc.ok ? await rc.json() : [];
         const cliente = Array.isArray(filas) ? filas[0] : null;
@@ -3950,7 +3975,7 @@ async function marcarFirmaPendiente(ruc, periodo, nombre) {
             const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
             const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
             if (url && key) {
-                const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+                const cab = { apikey: key, Authorization: 'Bearer ' + (await scBearer(key)), 'Content-Type': 'application/json' };
                 const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
                 const filas = rc.ok ? await rc.json() : [];
                 const cliente = Array.isArray(filas) ? filas[0] : null;
@@ -3995,7 +4020,7 @@ async function marcarAnexoEnLaNube(ruc, periodo, datos = {}) {
         const key = cfg.SUPABASE_ANON_KEY || (cfg.SUPABASE_KEY) || '';
         if (!url || !key) return { ok: false, motivo: 'sin_supabase' };
 
-        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const cab = { apikey: key, Authorization: 'Bearer ' + (await scBearer(key)), 'Content-Type': 'application/json' };
         const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
         const filas = rc.ok ? await rc.json() : [];
         const cliente = Array.isArray(filas) ? filas[0] : null;

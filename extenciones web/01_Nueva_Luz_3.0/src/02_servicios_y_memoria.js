@@ -1588,7 +1588,7 @@ const SriSincronizadorClaves = {
             const res = await fetch(url, {
                 headers: {
                     apikey: SC_SUPABASE_ANON_KEY,
-                    Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`
+                    Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}`
                 }
             });
             if (!res.ok) {
@@ -2144,7 +2144,7 @@ const Chequeo = {
                     const rw = await fetch(`${SC_SUPABASE_URL}/rest/v1/clients?select=id&limit=1`, {
                         headers: {
                             apikey: SC_SUPABASE_ANON_KEY,
-                            Authorization: `Bearer ${SC_SUPABASE_ANON_KEY}`
+                            Authorization: `Bearer ${await scBearer(SC_SUPABASE_ANON_KEY)}`
                         }
                     });
                     const origen = typeof SC_SUPABASE_ORIGEN === 'string' ? SC_SUPABASE_ORIGEN : 'del código';

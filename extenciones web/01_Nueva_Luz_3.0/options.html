@@ -318,6 +318,29 @@ footer {
     <p>SC TaxPilot PRO · lo que se guarda acá no viaja en el código</p>
 </header>
 
+<section class="tarjeta" id="tarjetaSesion">
+    <h2>👤 Sesión del estudio</h2>
+    <p class="bajada">
+        Con el mismo usuario con el que entrás a la web. La extensión guarda sólo
+        la sesión (se renueva sola); <b>la contraseña no se guarda</b>.
+    </p>
+    <div class="estado" id="estadoSesion">—</div>
+    <div id="formSesion">
+        <div class="campo">
+            <label for="sesionEmail">Correo</label>
+            <input type="email" id="sesionEmail" autocomplete="username" spellcheck="false">
+        </div>
+        <div class="campo">
+            <label for="sesionPass">Contraseña</label>
+            <input type="password" id="sesionPass" autocomplete="current-password" spellcheck="false">
+        </div>
+    </div>
+    <div class="botones">
+        <button class="b-guardar" id="btnIniciarSesion">Iniciar sesión</button>
+        <button class="b-borrar" id="btnCerrarSesion" hidden>Cerrar sesión</button>
+    </div>
+</section>
+
 <section class="tarjeta">
     <h2>🔑 Claves y servicios</h2>
     <p class="bajada">
@@ -562,6 +585,7 @@ footer {
 <div id="aviso-flotante" role="status" aria-live="polite"></div>
 
 <script src="shared_config.js"></script>
+<script src="sc_sesion.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

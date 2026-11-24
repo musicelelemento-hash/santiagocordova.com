@@ -5829,7 +5829,7 @@ async function _icePublicarPresentado(ruc, periodo) {
         const url = (typeof SC_SUPABASE_URL !== 'undefined' && SC_SUPABASE_URL) || (window.SC_CONFIG && window.SC_CONFIG.SUPABASE_URL);
         const key = (typeof SC_SUPABASE_ANON_KEY !== 'undefined' && SC_SUPABASE_ANON_KEY) || (window.SC_CONFIG && window.SC_CONFIG.SUPABASE_ANON_KEY);
         if (!url || !key) return;
-        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const cab = { apikey: key, Authorization: 'Bearer ' + (await scBearer(key)), 'Content-Type': 'application/json' };
         const r = await fetch(url + '/rest/v1/clients?ruc=eq.' + encodeURIComponent(ruc) + '&select=id,tax_profile', { headers: cab });
         const filas = await r.json();
         if (!Array.isArray(filas) || !filas.length) return;

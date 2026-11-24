@@ -69,7 +69,7 @@ async function pintarEstadoNube() {
     el.className = 'nube-chip';
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id&limit=1`, {
-            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+            headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${await ScSesion.bearer(SUPABASE_KEY)}` }
         });
         if (res.ok) {
             el.textContent = '☁ nube OK';
@@ -1091,7 +1091,7 @@ async function fetchClients(forceSync = false) {
         // ver grant_is_deleted_anon.sql). Sin ese permiso el SRI de la web marca
         // la baja y acá no nos enteramos: HTTP 401 / 42501.
         let res = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.false&select=${FIELDS}`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${await ScSesion.bearer(SUPABASE_KEY)}` }
         });
 
         // Intento 2 (degradado): el GRANT no se corrió todavía. Traemos todo lo
@@ -1101,7 +1101,7 @@ async function fetchClients(forceSync = false) {
         if (!res.ok) {
             syncBajasBloqueado = true;
             const degradado = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=${FIELDS}`, {
-                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${await ScSesion.bearer(SUPABASE_KEY)}` }
             });
             if (!degradado.ok) throw new Error("Error fetching clients (" + degradado.status + ")");
             const dataDegradada = await degradado.json();
@@ -1116,7 +1116,7 @@ async function fetchClients(forceSync = false) {
             // (si no, no hay forma de leer la columna).
             try {
                 const bajasRes = await fetch(`${SUPABASE_URL}/rest/v1/clients?is_deleted=eq.true&select=id,ruc,name,regime,tax_profile,declaration_history`, {
-                    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+                    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${await ScSesion.bearer(SUPABASE_KEY)}` }
                 });
                 if (bajasRes.ok) {
                     const bajas = await bajasRes.json();
@@ -2637,7 +2637,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json',
                     apikey: SUPABASE_KEY,
-                    Authorization: 'Bearer ' + SUPABASE_KEY,
+                    Authorization: 'Bearer ' + (await ScSesion.bearer(SUPABASE_KEY)),
                     Prefer: 'return=minimal'
                 },
                 body: JSON.stringify([{ level: nivel, area: 'extension', texto: t, source: 'extension-01' }])
@@ -2899,3 +2899,24 @@ function pedirConfirmacion({ titulo = "Confirmar", mensaje = "", aceptar = "Acep
         btnSi.focus();
     });
 }
+
+// ── 👤 Aviso de sesión del estudio ─────────────────────────────────
+// Sin sesión la extensión cae a la llave pública, que se va a cerrar para
+// los datos de clientes: mejor decirlo acá que fallar callado después.
+(function () {
+    async function pintarAvisoSesion() {
+        const el = document.getElementById('avisoSesion');
+        if (!el || typeof ScSesion === 'undefined') return;
+        const e = await ScSesion.estado();
+        el.hidden = e.conectado && !e.aviso;
+        if (e.aviso) el.title = e.aviso;
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        const el = document.getElementById('avisoSesion');
+        if (el) el.addEventListener('click', () => chrome.runtime.openOptionsPage && chrome.runtime.openOptionsPage());
+        pintarAvisoSesion();
+    });
+    chrome.storage.onChanged.addListener((ch, area) => {
+        if (area === 'local' && (ch.sc_sesion_web || ch.sc_sesion_web_aviso)) pintarAvisoSesion();
+    });
+})();

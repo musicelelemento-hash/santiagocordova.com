@@ -1104,7 +1104,8 @@ const SC_COBRO_NUBE = {
                 headers: {
                     "Content-Type": "application/json",
                     apikey: key,
-                    Authorization: `Bearer ${key}`,
+                    // Sesión del estudio si hay (sc_sesion.js); si no, la llave pública.
+                    Authorization: `Bearer ${(typeof ScSesion !== 'undefined') ? await ScSesion.bearer(key) : key}`,
                     Prefer: "resolution=merge-duplicates,return=minimal"
                 },
                 body: cuerpoJson
@@ -1112,6 +1113,7 @@ const SC_COBRO_NUBE = {
             if (!res.ok) {
                 const txt = await res.text().catch(() => "");
                 await this.anotarEstado(false, res.status, txt.slice(0, 140), 0);
+                if (typeof ScSesion !== 'undefined') ScSesion.rechazoSinSesion(res.status);
                 console.warn(`[COBRO] No se subió a la nube (HTTP ${res.status}):`, txt.slice(0, 160));
             } else {
                 await this.anotarEstado(true, res.status, "", cuerpoJson.length);

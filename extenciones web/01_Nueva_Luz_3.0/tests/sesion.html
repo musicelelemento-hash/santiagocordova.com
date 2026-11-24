@@ -1,0 +1,151 @@
+<!doctype html><meta charset="utf-8"><title>Sesión del estudio (sc_sesion.js)</title>
+<body style="font:12px ui-monospace,monospace;padding:18px;background:#0b1622;color:#d5e4fa">
+<h3>La extensión habla con Supabase como usuario, y nunca guarda la contraseña</h3>
+<pre id="out">…</pre>
+<script>
+  // chrome de mentira con callbacks (sc_sesion.js usa la forma con callback,
+  // la que funciona igual en service worker, popup y content script).
+  const store = {};
+  const oyentes = [];
+  window.__errors = [];
+  window.onerror = (m, s, l, c, e) => window.__errors.push(String((e && e.stack) || m));
+  window.addEventListener('unhandledrejection',
+    e => window.__errors.push('RECHAZO: ' + ((e.reason && e.reason.message) || e.reason)));
+  const pick = (k) => k === null ? { ...store }
+    : Object.fromEntries([].concat(k).filter(x => x in store).map(x => [x, store[x]]));
+  window.chrome = {
+    runtime: { id: 's' },
+    storage: {
+      local: {
+        get: (k, cb) => { const r = pick(k); if (cb) setTimeout(() => cb(r)); return Promise.resolve(r); },
+        set: (o, cb) => {
+          const ch = {}; for (const k in o) ch[k] = { oldValue: store[k], newValue: o[k] };
+          Object.assign(store, o); oyentes.forEach(f => f(ch, 'local'));
+          if (cb) setTimeout(cb); return Promise.resolve();
+        },
+        remove: (k, cb) => { [].concat(k).forEach(x => delete store[x]); if (cb) setTimeout(cb); return Promise.resolve(); }
+      },
+      onChanged: { addListener(f) { oyentes.push(f); } }
+    }
+  };
+
+  // fetch de mentira: registra cada pedido y contesta según un guion.
+  const pedidos = [];
+  let guion = {};
+  const jwt = (expSeg) => 'x.' + btoa(JSON.stringify({ exp: expSeg })) + '.y';
+  window.fetch = async (url, op = {}) => {
+    const body = op.body ? JSON.parse(op.body) : null;
+    pedidos.push({ url: String(url), body, headers: op.headers || {} });
+    const g = Object.keys(guion).find(k => String(url).includes(k));
+    const r = g ? guion[g](body) : { status: 404, json: {} };
+    return { ok: r.status < 300, status: r.status, text: async () => JSON.stringify(r.json || {}) };
+  };
+</script>
+<script src="../shared_config.js"></script>
+<script src="../sc_sesion.js"></script>
+<script>
+(async () => {
+  const L = [], ok = [];
+  const push = (k, v, e) => { const b = JSON.stringify(v) === JSON.stringify(e); ok.push(b);
+    L.push((b ? '  ' : '✗ ') + String(k).padEnd(64) + JSON.stringify(v) + (b ? '' : '  ESPERADO: ' + JSON.stringify(e))); };
+  const sec = (t) => L.push('\n── ' + t + ' ' + '─'.repeat(Math.max(0, 70 - t.length)));
+  const pintar = () => {
+    const fallos = ok.filter(x => !x).length;
+    document.getElementById('out').textContent = L.join('\n') + '\n\n' +
+      (fallos ? '✗ ' + fallos + ' de ' + ok.length + ' fallaron'
+              : '✓ ' + ok.length + ' comprobaciones, todas bien') +
+      (window.__errors.length ? '\n\nERRORES SUELTOS:\n' + window.__errors.join('\n') : '');
+  };
+  const ANON = (window.SC_CONFIG || {}).SUPABASE_ANON_KEY;
+  const limpiar = async () => { await ScSesion.cerrar(); Object.keys(store).forEach(k => delete store[k]); pedidos.length = 0; };
+
+  try {
+    sec('A · sin sesión, todo sigue como antes (llave pública)');
+    push('ScSesion existe', typeof ScSesion, 'object');
+    push('bearer() sin sesión = la llave pública', await ScSesion.bearer(ANON) === ANON, true);
+    const h0 = await ScSesion.cabeceras(ANON);
+    push('cabeceras sin sesión: apikey = llave', h0.apikey === ANON, true);
+    push('cabeceras sin sesión: marca sinSesion', h0.sinSesion, true);
+    push('estado sin sesión: no conectado', (await ScSesion.estado()).conectado, false);
+
+    sec('B · iniciar sesión guarda tokens, NUNCA la contraseña');
+    const ahora = Math.floor(Date.now() / 1000);
+    guion = { 'grant_type=password': () => ({ status: 200, json: {
+      access_token: 'AT-1', refresh_token: 'RT-1', expires_in: 3600, expires_at: ahora + 3600,
+      user: { id: 'u1', email: 'estudio@ejemplo.test' } } }) };
+    await ScSesion.iniciar('estudio@ejemplo.test', 'secreta-123');
+    const guardado = JSON.stringify(store);
+    push('la contraseña no aparece en el almacén', guardado.includes('secreta-123'), false);
+    push('se guardó el refresh token', (store.sc_sesion_web || {}).refresh_token, 'RT-1');
+    push('el pedido fue a /auth/v1/token?grant_type=password', pedidos[0].url.endsWith('/auth/v1/token?grant_type=password'), true);
+    push('el pedido lleva sólo apikey, sin Bearer de usuario', 'Authorization' in pedidos[0].headers, false);
+    push('bearer() con sesión = access token', await ScSesion.bearer(ANON), 'AT-1');
+    const h1 = await ScSesion.cabeceras(ANON, { 'Content-Type': 'application/json' });
+    push('cabeceras con sesión: apikey sigue siendo la llave', h1.apikey === ANON, true);
+    push('cabeceras con sesión: Authorization = Bearer AT-1', h1.Authorization, 'Bearer AT-1');
+    push('cabeceras con sesión: extra se conserva', h1['Content-Type'], 'application/json');
+    push('estado: conectado con el correo', [(await ScSesion.estado()).conectado, (await ScSesion.estado()).email], [true, 'estudio@ejemplo.test']);
+
+    sec('C · token por vencer → se renueva solo con el refresh token');
+    chrome.storage.local.set({ sc_sesion_web: { ...store.sc_sesion_web, expires_at: Date.now() + 10 * 1000 } });
+    pedidos.length = 0;
+    guion = { 'grant_type=refresh_token': (b) => ({ status: 200, json: {
+      access_token: 'AT-2', refresh_token: 'RT-2', expires_in: 3600, user: { id: 'u1', email: 'estudio@ejemplo.test' } } }) };
+    // Dos pedidos a la vez: una sola renovación.
+    const [t1, t2] = await Promise.all([ScSesion.token(), ScSesion.token()]);
+    push('los dos reciben el token nuevo', [t1, t2], ['AT-2', 'AT-2']);
+    push('una sola llamada de renovación', pedidos.filter(p => p.url.includes('refresh_token')).length, 1);
+    push('mandó el refresh token viejo', pedidos[0].body.refresh_token, 'RT-1');
+    push('guardó el refresh token nuevo', store.sc_sesion_web.refresh_token, 'RT-2');
+
+    sec('D · refresh rechazado → se borra la sesión y se avisa');
+    chrome.storage.local.set({ sc_sesion_web: { ...store.sc_sesion_web, expires_at: Date.now() - 1000 } });
+    guion = { 'grant_type=refresh_token': () => ({ status: 400, json: { error_description: 'Invalid Refresh Token' } }) };
+    push('token() devuelve null', await ScSesion.token(), null);
+    push('la sesión se borró', store.sc_sesion_web, null);
+    const e = await ScSesion.estado();
+    push('estado: no conectado', e.conectado, false);
+    push('estado: el aviso pide iniciar sesión', /Inicia sesión/.test(e.aviso), true);
+    push('bearer() vuelve a la llave pública', await ScSesion.bearer(ANON) === ANON, true);
+
+    sec('E · error de red al renovar: NO borra la sesión');
+    await limpiar();
+    chrome.storage.local.set({ sc_sesion_web: { access_token: 'AT-3', refresh_token: 'RT-3', expires_at: Date.now() - 1000, email: 'a@b.test' } });
+    guion = { 'grant_type=refresh_token': () => ({ status: 503, json: { message: 'caído' } }) };
+    push('token() null mientras no renueva', await ScSesion.token(), null);
+    push('la sesión sigue guardada (se reintenta después)', (store.sc_sesion_web || {}).refresh_token, 'RT-3');
+
+    sec('F · contraseña equivocada');
+    await limpiar();
+    guion = { 'grant_type=password': () => ({ status: 400, json: { error_description: 'Invalid login credentials' } }) };
+    let msg = '';
+    try { await ScSesion.iniciar('a@b.test', 'mala'); } catch (err) { msg = err.message; }
+    push('lanza con el mensaje de Supabase', msg, 'Invalid login credentials');
+    push('no queda sesión', store.sc_sesion_web || null, null);
+    let vacio = '';
+    try { await ScSesion.iniciar('', ''); } catch (err) { vacio = err.message; }
+    push('sin correo ni contraseña: pide escribirlos', /correo/.test(vacio), true);
+
+    sec('G · token prestado de la web (sc_supabase_token)');
+    await limpiar();
+    chrome.storage.local.set({ sc_supabase_token: jwt(Math.floor(Date.now() / 1000) + 1800) });
+    push('sin sesión propia, usa el token de la web vigente', await ScSesion.bearer(ANON), store.sc_supabase_token);
+    chrome.storage.local.set({ sc_supabase_token: jwt(Math.floor(Date.now() / 1000) - 10) });
+    push('si el token de la web venció, cae a la llave', await ScSesion.bearer(ANON) === ANON, true);
+
+    sec('H · cerrar sesión');
+    await limpiar();
+    guion = { 'grant_type=password': () => ({ status: 200, json: { access_token: 'AT-9', refresh_token: 'RT-9', expires_in: 3600 } }),
+              '/auth/v1/logout': () => ({ status: 204 }) };
+    await ScSesion.iniciar('a@b.test', 'x');
+    await ScSesion.cerrar();
+    push('avisó a Supabase (/auth/v1/logout)', pedidos.some(p => p.url.endsWith('/auth/v1/logout')), true);
+    push('no queda sesión', store.sc_sesion_web, null);
+  } catch (err) {
+    window.__errors.push('EXCEPCIÓN: ' + (err && err.stack || err));
+    ok.push(false);
+  }
+  await limpiar();
+  pintar();
+})();
+</script>

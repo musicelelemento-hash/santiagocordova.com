@@ -162,3 +162,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+// 👤 Sesión del estudio: sin ella, leer y guardar claves en la web deja de andar
+// cuando se cierre la tabla de clientes para la llave pública.
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof ScSesion !== 'undefined') ScSesion.montarFormulario(document.getElementById('sc-sesion-caja'));
+});
