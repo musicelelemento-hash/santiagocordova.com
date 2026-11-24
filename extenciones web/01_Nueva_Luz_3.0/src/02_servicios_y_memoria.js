@@ -5523,6 +5523,35 @@ function initDeclarationSuccessWatcher() {
 // declarás a mano sin despertarla, el 🧾 la baja después igual.
 extensionDespierta().then((d) => { if (d) initDeclarationSuccessWatcher(); });
 
+/**
+ * Si el SRI ya tiene sesión abierta (aunque el usuario haya entrado a mano),
+ * se anota un acceso ✅ en la auditoría y se deja `ultimo_ingreso` en la ficha.
+ * Dedupe de 30 min por RUC para no llenar la auditoría.
+ */
+function initSesionAbiertaWatcher() {
+    if (window.__sriSesionAbiertaWatcher) return;
+    window.__sriSesionAbiertaWatcher = true;
+    const revisar = async () => {
+        try {
+            if (typeof _sriYaAdentro !== 'function' || !_sriYaAdentro()) return;
+            if (typeof _sriEnLogin === 'function' && _sriEnLogin()) return;
+            const info = (window.sriAssistant && typeof window.sriAssistant.extractClientInfo === 'function')
+                ? window.sriAssistant.extractClientInfo() : {};
+            const ruc = String(info.ruc || '').replace(/\D/g, '');
+            if (ruc.length !== 13) return;
+            const st = await SafeStorage.get(['sc_ultima_sesion_auditada']);
+            const prev = st.sc_ultima_sesion_auditada || {};
+            if (prev.ruc === ruc && Date.now() - Number(prev.cuando || 0) < 30 * 60 * 1000) return;
+            await SafeStorage.set({ sc_ultima_sesion_auditada: { ruc, cuando: Date.now() } });
+            await SriLoginAuditoria.registrar('sesion_abierta', { ruc, nombre: info.name || '', motivo: 'Sesión abierta detectada en el portal (entrada manual o previa)', sesionAbierta: true });
+            if (typeof marcarSesionDetectada === 'function') await marcarSesionDetectada(ruc, info.name || '');
+        } catch (e) { /* no frena nada */ }
+    };
+    setTimeout(revisar, 4000);
+    setInterval(revisar, 60000);
+}
+extensionDespierta().then((d) => { if (d) initSesionAbiertaWatcher(); });
+
 // HELPER: ENCONTRAR BOTÓN ACEPTAR/ENVIAR PRINCIPAL EN EL RESUMEN (NO DIÁLOGOS OCULTOS)
 function findAceptarBtnOnSummary() {
     // Solo relevante dentro del formulario IVA

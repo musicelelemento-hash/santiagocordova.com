@@ -3888,6 +3888,47 @@ async function guardarVentasEnNube(ruc, periodo, datos = {}) {
  * La declaración ya se presentó, pero su firma de contador queda pendiente.
  * Se guarda para que la web y el popup la muestren y no se pierda de vista.
  */
+/**
+ * Deja constancia en la ficha de que el SRI tiene sesión abierta para este RUC.
+ * Es la prueba de que la clave SÍ entró, aunque el login no haya pasado por
+ * el flujo automático (entrada manual al portal).
+ */
+async function marcarSesionDetectada(ruc, nombre) {
+    try {
+        const limpio = String(ruc || '').replace(/\D/g, '');
+        if (limpio.length !== 13) return;
+        const cuando = new Date().toISOString();
+        const cfg = (typeof SC_CONFIG !== 'undefined' && SC_CONFIG) ? SC_CONFIG : {};
+        const url = (typeof SC_SUPABASE_URL !== 'undefined' ? SC_SUPABASE_URL : cfg.SUPABASE_URL) || '';
+        const key = cfg.SUPABASE_ANON_KEY || cfg.SUPABASE_KEY || '';
+        if (!url || !key) return;
+        const cab = { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' };
+        const rc = await fetch(`${url}/rest/v1/clients?ruc=eq.${limpio}&select=id,tax_profile`, { headers: cab });
+        const filas = rc.ok ? await rc.json() : [];
+        const cliente = Array.isArray(filas) ? filas[0] : null;
+        if (!cliente) return;
+        const tp = cliente.tax_profile || {};
+        const cred = tp.sriCredencial || {};
+        await fetch(`${url}/rest/v1/clients?id=eq.${cliente.id}`, {
+            method: 'PATCH', headers: cab,
+            body: JSON.stringify({
+                tax_profile: {
+                    ...tp,
+                    sriCredencial: {
+                        ...cred,
+                        estado: 'ok',
+                        motivo: 'Sesión abierta detectada en el portal',
+                        ultimo_ingreso: cuando,
+                    },
+                },
+            }),
+        });
+        log.info('🕵️ [SESIÓN] sesión abierta registrada para ' + limpio + (nombre ? ' · ' + nombre : ''));
+    } catch (e) {
+        log.warn('🕵️ [SESIÓN] no se pudo registrar: ' + (e && e.message));
+    }
+}
+
 async function marcarFirmaPendiente(ruc, periodo, nombre) {
     try {
         const limpio = String(ruc || '').replace(/\D/g, '');
