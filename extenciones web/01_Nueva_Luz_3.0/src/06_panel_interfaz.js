@@ -146,7 +146,7 @@ class SriAssistantPanel {
                 -webkit-backdrop-filter: blur(25px) saturate(200%);
                 box-shadow: 0 20px 50px rgba(0,0,0,0.3), 0 0 1px rgba(255,255,255,0.3);
                 border-radius: 18px;
-                z-index: 999999;
+                z-index: var(--sc-z-superficie, 100000);
                 font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
                 transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
                 border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1055,7 +1055,7 @@ class SriAssistantPanel {
             border: 1px solid rgba(99, 102, 241, 0.4);
             border-radius: 20px;
             padding: 20px;
-            z-index: 2000000;
+            z-index: var(--sc-z-toast, 200000);
             color: white;
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             font-family: 'Manrope', system-ui, sans-serif;
@@ -2205,7 +2205,7 @@ class SriAssistantPanel {
         
         // Efecto confeti visual simple
         const canvas = document.createElement('div');
-        canvas.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:999999;';
+        canvas.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:var(--sc-z-superficie, 100000);';
         document.body.appendChild(canvas);
         for(let i=0; i<50; i++) {
             const p = document.createElement('div');
@@ -2222,7 +2222,7 @@ class SriAssistantPanel {
         this.clearCards();
         const card = document.createElement('div');
         card.className = 'elite-context-card final-report animate-pop-in';
-        card.style.cssText = 'position:fixed; top:20px; right:20px; z-index:999999; border-left:4px solid #f59e0b; width:320px;';
+        card.style.cssText = 'position:fixed; top:20px; right:20px; z-index:var(--sc-z-superficie, 100000); border-left:4px solid #f59e0b; width:320px;';
         card.innerHTML = `
             <div class="card-header">
                 <span class="icon">🏆</span>
@@ -2270,7 +2270,7 @@ class SriAssistantPanel {
             -webkit-backdrop-filter: blur(25px) saturate(180%);
             box-shadow: 0 20px 50px rgba(0,0,0,0.45), 0 0 1px rgba(255,255,255,0.25);
             border-radius: 18px;
-            z-index: 999999;
+            z-index: var(--sc-z-superficie, 100000);
             font-family: var(--sc-fuente, 'Manrope', system-ui, sans-serif);
             border: 1px solid rgba(255, 255, 255, 0.14);
             color: #f8fafc;
@@ -2361,7 +2361,7 @@ class SriAssistantPanel {
                     border-radius: 28px;
                     padding: 30px;
                     box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.5);
-                    z-index: 2147483647;
+                    z-index: var(--sc-z-modal, 2147483500);
                     animation: slideInElite 0.6s cubic-bezier(0.16, 1, 0.3, 1);
                     transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
                 }
@@ -3220,7 +3220,7 @@ class SriAssistantPanel {
             this.contextOverlay.style.cssText = `
                 position: fixed; top: 0; left: 0; width: 100%; height: 100%;
                 background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px);
-                z-index: 2147483646; animation: fadeIn 0.3s ease-out;
+                z-index: var(--sc-z-modal-fondo, 2147483000); animation: fadeIn 0.3s ease-out;
             `;
             document.body.appendChild(this.contextOverlay);
 

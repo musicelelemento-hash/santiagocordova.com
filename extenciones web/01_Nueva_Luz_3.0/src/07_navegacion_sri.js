@@ -740,7 +740,7 @@ const SriLoopHUD = {
         // confundir nuestros botones con los del portal.
         el.setAttribute('data-sc-ui', 'hud');
         el.style.cssText = [
-            'position:fixed', 'z-index:2147483646', 'right:18px', 'bottom:18px',
+            'position:fixed', 'z-index:var(--sc-z-superficie, 100000)', 'right:18px', 'bottom:18px',
             'display:flex', 'align-items:center', 'gap:8px',
             // Sin esto el HUD se salía de la pantalla en una ventana angosta,
             // y con él se iban los botones que frenan el lote.
@@ -1855,7 +1855,7 @@ el.querySelector('#slh-mapear-anexo').addEventListener('click', async (ev) => {
                 '@keyframes sc-fila{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}',
                 '@keyframes sc-halo{0%,100%{box-shadow:0 0 0 0 rgba(125,211,252,.35)}50%{box-shadow:0 0 0 12px rgba(125,211,252,0)}}',
                 '#sc-saludo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);',
-                '  z-index:2147483647;width:min(420px,86vw);max-height:86vh;overflow:auto;',
+                '  z-index:var(--sc-z-modal, 2147483500);width:min(420px,86vw);max-height:86vh;overflow:auto;',
                 '  padding:22px 24px}',
                 '#sc-saludo.sc-entra{animation:sc-sube .42s cubic-bezier(.22,1,.36,1)}',
                 '#sc-saludo.sc-entra .sc-fila{animation:sc-fila .35s ease-out}',
@@ -2523,7 +2523,7 @@ el.querySelector('#slh-mapear-anexo').addEventListener('click', async (ev) => {
 
         // En el DOM del portal va sólo lo que hace falta ver. Nunca una clave.
         panel.innerHTML =
-            '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:99999999;' +
+            '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:var(--sc-z-modal, 2147483500);' +
             'display:flex;align-items:center;justify-content:center;background:rgba(3,7,18,0.78);' +
             'backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-sizing:border-box;padding:16px;' +
             'font-family:\'Manrope\',\'Inter\',system-ui,sans-serif;">' +
@@ -5083,7 +5083,7 @@ function showEliteToast(data, workflowPeriod) {
         border-radius: 28px;
         padding: 24px;
         color: white;
-        z-index: 1000000;
+        z-index: var(--sc-z-toast, 200000);
         box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.3);
         font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
         transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
@@ -5235,7 +5235,7 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
         border-radius: 28px;
         padding: 30px;
         color: white;
-        z-index: 1000001;
+        z-index: var(--sc-z-modal, 2147483500);
         box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.8), 0 0 1px rgba(255, 255, 255, 0.5);
         font-family: 'Inter', sans-serif;
     `;
@@ -5601,7 +5601,7 @@ function showBulkEliteToast(totals, bulkFlow, workflowPeriod) {
                     border-radius: 6px;
                     font-size: 10px;
                     font-weight: 800;
-                    z-index: 1000002;
+                    z-index: var(--sc-z-tip, 2147483647);
                     pointer-events: none;
                     top: ${e.clientY - 30}px;
                     left: ${e.clientX}px;

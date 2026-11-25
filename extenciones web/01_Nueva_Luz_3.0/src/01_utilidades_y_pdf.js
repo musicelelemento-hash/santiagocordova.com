@@ -215,6 +215,27 @@ function instalarEstilosSC() {
       --sc-radio-btn:10px;
       --sc-sombra:0 10px 30px rgba(0,0,0,.5);
       --sc-fuente:'Manrope','Inter',system-ui,sans-serif;
+      /* Cinco capas, no siete números mágicos sueltos (INFORME_FLOTANTES_2026-11.md §2).
+         --sc-z-superficie: lo "siempre visible" y no bloqueante — HUD, isla,
+         minibar, riel, tarjetas, barra de error, confeti.
+         --sc-z-toast: avisos — por encima de la superficie a propósito (que un
+         aviso se vea es más urgente que la cabecera del riel), por debajo del modal.
+         --sc-z-modal-fondo / --sc-z-modal: el fondo oscurecido y, encima suyo,
+         el diálogo que bloquea hasta que el usuario responde — desconexión,
+         saludo, notas de venta, reporte grande. SIEMPRE por encima de la
+         superficie y del toast (antes el modal de notas de venta usaba
+         99999999, que es MENOR que el 2147483647 de la isla/HUD: el modal
+         quedaba tapado por algo que no bloqueaba nada).
+         --sc-z-tip: el único nivel que tiene que ganarle a un modal — el
+         "Copiado" que sigue al cursor, porque puede aparecer con un modal
+         abierto detrás. 2147483647 es 2^31-1, el techo práctico de z-index en
+         los navegadores; no subir de ahí, por eso los otros cuatro quedan con
+         margen debajo en vez de pegados al techo. */
+      --sc-z-superficie:100000;
+      --sc-z-toast:200000;
+      --sc-z-modal-fondo:2147483000;
+      --sc-z-modal:2147483500;
+      --sc-z-tip:2147483647;
     }
     .sc-panel{
       background:var(--sc-fondo); border:1px solid var(--sc-borde);
@@ -1486,7 +1507,7 @@ function renderEmergencyStopBar() {
       if (!bar) {
         bar = document.createElement('div');
         bar.id = 'sri-emergency-stop-bar';
-        bar.style.cssText = 'position: fixed; top: 12px; right: 20px; z-index: 2147483647; display: flex; align-items: center; gap: 8px; background: rgba(185, 28, 28, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 30px; padding: 6px 14px; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: white; cursor: pointer; user-select: none; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);';
+        bar.style.cssText = 'position: fixed; top: 12px; right: 20px; z-index: var(--sc-z-superficie, 100000); display: flex; align-items: center; gap: 8px; background: rgba(185, 28, 28, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(248, 113, 113, 0.7); border-radius: 30px; padding: 6px 14px; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: white; cursor: pointer; user-select: none; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);';
         bar.innerHTML = `
           <span style="font-size: 13px;">🛑</span>
           <span style="font-weight: 900; font-size: 11px; letter-spacing: 0.05em;">DETENER BUCLE</span>
@@ -4417,7 +4438,7 @@ async function renderAnticipationWidget(items) {
       const conector = document.createElement('div');
       conector.id = 'sri-anticipacion-conector';
       conector.style.cssText =
-        'position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid rgba(5, 20, 36, 0.96); z-index: 999999; pointer-events: none;';
+        'position: fixed; top: 58px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 9px solid rgba(5, 20, 36, 0.96); z-index: var(--sc-z-superficie, 100000); pointer-events: none;';
       document.body.appendChild(conector);
     }
 
@@ -4428,7 +4449,7 @@ async function renderAnticipationWidget(items) {
     // no como un panel aparte en la esquina — era lo que hacía que el login
     // mostrara dos interfaces separadas haciendo casi lo mismo.
     sidebar.style.cssText =
-      "position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 440px; max-height: calc(100vh - 100px); z-index: 999999; background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
+      "position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 440px; max-height: calc(100vh - 100px); z-index: var(--sc-z-superficie, 100000); background: rgba(5, 20, 36, 0.96); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.1); border-top: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 20px rgba(78, 222, 163, 0.1); font-family: 'Manrope', 'Inter', system-ui, sans-serif; color: #d5e4fa; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;";
 
     sidebar.innerHTML = `
             <div style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; flex-direction: column; gap: 16px;">

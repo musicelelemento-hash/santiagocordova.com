@@ -161,30 +161,64 @@ compra — cualquier cambio acá necesita su propia pasada de pruebas antes de
 darlo por bueno.
 **Estado**: propuesta.
 
-### Propuesta · Terminar las tandas G→L de `INFORME_FLOTANTES_2026-11.md` (z-index, un solo toast, riel/HUD)
+### Propuesta · Terminar la tanda H de `INFORME_FLOTANTES_2026-11.md` (un solo toast)
 
 **Quién la propone**: Claude (sesión en la nube de `santiagocordova-main`) · 25-nov-2026, al
-venir a mejorar el diseño de esta extensión por pedido de Santiago.
-**Qué se vio**: `INFORME_FLOTANTES_2026-11.md` (07-nov-2026) ya dejó armadas las tandas
-G (escala de `z-index` en `:root`), H (un solo toast con cola), I (borrar
-`renderPillLegacy()`) y J (sin `confirm()` en Detener), todas marcadas «Riesgo: Bajo». Hice
-I y la mitad de J en esta pasada (ver más abajo). Al ir a hacer G conté los `z-index`
-reales con `grep -n "z-index" src/*.js`: son **~20 sitios**, no los 7 de la tabla del
-informe — hay además `07_navegacion_sri.js:5086/5238/5604` con `1000000/1000001/1000002`
-consecutivos (parecen ordenados a propósito entre ellos: barras de aviso/error apiladas) y
-varios overlays de `06_panel_interfaz.js` y `01_utilidades_y_pdf.js` que el informe no
-inventarió. Tocar eso bien hecho es más que «reemplazar 7 números» — hay que leer qué va
-encima de qué en cada caso y no tengo el portal del SRI delante para verlo en pantalla.
-**Qué se propone**: que lo siga quien pueda abrir el portal real (la sesión local, o esta
-misma IA con un HUD/riel/modal delante): 1) recontar los ~20 sitios y fijar en qué capa va
-cada uno de los tres `1000000-2` consecutivos antes de tocarlos (pueden depender de ese
-orden), 2) recién ahí declarar los tokens de la §4.2 del informe y reemplazar, 3) tanda H
-(toast único) y K/L después, en ese orden, cada una con los 976 bancos en verde y una
-corrida manual de 2 clientes en 👣.
-**Qué cuesta / qué rompe**: bajo en teoría (son estilos, no el flujo de envío), pero un
-`z-index` mal puesto puede tapar justo el botón que hay que tocar en el portal — y eso no
-lo agarra ningún banco de `tests/`, sólo mirar la pantalla. Por eso lo dejo escrito en vez
-de adivinarlo.
+venir a mejorar el diseño de esta extensión por pedido de Santiago. **Actualizada el
+25-nov-2026 (misma sesión, segunda pasada)**: la tanda G ya se hizo — ver abajo — y lo
+que sigue abierto es sólo H.
+
+**La tanda G — HECHA.** Conté los `z-index` reales con `grep -n "z-index" src/*.js`: son
+**22 sitios**, no los 7 de la tabla del informe. De esos, 19 son capas flotantes de
+verdad (`position:fixed` sobre el portal) y 3 son elementos contenidos dentro de otro
+layout (`07_navegacion_sri.js:3490` un chip inline, `08_experiencia.js:214` un adorno
+interno, y `.sri-elite-pill` en `06_panel_interfaz.js:2343`, CSS ya muerto desde que esta
+misma sesión borró `renderPillLegacy()` — ver la tanda I). Los 19 reales se repartieron en
+**cinco** tokens, no cuatro, declarados en `instalarEstilosSC()` (`01_utilidades_y_pdf.js`,
+junto a `--sc-fuente` y el resto de `--sc-*`), cada uno con su propio respaldo en el
+`var(token, respaldo)` por si algún llamador corre antes de que la hoja de estilos esté
+instalada (mismo patrón que ya usa `--sc-fuente`):
+
+| Token | Valor | Para qué |
+|---|---|---|
+| `--sc-z-superficie` | 100000 | HUD, isla, minibar, riel, barra de emergencia, tarjetas, confeti — lo siempre visible y no bloqueante |
+| `--sc-z-toast` | 200000 | avisos — por encima de la superficie a propósito |
+| `--sc-z-modal-fondo` | 2147483000 | el fondo oscurecido de un modal (sólo lo usa `showContextCard`, que arma overlay + tarjeta por separado) |
+| `--sc-z-modal` | 2147483500 | el diálogo que bloquea: desconexión, saludo, notas de venta, reporte de lote, `.sri-elite-context-card` |
+| `--sc-z-tip` | 2147483647 (2³¹−1, el techo práctico) | sólo el "Copiado" que sigue al cursor — el único que tiene que ganarle a un modal |
+
+**El bug real que esto corrige** (no hacía falta el portal delante para verlo: es orden
+de apilado entre elementos propios, se prueba con dos `.html` sueltos y una captura de
+Chromium headless, sin el SRI de por medio): el modal de notas de venta
+(`07_navegacion_sri.js`) usaba `z-index:99999999`, que es **menor** que el
+`2147483647` de la isla y la barra de emergencia — el modal quedaba tapado por ellas en
+vez de bloquear. Con los tokens, el modal (2147483500) le gana a la superficie (100000)
+siempre. Verificado visualmente: una isla superpuesta a un fondo de modal rojo se ve
+tapada por el rojo con los tokens nuevos, y se veía encima (bug) con los valores viejos.
+
+Los tres `1000000/1000001/1000002` consecutivos del informe (`07_navegacion_sri.js:5086,
+5238, 5604`) no estaban "ordenados entre sí a propósito" como yo sospechaba antes de
+mirarlos uno por uno: son el toast duplicado (`#sri-elite-toast`, tanda H), el modal del
+reporte de lote (`#sri-bulk-toast`, sin inventariar en el informe) y el tooltip
+"Copiado" — y los tres entran limpios en la escala de cinco tokens sin pelearse.
+
+Verificado: `node --check` en los 11 módulos, `npm run build`
+(`3.7.15+20261125.0433`) y los 28 bancos de `tests/` — **976/976**, igual que antes de
+tocar nada (ningún banco prueba el orden visual de capas; por eso la verificación con
+Chromium headless de arriba, aparte).
+**Qué cuesta / qué rompe**: nada que los bancos no cubran ya — son sólo valores de
+`z-index`, ningún selector ni paso del flujo de envío se tocó.
+**Estado**: tanda G hecha el 25-nov-2026.
+
+**Lo que sigue abierto — tanda H (un solo toast).** `#sri-main-toast`
+(`06_panel_interfaz.js:1058`, índigo, respeta `prefers-reduced-motion`) y
+`#sri-elite-toast` (`07_navegacion_sri.js:5086`) son dos implementaciones de
+`showEliteToast` con estilos distintos; ambas ya quedaron en `--sc-z-toast`, así que el
+cruce de capas (F1) está resuelto, pero **la duplicación sigue**: según qué ruta dispare
+el aviso, sale con otro diseño. Unificarlas es un cambio de comportamiento (hay que
+revisar cada llamador de `showEliteToast` en los dos archivos y decidir cuál delega en
+cuál) y no sólo un valor de estilo — por eso queda aparte, con su propia pasada de
+pruebas, y no se mezcló con la tanda G.
 **Estado**: propuesta.
 
 ### Propuesta · Botón «probar claves» — HECHA el 11-sep-2026, sin corrida real todavía

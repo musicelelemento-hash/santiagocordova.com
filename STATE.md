@@ -1487,3 +1487,32 @@ fecha).
 - **No se tocaron** las tandas G (escala de `z-index`), H (un solo toast) ni K/L: al
   contar los `z-index` reales salieron ~20 sitios, no los 7 de la tabla del informe — ver
   la propuesta en `.agents/AGENTS.md` §0c antes de seguir con eso.
+
+## 2026-11-25 (segunda pasada) — Nueva Luz 3.0: tanda G de `INFORME_FLOTANTES_2026-11.md` (z-index)
+
+Misma sesión, siguiendo ahora la skill `diseno-extension-sri` (nueva: `.claude/skills/`).
+Conté los 22 `z-index` reales uno por uno (19 son capas flotantes de verdad) y los repartí
+en **cinco** tokens en `instalarEstilosSC()` (`01_utilidades_y_pdf.js`): `--sc-z-superficie`
+(100000: HUD, isla, minibar, riel, barra de emergencia, tarjetas, confeti), `--sc-z-toast`
+(200000), `--sc-z-modal-fondo` (2147483000), `--sc-z-modal` (2147483500: desconexión,
+saludo, notas de venta, reporte de lote, `.sri-elite-context-card`) y `--sc-z-tip`
+(2147483647, sólo el "Copiado"). Cada uso lleva su propio respaldo
+(`var(--sc-z-modal, 2147483500)`), igual que `--sc-fuente`.
+
+**El bug real que corrige**: el modal de notas de venta usaba `z-index:99999999`, que es
+MENOR que el `2147483647` de la isla/barra de emergencia — el modal quedaba tapado en vez
+de bloquear. No hacía falta el portal del SRI para verlo ni para probarlo: es orden de
+apilado entre elementos propios de la extensión. Lo verifiqué con dos páginas HTML sueltas
+y una captura de Chromium headless (`--no-sandbox`, el binario de Playwright del
+contenedor) — con los valores viejos la isla se veía encima del fondo rojo del modal; con
+los tokens, el fondo rojo la tapa. Mismo método confirmó que el tooltip "Copiado" sigue
+viéndose con un modal abierto detrás.
+
+Verificado: `node --check` en los 11 módulos, `npm run build` (`3.7.15+20261125.0433`) y
+los 28 bancos — **976/976**, igual que antes (ningún banco prueba el orden visual de
+capas, por eso la verificación aparte con Chromium).
+
+**Tanda H (un solo toast) sigue sin hacer**: las dos implementaciones de `showEliteToast`
+ya quedan en el mismo `--sc-z-toast`, pero siguen siendo dos nodos con estilos distintos.
+Unificarlas es tocar comportamiento (cada llamador, en dos archivos), no sólo un valor de
+estilo — queda en `.agents/AGENTS.md` §0c con su propia pasada de pruebas pendiente.
