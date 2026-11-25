@@ -1459,3 +1459,31 @@ Banco: `tests/recuperar.html` (20). **531 comprobaciones verdes, quince bancos.*
 - Se eliminó el proyecto `uvrpvramkocndrbeugls` («musicelelemento-hash's
   Project»): 1 tabla demo, 9 filas, 0 usuarios y 0 buckets.
 - Queda un solo proyecto: `afssvsxlxiwqgtcgvqxp` (SantiagoCordova.com).
+
+## 2026-11-25 — Nueva Luz 3.0: tandas I y J (parcial) de `INFORME_FLOTANTES_2026-11.md`
+
+Pedido de Santiago a la sesión en la nube de `santiagocordova-main` («mejorá el diseño de
+la extensión 01»). Build base `3.7.15+20261125.0104`, 976 comprobaciones verdes en 28
+bancos (subieron de las 909 del informe de capas flotantes — hay más bancos desde esa
+fecha).
+
+- **Tanda I** — `renderPillLegacy()` borrado de `06_panel_interfaz.js` (con sus tres
+  `div` `#btn-pill-skip` / `#btn-force-scan` / `#btn-force-sync`): era código muerto —
+  nada lo llamaba — pero conservaba el defecto P0-1 original (`✨ Sync` que en realidad
+  llama a `ejecutarCierreMagico()` y **envía** la declaración). `grep -rn
+  "renderPillLegacy\|btn-pill-skip\|btn-force-scan\|btn-force-sync"` vacío.
+- **Tanda J (parcial)** — `stopAutomation(requireConfirm)` de `06_panel_interfaz.js`
+  perdió el parámetro y la rama `confirm('¿Desea detener la automatización?')`: los tres
+  llamadores (`06_panel_interfaz.js:1508,3683` y `02_servicios_y_memoria.js:4807`) ya
+  pasaban siempre `false`, así que no cambia nada en pantalla — sólo se borró una rama que
+  no se podía alcanzar. **No se tocó** el `confirm()` real de `omitirClienteActual()`
+  («¿Omitir a…?»): sacarlo de ahí es un cambio de comportamiento en una acción en vivo, no
+  limpieza de código muerto, y queda para la tanda J completa.
+- Limpieza de assets: `icon16/48/128.svg` (el diseño púrpura viejo que ya no usa el
+  manifest, pendiente anotado en la auditoría del 06-nov) borrados.
+- Verificado: `node --check` en los 11 módulos, `npm run build` (bundle
+  `3.7.15+20261125.0108`) y los 28 bancos — **976/976, mismas cifras que antes de tocar
+  nada**.
+- **No se tocaron** las tandas G (escala de `z-index`), H (un solo toast) ni K/L: al
+  contar los `z-index` reales salieron ~20 sitios, no los 7 de la tabla del informe — ver
+  la propuesta en `.agents/AGENTS.md` §0c antes de seguir con eso.

@@ -4804,7 +4804,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     if (request.action === 'STOP_ACTION') {
         if (window.sriAssistant) {
-            window.sriAssistant.stopAutomation(false); // false = no confirm
+            window.sriAssistant.stopAutomation();
         }
         sendResponse({ success: true });
         return true;

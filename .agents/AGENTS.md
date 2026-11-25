@@ -161,6 +161,32 @@ compra — cualquier cambio acá necesita su propia pasada de pruebas antes de
 darlo por bueno.
 **Estado**: propuesta.
 
+### Propuesta · Terminar las tandas G→L de `INFORME_FLOTANTES_2026-11.md` (z-index, un solo toast, riel/HUD)
+
+**Quién la propone**: Claude (sesión en la nube de `santiagocordova-main`) · 25-nov-2026, al
+venir a mejorar el diseño de esta extensión por pedido de Santiago.
+**Qué se vio**: `INFORME_FLOTANTES_2026-11.md` (07-nov-2026) ya dejó armadas las tandas
+G (escala de `z-index` en `:root`), H (un solo toast con cola), I (borrar
+`renderPillLegacy()`) y J (sin `confirm()` en Detener), todas marcadas «Riesgo: Bajo». Hice
+I y la mitad de J en esta pasada (ver más abajo). Al ir a hacer G conté los `z-index`
+reales con `grep -n "z-index" src/*.js`: son **~20 sitios**, no los 7 de la tabla del
+informe — hay además `07_navegacion_sri.js:5086/5238/5604` con `1000000/1000001/1000002`
+consecutivos (parecen ordenados a propósito entre ellos: barras de aviso/error apiladas) y
+varios overlays de `06_panel_interfaz.js` y `01_utilidades_y_pdf.js` que el informe no
+inventarió. Tocar eso bien hecho es más que «reemplazar 7 números» — hay que leer qué va
+encima de qué en cada caso y no tengo el portal del SRI delante para verlo en pantalla.
+**Qué se propone**: que lo siga quien pueda abrir el portal real (la sesión local, o esta
+misma IA con un HUD/riel/modal delante): 1) recontar los ~20 sitios y fijar en qué capa va
+cada uno de los tres `1000000-2` consecutivos antes de tocarlos (pueden depender de ese
+orden), 2) recién ahí declarar los tokens de la §4.2 del informe y reemplazar, 3) tanda H
+(toast único) y K/L después, en ese orden, cada una con los 976 bancos en verde y una
+corrida manual de 2 clientes en 👣.
+**Qué cuesta / qué rompe**: bajo en teoría (son estilos, no el flujo de envío), pero un
+`z-index` mal puesto puede tapar justo el botón que hay que tocar en el portal — y eso no
+lo agarra ningún banco de `tests/`, sólo mirar la pantalla. Por eso lo dejo escrito en vez
+de adivinarlo.
+**Estado**: propuesta.
+
 ### Propuesta · Botón «probar claves» — HECHA el 11-sep-2026, sin corrida real todavía
 
 **Quién la propone**: el usuario · 10-sep-2026

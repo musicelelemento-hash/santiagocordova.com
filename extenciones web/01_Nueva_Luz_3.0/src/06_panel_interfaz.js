@@ -1505,7 +1505,7 @@ class SriAssistantPanel {
                     onAction: async () => {
                         cancelled = true;
                         if (countdownInterval) clearInterval(countdownInterval);
-                        await this.stopAutomation(false);
+                        await this.stopAutomation();
                     }
                 }
             ]
@@ -2487,45 +2487,6 @@ class SriAssistantPanel {
         `;
         const tab = this.container.querySelector('#btn-panel-tab');
         if (tab) tab.onclick = () => this.toggleMinimize(false);
-    }
-
-    renderPillLegacy() {
-        if (!this.container) return; // ELITE FIX: Safety check
-        const info = this.extractClientInfo();
-        const clientName = info.name ? info.name.split(' ')[0] : 'SRI';
-
-        this.container.style.width = 'auto'; // Ajuste dinámico
-        this.container.innerHTML = `
-            <div id="sri-smart-hub" class="sri-elite-pill" role="toolbar" aria-label="Controles del asistente SRI" style="opacity: 0.95; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 100%;">
-                <div style="font-size: 16px;">💎</div>
-                <div style="font-size: 10px; font-weight: 700;">Panel ${escapeHtml(clientName)}</div>
-                <div id="btn-pill-skip" role="button" tabindex="0" aria-label="Omitir este cliente y pasar al siguiente" style="font-size: 12px; cursor: pointer; padding: 8px 12px; min-height: 32px; display: flex; align-items: center; background: rgba(245, 158, 11, 0.25); border: 1px solid rgba(245, 158, 11, 0.5); border-radius: 8px; font-weight: 800; color: #fbbf24;" title="Omitir este cliente y pasar al siguiente">⏭️ Omitir</div>
-                <div id="btn-force-scan" role="button" tabindex="0" aria-label="Forzar escaneo de obligaciones" style="font-size: 14px; cursor: pointer; padding: 8px 10px; min-width: 32px; min-height: 32px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.1); border-radius: 8px;" title="Forzar Escaneo de Obligaciones">🔍</div>
-                <div id="btn-force-sync" role="button" tabindex="0" aria-label="Sincronizar manualmente" style="font-size: 12px; cursor: pointer; padding: 8px 12px; min-height: 32px; display: flex; align-items: center; background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.4); border-radius: 8px; font-weight: 800; color: #10b981;" title="Sincronizar Manualmente (Si terminaste por fuera)">✨ Sync</div>
-            </div>
-        `;
-
-        const hub = this.container.querySelector('#sri-smart-hub');
-        hub.onclick = (e) => {
-            if (e.target.id === 'btn-pill-skip') {
-                e.stopPropagation();
-                this.omitirClienteActual();
-                return;
-            }
-            if (e.target.id === 'btn-force-scan') {
-                e.stopPropagation();
-                log.debug('🔍 [FORCE SCAN] Ejecutando escaneo manual...');
-                this.scanObligacionesSRI();
-                return;
-            }
-            if (e.target.id === 'btn-force-sync') {
-                e.stopPropagation();
-                log.debug('✨ [FORCE SYNC] Ejecutando cierre mágico manual...');
-                this.ejecutarCierreMagico();
-                return;
-            }
-            this.toggleMinimize(false);
-        };
     }
 
     async omitirClienteActual() {
@@ -4734,10 +4695,9 @@ class SriAssistantPanel {
         this.render();
     }
 
-    async stopAutomation(requireConfirm = false) {
-        if (requireConfirm && !confirm('¿Desea detener la automatización?')) {
-            return;
-        }
+    // Detener nunca pregunta: un confirm() en medio de un lote desatendido
+    // es una parada, no una protección (mismo criterio que 🛑 del HUD).
+    async stopAutomation() {
         if (typeof marcarParadaPedida === 'function') marcarParadaPedida();
 
         // 🚦 Si hay un bucle vivo (semáforo en CORRIENDO/PAUSANDO/PAUSADO), la
